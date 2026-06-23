@@ -1,0 +1,75 @@
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=No
+/CSV=calendar_ref.csv
+/HEADERS=qtr,month,ww,ww_start_date_raw,ww_end_date_raw,start_date_raw,end_date_raw
+/INSTANCE=8486
+/PROMPT-TEXT=Step 1.1-a0. Fetching MARS Data
+/RECORD=Calendar@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT /*+  index(c0) */ DISTINCT 
+          c0.qtr AS qtr
+         ,c0.month AS month
+         ,c0.ww AS ww
+         ,To_Char((SELECT min(c000.start_date) FROM @[]@F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_start_date_raw
+         ,To_Char((SELECT max(c000.end_date) FROM @[]@F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_end_date_raw
+         ,To_Char(c0.start_date,'yyyy-mm-dd hh24:mi:ss') AS start_date_raw
+         ,To_Char(c0.end_date,'yyyy-mm-dd hh24:mi:ss') AS end_date_raw
+FROM 
+     @[]@F_Calendar c0
+WHERE 
+              1=1
+ AND      c0.facility = 'A15' 
+ AND      c0.start_date >= TRUNC(SYSDATE) - 365 
+ AND      c0.start_date <= TRUNC(SYSDATE) + 1 
+ORDER BY
+           6 Asc
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=8486
+/PROMPT-TEXT=Step 2. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=lich.py
+</OPTIONS>
+
+import pandas as pd
+import numpy as np
+
+data = pd.read_csv(r'calendar_ref.csv')
+
+data['WW_START_DATE'] = pd.to_datetime(data['WW_START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['WW_END_DATE'] = pd.to_datetime(data['WW_END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['START_DATE'] = pd.to_datetime(data['START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['END_DATE'] = pd.to_datetime(data['END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+ww = (data.groupby('WW', as_index=False)
+          .agg(
+              START_DATE=('START_DATE', 'min'),
+              END_DATE=('END_DATE', 'max')
+          )
+      )
+calendar = pd.merge(ww,data[['WW','MONTH','QTR']],how='left',on=['WW'])
+calendar = calendar[['QTR','MONTH','WW','START_DATE','END_DATE']]
+calendar .columns = calendar .columns.str.lower()
+calendar.to_csv(r'calendar_ref.csv',index=False)
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=8486
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"
+/PROMPT-TEXT=Step 3. Run Python script
+</OPTIONS>
+

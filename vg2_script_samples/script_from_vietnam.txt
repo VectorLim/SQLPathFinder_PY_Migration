@@ -1,0 +1,532 @@
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=29397
+/PROMPT-TEXT=Step 1. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=path.csv
+</OPTIONS>
+
+category,path
+QY_raw_data,\\KMatshfs.intel.com\KMATAnalysis$\MAOATM\KuAT\AE\YIELD\RINA\Yield\Yield_DashBoard\QY_Data
+Dashboard_data,\\KMatshfs.intel.com\KMATAnalysis$\MAOATM\KuAT\AE\YIELD\RINA\Yield\Yield_DashBoard\Data Dashboard
+reference_file,\\KMatshfs.intel.com\KMATAnalysis$\MAOATM\KuAT\AE\YIELD\RINA\Yield\Yield_DashBoard
+<---- New Query ---->
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=No
+/TS=_20260616145717
+/CSV=calendar_ref.csv
+/HEADERS=qtr,month,ww,ww_start_date_raw,ww_end_date_raw,start_date_raw,end_date_raw
+/INSTANCE=29397
+/PROMPT-TEXT=Step 2-1.1-a0. Fetching MARS Data
+/RECORD=Calendar@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT /*+  index(c0) */ DISTINCT 
+          c0.qtr AS qtr
+         ,c0.month AS month
+         ,c0.ww AS ww
+         ,To_Char((SELECT min(c000.start_date) FROM @[]@F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_start_date_raw
+         ,To_Char((SELECT max(c000.end_date) FROM @[]@F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_end_date_raw
+         ,To_Char(c0.start_date,'yyyy-mm-dd hh24:mi:ss') AS start_date_raw
+         ,To_Char(c0.end_date,'yyyy-mm-dd hh24:mi:ss') AS end_date_raw
+FROM 
+     @[]@F_Calendar c0
+WHERE 
+              1=1
+ AND      c0.facility = 'A15' 
+ AND      c0.start_date >= TRUNC(SYSDATE) - 365 
+ AND      c0.start_date <= TRUNC(SYSDATE) + 1 
+ORDER BY
+           6 Asc
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=29397
+/PROMPT-TEXT=Step 2-2. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=lich.py
+</OPTIONS>
+
+import pandas as pd
+import numpy as np
+
+data = pd.read_csv(r'calendar_ref.csv')
+
+data['WW_START_DATE'] = pd.to_datetime(data['WW_START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['WW_END_DATE'] = pd.to_datetime(data['WW_END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['START_DATE'] = pd.to_datetime(data['START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+data['END_DATE'] = pd.to_datetime(data['END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
+ww = (data.groupby('WW', as_index=False)
+          .agg(
+              START_DATE=('START_DATE', 'min'),
+              END_DATE=('END_DATE', 'max')
+          )
+      )
+calendar = pd.merge(ww,data[['WW','MONTH','QTR']],how='left',on=['WW'])
+calendar = calendar[['QTR','MONTH','WW','START_DATE','END_DATE']]
+calendar .columns = calendar .columns.str.lower()
+calendar.to_csv(r'calendar_ref.csv',index=False)
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=29397
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"
+/PROMPT-TEXT=Step 2-3. Run Python script
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=29397
+/PROMPT-TEXT=Step 3. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=yield_dashboard.py
+</OPTIONS>
+
+import pandas as pd
+from pathlib import Path
+import shutil
+import os
+import numpy as np
+
+path = pd.read_csv(r'path.csv')
+raw_data_path = (path.loc[path['category'].str.strip() == 'QY_raw_data', 'path'].iloc[0])
+dashboard_data_path = (path.loc[path['category'].str.strip() == 'Dashboard_data', 'path'].iloc[0])
+calendar = pd.read_excel(os.path.join((path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0]),"Reference.xlsx"), sheet_name="calendar")
+module_goal = pd.read_excel(os.path.join((path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0]),"Reference.xlsx"), sheet_name="module_goal")
+module_goal.to_csv(r'module_goal.csv',index=False)
+
+raw_data_path = Path(raw_data_path)
+dashboard_data_path = Path(dashboard_data_path)
+yield_folder = Path(raw_data_path) / "Yield"
+pareto_folder = Path(raw_data_path) / "Pareto"
+dashboard_data_path.mkdir(parents=True, exist_ok=True)
+pareto_folder.mkdir(parents=True, exist_ok=True)
+yield_folder.mkdir(parents=True, exist_ok=True)
+
+#groupping files to respective folder
+for file_name in os.listdir(raw_data_path):
+    src = Path(raw_data_path) / file_name
+    dest_yield = yield_folder / file_name
+    dest_pareto = pareto_folder / file_name
+    if not src.is_file():
+        continue
+    if file_name.endswith("_yield.csv"):
+        if dest_yield.exists():
+            dest_yield.unlink()
+        shutil.move(str(src), str(dest_yield))
+    elif file_name.endswith("_pareto.csv"):
+        if dest_pareto.exists():
+            dest_pareto.unlink()
+        shutil.move(str(src), str(dest_pareto))
+
+#yield
+yield_data = pd.DataFrame()
+for file_name in yield_folder.glob("*.csv"):
+    data = pd.read_csv(file_name)
+    data['module'] = file_name.name.split("\\")[-1].split("_")[0]
+    data = data.rename(columns={'diecodename':'prodgroup3'})
+    yield_data = pd.concat([yield_data, data], ignore_index=True)
+yield_data = pd.merge(yield_data,calendar[['ww','month','qtr']],how='left',on='ww')
+yield_data = yield_data[['facility','prodgroup3','module','owner','qtr','month','ww','lot','volume','losses']]
+yield_data = yield_data.drop_duplicates()
+
+def yield_analyze (data,time_frame,goal):
+    data = (data.groupby(['facility','prodgroup3','module',time_frame,'owner'],as_index=False)
+        .agg(
+            volume = ('volume','sum'),
+            losses = ('losses','sum')
+        )
+    )
+    data['yield'] = (1 - data['losses']/data['volume'])
+    data = pd.merge(data,goal[['host_facility','module','area','prodgroup3','forum','owner']],how='left',on=['module','prodgroup3','owner'])
+    data['host_site'] = np.where(
+        data['facility'] == data['host_facility'],
+        'host_site',
+        data['facility']
+    )
+    yield_pivot = data.pivot_table(
+        index=['host_facility',time_frame, 'prodgroup3','module','owner'],
+        columns='host_site',
+        values='yield',
+        aggfunc='first',
+    ).reset_index().fillna(0) 
+    yield_pivot = pd.merge(yield_pivot,goal[['module','prodgroup3','goal','limit','vf_tolerance','forum','area']],how='left',on=['module','prodgroup3'])
+    
+    cols = yield_pivot.columns.tolist()
+    #re-order columns
+    after_host = cols[cols.index('host_site') + 1:]   
+    base = [c for c in cols if c not in after_host]   
+    i = base.index('module') + 1                      
+    new_cols = base[:i] + after_host + base[i:]
+    yield_pivot = yield_pivot[new_cols]
+    
+    yield_pivot['host_site_tolerance'] = yield_pivot['host_site'] + yield_pivot['vf_tolerance']
+    cols = yield_pivot.columns.tolist()
+    yield_pivot['site_bic'] =  yield_pivot[cols[cols.index('owner') + 1:cols.index('host_site_tolerance')]].idxmax(axis=1)
+    yield_pivot['yield_bic'] =  yield_pivot[cols[cols.index('owner') + 1:cols.index('host_site_tolerance')]].max(axis=1)
+    yield_pivot['status'] = np.where(
+        yield_pivot['site_bic'] == 'host_site',
+        'BIC',
+        np.where(
+            yield_pivot['host_site_tolerance'] >= yield_pivot['yield_bic'],
+            'Comparable',
+            'Incomparable'
+        )
+    )
+    yield_pivot['yield_goal'] = 1 - yield_pivot['goal']
+    yield_pivot['yield_limit'] = 1 - yield_pivot['limit']
+    yield_pivot['status_goal'] = np.where(
+        yield_pivot['host_site'] >= yield_pivot['yield_goal'],
+        'Meet Goal',
+        np.where(
+            yield_pivot['host_site'] >= yield_pivot['yield_limit'],
+            'Within Limit',
+            'Fail Goal'
+        )
+    )
+    yield_pivot['color'] = None
+    yield_pivot['color_code'] = None
+    yield_pivot['comment'] = None
+    for i in range(len(yield_pivot)):
+        if (yield_pivot.loc[i,'status'] == 'BIC') or (yield_pivot.loc[i,'status'] == 'Comparable') :
+            if (yield_pivot.loc[i,'status_goal'] == 'Meet Goal') or (yield_pivot.loc[i,'status_goal'] == 'Within Limit'):
+                yield_pivot.loc[i,'color'] = 'Green' #BIC/Comparable and meet goal
+                yield_pivot.loc[i,'color_code'] = 1
+                yield_pivot.loc[i,'comment'] = 'Meet VF & Meet Goal'
+            else:
+                yield_pivot.loc[i,'color'] = 'Yellow' #BIC/Comparable but fail goal
+                yield_pivot.loc[i,'color_code'] = 2
+                yield_pivot.loc[i,'comment'] = 'Meet VF & Fail Goal'
+        else:
+            yield_pivot.loc[i,'color'] = 'Red' #Incomparable
+            yield_pivot.loc[i,'color_code'] = 3
+            yield_pivot.loc[i,'comment'] = 'Not Meet VF'
+    
+    yield_pivot['facility'] = yield_pivot['host_facility']
+    final = pd.merge(data,yield_pivot[['facility','prodgroup3','module',time_frame,'color','color_code','comment','yield_goal','yield_limit']],how='left',on=['facility','prodgroup3','module',time_frame,])    
+    final = final[['facility',time_frame,'prodgroup3','forum','module','area','owner','losses','volume','yield','yield_goal','yield_limit','color','color_code','comment']]
+    final.to_csv(dashboard_data_path / f"{time_frame}_yield.csv", index=False)
+
+ww_yield = yield_analyze (yield_data,'ww',module_goal)
+month_yield = yield_analyze (yield_data,'month',module_goal)
+qtr_yield = yield_analyze (yield_data,'qtr',module_goal)
+
+#pareto
+pareto_data = pd.DataFrame()
+for file_name in pareto_folder.glob("*.csv"):
+    data = pd.read_csv(file_name)
+    data['module'] = file_name.name.split("\\")[-1].split("_")[0]
+    data = data.rename(columns={'diecodename':'prodgroup3'})
+    pareto_data = pd.concat([pareto_data, data], ignore_index=True)
+pareto_data = pd.merge(pareto_data,calendar[['ww','month','qtr']],how='left',on='ww')
+pareto_data = pd.merge(pareto_data,module_goal[['module','area','prodgroup3','forum','owner']],how='left',on=['module','prodgroup3','owner'])
+pareto_data = pareto_data[['facility','prodgroup3','ww','month','qtr','area','module','forum','owner','location','lot','qty','binname','date_STR']]
+pareto_data = pareto_data.drop_duplicates()
+pareto_data.to_csv(dashboard_data_path / "pareto.csv", index=False)
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=29397
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\Run_Python_Script.va "yield_dashboard.py" "" "N" "atd_atm.hadoop" "Python-v3"
+/PROMPT-TEXT=Step 4. Run Python script
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=29397
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFCopy.bat "\\vnatshfs.intel.com\VNATAnalysis$\MAOATM\VN\Applications\AE1Stop\EPOXY\Luc\Yield\Yield_DashBoard\QY.csv" ".\" "N"
+/PROMPT-TEXT=Step 5-1. Copy Files/Folders
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145717
+/CSV=\\vnatshfs.intel.com\VNATAnalysis$\MAOATM\VN\Applications\AE1Stop\EPOXY\Luc\Yield\Yield_DashBoard\QY.csv
+/TABLE=QY.csv
+/HEADERS=REPORT_NAME,EATS_REPORTS
+/INSTANCE=29397
+/PROMPT-TEXT=Step 5-2.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[report_name] AS [REPORT_NAME]
+         ,a0.[eats_reports] AS [EATS_REPORTS]
+FROM 
+[QY] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=29397
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFCopy.bat "\\vnatshfs.intel.com\VNATAnalysis$\MAOATM\VN\Applications\AE1Stop\EPOXY\Luc\Yield\Yield_DashBoard\Data Dashboard\ww_yield.csv" "ww_yield.csv" "N"
+/PROMPT-TEXT=Step 6-1. Copy Files/Folders
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145717
+/CSV=facility.csv
+/TABLE=ww_yield.csv,module_goal.csv
+/HEADERS=facility,host_site
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-2-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [module_goal] ([host_facility]);
+
+SELECT /*L0*/  DISTINCT 
+          a0.[facility] AS [facility]
+         ,CASE  WHEN  a0.[facility] =  a1.[host_facility]  THEN 'Yes'  ELSE 'No' END AS [host_site]
+FROM 
+           [ww_yield] a0
+ LEFT OUTER JOIN [module_goal] a1
+  ON a0.[facility] = a1.[host_facility]
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145717
+/CSV=prodgroup3.csv
+/TABLE=ww_yield.csv
+/HEADERS=prodgroup3
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-3-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[prodgroup3] AS [prodgroup3]
+FROM 
+[ww_yield] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145717
+/CSV=module.csv
+/TABLE=ww_yield.csv
+/HEADERS=module
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-4-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[module] AS [module]
+FROM 
+[ww_yield] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145718
+/CSV=area.csv
+/TABLE=ww_yield.csv
+/HEADERS=area
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-5-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[area] AS [area]
+FROM 
+[ww_yield] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145718
+/CSV=forum.csv
+/TABLE=ww_yield.csv
+/HEADERS=forum
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-6-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[forum] AS [forum]
+FROM 
+[ww_yield] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20260616145718
+/CSV=owner.csv
+/TABLE=ww_yield.csv
+/HEADERS=owner
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-7-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a0.[owner] AS [owner]
+FROM 
+[ww_yield] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=29397
+/PROMPT-TEXT=Step 6-8. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=ref.py
+</OPTIONS>
+
+import pandas as pd
+import os
+
+# path
+path = pd.read_csv(r'path.csv')
+ref = os.path.join(
+    path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0],
+    "Reference.xlsx"
+)
+
+calendar = pd.read_csv(r"calendar_ref.csv")
+ww = calendar[['ww']].dropna().drop_duplicates()
+month = calendar[['month']].dropna().drop_duplicates()
+qtr = calendar[['qtr']].dropna().drop_duplicates()
+
+facility = pd.read_csv(r"facility.csv").dropna()
+prodgroup3 = pd.read_csv(r"prodgroup3.csv").dropna()
+module = pd.read_csv(r"module.csv").dropna()
+area = pd.read_csv(r"area.csv").dropna()
+forum = pd.read_csv(r"forum.csv").dropna()
+owner = pd.read_csv(r"owner.csv").dropna()
+
+refresh = pd.DataFrame({'refresh': [pd.Timestamp.now()]})
+
+mode = "a" if os.path.exists(ref) else "w"
+
+with pd.ExcelWriter(
+    ref,
+    engine="openpyxl",
+    mode=mode,
+    if_sheet_exists="replace"
+) as writer:
+
+    # calendar group
+    ww.to_excel(writer, sheet_name="ww", index=False)
+    month.to_excel(writer, sheet_name="month", index=False)
+    qtr.to_excel(writer, sheet_name="qtr", index=False)
+    calendar.to_excel(writer, sheet_name="calendar", index=False)
+
+    # master tables
+    facility.to_excel(writer, sheet_name="facility", index=False)
+    prodgroup3.to_excel(writer, sheet_name="prodgroup3", index=False)
+    module.to_excel(writer, sheet_name="module", index=False)
+    area.to_excel(writer, sheet_name="area", index=False)
+    forum.to_excel(writer, sheet_name="forum", index=False)
+    owner.to_excel(writer, sheet_name="owner", index=False)
+
+    # refresh
+    refresh.to_excel(writer, sheet_name="refresh", index=False)
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=29397
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\Run_Python_Script.va "ref.py" "" "N" "atd_atm.hadoop" "Python-v3"
+/PROMPT-TEXT=Step 6-9. Run Python script
+</OPTIONS>
+
