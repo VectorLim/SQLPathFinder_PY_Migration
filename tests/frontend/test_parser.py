@@ -21,20 +21,20 @@ def test_block_count(fixture: str, expected_blocks: int, FIXTURES) -> None:
 
 
 def test_every_block_has_at_least_options_or_body(FIXTURES) -> None:
-    for fixture in FIXTURES.iterdir():
+    for fixture in FIXTURES.glob("*.txt"):
         for block in parse_vg2(fixture):
             assert block.options or block.body
 
 
 def test_spans_are_within_file_bounds(FIXTURES) -> None:
-    for fixture in FIXTURES.iterdir():
+    for fixture in FIXTURES.glob("*.txt"):
         total_lines = sum(1 for _ in fixture.open(encoding="utf-8", errors="replace"))
         for block in parse_vg2(fixture):
             assert 1 <= block.span.start_line <= block.span.end_line <= max(total_lines, 1)
 
 
 def test_parser_is_deterministic(FIXTURES) -> None:
-    for fixture in FIXTURES.iterdir():
+    for fixture in FIXTURES.glob("*.txt"):
         assert parse_vg2(fixture) == parse_vg2(fixture)
 
 

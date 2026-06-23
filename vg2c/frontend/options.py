@@ -28,4 +28,4 @@ def parse_options(header: str) -> dict[str, str]:
         value = text[value_start:next_start].strip()
         options[key] = value
 
-    return options
+    return {k.upper(): v for k, v in options.items()}
