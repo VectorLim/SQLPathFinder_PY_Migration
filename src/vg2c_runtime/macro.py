@@ -45,8 +45,9 @@ class MacroState:
 
     def push_frame(self, named: dict[str, str] | None = None) -> None:
         frame: dict[str, str] = {}
-        print(named)
         for k, v in (named or {}).items():
+            if k is None:
+                continue  # guard: malformed DictReader row (e.g. blank header line)
             frame[k.upper()] = str(v)
         self._stack.append(frame)
 

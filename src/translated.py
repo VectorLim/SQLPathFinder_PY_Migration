@@ -3,6 +3,7 @@
 
 from vg2c_runtime import ctx as pipeline_ctx
 
+
 def step_0000_step_1_1_create_an_html_report(ctx):
     pass  # HTML report not translated
 
@@ -15,28 +16,28 @@ def step_0002_html_report(ctx):
     pass  # HTML report not translated
 
 
-def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
-    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y')
+# def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
+#     ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y')
 
 
-def step_0004_step_1_4_create_getcsrsu_bat(ctx):
-    ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
+# def step_0004_step_1_4_create_getcsrsu_bat(ctx):
+#     ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
 
 
-def step_0005_step_1_5_run_getcsrsu_bat(ctx):
-    ctx.external.run(['getcsrsu.bat'])
+# def step_0005_step_1_5_run_getcsrsu_bat(ctx):
+#     ctx.external.run(['getcsrsu.bat'])
 
 
-def step_0007_step_1_7_run_setsiteparam_exe(ctx):
-    ctx.external.run(['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
+# def step_0007_step_1_7_run_setsiteparam_exe(ctx):
+#     ctx.external.run(['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
 
 
-def step_0009_step_1_8_delete_temporary_files(ctx):
-    ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
+# def step_0009_step_1_8_delete_temporary_files(ctx):
+#     ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
 
 
-def step_0011_rows_in_file(ctx):
-    ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
+# def step_0011_rows_in_file(ctx):
+#     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
 
 
 def step_0013_step_1_12_trigger_if_config_file_not_found(ctx):
@@ -122,29 +123,41 @@ GROUP BY
          ,[CSRV]
          ,[MMSV]
 """,
-        inputs=['ICMPCS_config.csv'],
-        output='configsets.csv',
+        inputs=["ICMPCS_config.csv"],
+        output="configsets.csv",
     )
 
 
 def step_0016_rows_in_file(ctx):
-    ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
+    ctx.macro.set_named("CONFIGSETS", str(ctx.csv_io.row_count("configsets.csv")))
 
 
-def step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(ctx):
+def step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(
+    ctx,
+):
     pass  # TODO: email utility — argv positions unresolved
 
 
-def step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
+def step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    ctx,
+):
+    ctx.write_file(
+        path="CSRVerror.htm",
+        template="\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>",
+    )
 
 
 def step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx):
     pass  # TODO: email utility — argv positions unresolved
 
 
-def step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
+def step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    ctx,
+):
+    ctx.write_file(
+        path="MMSVerror.htm",
+        template="\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>",
+    )
 
 
 def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx):
@@ -152,19 +165,26 @@ def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx)
 
 
 def step_0029_step_1_24_robocopy_hist_txt(ctx):
-    ctx.fs_ops.copy(src='HIST.txt', dst='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\KM\\HIST')
+    ctx.fs_ops.copy(
+        src="HIST.txt",
+        dst="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\"
+        + ctx.macro.named("SFOLDER")
+        + "\\KM\\HIST",
+    )
 
 
 def step_0030_rows_in_file(ctx):
-    ctx.macro.set_named('HIST', str(ctx.csv_io.row_count('HIST.txt')))
+    ctx.macro.set_named("HIST", str(ctx.csv_io.row_count("HIST.txt")))
 
 
 def step_0032_step_1_27_create_dummy_hist_csv(ctx):
-    ctx.write_file(path='HIST.csv', template='\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00')
+    ctx.write_file(
+        path="HIST.csv", template="\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00"
+    )
 
 
 def step_0033_step_1_28_create_histerror_txt(ctx):
-    ctx.write_file(path='HISTERROR.txt', template='\nERROR\nERROR\nERROR')
+    ctx.write_file(path="HISTERROR.txt", template="\nERROR\nERROR\nERROR")
 
 
 def step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx):
@@ -172,7 +192,10 @@ def step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx):
 
 
 def step_0042_step_4_1_copy_files_folders(ctx):
-    ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst='.\\')
+    ctx.fs_ops.copy(
+        src="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv",
+        dst=".\\",
+    )
 
 
 def step_0043_step_4_2_1_fetching_text_sqlite_data(ctx):
@@ -188,19 +211,20 @@ SELECT /*L0*/
 FROM 
 [Product_Lookup] a0
 """,
-        inputs=['Product_Lookup.csv'],
-        output='CSR_Server_OIS_Product_List.csv',
+        inputs=["Product_Lookup.csv"],
+        output="CSR_Server_OIS_Product_List.csv",
     )
 
 
 def step_0044_step_5_1_1_a0_fetching_mars_data(ctx):
     reader = ctx.reader_mars(
-        database='MARS',
+        database="MARS",
         node=ctx.macro.named("MARS"),
-        record=('WIP_Lot_History_v2', '1.0.0.0'),
-        instance='15507',
+        record=("WIP_Lot_History_v2", "1.0.0.0"),
+        instance="15507",
     )
-    result = reader.read(sql="""
+    result = reader.read(
+        sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           c0.ww AS site_work_week
@@ -227,7 +251,11 @@ WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
  AND      (p.prodgroup3 In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\CSR_Server_OIS_Product_List.csv", 2, "p.prodgroup3 In"
+        )
+        + """ 
  AND      f0.operation In ('2090'
 ,'1960') 
  AND      f0.load_date >= (SYSDATE - 8/24) 
@@ -235,22 +263,26 @@ AND      f0.owner <> 'EMPTYFOUP'
 -- Tail A
 /*END SQL*/
 
-""")
-    ctx.csv_io.write('CSR_Server_OIS_subplane_lotlist.csv', result)
+"""
+    )
+    ctx.csv_io.write("CSR_Server_OIS_subplane_lotlist.csv", result)
 
 
 def step_0045_rows_in_file(ctx):
-    ctx.macro.set_named('LOTS', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_lotlist.csv')))
+    ctx.macro.set_named(
+        "LOTS", str(ctx.csv_io.row_count("CSR_Server_OIS_subplane_lotlist.csv"))
+    )
 
 
 def step_0047_step_8_1_1_a0_fetching_aries_data(ctx):
     reader = ctx.reader_aries(
-        database='ARIES',
+        database="ARIES",
         node=ctx.macro.named("ARIES"),
-        record=('AT_Metrology', '1.0.0.0'),
-        instance='15507',
+        record=("AT_Metrology", "1.0.0.0"),
+        instance="15507",
     )
-    result = reader.read(sql="""
+    result = reader.read(
+        sql="""
 /*BEGIN SQL*/
 SELECT 
           facility AS facility
@@ -334,9 +366,17 @@ AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = c
 LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
 WHERE ats.data_domain='METROLOGY'
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\CSR_Server_OIS_subplane_lotlist.csv", 2, "ats.lot In"
+        )
+        + """ 
  AND      (ats.operation In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\CSR_Server_OIS_subplane_lotlist.csv", 3, "ats.operation In"
+        )
+        + """ 
  AND      (ats.tester_id LIKE  'OIS%'
 ) 
  AND      t.test_name In ('SUBPLANEANGLEX'
@@ -361,18 +401,20 @@ GROUP BY
          ,lane_number
 /*END SQL*/
 
-""")
-    ctx.csv_io.write('yeuchuan_a0_15507.tab', result)
+"""
+    )
+    ctx.csv_io.write("yeuchuan_a0_15507.tab", result)
 
 
 def step_0048_step_8_1_1_a2_fetching_aries_data(ctx):
     reader = ctx.reader_aries(
-        database='ARIES',
+        database="ARIES",
         node=ctx.macro.named("ARIES"),
-        record=('AT_TDX_DIA', '1.0.0.0'),
-        instance='15507',
+        record=("AT_TDX_DIA", "1.0.0.0"),
+        instance="15507",
     )
-    result = reader.read(sql="""
+    result = reader.read(
+        sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           z0.primary_entity AS entity
@@ -385,14 +427,23 @@ LEFT JOIN ARIES_Views.AV_dia_media_testing z2 ON z2.lao_start_ww = z0.lao_start_
 INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
 WHERE
               (z0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\yeuchuan_a0_15507.tab", "lot", "z0.lot In"
+        )
+        + """ 
  AND      z0.tool_entity Like 'TGB%' 
  AND      (z0.operation In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\yeuchuan_a0_15507.tab", "operation", "z0.operation In"
+        )
+        + """ 
 /*END SQL*/
 
-""")
-    ctx.csv_io.write('yeuchuan_a2_15507.tab', result)
+"""
+    )
+    ctx.csv_io.write("yeuchuan_a2_15507.tab", result)
 
 
 def step_0049_sqlite_query(ctx):
@@ -425,8 +476,8 @@ FROM
  LEFT OUTER JOIN [yeuchuan_a2_15507] a2
   ON a0.[visual_id] = a2.[visual_id_1]
 """,
-        inputs=['yeuchuan_a0_15507.tab', 'yeuchuan_a2_15507.tab'],
-        output='CSR_Server_OIS_subplane.csv',
+        inputs=["yeuchuan_a0_15507.tab", "yeuchuan_a2_15507.tab"],
+        output="CSR_Server_OIS_subplane.csv",
     )
 
 
@@ -564,8 +615,8 @@ FROM
 WHERE
               [Flag] = 'flag'
 """,
-        inputs=['CSR_Server_OIS_subplane.csv', 'CSR_Server_OIS_Product_List.csv'],
-        output='CSR_Server_OIS_subplane_interim.csv',
+        inputs=["CSR_Server_OIS_subplane.csv", "CSR_Server_OIS_Product_List.csv"],
+        output="CSR_Server_OIS_subplane_interim.csv",
     )
 
 
@@ -608,13 +659,15 @@ WHERE
               a0.[dense_rank] Not In ('1'
 ,'2')
 """,
-        inputs=['CSR_Server_OIS_subplane_interim.csv'],
-        output='CSR_Server_OIS_subplane_output.csv',
+        inputs=["CSR_Server_OIS_subplane_interim.csv"],
+        output="CSR_Server_OIS_subplane_output.csv",
     )
 
 
 def step_0052_rows_in_file(ctx):
-    ctx.macro.set_named('FLAG', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_output.csv')))
+    ctx.macro.set_named(
+        "FLAG", str(ctx.csv_io.row_count("CSR_Server_OIS_subplane_output.csv"))
+    )
 
 
 def step_0054_step_13_1_1_fetching_text_sqlite_data(ctx):
@@ -640,21 +693,24 @@ FROM
 [CSR_Server_OIS_subplane_output] a0
 WHERE
  NOT          (a0.[lot] In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """
+"""
+        + ctx.sql_macros.sql_get_csv_list(".\\HIST.csv", 1, "a0.[lot] In")
+        + """
 """,
-        inputs=['CSR_Server_OIS_subplane_output.csv'],
-        output='yeuchuan_SQL_15507.tab',
+        inputs=["CSR_Server_OIS_subplane_output.csv"],
+        output="yeuchuan_SQL_15507.tab",
     )
 
 
 def step_0055_step_13_1_2_a1_fetching_mars_data(ctx):
     reader = ctx.reader_mars(
-        database='MARS',
+        database="MARS",
         node=ctx.macro.named("MARS"),
-        record=('WIP_Lot_Status_v2', '1.0.0.0'),
-        instance='15507',
+        record=("WIP_Lot_Status_v2", "1.0.0.0"),
+        instance="15507",
     )
-    result = reader.read(sql="""
+    result = reader.read(
+        sql="""
 /*BEGIN SQL*/
 SELECT 
           f0.lot AS lot_1
@@ -671,11 +727,16 @@ WHERE f0.owner <> 'EMPTYFOUP'
  AND      f0.qty1 > 0 
  AND      f0.src_erase_date Is Null  
  AND      (f0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """ 
+"""
+        + ctx.sql_macros.sql_get_csv_list(
+            ".\\yeuchuan_SQL_15507.tab", "lot", "f0.lot In"
+        )
+        + """ 
 /*END SQL*/
 
-""")
-    ctx.csv_io.write('yeuchuan_a1_15507.tab', result)
+"""
+    )
+    ctx.csv_io.write("yeuchuan_a1_15507.tab", result)
 
 
 def step_0056_sqlite_query(ctx):
@@ -743,66 +804,84 @@ FROM
 WHERE
               [Lot_MVIN_CURE] = 'Y'
 """,
-        inputs=['yeuchuan_SQL_15507.tab', 'yeuchuan_a1_15507.tab'],
-        output='Data.csv',
+        inputs=["yeuchuan_SQL_15507.tab", "yeuchuan_a1_15507.tab"],
+        output="Data.csv",
     )
 
 
 def run() -> None:
     ctx = pipeline_ctx
-    step_0000_step_1_1_create_an_html_report(ctx)
-    step_0001_html_report(ctx)
-    step_0002_html_report(ctx)
-    step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx)
-    step_0004_step_1_4_create_getcsrsu_bat(ctx)
-    step_0005_step_1_5_run_getcsrsu_bat(ctx)
-    for __row in ctx.csv_io.iter('macrotmp.csv'):
-        with ctx.macro_scope(__row):
-            step_0007_step_1_7_run_setsiteparam_exe(ctx)
-    step_0009_step_1_8_delete_temporary_files(ctx)
-    for __row in ctx.csv_io.iter('ctime.csv'):
-        with ctx.macro_scope(__row):
-            step_0011_rows_in_file(ctx)
-            if int(ctx.macro.named("CONFIG")) <= int('0'):
-                step_0013_step_1_12_trigger_if_config_file_not_found(ctx)
-            else:
-                step_0015_step_1_13_1_transpose_config_file_to_macro_friendly_format(ctx)
-                step_0016_rows_in_file(ctx)
-                if int(ctx.macro.named("CONFIGSETS")) != int('1'):
-                    step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(ctx)
-                else:
-                    for __row in ctx.csv_io.iter('configsets.csv'):
-                        with ctx.macro_scope(__row):
-                            if ctx.macro.named("CSRV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
-                                step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx)
-                                step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx)
-                            if ctx.macro.named("MMSV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
-                                step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx)
-                                step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx)
-                            step_0029_step_1_24_robocopy_hist_txt(ctx)
-                            step_0030_rows_in_file(ctx)
-                            if int(ctx.macro.named("HIST")) <= int('0'):
-                                step_0032_step_1_27_create_dummy_hist_csv(ctx)
-                                step_0033_step_1_28_create_histerror_txt(ctx)
-                            else:
-                                step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx)
-    for __row in ctx.csv_io.iter('configsets.csv'):
-        with ctx.macro_scope(__row):
-            step_0042_step_4_1_copy_files_folders(ctx)
-            step_0043_step_4_2_1_fetching_text_sqlite_data(ctx)
-            step_0044_step_5_1_1_a0_fetching_mars_data(ctx)
-            step_0045_rows_in_file(ctx)
-            if int(ctx.macro.named("LOTS")) > int('0'):
-                step_0047_step_8_1_1_a0_fetching_aries_data(ctx)
-                step_0048_step_8_1_1_a2_fetching_aries_data(ctx)
-                step_0049_sqlite_query(ctx)
-                step_0050_step_9_1_1_fetching_text_sqlite_data(ctx)
-                step_0051_step_10_1_1_fetching_text_sqlite_data(ctx)
-                step_0052_rows_in_file(ctx)
-                if int(ctx.macro.named("FLAG")) > int('0'):
-                    step_0054_step_13_1_1_fetching_text_sqlite_data(ctx)
-                    step_0055_step_13_1_2_a1_fetching_mars_data(ctx)
-                    step_0056_sqlite_query(ctx)
+    # step_0000_step_1_1_create_an_html_report(ctx)
+    # step_0001_html_report(ctx)
+    # step_0002_html_report(ctx)
+    # step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx)
+    # step_0004_step_1_4_create_getcsrsu_bat(ctx)
+    # step_0005_step_1_5_run_getcsrsu_bat(ctx)
+    # for __row in ctx.csv_io.iter("macrotmp.csv"):
+    #     with ctx.macro_scope(__row):
+    #         step_0007_step_1_7_run_setsiteparam_exe(ctx)
+    # step_0009_step_1_8_delete_temporary_files(ctx)
+    # for __row in ctx.csv_io.iter("ctime.csv"):
+    #     with ctx.macro_scope(__row):
+    #         # step_0011_rows_in_file(ctx)
+    #         if int(ctx.macro.named("CONFIG")) <= int("0"):
+    #             step_0013_step_1_12_trigger_if_config_file_not_found(ctx)
+    #         else:
+    #             step_0015_step_1_13_1_transpose_config_file_to_macro_friendly_format(
+    #                 ctx
+    #             )
+    #             step_0016_rows_in_file(ctx)
+    #             if int(ctx.macro.named("CONFIGSETS")) != int("1"):
+    #                 step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(
+    #                     ctx
+    #                 )
+    #             else:
+    #                 for __row in ctx.csv_io.iter("configsets.csv"):
+    #                     with ctx.macro_scope(__row):
+    #                         if (
+    #                             ctx.macro.named("CSRV") == "FAIL"
+    #                             and ctx.macro.named("UNDERDEV") == "N"
+    #                         ):
+    #                             step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    #                                 ctx
+    #                             )
+    #                             step_0023_step_1_20_email_when_user_have_no_access_to_csr(
+    #                                 ctx
+    #                             )
+    #                         if (
+    #                             ctx.macro.named("MMSV") == "FAIL"
+    #                             and ctx.macro.named("UNDERDEV") == "N"
+    #                         ):
+    #                             step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    #                                 ctx
+    #                             )
+    #                             step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(
+    #                                 ctx
+    #                             )
+    #                         step_0029_step_1_24_robocopy_hist_txt(ctx)
+    #                         step_0030_rows_in_file(ctx)
+    #                         if int(ctx.macro.named("HIST")) <= int("0"):
+    #                             step_0032_step_1_27_create_dummy_hist_csv(ctx)
+    #                             step_0033_step_1_28_create_histerror_txt(ctx)
+    #                         else:
+    #                             step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx)
+    # for __row in ctx.csv_io.iter("configsets.csv"):
+    step_0042_step_4_1_copy_files_folders(ctx)
+    step_0043_step_4_2_1_fetching_text_sqlite_data(ctx)
+    step_0044_step_5_1_1_a0_fetching_mars_data(ctx)
+    step_0045_rows_in_file(ctx)
+    if int(ctx.macro.named("LOTS")) > int("0"):
+        step_0047_step_8_1_1_a0_fetching_aries_data(ctx)
+        step_0048_step_8_1_1_a2_fetching_aries_data(ctx)
+        step_0049_sqlite_query(ctx)
+        step_0050_step_9_1_1_fetching_text_sqlite_data(ctx)
+        step_0051_step_10_1_1_fetching_text_sqlite_data(ctx)
+        step_0052_rows_in_file(ctx)
+        if int(ctx.macro.named("FLAG")) > int("0"):
+            step_0054_step_13_1_1_fetching_text_sqlite_data(ctx)
+            step_0055_step_13_1_2_a1_fetching_mars_data(ctx)
+            step_0056_sqlite_query(ctx)
+
 
 if __name__ == "__main__":
     run()

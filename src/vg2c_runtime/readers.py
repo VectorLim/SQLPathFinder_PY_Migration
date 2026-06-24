@@ -81,7 +81,5 @@ class OracleReader(Reader):
         reader = self._datasyncx.OracleReader(
             database=self._database,
             node=self._node,
-            record=self._record,
-            instance=self._instance,
         )
-        return reader.read(sql)
+        return reader.read("KM6", sql)
