@@ -94,7 +94,9 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         "{ROWS-IN-FILE}",
     ]
     for token in required_tokens:
-        assert any(v.lstrip().startswith(token) for v in macro_values), f"Missing macro token {token}"
+        assert any(
+            v.lstrip().startswith(token) for v in macro_values
+        ), f"Missing macro token {token}"
 
     utility_values = [
         item.parsed.options.lookup.get("UTILITIES", "")

@@ -24,7 +24,9 @@ def test_html_report_rule() -> None:
 def test_write_file_rule_for_multiple_body_types() -> None:
     bodies = ["print('x')", "echo hi", "a,b\n1,2", "<html></html>"]
     for body in bodies:
-        classified, diagnostics = classify([_block({"WRITE-FILE": "Y", "CSV": "x"}, body=body)])
+        classified, diagnostics = classify(
+            [_block({"WRITE-FILE": "Y", "CSV": "x"}, body=body)]
+        )
         assert classified[0].kind is Kind.WRITE_FILE
         assert not diagnostics
 
@@ -64,7 +66,9 @@ def test_sqlite_rule_for_oledb_or_engine() -> None:
 
 
 def test_mars_rule() -> None:
-    classified, diagnostics = classify([_block({"NODE": "KM.[A15_PROD_21.].MARS", "ENGINE": "VA"})])
+    classified, diagnostics = classify(
+        [_block({"NODE": "KM.[A15_PROD_21.].MARS", "ENGINE": "VA"})]
+    )
     assert classified[0].kind is Kind.MARS_READ
     assert not diagnostics
 

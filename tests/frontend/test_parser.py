@@ -49,7 +49,9 @@ def test_parses_inline_options_when_markers_missing() -> None:
 
 
 def test_preserves_sql_body_verbatim() -> None:
-    body = "/*BEGIN SQL*/\nSELECT\n    a,\n    b\nFROM t\nORDER BY\n    1\n/*END SQL*/\n"
+    body = (
+        "/*BEGIN SQL*/\nSELECT\n    a,\n    b\nFROM t\nORDER BY\n    1\n/*END SQL*/\n"
+    )
     text = f"<OPTIONS>\n/OLEDB=SQLite\n</OPTIONS>\n{body}"
     blocks, _ = parse(text)
 
@@ -81,7 +83,9 @@ def test_preserves_csv_and_html_bodies_verbatim() -> None:
 
 
 def test_quoted_utility_value_kept_verbatim() -> None:
-    value = '@EXEDIR@\\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"'
+    value = (
+        '@EXEDIR@\\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"'
+    )
     text = f"<OPTIONS>\n/UTILITIES={value}\n</OPTIONS>\n"
     blocks, _ = parse(text)
 

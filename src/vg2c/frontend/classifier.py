@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from typing import Callable
 
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Diagnostic, Kind, ParsedBlock
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Diagnostic,
+    Kind,
+    ParsedBlock,
+)
 
 RuleFn = Callable[[BlockOptions, str], tuple[Kind, str] | None]
 
 
-def classify(blocks: list[ParsedBlock]) -> tuple[list[ClassifiedBlock], list[Diagnostic]]:
+def classify(
+    blocks: list[ParsedBlock],
+) -> tuple[list[ClassifiedBlock], list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
     classified: list[ClassifiedBlock] = []
     aries_noted = False
@@ -15,7 +23,11 @@ def classify(blocks: list[ParsedBlock]) -> tuple[list[ClassifiedBlock], list[Dia
     for block in blocks:
         result = _classify_one(block.options, block.body)
         if result is None:
-            classified.append(ClassifiedBlock(parsed=block, kind=Kind.UNKNOWN, reason="no rule matched"))
+            classified.append(
+                ClassifiedBlock(
+                    parsed=block, kind=Kind.UNKNOWN, reason="no rule matched"
+                )
+            )
             diagnostics.append(
                 Diagnostic(
                     severity="warning",
@@ -113,9 +125,7 @@ def _rule_aries(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
 def _node_matches(node_value: str, token: str) -> bool:
     node = node_value.upper().strip()
     return (
-        node.endswith(token)
-        or node.endswith(f".{token}")
-        or f"<<<{token}>>>" in node
+        node.endswith(token) or node.endswith(f".{token}") or f"<<<{token}>>>" in node
     )
 
 
