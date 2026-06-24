@@ -26,7 +26,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     ctx.add_import("vg2c_runtime", "ctx as pipeline_ctx")
 
     # Walk the scope tree and emit code
-    functions, run_body = walk_and_emit(dispatched, ctx)
+    functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)
 
     # Assemble the final script
     script_writer = IndentWriter()
@@ -61,6 +61,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.pop_indent()
 
     source = script_writer.source()
+    merged_diags = [*dispatched.diagnostics, *walker_diags]
 
     # Validate syntax
     try:
@@ -69,7 +70,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         ast.parse(source)
     except SyntaxError as e:
         # Emit diagnostic but include source anyway (with error marked)
-        diags = list(dispatched.diagnostics)
+        diags = list(merged_diags)
         diags.append(
             Diagnostic(
                 severity="error",
@@ -82,5 +83,5 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         )
 
     return EmittedScript(
-        source=source, imports=tuple(ctx.imports), diagnostics=dispatched.diagnostics
+        source=source, imports=tuple(ctx.imports), diagnostics=tuple(merged_diags)
     )

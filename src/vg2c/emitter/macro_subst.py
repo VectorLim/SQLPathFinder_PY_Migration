@@ -35,10 +35,6 @@ class MacroSubstituter:
         result = text
 
         for ref in refs:
-            if ref.location != "body":
-                # Only process body references for now
-                continue
-
             # Named placeholders
             named = self._extract_named_from_literal(text)
             for name in named:

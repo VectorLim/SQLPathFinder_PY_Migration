@@ -91,6 +91,10 @@ class MacroState:
         """Get a named macro variable by name (uppercased)."""
         raise NotImplementedError("Stage 6: macro.named")
 
+    def set_named(self, name: str, value: str) -> None:
+        """Set a named macro variable in the current scope."""
+        raise NotImplementedError("Stage 6: macro.set_named")
+
     def positional(self) -> str:
         """Get the next positional macro variable."""
         raise NotImplementedError("Stage 6: macro.positional")

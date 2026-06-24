@@ -83,3 +83,26 @@ def test_actual_script_emitted_has_imports(FIXTURES: Path) -> None:
     """Emitted script should have runtime imports."""
     emitted = _run_full_pipeline(FIXTURES, "actual_script.txt")
     assert "from vg2c_runtime import" in emitted.source or "import" in emitted.source
+
+
+def test_actual_script_uses_declared_output_paths(FIXTURES: Path) -> None:
+    """Known producer outputs should preserve declared /CSV paths, not step_*."""
+    emitted = _run_full_pipeline(FIXTURES, "actual_script.txt")
+    source = emitted.source
+
+    # Ensure known declared producer outputs are preserved.
+    assert "yeuchuan_a0_15507.tab" in source
+    assert "yeuchuan_SQL_15507.tab" in source
+    assert "macrotmp.csv" in source
+
+
+def test_actual_script_rows_in_file_and_macro_names(FIXTURES: Path) -> None:
+    """ROWS-IN-FILE should emit variable assignment and macro names should be normalized."""
+    emitted = _run_full_pipeline(FIXTURES, "actual_script.txt")
+    source = emitted.source
+
+    # ROWS-IN-FILE blocks should define macro variables via runtime context.
+    assert "ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))" in source
+
+    # Macro lookups should not include placeholder delimiters.
+    assert 'ctx.macro.named("<<<' not in source
