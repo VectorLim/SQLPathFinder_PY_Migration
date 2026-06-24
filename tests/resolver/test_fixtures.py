@@ -26,9 +26,16 @@ def test_pipeline_runs_end_to_end(FIXTURES: Path, fixture_name: str) -> None:
 
 @pytest.mark.parametrize(
     "fixture_name",
-    ["script_short.txt", "script_another.txt", "sql_script.txt", "script_from_vietnam.txt"],
+    [
+        "script_short.txt",
+        "script_another.txt",
+        "sql_script.txt",
+        "script_from_vietnam.txt",
+    ],
 )
-def test_no_error_diagnostics_on_clean_fixtures(FIXTURES: Path, fixture_name: str) -> None:
+def test_no_error_diagnostics_on_clean_fixtures(
+    FIXTURES: Path, fixture_name: str
+) -> None:
     program = _resolve_fixture(FIXTURES, fixture_name)
     assert not [d for d in program.diagnostics if d.severity == "error"]
 
@@ -100,7 +107,9 @@ def test_actual_script_scope_and_macro_signals(FIXTURES: Path) -> None:
 
 
 def test_macro_control_blocks_have_scope_representation(FIXTURES: Path) -> None:
-    text = (FIXTURES / "actual_script.txt").read_text(encoding="utf-8", errors="replace")
+    text = (FIXTURES / "actual_script.txt").read_text(
+        encoding="utf-8", errors="replace"
+    )
     parsed, pdiag = parse(text, source=FIXTURES / "actual_script.txt")
     classified, cdiag = classify(parsed)
     program = resolve(classified, diagnostics=[*pdiag, *cdiag])

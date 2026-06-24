@@ -33,7 +33,9 @@ def test_column_by_name_parses() -> None:
 
 
 def test_column_by_index_parses() -> None:
-    block = _resolved_sql_block('WHERE SQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")')
+    block = _resolved_sql_block(
+        'WHERE SQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    )
     updated, _, _ = expand_sql_macros([block], {"f.csv": 1}, {})
     call = updated[0].sql_macro_calls[0]
     assert call.column_ref == 2

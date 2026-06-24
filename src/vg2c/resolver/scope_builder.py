@@ -4,7 +4,15 @@ import re
 from dataclasses import dataclass
 
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic, Kind
-from vg2c.resolver.models import Else, EndIf, EndMacro, IfThen, RowsInFile, ScopeNode, StartMacro
+from vg2c.resolver.models import (
+    Else,
+    EndIf,
+    EndMacro,
+    IfThen,
+    RowsInFile,
+    ScopeNode,
+    StartMacro,
+)
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 
@@ -19,7 +27,9 @@ class _ScopeBuilderState:
         return value
 
 
-def build_scope_tree(blocks: list[ClassifiedBlock]) -> tuple[ScopeNode, list[Diagnostic]]:
+def build_scope_tree(
+    blocks: list[ClassifiedBlock],
+) -> tuple[ScopeNode, list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
     state = _ScopeBuilderState()
 
@@ -96,7 +106,9 @@ def _parse_children(
                     span=block.parsed.span,
                 )
             )
-            children.append(_leaf_node(state, block.parsed.index, control_payload=EndMacro()))
+            children.append(
+                _leaf_node(state, block.parsed.index, control_payload=EndMacro())
+            )
             i += 1
             continue
 
@@ -110,7 +122,9 @@ def _parse_children(
                     span=block.parsed.span,
                 )
             )
-            children.append(_leaf_node(state, block.parsed.index, control_payload=EndIf()))
+            children.append(
+                _leaf_node(state, block.parsed.index, control_payload=EndIf())
+            )
             i += 1
             continue
 
@@ -124,13 +138,17 @@ def _parse_children(
                     span=block.parsed.span,
                 )
             )
-            children.append(_leaf_node(state, block.parsed.index, control_payload=Else()))
+            children.append(
+                _leaf_node(state, block.parsed.index, control_payload=Else())
+            )
             i += 1
             continue
 
         if token == "ROWS-IN-FILE":
             payload = _parse_rows_in_file_payload(block)
-            children.append(_leaf_node(state, block.parsed.index, control_payload=payload))
+            children.append(
+                _leaf_node(state, block.parsed.index, control_payload=payload)
+            )
             i += 1
             continue
 
@@ -231,7 +249,9 @@ def _parse_if(
             scope_id=state.new_scope_id(),
             kind="if-branch",
             start_index=start_block.parsed.index,
-            end_index=if_children[-1].end_index if if_children else start_block.parsed.index,
+            end_index=(
+                if_children[-1].end_index if if_children else start_block.parsed.index
+            ),
             children=tuple(if_children),
             block_index=None,
             control_payload=None,
@@ -254,7 +274,11 @@ def _parse_if(
                 scope_id=state.new_scope_id(),
                 kind="else-branch",
                 start_index=blocks[i].parsed.index,
-                end_index=else_children[-1].end_index if else_children else blocks[i].parsed.index,
+                end_index=(
+                    else_children[-1].end_index
+                    if else_children
+                    else blocks[i].parsed.index
+                ),
                 children=tuple(else_children),
                 block_index=None,
                 control_payload=Else(),

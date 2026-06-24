@@ -5,7 +5,13 @@ from collections import defaultdict
 from pathlib import PurePosixPath
 from types import MappingProxyType
 
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Diagnostic,
+    Kind,
+    SourceSpan,
+)
 from vg2c.resolver.models import (
     Else,
     EndIf,
@@ -43,7 +49,9 @@ def resolve_macros(
         if block.kind is Kind.MACRO_CONTROL
     }
 
-    runtime_refs_by_block, local_diags = _collect_runtime_refs(blocks, scope_tree, payload_by_index)
+    runtime_refs_by_block, local_diags = _collect_runtime_refs(
+        blocks, scope_tree, payload_by_index
+    )
     diagnostics.extend(local_diags)
 
     csv_producers = _collect_csv_producers(blocks)
@@ -71,7 +79,9 @@ def resolve_macros(
                 resolved_options=block.parsed.options,
                 resolved_body=block.parsed.body,
                 sql_macro_calls=(),
-                runtime_macro_refs=tuple(runtime_refs_by_block.get(block.parsed.index, [])),
+                runtime_macro_refs=tuple(
+                    runtime_refs_by_block.get(block.parsed.index, [])
+                ),
                 control_payload=payload,
                 scope_id=scope_for_block.get(block.parsed.index, 0),
             )
@@ -116,7 +126,9 @@ def _collect_runtime_refs(
     diagnostics: list[Diagnostic] = []
     refs: dict[int, list[RuntimeMacroRef]] = defaultdict(list)
     block_by_index = {b.parsed.index: b for b in blocks}
-    mutable_frames: list[_MutableFrame] = [_MutableFrame(frame_id=0, kind="static-vars")]
+    mutable_frames: list[_MutableFrame] = [
+        _MutableFrame(frame_id=0, kind="static-vars")
+    ]
 
     def walk(node: ScopeNode) -> None:
         pushed = False
@@ -134,7 +146,9 @@ def _collect_runtime_refs(
             if isinstance(payload, RowsInFile):
                 mutable_frames[-1].named_vars.add(payload.var_name.upper())
 
-            _scan_block_placeholders(block, mutable_frames, refs[node.block_index], diagnostics)
+            _scan_block_placeholders(
+                block, mutable_frames, refs[node.block_index], diagnostics
+            )
 
         if pushed:
             mutable_frames.pop()
@@ -318,7 +332,9 @@ def _parse_control_payload(
         csv_path = args[0] if args else ""
         var_name = args[1] if len(args) > 1 else ""
         prompt_flag = args[2] if len(args) > 2 else "N"
-        return RowsInFile(csv_path=csv_path, var_name=var_name, prompt_off=prompt_flag.upper() == "Y")
+        return RowsInFile(
+            csv_path=csv_path, var_name=var_name, prompt_off=prompt_flag.upper() == "Y"
+        )
 
     diagnostics.append(
         Diagnostic(

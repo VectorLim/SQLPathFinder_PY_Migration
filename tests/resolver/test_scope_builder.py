@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Kind, ParsedBlock, SourceSpan
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Kind,
+    ParsedBlock,
+    SourceSpan,
+)
 from vg2c.resolver.scope_builder import build_scope_tree
 
 
-def _block(index: int, kind: Kind, options: dict[str, str] | None = None) -> ClassifiedBlock:
+def _block(
+    index: int, kind: Kind, options: dict[str, str] | None = None
+) -> ClassifiedBlock:
     opts = BlockOptions.from_pairs((options or {}).items())
     parsed = ParsedBlock(
         index=index,
@@ -42,7 +50,9 @@ def test_macro_pair_wraps_inner_leaves() -> None:
 
 def test_if_else_builds_if_node_with_branches() -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{IF-THEN} "A" "EQS" "1" "" "" "" ""'}),
+        _block(
+            0, Kind.MACRO_CONTROL, {"UTILITIES": '{IF-THEN} "A" "EQS" "1" "" "" "" ""'}
+        ),
         _block(1, Kind.UTILITY, {"UTILITIES": "left.bat"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{ELSE}"}),
         _block(3, Kind.UTILITY, {"UTILITIES": "right.bat"}),
@@ -80,7 +90,9 @@ def test_orphan_else_emits_diagnostic() -> None:
 
 def test_rows_in_file_is_leaf_not_scope() -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}),
+        _block(
+            0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}
+        ),
         _block(1, Kind.UTILITY, {"UTILITIES": "after.bat"}),
     ]
     root, diagnostics = build_scope_tree(blocks)

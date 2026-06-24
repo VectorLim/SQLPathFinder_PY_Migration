@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Kind, ParsedBlock, SourceSpan
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Kind,
+    ParsedBlock,
+    SourceSpan,
+)
 from vg2c.resolver.macro_resolver import resolve_macros
 from vg2c.resolver.models import RowsInFile
 from vg2c.resolver.scope_builder import build_scope_tree
@@ -50,13 +56,21 @@ def test_same_name_in_sibling_macros_uses_distinct_frame_ids() -> None:
     tree, _ = build_scope_tree(blocks)
     resolved, _, _, _ = resolve_macros(blocks, tree)
 
-    assert resolved[1].runtime_macro_refs[0].frame_id != resolved[4].runtime_macro_refs[0].frame_id
+    assert (
+        resolved[1].runtime_macro_refs[0].frame_id
+        != resolved[4].runtime_macro_refs[0].frame_id
+    )
 
 
 def test_case_insensitive_named_resolution() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.WRITE_FILE, {"WRITE-FILE": "Y"}, body="<<<sfolder>>> <<<SFOLDER>>> <<<SFolder>>>"),
+        _block(
+            1,
+            Kind.WRITE_FILE,
+            {"WRITE-FILE": "Y"},
+            body="<<<sfolder>>> <<<SFOLDER>>> <<<SFolder>>>",
+        ),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     tree, _ = build_scope_tree(blocks)
@@ -68,7 +82,9 @@ def test_case_insensitive_named_resolution() -> None:
 
 def test_rows_in_file_payload_present_but_no_scope_push() -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "f.csv" "COUNT" "N"'}),
+        _block(
+            0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "f.csv" "COUNT" "N"'}
+        ),
         _block(1, Kind.UTILITY, {"UTILITIES": "echo <<<COUNT>>>"}),
     ]
     tree, _ = build_scope_tree(blocks)

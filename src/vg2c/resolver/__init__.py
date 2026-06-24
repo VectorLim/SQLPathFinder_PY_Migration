@@ -24,7 +24,9 @@ def resolve(
     scope_tree, scope_diags = build_scope_tree(blocks)
     merged_diagnostics.extend(scope_diags)
 
-    resolved_blocks, csv_producers, csv_consumers, macro_diags = resolve_macros(blocks, scope_tree)
+    resolved_blocks, csv_producers, csv_consumers, macro_diags = resolve_macros(
+        blocks, scope_tree
+    )
     merged_diagnostics.extend(macro_diags)
 
     resolved_blocks, csv_consumers, sql_diags = expand_sql_macros(
