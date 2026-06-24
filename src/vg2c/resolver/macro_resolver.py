@@ -367,7 +367,9 @@ def _collect_csv_consumers(
     for block in blocks:
         for key, value in block.parsed.options.pairs:
             if key == "TABLE":
-                consumers[_normalize_csv_path(value)].append(block.parsed.index)
+                table_items = [part.strip() for part in value.split(",") if part.strip()]
+                for table_item in table_items:
+                    consumers[_normalize_csv_path(table_item)].append(block.parsed.index)
 
         payload = payload_by_index.get(block.parsed.index)
         if isinstance(payload, (StartMacro, RowsInFile)) and payload.csv_path:
