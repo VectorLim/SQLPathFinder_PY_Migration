@@ -31,7 +31,9 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
     consumers = _collect_consumers(blocks)
 
     producers_by_path = _index_by_path(explicit_producers)
-    _emit_multi_producer_diagnostics(producers_by_path, scope_rel, diagnostics, block_by_index)
+    _emit_multi_producer_diagnostics(
+        producers_by_path, scope_rel, diagnostics, block_by_index
+    )
 
     edges: list[DataflowEdge] = []
     matched_producer_keys: set[tuple[int, str]] = set()
@@ -54,7 +56,9 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                     )
                 )
 
-        scope_relation, order_ok = _classify_edge_relation(producer, consumer, scope_rel)
+        scope_relation, order_ok = _classify_edge_relation(
+            producer, consumer, scope_rel
+        )
         edge = DataflowEdge(
             csv_path=consumer.csv_path,
             producer=producer,
@@ -80,7 +84,9 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                     )
                 )
 
-            if producer.is_conditional and not scope_rel.is_ancestor(producer.scope_id, consumer.scope_id):
+            if producer.is_conditional and not scope_rel.is_ancestor(
+                producer.scope_id, consumer.scope_id
+            ):
                 diagnostics.append(
                     Diagnostic(
                         severity="warning",
@@ -92,7 +98,9 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                         span=block_by_index[consumer.block_index].parsed.span,
                     )
                 )
-            elif producer.is_in_loop and not scope_rel.is_ancestor(producer.scope_id, consumer.scope_id):
+            elif producer.is_in_loop and not scope_rel.is_ancestor(
+                producer.scope_id, consumer.scope_id
+            ):
                 diagnostics.append(
                     Diagnostic(
                         severity="info",
@@ -149,7 +157,9 @@ def _collect_explicit_producers(
                 csv_path=csv_path,
                 scope_id=block.scope_id,
                 producer_kind=_producer_kind_for_block(block.kind),
-                is_conditional=scope_rel.is_under_kind(block.scope_id, {"if-branch", "else-branch"}),
+                is_conditional=scope_rel.is_under_kind(
+                    block.scope_id, {"if-branch", "else-branch"}
+                ),
                 is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro"}),
             )
         )
@@ -172,7 +182,9 @@ def _collect_external_utility_candidates(
                     csv_path=_normalize_csv_path(token),
                     scope_id=block.scope_id,
                     producer_kind="external-presumed",
-                    is_conditional=scope_rel.is_under_kind(block.scope_id, {"if-branch", "else-branch"}),
+                    is_conditional=scope_rel.is_under_kind(
+                        block.scope_id, {"if-branch", "else-branch"}
+                    ),
                     is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro"}),
                 )
             )
@@ -184,7 +196,9 @@ def _collect_consumers(blocks) -> list[ConsumerRecord]:
     for block in blocks:
         for key, value in block.resolved_options.pairs:
             if key == "TABLE":
-                table_items = [item.strip() for item in value.split(",") if item.strip()]
+                table_items = [
+                    item.strip() for item in value.split(",") if item.strip()
+                ]
                 for table_item in table_items:
                     consumers.append(
                         ConsumerRecord(
@@ -287,7 +301,11 @@ def _classify_edge_relation(
     elif scope_rel.is_ancestor(producer.scope_id, consumer.scope_id):
         relation = "consumer-deeper"
     elif scope_rel.is_ancestor(consumer.scope_id, producer.scope_id):
-        relation = "producer-deeper-loop" if producer.is_in_loop else "producer-in-other-branch"
+        relation = (
+            "producer-deeper-loop"
+            if producer.is_in_loop
+            else "producer-in-other-branch"
+        )
     else:
         relation = "producer-in-other-branch"
 
@@ -329,7 +347,9 @@ def _emit_multi_producer_diagnostics(
                     )
 
 
-def _are_branch_exclusive(scope_a: int, scope_b: int, scope_rel: "_ScopeRelations") -> bool:
+def _are_branch_exclusive(
+    scope_a: int, scope_b: int, scope_rel: "_ScopeRelations"
+) -> bool:
     branch_a = scope_rel.nearest_kind(scope_a, {"if-branch", "else-branch"})
     branch_b = scope_rel.nearest_kind(scope_b, {"if-branch", "else-branch"})
     if branch_a is None or branch_b is None or branch_a == branch_b:
