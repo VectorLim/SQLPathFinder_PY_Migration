@@ -6,7 +6,13 @@ from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.handlers import create_handlers
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.frontend.models import Diagnostic, Kind
-from vg2c.resolver.models import IfThen, ResolvedBlock, RowsInFile, ScopeNode, StartMacro
+from vg2c.resolver.models import (
+    IfThen,
+    ResolvedBlock,
+    RowsInFile,
+    ScopeNode,
+    StartMacro,
+)
 
 __all__ = ["walk_and_emit"]
 

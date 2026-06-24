@@ -102,7 +102,10 @@ def test_actual_script_rows_in_file_and_macro_names(FIXTURES: Path) -> None:
     source = emitted.source
 
     # ROWS-IN-FILE blocks should define macro variables via runtime context.
-    assert "ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))" in source
+    assert (
+        "ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))"
+        in source
+    )
 
     # Macro lookups should not include placeholder delimiters.
     assert 'ctx.macro.named("<<<' not in source
