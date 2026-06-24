@@ -155,13 +155,18 @@ def _walk_scope(
             )
 
     elif node.kind == "macro":
-        # {START-MACRO}: emit for/with wrapper
+        # {START-MACRO}: row-iter macros emit a for-loop; static-vars emit a with-block
         payload = node.control_payload
         if isinstance(payload, StartMacro):
-            writer.write(
-                f'with ctx.macro_scope("{payload.csv_path}", row_iter={bool(payload.csv_path)}):'
-            )
-            writer.push_indent()
+            row_iter = bool(payload.csv_path)
+            if row_iter:
+                writer.write(f"for __row in ctx.csv_io.iter({repr(payload.csv_path)}):")
+                writer.push_indent()
+                writer.write("with ctx.macro_scope(__row):")
+                writer.push_indent()
+            else:
+                writer.write("with ctx.macro_scope():")
+                writer.push_indent()
             for child in node.children:
                 _walk_scope(
                     child,
@@ -173,6 +178,8 @@ def _walk_scope(
                     functions,
                     diagnostics,
                 )
+            if row_iter:
+                writer.pop_indent()
             writer.pop_indent()
 
     elif node.kind == "if":

@@ -269,37 +269,31 @@ def _emit_utility(
     if shape_info.shape == "run-python-script":
         func_code = f"def {func_name}(ctx):\n    ctx.external.run({argv_expr})\n"
     elif shape_info.shape == "email":
-        to_expr = (
+        # TODO: SQLPathFinder_Email.va argv positions not yet standardised.
+        # Emit a stub + diagnostic until a real fixture pins the positions.
+        func_code = f"def {func_name}(ctx):\n    pass  # TODO: email utility — argv positions unresolved\n"
+    elif shape_info.shape in ("robocopy", "spf-copy"):
+        # Typical: robocopy <src> <dst> [flags...]
+        src_expr = (
             _value_to_python_expr(shape_info.argv[1])
             if len(shape_info.argv) > 1
             else repr("")
         )
-        subject_expr = (
+        dst_expr = (
             _value_to_python_expr(shape_info.argv[2])
             if len(shape_info.argv) > 2
             else repr("")
         )
-        body_expr = (
-            _value_to_python_expr(shape_info.argv[3])
-            if len(shape_info.argv) > 3
-            else repr("")
-        )
-        func_code = f"def {func_name}(ctx):\n    ctx.mail.send(to={to_expr}, subject={subject_expr}, body={body_expr})\n"
-    elif shape_info.shape in ("robocopy", "spf-copy"):
-        src_expr = (
-            _value_to_python_expr(shape_info.argv[-2])
-            if len(shape_info.argv) > 2
-            else repr("")
-        )
-        dst_expr = (
-            _value_to_python_expr(shape_info.argv[-1])
-            if len(shape_info.argv) > 1
-            else repr("")
-        )
         func_code = f"def {func_name}(ctx):\n    ctx.fs_ops.copy(src={src_expr}, dst={dst_expr})\n"
     elif shape_info.shape == "spf-delete":
+        # SPFDelete arg[1] is a comma-joined path list; split into individual paths
+        paths_raw = shape_info.argv[1] if len(shape_info.argv) > 1 else ""
+        paths_items = [p.strip() for p in paths_raw.split(",") if p.strip()]
+        paths_expr = (
+            "[" + ", ".join(_value_to_python_expr(p) for p in paths_items) + "]"
+        )
         func_code = (
-            f"def {func_name}(ctx):\n    ctx.fs_ops.delete(paths={argv_tail_expr})\n"
+            f"def {func_name}(ctx):\n    ctx.fs_ops.delete(paths={paths_expr})\n"
         )
     elif shape_info.shape == "bat-file" or shape_info.shape == "exe-direct":
         func_code = f"def {func_name}(ctx):\n    ctx.external.run({argv_expr})\n"
