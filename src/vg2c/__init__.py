@@ -7,6 +7,7 @@ from vg2c.frontend import (
     parse,
 )
 from vg2c.dataflow import analyze
+from vg2c.dispatch import dispatch
 from vg2c.resolver import resolve
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "classify",
     "parse",
     "analyze",
+    "dispatch",
     "resolve",
 ]
