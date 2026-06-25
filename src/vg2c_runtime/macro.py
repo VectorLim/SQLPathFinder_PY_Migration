@@ -47,7 +47,7 @@ class MacroState:
         frame: dict[str, str] = {}
         for k, v in (named or {}).items():
             if k is None:
-                continue  # guard: malformed DictReader row (e.g. blank header line)
+                continue  # Guard malformed DictReader rows (e.g., blank header line)
             frame[k.upper()] = str(v)
         self._stack.append(frame)
 

@@ -42,7 +42,7 @@ def write_file(
         return ""
 
     content = _PLACEHOLDER_RE.sub(_replace, template)
-    content = content.lstrip("\n")  # strip leading-newline translation artifact
+    content = content.lstrip("\n")  # Strip translation artifact leading newlines.
 
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)

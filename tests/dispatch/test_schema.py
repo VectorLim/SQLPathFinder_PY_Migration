@@ -35,13 +35,13 @@ def test_oasys_no_config_emits_error() -> None:
     assert any(d.code == "dispatch-oasys-schema-unset" and d.severity == "error" for d in diags)
 
 
-# --- MARS @[]@ preservation ---
+# --- MARS @[]@ normalization ---
 
 
-def test_mars_preserves_square_bracket_marker() -> None:
+def test_mars_normalizes_missing_dot_after_placeholder() -> None:
     body = "FROM @[]@F_LotHist f0 JOIN @[]@F_Calendar c0"
     new_body, diags = substitute(body, "oracle_mars", DispatchConfig(oasys_schema=""), _SPAN, _BLOCK)
-    assert new_body == body  # unchanged
+    assert new_body == "FROM @[]@.F_LotHist f0 JOIN @[]@.F_Calendar c0"
     assert not diags
 
 

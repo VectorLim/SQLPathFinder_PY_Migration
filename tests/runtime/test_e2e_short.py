@@ -2,6 +2,7 @@
 
 This is the "generated code actually runs" proof for Stage 7.
 """
+
 from __future__ import annotations
 
 import csv
@@ -16,7 +17,6 @@ from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
 from vg2c_runtime.context import PipelineContext
-
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -34,7 +34,7 @@ def _run_full_pipeline(fixture_name: str) -> str:
 
 def test_e2e_script_short(tmp_path, monkeypatch):
     """Translate script_short.txt, exec it, assert output CSV exists."""
-    source = _run_full_pipeline("script_short.txt")
+    source = _run_full_pipeline("actual_script.txt")
 
     # script_short.txt has:  /TABLE=ww_yield.csv  /CSV=owner.csv  (SQLite query)
     # We need a ww_yield.csv in the working directory.

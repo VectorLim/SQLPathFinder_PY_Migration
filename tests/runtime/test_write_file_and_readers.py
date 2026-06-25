@@ -1,4 +1,5 @@
 """Unit tests for write_file and MockReader."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,8 +10,8 @@ from vg2c_runtime.macro import MacroState
 from vg2c_runtime.readers import MockReader
 from vg2c_runtime.write_file import write_file
 
-
 # --- write_file ---
+
 
 def test_write_file_plain(tmp_path):
     out = str(tmp_path / "out.txt")
@@ -47,6 +48,7 @@ def test_write_file_auto_mkdir(tmp_path):
 
 
 # --- MockReader ---
+
 
 def test_mock_reader_exact_match():
     r = MockReader({"SELECT 1": [{"val": "1"}]})

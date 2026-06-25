@@ -16,28 +16,45 @@ def step_0002_html_report(ctx):
     pass  # HTML report not translated
 
 
-# def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
-#     ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y')
+def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
+    ctx.write_file(
+        path="macrotmp.csv",
+        template="\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y",
+    )
 
 
-# def step_0004_step_1_4_create_getcsrsu_bat(ctx):
-#     ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
+def step_0004_step_1_4_create_getcsrsu_bat(ctx):
+    ctx.write_file(
+        path="getcsrsu.bat",
+        template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe',
+    )
 
 
-# def step_0005_step_1_5_run_getcsrsu_bat(ctx):
-#     ctx.external.run(['getcsrsu.bat'])
+def step_0005_step_1_5_run_getcsrsu_bat(ctx):
+    ctx.external.run(["getcsrsu.bat"])
 
 
-# def step_0007_step_1_7_run_setsiteparam_exe(ctx):
-#     ctx.external.run(['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
+def step_0007_step_1_7_run_setsiteparam_exe(ctx):
+    ctx.external.run(
+        [
+            "setsiteparam.exe",
+            "KM",
+            ctx.macro.named("SFOLDER"),
+            ctx.macro.named("UNDERDEV"),
+            ctx.macro.named("USECSR"),
+            ctx.macro.named("USEMMS"),
+        ]
+    )
 
 
-# def step_0009_step_1_8_delete_temporary_files(ctx):
-#     ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
+def step_0009_step_1_8_delete_temporary_files(ctx):
+    ctx.fs_ops.delete(
+        paths=['"macrotmp.csv', "getcsrsu.bat", "setsiteparam.exe", 'csrsu.txt"']
+    )
 
 
-# def step_0011_rows_in_file(ctx):
-#     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
+def step_0011_rows_in_file(ctx):
+    ctx.macro.set_named("CONFIG", str(ctx.csv_io.row_count("ICMPCS_config.csv")))
 
 
 def step_0013_step_1_12_trigger_if_config_file_not_found(ctx):
@@ -239,18 +256,18 @@ SELECT  DISTINCT
          ,p.prodgroup3 AS prodgroup3
          ,f0.facility AS facility
 FROM 
-@[]@F_LotHist f0
-INNER JOIN @[]@F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
-LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
-INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
-LEFT JOIN @[]@F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
+@[]@.F_LotHist f0
+INNER JOIN @[]@.F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
+LEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot
+LEFT JOIN q f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
  AND      f4.entity Like 'DIA%' 
-LEFT JOIN @[]@F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
-LEFT JOIN @[]@F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility
+LEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
+LEFT JOIN @[]@.F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility
 WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
- AND      (p.prodgroup3 In 
+ AND      p.prodgroup3 In 
 """
         + ctx.sql_macros.sql_get_csv_list(
             ".\\CSR_Server_OIS_Product_List.csv", 2, "p.prodgroup3 In"
@@ -721,7 +738,7 @@ SELECT
          ,f0.route AS route
          ,f0.qty1 AS quantity
 FROM 
-@[]@F_Lot f0
+@[]@.F_Lot f0
 WHERE f0.owner <> 'EMPTYFOUP'
  AND      f0.terminated = 'N' 
  AND      f0.qty1 > 0 
@@ -819,8 +836,8 @@ def run() -> None:
     # step_0005_step_1_5_run_getcsrsu_bat(ctx)
     # for __row in ctx.csv_io.iter("macrotmp.csv"):
     #     with ctx.macro_scope(__row):
-    #         step_0007_step_1_7_run_setsiteparam_exe(ctx)
-    # step_0009_step_1_8_delete_temporary_files(ctx)
+    # step_0007_step_1_7_run_setsiteparam_exe(ctx)
+    step_0009_step_1_8_delete_temporary_files(ctx)
     # for __row in ctx.csv_io.iter("ctime.csv"):
     #     with ctx.macro_scope(__row):
     #         # step_0011_rows_in_file(ctx)

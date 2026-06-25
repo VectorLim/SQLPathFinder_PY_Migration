@@ -758,7 +758,7 @@ LEFT JOIN @[]@F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility
 WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
- AND      (p.prodgroup3 In 
+ AND      p.prodgroup3 In 
 SQL_Get_CSV_List(".\CSR_Server_OIS_Product_List.csv", "2", "p.prodgroup3 In") 
  AND      f0.operation In ('2090'
 ,'1960') 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
+
 from vg2c.dispatch.models import Dialect, DispatchConfig
 from vg2c.frontend.models import Diagnostic, SourceSpan
 
 _OASYS_PLACEHOLDER = "@OASYSSCHEMA@"
 _MARS_PLACEHOLDER = "@[]@"
+_MARS_MISSING_DOT_PATTERN = re.compile(r"@\[\]@(?=[A-Za-z_])")
 # SQL macro placeholders from Stage 2 must not be touched
 # @@SQLMACRO:n@@ — the double-@ prefix / suffix distinguishes them
 
@@ -23,9 +26,13 @@ def substitute(
       when schema is non-empty; otherwise emit diagnostic and leave placeholder.
     - @OASYSSCHEMA@ in a non-OASYS block → dialect-mismatch warning, leave as-is.
     - @[]@ in a non-MARS block → dialect-mismatch warning, leave as-is.
+    - In MARS blocks, normalize malformed ``@[]@F_*`` to ``@[]@.F_*``.
     - @@SQLMACRO:n@@ tokens are never touched.
     """
     diags: list[Diagnostic] = []
+
+    if dialect == "oracle_mars":
+        body = _MARS_MISSING_DOT_PATTERN.sub("@[]@.", body)
 
     has_oasys_token = _OASYS_PLACEHOLDER in body
     has_mars_token = _MARS_PLACEHOLDER in body

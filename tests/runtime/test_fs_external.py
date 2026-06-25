@@ -1,4 +1,5 @@
 """Unit tests for FileSystemOps and ExternalProcess."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,8 +10,8 @@ import pytest
 from vg2c_runtime.external import ExternalProcess
 from vg2c_runtime.fs_ops import FileSystemOps
 
-
 # --- FileSystemOps ---
+
 
 def test_copy_file(tmp_path):
     src = tmp_path / "src.txt"
@@ -49,6 +50,7 @@ def test_delete_multiple(tmp_path):
 
 
 # --- ExternalProcess ---
+
 
 def test_run_returns_exit_code():
     proc = ExternalProcess()
