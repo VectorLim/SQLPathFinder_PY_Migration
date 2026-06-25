@@ -23,7 +23,9 @@ class FileSystemOps:
         for p in paths:
             path = Path(p)
             if path.is_dir():
-                if recurse:
-                    shutil.rmtree(path, ignore_errors=True)
+                # if recurse:
+                # shutil.rmtree(path, ignore_errors=True)
+                pass
             else:
-                path.unlink(missing_ok=True)
+                # path.unlink(missing_ok=True)
+                pass
