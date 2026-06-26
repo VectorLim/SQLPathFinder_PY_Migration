@@ -1,0 +1,65 @@
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=No
+/CSV=IIS.csv
+/HEADERS=lot,operation,test_end_date,tester_id,test_name,all_value,testing_session_sequence,ws_loss_code,test_bond_head_id,test_end_work_week,summary_id,program_name,complevel_1,complevel_2,lane_number,carrier_x,carrier_y,testing_session_tray_id,testing_session_unit_id,visual_id,owner_type_name
+/INSTANCE=8933
+/USE_LEGACY_PIVOT_HEADERS=Y
+/PROMPT-TEXT=Step 1.1-a0. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          ats.lot AS lot
+         ,ats.operation AS operation
+         ,To_Char(ats.test_end_date_time,'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+         ,ats.tester_id AS tester_id
+         ,t.test_name AS test_name
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value
+         ,ats.testing_session_sequence AS testing_session_sequence
+         ,dt.ws_loss_code AS ws_loss_code
+         ,dt.test_head_id AS test_bond_head_id
+         ,ats.test_end_work_week AS test_end_work_week
+         ,ats.summary_number||ats.summary_letter AS summary_id
+         ,ats.program_name AS program_name
+         ,ctr.complevel_1 AS complevel_1
+         ,ctr.complevel_2 AS complevel_2
+         ,dt.lane_number AS lane_number
+         ,dt.carrier_x AS carrier_x
+         ,dt.carrier_y AS carrier_y
+         ,dt.testing_session_tray_id AS testing_session_tray_id
+         ,dt.testing_session_unit_id AS testing_session_unit_id
+         ,di.visual_id AS visual_id
+         ,ats.owner_type_name AS owner_type_name
+FROM 
+A_Testing_Session ats
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      ats.lot In ('7549G419'
+,'7550F062'
+,'7603D983'
+,'7604F833'
+,'7606F719'
+,'7607D328'
+,'7607D609'
+,'7608G116') 
+ AND      ats.operation = '2090' 
+ AND      ats.latest_flag = 'Y' 
+ AND      (ats.tester_id LIKE  '%IIS%'
+) 
+ AND      ctr.complevel_2 = 'INSPRES' 
+ AND      (t.test_name LIKE  'POSX%'
+OR t.test_name LIKE 'POSY%'
+) 
+/*END SQL*/

@@ -34,8 +34,8 @@ def _run_full_pipeline(fixture_name: str) -> str:
 
 def test_e2e_script_short(tmp_path, monkeypatch):
     """Translate script_short.txt, exec it, assert output CSV exists."""
-    source = _run_full_pipeline("actual_script.txt")
-    (tmp_path / "generated_script.py").write_text(source, encoding="utf-8")
+    source = _run_full_pipeline("new_stuff.txt")
+    (Path.cwd() / "generated_script.py").write_text(source, encoding="utf-8")
 
     # script_short.txt has:  /TABLE=ww_yield.csv  /CSV=owner.csv  (SQLite query)
     # We need a ww_yield.csv in the working directory.
