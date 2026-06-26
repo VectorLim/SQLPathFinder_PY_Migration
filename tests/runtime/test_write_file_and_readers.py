@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.macro import MacroState
+from vg2c.emitter.macro import MacroState, write_file
 from vg2c.emitter.readers import READER_SNIPPET
-from vg2c.emitter.write_file import write_file
 
 # --- write_file ---
 
@@ -52,4 +51,4 @@ def test_reader_snippet_includes_runtime_imports():
         "from datasyncx.readers import AriesReader, MarsReader, OracleReader"
         in READER_SNIPPET
     )
-    assert "import re" in READER_SNIPPET
+    assert "DATABASE_TYPE_MAP" in READER_SNIPPET

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c_runtime.sqlite_engine import SqliteEngine
+from vg2c.emitter.sqlite_engine import SqliteEngine
 
 
 def _write_csv(path: Path, rows: list[dict]) -> None:

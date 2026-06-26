@@ -4,6 +4,10 @@ import re
 
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.handlers import create_handlers
+from vg2c.emitter.macro import (
+    NAMED_PLACEHOLDER_RE,
+    macro_token_to_python_expr,
+)
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
@@ -27,15 +31,7 @@ _OPERATOR_TABLE = {
     "NE": ("!=", "numeric"),
 }
 
-_MACRO_TOKEN_RE = re.compile(r"^<<<([^>]+)>>>$")
 _BARE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def _macro_name(raw: str) -> str:
-    name = raw.strip()
-    if name.startswith("<<<") and name.endswith(">>>"):
-        name = name[3:-3]
-    return name.strip().upper()
 
 
 def _int_expr(expr: str) -> str:
@@ -49,19 +45,15 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         return _int_expr("0") if numeric else repr("")
 
     if value.startswith("VAR(") and value.endswith(")"):
-        inner = value[4:-1].strip()
-        macro_match = _MACRO_TOKEN_RE.match(inner)
-        macro_name = _macro_name(macro_match.group(1) if macro_match else inner)
-        base = f'ctx.macro.named("{macro_name}")'
+        base = macro_token_to_python_expr(value[4:-1].strip())
         return _int_expr(base) if numeric else base
 
-    macro_match = _MACRO_TOKEN_RE.match(value)
-    if macro_match:
-        base = f'ctx.macro.named("{_macro_name(macro_match.group(1))}")'
+    if NAMED_PLACEHOLDER_RE.fullmatch(value):
+        base = macro_token_to_python_expr(value)
         return _int_expr(base) if numeric else base
 
     if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = f'ctx.macro.named("{value.upper()}")'
+        base = macro_token_to_python_expr(value)
         return _int_expr(base) if numeric else base
 
     if numeric:

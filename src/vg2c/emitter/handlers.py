@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.models import DispatchedBlock
+from vg2c.emitter.macro import placeholders_to_python_expr
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.readers import register_reader_emission
 from vg2c.emitter.utility_shapes import classify_utility
@@ -11,7 +12,6 @@ from vg2c.resolver.models import ResolvedBlock
 
 __all__ = ["create_handlers"]
 
-_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -32,46 +32,10 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
-def _macro_name(raw: str) -> str:
-    name = raw.strip()
-    if name.startswith("<<<") and name.endswith(">>>"):
-        name = name[3:-3]
-    return name.strip().upper()
-
-
 def _value_to_python_expr(value: str | None) -> str:
     if value is None:
         return "None"
-
-    text = _strip_quotes(value)
-    if not text:
-        return repr("")
-
-    parts: list[str] = []
-    cursor = 0
-
-    for match in _PLACEHOLDER_RE.finditer(text):
-        literal = text[cursor : match.start()]
-        if literal:
-            parts.append(repr(literal))
-
-        named = match.group(1)
-        if named is not None:
-            parts.append(f'ctx.macro.named("{_macro_name(named)}")')
-        else:
-            parts.append("ctx.macro.positional()")
-
-        cursor = match.end()
-
-    tail = text[cursor:]
-    if tail:
-        parts.append(repr(tail))
-
-    if not parts:
-        return repr(text)
-    if len(parts) == 1:
-        return parts[0]
-    return " + ".join(parts)
+    return placeholders_to_python_expr(_strip_quotes(value))
 
 
 def _resolve_output_path(block: ResolvedBlock, fallback_ext: str) -> str:

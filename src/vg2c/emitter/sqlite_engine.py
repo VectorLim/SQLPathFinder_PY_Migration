@@ -15,7 +15,6 @@ def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
     stem = path.stem
     table_name = stem
 
-    rows = []
     with path.open(newline="", encoding="utf-8", errors="replace") as fh:
         reader = csv.DictReader(fh)
         rows = list(reader)
@@ -37,8 +36,11 @@ def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
     return table_name
 
 
-# Split on ';' but not inside single-quoted strings.
-_STMT_SPLIT_RE = re.compile(r"(?:'[^']*'|[^;])+", re.DOTALL)
+# Split on ';' but protect content inside quotes/brackets.
+_STMT_SPLIT_RE = re.compile(
+    r"(?:'[^']*'|\"[^\"]*\"|\[[^\]]*\]|`[^`]*`|[^;])+",
+    re.DOTALL,
+)
 
 
 def _split_statements(sql: str) -> list[str]:
