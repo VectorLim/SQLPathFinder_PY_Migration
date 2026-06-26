@@ -23,14 +23,17 @@ from __future__ import annotations
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Protocol
+from typing import Any, Callable, Iterator, Mapping, Protocol
 
 __all__ = [
     "PLACEHOLDER_RE",
     "NAMED_PLACEHOLDER_RE",
+    "CROSSTAB_RE",
     "MacroLookup",
     "MacroState",
     "normalize_macro_name",
+    "apply_crosstab",
+    "substitute_crosstab",
     "write_file",
     "placeholders_to_python_expr",
     "macro_token_to_python_expr",
@@ -43,6 +46,139 @@ __all__ = [
 
 PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+CROSSTAB_RE = re.compile(
+    r"CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\]"
+)
+
+
+def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
+    """Return selected ``alias.column`` refs from the first SELECT list in *sql*."""
+    by_alias: dict[str, set[str]] = {}
+    match = re.search(
+        r"\bSELECT\b(?P<select_part>.*?)\bFROM\b", sql, flags=re.IGNORECASE | re.DOTALL
+    )
+    if not match:
+        return by_alias
+
+    select_part = match.group("select_part")
+    col_ref_re = re.compile(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
+    )
+    for col_match in col_ref_re.finditer(select_part):
+        alias = col_match.group(1).lower()
+        col_name = col_match.group(2) or col_match.group(3) or col_match.group(4)
+        if not col_name:
+            continue
+        by_alias.setdefault(alias, set()).add(col_name.lower())
+
+    return by_alias
+
+
+def _ci_get(row: Mapping[str, Any], key: str) -> Any:
+    """Case-insensitive mapping lookup; returns None when key is absent."""
+    if key in row:
+        return row[key]
+    key_lower = key.lower()
+    for k, v in row.items():
+        if str(k).lower() == key_lower:
+            return v
+    return None
+
+
+def apply_crosstab(
+    rows: Any,
+    row_keys: list[str],
+    header_key: str,
+    value_key: str,
+) -> list[dict[str, Any]]:
+    """Pivot row-oriented data into SQLPathFinder-style crosstab output.
+
+    Args:
+        rows: Iterable of row mappings or a pandas DataFrame.
+        row_keys: Grouping columns (``/CTROW``).
+        header_key: Dynamic column source (``/CTHEADER``).
+        value_key: Dynamic value source (``/CTVALUE``).
+    """
+    if not row_keys or not header_key or not value_key:
+        return list(rows) if rows is not None else []
+
+    # Accept DataFrame-like inputs without importing pandas in this module.
+    if hasattr(rows, "to_dict"):
+        try:
+            source_rows = list(rows.to_dict(orient="records"))  # type: ignore[attr-defined]
+        except Exception:
+            source_rows = list(rows) if rows is not None else []
+    else:
+        source_rows = list(rows) if rows is not None else []
+
+    if not source_rows:
+        return []
+
+    grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
+    dynamic_cols: list[str] = []
+
+    for row in source_rows:
+        if not isinstance(row, Mapping):
+            continue
+
+        key_tuple = tuple(_ci_get(row, key) for key in row_keys)
+        out = grouped.get(key_tuple)
+        if out is None:
+            out = {key: _ci_get(row, key) for key in row_keys}
+            grouped[key_tuple] = out
+
+        header_value = _ci_get(row, header_key)
+        if header_value is None or str(header_value) == "":
+            continue
+
+        dynamic_name = str(header_value)
+        if dynamic_name not in dynamic_cols:
+            dynamic_cols.append(dynamic_name)
+
+        val = _ci_get(row, value_key)
+        existing = out.get(dynamic_name)
+        # SQLPathFinder crosstab uses MAX-like behavior for duplicate cells.
+        if existing is None or str(val) > str(existing):
+            out[dynamic_name] = val
+
+    result: list[dict[str, Any]] = []
+    for out in grouped.values():
+        for name in dynamic_cols:
+            out.setdefault(name, "")
+        result.append(out)
+
+    return result
+
+
+def substitute_crosstab(
+    sql: str, alias_columns_lookup: Callable[[str], list[str]] | None = None
+) -> str:
+    """Expand SQLPathFinder ``CrossTab->[[alias,instance;:Y/N]]`` tokens.
+
+    ``:Y`` expands to SQL projection expressions (``alias.[col] AS [col]``).
+    ``:N`` expands to a comma-joined header list (``col1,col2``).
+    """
+    if alias_columns_lookup is None or "CrossTab->[[" not in sql:
+        return sql
+
+    selected_by_alias = _extract_selected_columns_by_alias(sql)
+
+    def _replace(match: re.Match[str]) -> str:
+        alias = match.group(1)
+        mode = match.group(3).upper()
+        all_cols = alias_columns_lookup(alias)
+        selected = selected_by_alias.get(alias.lower(), set())
+        dynamic_cols = [c for c in all_cols if c.lower() not in selected]
+
+        if not dynamic_cols:
+            return "NULL AS [CROSSTAB_EMPTY]" if mode == "Y" else "CROSSTAB_EMPTY"
+
+        if mode == "N":
+            return ",".join(dynamic_cols)
+
+        return "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
+
+    return CROSSTAB_RE.sub(_replace, sql)
 
 
 def normalize_macro_name(raw: str) -> str:
@@ -99,18 +235,22 @@ class MacroState:
             return pos_list[cursor]
         return ""
 
-    def substitute_sql(self, sql: str) -> str:
+    def substitute_sql(
+        self,
+        sql: str,
+        crosstab_alias_columns: Callable[[str], list[str]] | None = None,
+    ) -> str:
         """Substitute ``<<<NAME>>>`` placeholders in *sql* using current state.
 
         Positional ``<<>>`` placeholders are intentionally left alone in SQL
         bodies — they have no defined semantic for raw SQL text.
         """
-        if "<<<" not in sql:
-            return sql
-        return NAMED_PLACEHOLDER_RE.sub(
-            lambda m: self.named(normalize_macro_name(m.group(1))),
-            sql,
-        )
+        if "<<<" in sql:
+            sql = NAMED_PLACEHOLDER_RE.sub(
+                lambda m: self.named(normalize_macro_name(m.group(1))),
+                sql,
+            )
+        return substitute_crosstab(sql, alias_columns_lookup=crosstab_alias_columns)
 
     def write_file(
         self, path: str, template: str, vars: dict[str, str] | None = None

@@ -111,11 +111,25 @@ def _emit_reader(
 
     sql_expr = _sql_to_python_expr(dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
+    ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
+    ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
+    ctvalue = _strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
+    has_crosstab = bool(ctrow and ctheader and ctvalue)
+    row_keys_expr = repr([c.strip() for c in ctrow.split(",") if c.strip()])
 
     func_name = _function_name(block, suffix)
+    if has_crosstab:
+        ctx.add_import("vg2c.emitter.macro", "apply_crosstab")
+    crosstab_line = (
+        f"    result = apply_crosstab(result, row_keys={row_keys_expr}, header_key={ctheader!r}, value_key={ctvalue!r})\n"
+        if has_crosstab
+        else ""
+    )
+
     func_code = f"""\
 def {func_name}(ctx):
     result = read(sql={sql_expr}, db_type={repr(db_type)}, macro_state=ctx.macro)
+{crosstab_line}
     ctx.csv_io.write({output_expr}, result)
 """
     return func_code, f"{func_name}(ctx)"
@@ -162,7 +176,6 @@ def _emit_sqlite_query(
                     inputs.append(_value_to_python_expr(table_name))
 
     inputs_str = "[" + ", ".join(inputs) + "]" if inputs else "[]"
-
     func_name = _function_name(block, "sqlite_query")
     output_name = _resolve_output_path(block, "csv")
 

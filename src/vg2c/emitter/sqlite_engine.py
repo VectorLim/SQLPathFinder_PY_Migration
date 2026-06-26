@@ -7,6 +7,8 @@ import re
 import sqlite3
 from pathlib import Path
 
+from vg2c.emitter.macro import substitute_crosstab
+
 
 def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
     """Load a CSV file into a SQLite table; return the table name (file stem)."""
@@ -19,11 +21,7 @@ def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
         reader = csv.DictReader(fh)
         rows = list(reader)
 
-    if not rows:
-        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table_name}" (_dummy TEXT)')
-        return table_name
-
-    cols = list(rows[0].keys())
+    cols = list(reader.fieldnames)
     col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
     conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
     conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
@@ -79,6 +77,29 @@ class SqliteEngine:
 
         # Run the final statement as a SELECT
         final_stmt = stmts[-1]
+
+        alias_to_table: dict[str, str] = {}
+        alias_map_re = re.compile(
+            r"\b(?:FROM|JOIN)\s+(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))\s+([A-Za-z_][A-Za-z0-9_]*)\b",
+            re.IGNORECASE,
+        )
+        for m in alias_map_re.finditer(final_stmt):
+            table_name = m.group(1) or m.group(2) or m.group(3)
+            alias = m.group(4)
+            if table_name and alias:
+                alias_to_table[alias.lower()] = table_name
+
+        def _lookup_alias_columns(alias: str) -> list[str]:
+            table_name = alias_to_table.get(alias.lower())
+            if not table_name:
+                return []
+            pragma_rows = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+            return [str(r[1]) for r in pragma_rows if len(r) > 1]
+
+        final_stmt = substitute_crosstab(
+            final_stmt, alias_columns_lookup=_lookup_alias_columns
+        )
+
         try:
             cursor = conn.execute(final_stmt)
             rows = cursor.fetchall()

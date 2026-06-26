@@ -78,3 +78,37 @@ def test_join_two_tables(tmp_path):
     rows = list(csv.DictReader(Path(out).open(newline="", encoding="utf-8")))
     assert len(rows) == 1
     assert rows[0]["name"] == "Alice"
+
+
+def test_crosstab_macro_expansion_in_sqlite_join(tmp_path):
+    engine = SqliteEngine()
+    a0 = tmp_path / "a0.csv"
+    _write_csv(
+        a0,
+        [
+            {
+                "facility": "KM",
+                "lot": "L1",
+                "SUBPLANEANGLEX": "1.25",
+                "SUBPLANEANGLEY": "-0.75",
+            }
+        ],
+    )
+
+    out = str(tmp_path / "out_crosstab.csv")
+    engine.run_join(
+        sql=(
+            "SELECT a0.[facility] AS [facility], a0.[lot] AS [lot], "
+            "CrossTab->[[a0,15507;:Y]] "
+            "FROM [a0] a0"
+        ),
+        inputs=[str(a0)],
+        output=out,
+    )
+
+    rows = list(csv.DictReader(Path(out).open(newline="", encoding="utf-8")))
+    assert len(rows) == 1
+    assert rows[0]["facility"] == "KM"
+    assert rows[0]["lot"] == "L1"
+    assert rows[0]["SUBPLANEANGLEX"] == "1.25"
+    assert rows[0]["SUBPLANEANGLEY"] == "-0.75"
