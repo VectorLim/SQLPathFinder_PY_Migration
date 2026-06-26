@@ -59,8 +59,22 @@ def test_chunking_at_1000(tmp_path):
     vals = [["v"]] + [[str(i)] for i in range(1001)]
     _write_csv(f, vals)
     result = m.sql_get_csv_list(str(f), 1, "v In")
-    # There should be two IN groups separated by the lead_in
-    assert result.count("v In") >= 1
+    # Two IN groups separated by an OR + lead_in connector.
+    assert "OR v In" in result
+    assert result.count("(") == 2
+    assert result.count(")") == 2
+    # The macro itself emits balanced parens; the resolver appends a trailing
+    # `)` when the call site has an unmatched `(<col> In ` wrap.
+    assert result.endswith(")")
+
+
+def test_balanced_output_when_unwrapped(tmp_path):
+    """Output alone is balanced; call sites without a wrap stay valid."""
+    m = SqlMacros()
+    f = tmp_path / "balanced.csv"
+    _write_csv(f, [["v"], ["A"], ["B"]])
+    result = m.sql_get_csv_list(str(f), 1, "v In")
+    assert result.count("(") == result.count(")")
 
 
 def test_empty_file_returns_no_values_sentinel(tmp_path):
@@ -69,3 +83,5 @@ def test_empty_file_returns_no_values_sentinel(tmp_path):
     _write_csv(f, [["col"]])
     result = m.sql_get_csv_list(str(f), 1, "c In")
     assert "__NO_VALUES__" in result
+    # Sentinel is also balanced.
+    assert result.count("(") == result.count(")")

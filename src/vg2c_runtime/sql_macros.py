@@ -45,14 +45,15 @@ class SqlMacros:
         """Return chunked IN-list clause for use inside Oracle SQL.
 
         Oracle hard-limits IN lists to 1000 values. When there are more, the
-        result is chunked: ``IN (v1..v1000) <lead_in> IN (v1001..)``.
+        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
 
-        The returned string fits directly after the opening ``IN (`` already
-        present in the surrounding SQL, so it starts with the first value.
+        The result is a balanced parenthesized IN list. Any call-site wrapping
+        ``(<col> In ...)`` paren is closed by the resolver (see
+        :mod:`vg2c.resolver.sql_macro_expander`), not by this runtime macro.
         """
         values = _read_column(path, column_ref)
         if not values:
-            return "'__NO_VALUES__'"
+            return "('__NO_VALUES__')"
 
         chunk_size = 1000
         chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
@@ -61,6 +62,6 @@ class SqlMacros:
             quoted = ", ".join(_single_quote(v) for v in chunk)
             parts.append(f"({quoted})")
             if i < len(chunks) - 1:
-                parts.append(f"\n{lead_in} ")
+                parts.append(f"\nOR {lead_in} ")
 
         return "".join(parts)

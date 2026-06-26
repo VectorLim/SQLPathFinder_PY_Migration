@@ -71,3 +71,24 @@ def test_unknown_producer_emits_info_diag() -> None:
     block = _resolved_sql_block('WHERE SQL_Get_CSV_List(".\\missing.csv", "1", "x In")')
     _, _, diags = expand_sql_macros([block], {}, {})
     assert any(d.code == "sql-macro-csv-unknown-producer" for d in diags)
+
+
+def test_call_site_wrap_appends_closing_paren() -> None:
+    """When the call site is `(<col> In SQL_Get_CSV_List(...)` the resolver
+    must append a `)` after the placeholder to balance the unmatched `(`."""
+    body = 'WHERE (ats.lot In \nSQL_Get_CSV_List(".\\f.tab", "2", "ats.lot In")'
+    block = _resolved_sql_block(body)
+    updated, _, _ = expand_sql_macros([block], {"f.tab": 1}, {})
+    placeholder = updated[0].sql_macro_calls[0].placeholder
+    assert placeholder + ")" in updated[0].resolved_body
+
+
+def test_unwrapped_call_site_has_no_extra_paren() -> None:
+    """A bare `<col> In SQL_Get_CSV_List(...)` must NOT gain a trailing `)`."""
+    body = 'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    block = _resolved_sql_block(body)
+    updated, _, _ = expand_sql_macros([block], {"f.csv": 1}, {})
+    placeholder = updated[0].sql_macro_calls[0].placeholder
+    # Placeholder must not be followed by `)`.
+    after = updated[0].resolved_body.split(placeholder, 1)[1]
+    assert not after.startswith(")")

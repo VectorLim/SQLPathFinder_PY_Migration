@@ -9,6 +9,13 @@ from vg2c.resolver.models import ResolvedBlock, SqlMacroCall
 
 SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
 
+# Detects the `(<col> In ` wrap that some VG2 scripts put before
+# SQL_Get_CSV_List(...) — an unmatched `(` that relies on the macro/expansion
+# to close it. Anchored to the end of body[:call_start].
+_CALL_SITE_WRAP_RE = re.compile(
+    r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE
+)
+
 
 def expand_sql_macros(
     blocks: list[ResolvedBlock],
@@ -126,6 +133,11 @@ def _expand_body(
             )
         )
         result_parts.append(placeholder)
+        if _CALL_SITE_WRAP_RE.search(body[: match.start]):
+            # The call site looks like `(<col> In SQL_Get_CSV_List(...)` with an
+            # unmatched leading `(`. Emit a trailing `)` so the rewritten body
+            # stays balanced after the runtime macro produces its IN list.
+            result_parts.append(")")
 
         normalized_csv = normalize_csv_path(csv_path_raw)
         merged_consumers[normalized_csv].add(block_index)

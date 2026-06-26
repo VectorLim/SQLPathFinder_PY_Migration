@@ -84,4 +84,6 @@ class OracleReader(Reader):
             # record=self._record,
             # instance=self._instance,
         )
+        # Extract site from node (e.g., "KM" from "KM" or "KM.MARS")
+        # site = self._node.split(".")[0] if self._node else "KM"
         return reader.read("KM", sql)
