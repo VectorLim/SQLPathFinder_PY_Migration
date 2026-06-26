@@ -8,6 +8,13 @@
 
 **Key Achievement:** Hard contract validated — all emitted scripts parse cleanly as valid Python (ast.parse ✓), contain `def run()` function, and have `if __name__ == "__main__"` entry point.
 
+## Follow-up Change
+
+- Embedded reader runtime now carries its own imports inside `READER_SNIPPET`.
+- Removed the separate `READER_IMPORTS` registry from `vg2c.emitter.readers`.
+- Moved the `_reader.py` begin sentinel above the runtime imports so the emitted block stays self-contained.
+- Added a regression test that checks the embedded snippet still includes `import re` and the `datasyncx.readers` import.
+
 ---
 
 ## Architecture

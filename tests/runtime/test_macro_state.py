@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c_runtime.macro import MacroState
+from vg2c.emitter.macro import MacroState
 
 
 def test_set_and_get_named():

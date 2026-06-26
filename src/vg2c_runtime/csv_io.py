@@ -6,6 +6,8 @@ import csv
 from pathlib import Path
 from typing import Any, Iterator
 
+import pandas
+
 
 class CsvIO:
     """Read and write CSV files relative to ``cwd``."""
@@ -50,6 +52,10 @@ class CsvIO:
         """
         path = Path(name)
         path.parent.mkdir(parents=True, exist_ok=True)
+
+        if isinstance(content, pandas.DataFrame):
+            content.to_csv(path, index=False, encoding="utf-8")
+            return
 
         if isinstance(content, str):
             path.write_text(content, encoding="utf-8")

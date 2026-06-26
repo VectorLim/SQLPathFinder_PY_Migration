@@ -1,9 +1,11 @@
-"""MacroState — stack-based named variable store for macro scopes."""
+"""MacroState - stack-based named variable store for macro scopes."""
 
 from __future__ import annotations
 
 from contextlib import contextmanager
 from typing import Iterator
+
+from vg2c.emitter.write_file import write_file as _write_file
 
 
 class MacroState:
@@ -38,6 +40,18 @@ class MacroState:
             frame["__cursor__"] = cursor + 1
             return pos_list[cursor]
         return ""
+
+    def write_file(
+        self, path: str, template: str, vars: dict[str, str] | None = None
+    ) -> None:
+        """Write a template to disk using this macro state for substitutions."""
+        _write_file(path, template, vars=vars, macro_state=self)
+
+    def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
+        """Legacy condition evaluation kept for backward compatibility."""
+        lhs_val = self.named(lhs) if lhs.startswith("VAR(") else lhs
+        rhs_val = self.named(rhs) if rhs.startswith("VAR(") else rhs
+        return lhs_val == rhs_val
 
     # ------------------------------------------------------------------
     # Frame management (called by context.py / macro_scope)

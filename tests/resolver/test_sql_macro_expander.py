@@ -85,7 +85,9 @@ def test_call_site_wrap_appends_closing_paren() -> None:
 
 def test_unwrapped_call_site_has_no_extra_paren() -> None:
     """A bare `<col> In SQL_Get_CSV_List(...)` must NOT gain a trailing `)`."""
-    body = 'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    body = (
+        'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    )
     block = _resolved_sql_block(body)
     updated, _, _ = expand_sql_macros([block], {"f.csv": 1}, {})
     placeholder = updated[0].sql_macro_calls[0].placeholder

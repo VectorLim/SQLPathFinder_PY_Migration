@@ -4,6 +4,7 @@ import re
 
 from vg2c.dispatch.models import DispatchedBlock
 from vg2c.emitter.models import EmitContext
+from vg2c.emitter.readers import register_reader_emission
 from vg2c.emitter.utility_shapes import classify_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import ResolvedBlock
@@ -136,27 +137,13 @@ def _sql_to_python_expr(sql: str, block: ResolvedBlock) -> str:
 
 
 def _emit_reader(
+    ctx: EmitContext,
     block: ResolvedBlock,
     dispatched: DispatchedBlock,
-    method_name: str,
+    db_type: str,
     suffix: str,
 ) -> tuple[str, str]:
-    target = dispatched.reader_target
-
-    database_expr = _value_to_python_expr(target.database_arg or "")
-    node_expr = _value_to_python_expr(target.node)
-    instance_expr = (
-        _value_to_python_expr(target.instance)
-        if target.instance and target.instance.strip()
-        else "None"
-    )
-    if target.record_name:
-        record_expr = (
-            f"({_value_to_python_expr(target.record_name)}, "
-            f"{_value_to_python_expr(target.record_version or '')})"
-        )
-    else:
-        record_expr = "None"
+    register_reader_emission(ctx)
 
     sql_expr = _sql_to_python_expr(dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
@@ -164,13 +151,7 @@ def _emit_reader(
     func_name = _function_name(block, suffix)
     func_code = f"""\
 def {func_name}(ctx):
-    reader = ctx.{method_name}(
-        database={database_expr},
-        node={node_expr},
-        record={record_expr},
-        instance={instance_expr},
-    )
-    result = reader.read(sql={sql_expr})
+    result = read(sql={sql_expr}, db_type={repr(db_type)}, macro_state=ctx.macro)
     ctx.csv_io.write({output_expr}, result)
 """
     return func_code, f"{func_name}(ctx)"
@@ -179,25 +160,25 @@ def {func_name}(ctx):
 def _emit_mars_read(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
 ) -> tuple[str, str]:
-    """Emit OracleReader for MARS."""
+    """Emit MarsReader read step."""
     assert dispatched is not None
-    return _emit_reader(block, dispatched, "reader_mars", "mars_read")
+    return _emit_reader(ctx, block, dispatched, "MARS", "mars_read")
 
 
 def _emit_oasys_read(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
 ) -> tuple[str, str]:
-    """Emit OracleReader for OASYS."""
+    """Emit OracleReader read step for OASYS."""
     assert dispatched is not None
-    return _emit_reader(block, dispatched, "reader_oasys", "oasys_read")
+    return _emit_reader(ctx, block, dispatched, "OASYS", "oasys_read")
 
 
 def _emit_aries_read(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
 ) -> tuple[str, str]:
-    """Emit OracleReader for ARIES."""
+    """Emit AriesReader read step."""
     assert dispatched is not None
-    return _emit_reader(block, dispatched, "reader_aries", "aries_read")
+    return _emit_reader(ctx, block, dispatched, "ARIES", "aries_read")
 
 
 def _emit_sqlite_query(

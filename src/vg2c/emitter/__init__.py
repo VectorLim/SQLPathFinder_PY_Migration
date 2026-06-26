@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.macro_subst import MacroSubstituter
 from vg2c.emitter.models import EmitContext, EmittedScript, IndentWriter
+from vg2c.emitter.readers import READER_SNIPPET
 from vg2c.emitter.walker import walk_and_emit
 from vg2c.frontend.models import Diagnostic
 
@@ -19,7 +19,6 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         An EmittedScript containing the generated Python source and merged diagnostics.
     """
     ctx = EmitContext()
-    ctx.macro_subst = MacroSubstituter()
     ctx.dispatch_map = {db.block_index: db for db in dispatched.dispatched}
 
     # Add standard imports
@@ -40,6 +39,11 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     for imp in sorted(ctx.imports):
         script_writer.write(imp)
     script_writer.write("")
+
+    # Embedded reader runtime (only when a reader handler asked for it)
+    if ctx.needs_reader:
+        script_writer.write_block(READER_SNIPPET)
+        script_writer.write("")
 
     # Helper functions
     for func_code in functions:

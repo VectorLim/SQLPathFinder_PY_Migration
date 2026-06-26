@@ -12,9 +12,7 @@ SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
 # Detects the `(<col> In ` wrap that some VG2 scripts put before
 # SQL_Get_CSV_List(...) — an unmatched `(` that relies on the macro/expansion
 # to close it. Anchored to the end of body[:call_start].
-_CALL_SITE_WRAP_RE = re.compile(
-    r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE
-)
+_CALL_SITE_WRAP_RE = re.compile(r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE)
 
 
 def expand_sql_macros(

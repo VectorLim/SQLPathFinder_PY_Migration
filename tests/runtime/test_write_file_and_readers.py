@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from vg2c_runtime.macro import MacroState
-from vg2c_runtime.readers import MockReader
-from vg2c_runtime.write_file import write_file
+from vg2c.emitter.macro import MacroState
+from vg2c.emitter.readers import READER_SNIPPET
+from vg2c.emitter.write_file import write_file
 
 # --- write_file ---
 
@@ -47,30 +47,9 @@ def test_write_file_auto_mkdir(tmp_path):
     assert Path(out).exists()
 
 
-# --- MockReader ---
-
-
-def test_mock_reader_exact_match():
-    r = MockReader({"SELECT 1": [{"val": "1"}]})
-    rows = r.read("SELECT 1")
-    assert rows == [{"val": "1"}]
-
-
-def test_mock_reader_substring_match():
-    r = MockReader({"FROM my_table": [{"id": "42"}]})
-    rows = r.read("SELECT * FROM my_table WHERE x = 1")
-    assert rows == [{"id": "42"}]
-
-
-def test_mock_reader_no_match_returns_empty():
-    r = MockReader({})
-    rows = r.read("SELECT anything")
-    assert rows == []
-
-
-def test_mock_reader_returns_copies():
-    canned = [{"a": "1"}]
-    r = MockReader({"key": canned})
-    result = r.read("key")
-    result.append({"extra": "row"})
-    assert len(r.read("key")) == 1  # original not mutated
+def test_reader_snippet_includes_runtime_imports():
+    assert (
+        "from datasyncx.readers import AriesReader, MarsReader, OracleReader"
+        in READER_SNIPPET
+    )
+    assert "import re" in READER_SNIPPET

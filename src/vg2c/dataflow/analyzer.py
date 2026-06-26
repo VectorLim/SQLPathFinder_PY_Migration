@@ -15,7 +15,13 @@ from vg2c.dataflow.models import (
     ScopeRelation,
 )
 from vg2c.frontend.models import Diagnostic, Kind
-from vg2c.resolver.models import ResolvedProgram, RowsInFile, ScopeNode, StartMacro
+from vg2c.resolver.models import (
+    ResolvedBlock,
+    ResolvedProgram,
+    RowsInFile,
+    ScopeNode,
+    StartMacro,
+)
 
 _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE)
 
@@ -142,7 +148,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
 
 def _collect_explicit_producers(
-    blocks,
+    blocks: list[ResolvedBlock],
     scope_rel: "_ScopeRelations",
 ) -> list[ProducerRecord]:
     producers: list[ProducerRecord] = []
@@ -167,7 +173,7 @@ def _collect_explicit_producers(
 
 
 def _collect_external_utility_candidates(
-    blocks,
+    blocks: list[ResolvedBlock],
     scope_rel: "_ScopeRelations",
 ) -> list[ProducerRecord]:
     candidates: list[ProducerRecord] = []
@@ -191,7 +197,7 @@ def _collect_external_utility_candidates(
     return candidates
 
 
-def _collect_consumers(blocks) -> list[ConsumerRecord]:
+def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
     consumers: list[ConsumerRecord] = []
     for block in blocks:
         for key, value in block.resolved_options.pairs:

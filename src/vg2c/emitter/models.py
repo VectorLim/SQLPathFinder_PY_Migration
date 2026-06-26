@@ -28,6 +28,7 @@ class EmitContext:
     )  # block_index -> DispatchedBlock
     registry: Any | None = None  # HandlerRegistry instance
     macro_subst: Any | None = None  # MacroSubstitution instance
+    needs_reader: bool = False  # set by reader handlers to inject reader snippet
 
     def add_import(self, module: str, name: str | None = None) -> None:
         """Register an import statement.
