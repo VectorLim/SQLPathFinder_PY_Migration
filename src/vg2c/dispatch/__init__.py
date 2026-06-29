@@ -1,12 +1,6 @@
 from __future__ import annotations
 
 from vg2c.dataflow.models import AnalyzedProgram
-from vg2c.dispatch.dialect import (
-    SQL_BEARING_KINDS,
-    derive_from_signals,
-    resolve_dialect,
-)
-from vg2c.dispatch.dispatcher import build_target
 from vg2c.dispatch.models import (
     Dialect,
     DispatchConfig,
@@ -14,7 +8,11 @@ from vg2c.dispatch.models import (
     DispatchedProgram,
     ReaderTarget,
 )
-from vg2c.dispatch.schema import substitute
+from vg2c.dispatch.registry import (
+    HANDLERS,
+    derive_handler_from_signals,
+    get_handler_for_kind,
+)
 from vg2c.frontend.models import Diagnostic, Kind
 
 __all__ = [
@@ -53,24 +51,24 @@ def dispatch(
     _aries_warned = False
 
     for block in analyzed.resolved.blocks:
-        # --- Step 1: resolve dialect ---
-        dialect = resolve_dialect(block.kind)
+        # --- Step 1: resolve handler ---
+        handler = get_handler_for_kind(block.kind)
         is_fallback = False
 
-        if dialect is None and block.kind is Kind.UNKNOWN:
+        if handler is None and block.kind is Kind.UNKNOWN:
             opts = block.resolved_options.lookup
-            dialect = derive_from_signals(
+            handler = derive_handler_from_signals(
                 node=opts.get("NODE", ""),
                 engine=opts.get("ENGINE", ""),
                 oledb=opts.get("OLEDB", ""),
             )
-            is_fallback = dialect is not None
+            is_fallback = handler is not None
 
-        if dialect is None:
+        if handler is None:
             continue  # Non-SQL block; no DispatchedBlock emitted
 
         # --- Step 2: one-shot ARIES note ---
-        if dialect == "oracle_aries" and not _aries_warned:
+        if handler.dialect == "oracle_aries" and not _aries_warned:
             _aries_warned = True
             diagnostics.append(
                 Diagnostic(
@@ -90,7 +88,7 @@ def dispatch(
                     code="dispatch-unknown-dialect",
                     message=(
                         f"Block {block.parsed.index} has Kind.UNKNOWN; "
-                        f"dialect derived from option signals as {dialect!r}."
+                        f"dialect derived from option signals as {handler.dialect!r}."
                     ),
                     block_index=block.parsed.index,
                     span=block.parsed.span,
@@ -98,23 +96,40 @@ def dispatch(
             )
 
         # --- Step 4: schema substitution ---
-        rewritten_sql, schema_diags = substitute(
+        rewritten_sql, schema_diags = handler.substitute(
             body=block.resolved_body,
-            dialect=dialect,
             config=config,
             span=block.parsed.span,
             block_index=block.parsed.index,
         )
         diagnostics.extend(schema_diags)
 
-        # --- Step 5: reader target ---
-        reader_target, target_diags = build_target(block, dialect)
+        # --- Step 5: cross-dialect mismatch check ---
+        for other_handler in HANDLERS.values():
+            if other_handler is handler:
+                continue
+            if other_handler.has_own_placeholders(block.resolved_body):
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="dispatch-placeholder-dialect-mismatch",
+                        message=(
+                            f"{other_handler.schema_placeholder} schema placeholder found in "
+                            f"{handler.dialect} block; expected {other_handler.dialect} context."
+                        ),
+                        block_index=block.parsed.index,
+                        span=block.parsed.span,
+                    )
+                )
+
+        # --- Step 6: reader target ---
+        reader_target, target_diags = handler.build_reader_target(block)
         diagnostics.extend(target_diags)
 
         dispatched.append(
             DispatchedBlock(
                 block_index=block.parsed.index,
-                dialect=dialect,
+                dialect=handler.dialect,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
             )

@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 
 from vg2c.dispatch.dispatcher import build_target
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Kind, ParsedBlock, SourceSpan
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Kind,
+    ParsedBlock,
+    SourceSpan,
+)
 from vg2c.resolver import resolve
 
 _SPAN = SourceSpan(file=None, start_line=1, end_line=1)
