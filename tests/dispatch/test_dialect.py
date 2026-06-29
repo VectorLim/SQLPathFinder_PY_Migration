@@ -14,13 +14,11 @@ from vg2c.frontend.models import Kind
 @pytest.mark.parametrize(
     "kind, expected",
     [
-        (Kind.MARS_READ, "oracle_mars"),
-        (Kind.OASYS_READ, "oracle_oasys"),
-        (Kind.ARIES_READ, "oracle_aries"),
+        (Kind.SQL_QUERY, None),
         (Kind.SQLITE_QUERY, "sqlite"),
     ],
 )
-def test_resolve_dialect_sql_bearing(kind: Kind, expected: Dialect) -> None:
+def test_resolve_dialect_sql_bearing(kind: Kind, expected: Dialect | None) -> None:
     assert resolve_dialect(kind) == expected
 
 
@@ -40,9 +38,7 @@ def test_resolve_dialect_non_sql_returns_none(kind: Kind) -> None:
 
 
 def test_sql_bearing_kinds_coverage() -> None:
-    assert Kind.MARS_READ in SQL_BEARING_KINDS
-    assert Kind.OASYS_READ in SQL_BEARING_KINDS
-    assert Kind.ARIES_READ in SQL_BEARING_KINDS
+    assert Kind.SQL_QUERY in SQL_BEARING_KINDS
     assert Kind.SQLITE_QUERY in SQL_BEARING_KINDS
     assert Kind.WRITE_FILE not in SQL_BEARING_KINDS
 

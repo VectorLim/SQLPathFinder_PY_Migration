@@ -13,7 +13,7 @@ class OasysDialect(DialectHandler):
     """Handler for Oracle OASYS dialect."""
 
     dialect = "oracle_oasys"
-    kind = Kind.OASYS_READ
+    kind = Kind.SQL_QUERY
     reader_class_hint = "OracleReader"
     database_arg = "OASYS"
     schema_placeholder = _OASYS_PLACEHOLDER

@@ -135,28 +135,21 @@ def {func_name}(ctx):
     return func_code, f"{func_name}(ctx)"
 
 
-def _emit_mars_read(
+def _emit_sql_query(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
 ) -> tuple[str, str]:
-    """Emit MarsReader read step."""
+    """Emit OracleReader read step for signal-resolved Oracle dialects."""
     assert dispatched is not None
-    return _emit_reader(ctx, block, dispatched, "MARS", "mars_read")
-
-
-def _emit_oasys_read(
-    ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
-) -> tuple[str, str]:
-    """Emit OracleReader read step for OASYS."""
-    assert dispatched is not None
-    return _emit_reader(ctx, block, dispatched, "OASYS", "oasys_read")
-
-
-def _emit_aries_read(
-    ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
-) -> tuple[str, str]:
-    """Emit AriesReader read step."""
-    assert dispatched is not None
-    return _emit_reader(ctx, block, dispatched, "ARIES", "aries_read")
+    db_by_dialect = {
+        "oracle_mars": ("MARS", "mars_read"),
+        "oracle_oasys": ("OASYS", "oasys_read"),
+        "oracle_aries": ("ARIES", "aries_read"),
+    }
+    db_type, suffix = db_by_dialect.get(
+        dispatched.dialect,
+        (dispatched.reader_target.database_arg or "MARS", "sql_query"),
+    )
+    return _emit_reader(ctx, block, dispatched, db_type, suffix)
 
 
 def _emit_sqlite_query(
@@ -287,9 +280,7 @@ def _emit_unknown(
 def create_handlers() -> dict[Kind, callable]:
     """Create a mapping of Kind -> handler function."""
     return {
-        Kind.MARS_READ: _emit_mars_read,
-        Kind.OASYS_READ: _emit_oasys_read,
-        Kind.ARIES_READ: _emit_aries_read,
+        Kind.SQL_QUERY: _emit_sql_query,
         Kind.SQLITE_QUERY: _emit_sqlite_query,
         Kind.WRITE_FILE: _emit_write_file,
         Kind.UTILITY: _emit_utility,

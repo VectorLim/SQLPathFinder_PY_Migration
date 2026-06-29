@@ -19,13 +19,22 @@ def register(handler_cls: type[DialectHandler]) -> type[DialectHandler]:
 
     kind = handler_cls.kind
     if kind is not None:
-        existing_kind = _KIND_TO_HANDLER.get(kind)
-        if existing_kind is not None and existing_kind is not handler_cls:
-            raise ValueError(f"Duplicate dialect handler registered for kind {kind!r}")
-        _KIND_TO_HANDLER[kind] = handler_cls
+        # Kind.SQL_QUERY intentionally maps to multiple Oracle dialect handlers and
+        # is resolved from option signals in dispatch. Keep only unambiguous mappings.
+        if kind is Kind.SQL_QUERY:
+            _KIND_TO_HANDLER.pop(kind, None)
+        else:
+            existing_kind = _KIND_TO_HANDLER.get(kind)
+            if existing_kind is not None and existing_kind is not handler_cls:
+                raise ValueError(
+                    f"Duplicate dialect handler registered for kind {kind!r}"
+                )
+            _KIND_TO_HANDLER[kind] = handler_cls
 
     global SQL_BEARING_KINDS
-    SQL_BEARING_KINDS = frozenset(_KIND_TO_HANDLER.keys())
+    SQL_BEARING_KINDS = frozenset(
+        h.kind for h in HANDLERS.values() if h.kind is not None
+    )
     return handler_cls
 
 
@@ -35,7 +44,7 @@ def get_handler(dialect: Dialect) -> type[DialectHandler] | None:
 
 
 def get_handler_for_kind(kind: Kind) -> type[DialectHandler] | None:
-    """Get handler by Kind enum value."""
+    """Get handler by Kind enum value when the mapping is unambiguous."""
     return _KIND_TO_HANDLER.get(kind)
 
 

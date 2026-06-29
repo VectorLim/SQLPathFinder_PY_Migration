@@ -8,9 +8,7 @@ from typing import Iterable, Literal, Mapping
 
 
 class Kind(str, Enum):
-    MARS_READ = "MARS_READ"
-    OASYS_READ = "OASYS_READ"
-    ARIES_READ = "ARIES_READ"
+    SQL_QUERY = "SQL_QUERY"
     SQLITE_QUERY = "SQLITE_QUERY"
     WRITE_FILE = "WRITE_FILE"
     HTML_REPORT = "HTML_REPORT"

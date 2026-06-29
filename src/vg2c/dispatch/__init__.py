@@ -24,11 +24,6 @@ __all__ = [
     "ReaderTarget",
 ]
 
-_ARIES_NOTE = (
-    "oracle_aries dialect encountered; ARIES classification rule has no dedicated test "
-    "fixture (see Stage 1 aries-rule-untested). Results are speculative."
-)
-
 
 def dispatch(
     analyzed: AnalyzedProgram,
@@ -48,15 +43,23 @@ def dispatch(
     """
     diagnostics: list[Diagnostic] = list(analyzed.diagnostics)
     dispatched: list[DispatchedBlock] = []
-    _aries_warned = False
+    emitted_one_shot_notes: set[str] = set()
 
     for block in analyzed.resolved.blocks:
         # --- Step 1: resolve handler ---
-        handler = get_handler_for_kind(block.kind)
         is_fallback = False
+        opts = block.resolved_options.lookup
+
+        if block.kind is Kind.SQL_QUERY:
+            handler = derive_handler_from_signals(
+                node=opts.get("NODE", ""),
+                engine=opts.get("ENGINE", ""),
+                oledb=opts.get("OLEDB", ""),
+            )
+        else:
+            handler = get_handler_for_kind(block.kind)
 
         if handler is None and block.kind is Kind.UNKNOWN:
-            opts = block.resolved_options.lookup
             handler = derive_handler_from_signals(
                 node=opts.get("NODE", ""),
                 engine=opts.get("ENGINE", ""),
@@ -67,18 +70,20 @@ def dispatch(
         if handler is None:
             continue  # Non-SQL block; no DispatchedBlock emitted
 
-        # --- Step 2: one-shot ARIES note ---
-        if handler.dialect == "oracle_aries" and not _aries_warned:
-            _aries_warned = True
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="dispatch-aries-rule-untested",
-                    message=_ARIES_NOTE,
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+        # --- Step 2: one-shot dialect notes ---
+        if handler.one_shot_note is not None:
+            code, message = handler.one_shot_note
+            if code not in emitted_one_shot_notes:
+                emitted_one_shot_notes.add(code)
+                diagnostics.append(
+                    Diagnostic(
+                        severity="info",
+                        code=code,
+                        message=message,
+                        block_index=block.parsed.index,
+                        span=block.parsed.span,
+                    )
                 )
-            )
 
         # --- Step 3: unknown-dialect fallback note ---
         if is_fallback:
@@ -108,7 +113,7 @@ def dispatch(
         for other_handler in HANDLERS.values():
             if other_handler is handler:
                 continue
-            if other_handler.has_own_placeholders(block.resolved_body):
+            if other_handler.has_own_placeholders(rewritten_sql):
                 diagnostics.append(
                     Diagnostic(
                         severity="warning",

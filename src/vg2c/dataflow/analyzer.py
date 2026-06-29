@@ -251,7 +251,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
 def _producer_kind_for_block(kind: Kind) -> ProducerKind:
     if kind is Kind.WRITE_FILE:
         return "write-file"
-    if kind in {Kind.MARS_READ, Kind.OASYS_READ, Kind.ARIES_READ}:
+    if kind is Kind.SQL_QUERY:
         return "db-read"
     if kind is Kind.SQLITE_QUERY:
         return "sqlite-query"

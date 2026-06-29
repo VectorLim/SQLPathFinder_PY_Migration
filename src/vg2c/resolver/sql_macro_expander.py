@@ -9,7 +9,7 @@ from vg2c.resolver.models import ResolvedBlock
 from vg2c.resolver.sql_macros import HANDLERS, MacroParseError
 
 _SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
-_SCANNED_KINDS = {Kind.MARS_READ, Kind.OASYS_READ, Kind.ARIES_READ, Kind.SQLITE_QUERY}
+_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
 def expand_sql_macros(

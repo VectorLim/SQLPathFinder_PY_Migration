@@ -69,13 +69,13 @@ def test_mars_rule() -> None:
     classified, diagnostics = classify(
         [_block({"NODE": "KM.[A15_PROD_21.].MARS", "ENGINE": "VA"})]
     )
-    assert classified[0].kind is Kind.MARS_READ
+    assert classified[0].kind is Kind.SQL_QUERY
     assert not diagnostics
 
 
 def test_oasys_rule() -> None:
     classified, diagnostics = classify([_block({"NODE": "KM.OASYS", "ENGINE": "VA"})])
-    assert classified[0].kind is Kind.OASYS_READ
+    assert classified[0].kind is Kind.SQL_QUERY
     assert not diagnostics
 
 

@@ -15,7 +15,7 @@ class MarsDialect(DialectHandler):
     """Handler for Oracle MARS dialect."""
 
     dialect = "oracle_mars"
-    kind = Kind.MARS_READ
+    kind = Kind.SQL_QUERY
     reader_class_hint = "OracleReader"
     database_arg = "MARS"
     schema_placeholder = "@[]@"

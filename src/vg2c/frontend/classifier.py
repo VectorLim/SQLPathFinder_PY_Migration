@@ -18,7 +18,6 @@ def classify(
 ) -> tuple[list[ClassifiedBlock], list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
     classified: list[ClassifiedBlock] = []
-    aries_noted = False
 
     for block in blocks:
         result = _classify_one(block.options, block.body)
@@ -41,17 +40,6 @@ def classify(
 
         kind, reason = result
         classified.append(ClassifiedBlock(parsed=block, kind=kind, reason=reason))
-        if kind is Kind.ARIES_READ and not aries_noted:
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="aries-rule-untested",
-                    message="ARIES classification rule fired; this path has no fixture coverage yet.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            aries_noted = True
 
     return classified, diagnostics
 
@@ -98,27 +86,18 @@ def _rule_sqlite(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
     return None
 
 
-def _rule_mars(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
+def _rule_oracle(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
     node = options.lookup.get("NODE", "")
     engine = options.lookup.get("ENGINE", "")
-    if _node_matches(node, "MARS") and engine.upper() == "VA":
-        return Kind.MARS_READ, "/NODE indicates MARS and /ENGINE=VA"
-    return None
+    oledb = options.lookup.get("OLEDB", "")
+    if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
+        return None
 
-
-def _rule_oasys(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
-    node = options.lookup.get("NODE", "")
-    engine = options.lookup.get("ENGINE", "")
-    if _node_matches(node, "OASYS") and engine.upper() == "VA":
-        return Kind.OASYS_READ, "/NODE indicates OASYS and /ENGINE=VA"
-    return None
-
-
-def _rule_aries(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
-    node = options.lookup.get("NODE", "")
-    engine = options.lookup.get("ENGINE", "")
-    if _node_matches(node, "ARIES") and engine.upper() == "VA":
-        return Kind.ARIES_READ, "/NODE indicates ARIES and /ENGINE=VA"
+    if any(_node_matches(node, token) for token in ("MARS", "OASYS", "ARIES")):
+        return (
+            Kind.SQL_QUERY,
+            "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
+        )
     return None
 
 
@@ -135,7 +114,5 @@ _RULES: tuple[RuleFn, ...] = (
     _rule_macro_control,
     _rule_utility,
     _rule_sqlite,
-    _rule_mars,
-    _rule_oasys,
-    _rule_aries,
+    _rule_oracle,
 )

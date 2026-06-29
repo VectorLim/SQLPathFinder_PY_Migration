@@ -32,7 +32,7 @@ def _resolved_block(index: int, kind: Kind, options: dict[str, str], body: str =
 def test_mars_reader_target() -> None:
     block = _resolved_block(
         0,
-        Kind.MARS_READ,
+        Kind.SQL_QUERY,
         {
             "NODE": "KM.[A15_PROD_21.].MARS",
             "INSTANCE": "8486",
@@ -53,7 +53,7 @@ def test_mars_reader_target() -> None:
 def test_oasys_reader_target() -> None:
     block = _resolved_block(
         0,
-        Kind.OASYS_READ,
+        Kind.SQL_QUERY,
         {
             "NODE": "KM.OASYS",
             "INSTANCE": "29397",
@@ -92,7 +92,7 @@ def test_sqlite_reader_target() -> None:
 def test_record_without_version_emits_malformed() -> None:
     block = _resolved_block(
         0,
-        Kind.MARS_READ,
+        Kind.SQL_QUERY,
         {"NODE": "KM.MARS", "RECORD": "Calendar"},
     )
     target, diags = build_target(block, "oracle_mars")

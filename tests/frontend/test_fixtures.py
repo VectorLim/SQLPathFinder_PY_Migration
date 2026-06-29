@@ -38,21 +38,20 @@ def test_script_short_has_sqlite_query(FIXTURES: Path) -> None:
 
 def test_script_another_has_mars_write_and_utility(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "script_another.txt")
-    assert _has_kind(classified, Kind.MARS_READ)
+    assert _has_kind(classified, Kind.SQL_QUERY)
     assert _has_kind(classified, Kind.WRITE_FILE)
     assert _has_kind(classified, Kind.UTILITY)
 
 
 def test_sql_script_has_mars_oasys_and_sqlite(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "sql_script.txt")
-    assert _has_kind(classified, Kind.MARS_READ)
-    assert _has_kind(classified, Kind.OASYS_READ)
+    assert _has_kind(classified, Kind.SQL_QUERY)
     assert _has_kind(classified, Kind.SQLITE_QUERY)
 
 
 def test_script_from_vietnam_has_mars_write_and_utility(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "script_from_vietnam.txt")
-    assert _has_kind(classified, Kind.MARS_READ)
+    assert _has_kind(classified, Kind.SQL_QUERY)
     assert _has_kind(classified, Kind.WRITE_FILE)
     assert _has_kind(classified, Kind.UTILITY)
 
