@@ -57,13 +57,3 @@ class ClassifiedBlock:
     parsed: ParsedBlock
     kind: Kind
     reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class Diagnostic:
-    severity: Literal["info", "warning", "error"]
-    code: str
-    message: str
-    block_index: int | None = None
-    span: SourceSpan | None = None
-    hint: str | None = None

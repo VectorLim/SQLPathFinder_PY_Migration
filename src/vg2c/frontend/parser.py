@@ -61,27 +61,9 @@ def parse(
 
 
 def _normalize_input(text: str | bytes, diagnostics: list[Diagnostic]) -> str:
-    if isinstance(text, bytes):
-        decoded = text.decode("utf-8", errors="replace")
-        if "\ufffd" in decoded:
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="non-utf8-bytes-replaced",
-                    message="Input bytes were decoded with UTF-8 replacement characters.",
-                )
-            )
-        normalized = decoded
-    else:
-        normalized = text
-        if "\ufffd" in normalized:
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="non-utf8-bytes-replaced",
-                    message="Input text contains UTF-8 replacement characters.",
-                )
-            )
+    normalized = (
+        text.decode("utf-8", errors="replace") if isinstance(text, bytes) else text
+    )
 
     if normalized.startswith("\ufeff"):
         normalized = normalized[1:]
