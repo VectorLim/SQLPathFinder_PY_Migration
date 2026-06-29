@@ -6,8 +6,8 @@ from pathlib import PurePosixPath
 from types import MappingProxyType
 
 from vg2c.frontend.models import (
-    BlockOptions,
     ClassifiedBlock,
+    BlockOptions,
     Diagnostic,
     Kind,
     SourceSpan,

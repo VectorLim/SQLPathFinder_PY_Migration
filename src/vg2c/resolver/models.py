@@ -72,7 +72,7 @@ class ScopeNode:
 
 @dataclass(frozen=True, slots=True)
 class SqlMacroCall:
-    name: Literal["SQL_Get_CSV_List"]
+    name: str  # Macro identifier, e.g. "SQL_Get_CSV_List"
     csv_path: str
     column_ref: int | str
     lead_in: str

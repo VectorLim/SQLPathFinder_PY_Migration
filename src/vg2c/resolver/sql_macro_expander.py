@@ -5,14 +5,11 @@ from collections import defaultdict
 
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 from vg2c.resolver.macro_resolver import normalize_csv_path
-from vg2c.resolver.models import ResolvedBlock, SqlMacroCall
+from vg2c.resolver.models import ResolvedBlock
+from vg2c.resolver.sql_macros import HANDLERS, MacroParseError
 
-SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
-
-# Detects the `(<col> In ` wrap that some VG2 scripts put before
-# SQL_Get_CSV_List(...) — an unmatched `(` that relies on the macro/expansion
-# to close it. Anchored to the end of body[:call_start].
-_CALL_SITE_WRAP_RE = re.compile(r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE)
+_SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
+_SCANNED_KINDS = {Kind.MARS_READ, Kind.OASYS_READ, Kind.ARIES_READ, Kind.SQLITE_QUERY}
 
 
 def expand_sql_macros(
@@ -27,12 +24,7 @@ def expand_sql_macros(
         merged_consumers[path].update(items)
 
     for block in blocks:
-        if block.kind not in {
-            Kind.MARS_READ,
-            Kind.OASYS_READ,
-            Kind.ARIES_READ,
-            Kind.SQLITE_QUERY,
-        }:
+        if block.kind not in _SCANNED_KINDS:
             updated_blocks.append(block)
             continue
 
@@ -67,12 +59,11 @@ def _expand_body(
     block_index: int,
     csv_producers: dict[str, int],
     merged_consumers: dict[str, set[int]],
-) -> tuple[str, list[SqlMacroCall], list[Diagnostic]]:
+) -> tuple[str, list, list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
-    calls: list[SqlMacroCall] = []
+    calls: list = []
     result_parts: list[str] = []
     cursor = 0
-    macro_index = 0
 
     while True:
         match = _next_sql_call(body, cursor)
@@ -84,14 +75,15 @@ def _expand_body(
         name = match.name
         call_text = body[match.start : match.end]
 
-        if name != "SQL_Get_CSV_List":
+        handler = HANDLERS.get(name)
+        if handler is None:
             diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="unknown-sql-macro",
-                    message=f"Left SQL macro {name} unchanged.",
-                    block_index=block_index,
-                    span=span,
+                _diag(
+                    "info",
+                    "unknown-sql-macro",
+                    f"Left SQL macro {name} unchanged.",
+                    block_index,
+                    span,
                 )
             )
             result_parts.append(call_text)
@@ -99,56 +91,40 @@ def _expand_body(
             continue
 
         args = _split_args(match.args_text)
-        if len(args) != 3:
+        placeholder = f"@@SQLMACRO:{len(calls)}@@"
+        outcome = handler.build_call(args, placeholder, span, body[: match.start])
+
+        if isinstance(outcome, MacroParseError):
             diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="sql-macro-parse-failed",
-                    message="Could not parse SQL_Get_CSV_List arguments; left call unchanged.",
-                    block_index=block_index,
-                    span=span,
+                _diag(
+                    "warning",
+                    "sql-macro-parse-failed",
+                    f"{outcome.message}; left call unchanged.",
+                    block_index,
+                    span,
                 )
             )
             result_parts.append(call_text)
             cursor = match.end
             continue
 
-        csv_path_raw = _unquote(args[0])
-        column_raw = args[1].strip()
-        lead_in = _unquote(args[2])
-        column_ref: int | str = _parse_column_ref(column_raw)
-
-        placeholder = f"@@SQLMACRO:{macro_index}@@"
-        macro_index += 1
-        calls.append(
-            SqlMacroCall(
-                name="SQL_Get_CSV_List",
-                csv_path=csv_path_raw,
-                column_ref=column_ref,
-                lead_in=lead_in,
-                placeholder=placeholder,
-                source_span=span,
-            )
-        )
+        calls.append(outcome.call)
         result_parts.append(placeholder)
-        if _CALL_SITE_WRAP_RE.search(body[: match.start]):
-            # The call site looks like `(<col> In SQL_Get_CSV_List(...)` with an
-            # unmatched leading `(`. Emit a trailing `)` so the rewritten body
-            # stays balanced after the runtime macro produces its IN list.
-            result_parts.append(")")
+        result_parts.append(outcome.appended_text)
 
-        normalized_csv = normalize_csv_path(csv_path_raw)
-        merged_consumers[normalized_csv].add(block_index)
-        if normalized_csv not in csv_producers:
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
-                    code="sql-macro-csv-unknown-producer",
-                    message=f"No known producer found for SQL macro CSV path {csv_path_raw}.",
-                    block_index=block_index,
-                    span=span,
+        if outcome.consumed_csv_path:
+            normalized_csv = normalize_csv_path(outcome.consumed_csv_path)
+            merged_consumers[normalized_csv].add(block_index)
+            if normalized_csv not in csv_producers:
+                diagnostics.append(
+                    _diag(
+                        "info",
+                        "sql-macro-csv-unknown-producer",
+                        f"No known producer found for SQL macro CSV path {outcome.consumed_csv_path}.",
+                        block_index,
+                        span,
+                    )
                 )
-            )
         cursor = match.end
 
     return "".join(result_parts), calls, diagnostics
@@ -163,8 +139,7 @@ class _SqlCallMatch:
 
 
 def _next_sql_call(body: str, start: int) -> _SqlCallMatch | None:
-    pattern = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
-    for match in pattern.finditer(body, start):
+    for match in _SQL_CALL_RE.finditer(body, start):
         open_paren = body.find("(", match.start())
         if open_paren == -1:
             continue
@@ -238,13 +213,13 @@ def _split_args(args_text: str) -> list[str]:
     return args
 
 
-def _unquote(value: str) -> str:
-    stripped = value.strip()
-    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
-        return stripped[1:-1]
-    return stripped
-
-
-def _parse_column_ref(raw: str) -> int | str:
-    value = _unquote(raw)
-    return int(value) if value.isdigit() else value
+def _diag(
+    severity: str, code: str, message: str, block_index: int, span: SourceSpan
+) -> Diagnostic:
+    return Diagnostic(
+        severity=severity,  # type: ignore[arg-type]
+        code=code,
+        message=message,
+        block_index=block_index,
+        span=span,
+    )
