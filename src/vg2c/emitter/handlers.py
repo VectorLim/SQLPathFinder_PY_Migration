@@ -32,6 +32,29 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
+def _declared_headers(block: ResolvedBlock) -> list[str] | None:
+    """Extract declared headers from /HEADERS option.
+
+    Returns None if:
+    - /HEADERS is not present
+    - /HEADERS contains CrossTab->[[...]] (dynamic columns)
+
+    Otherwise returns a list of stripped header names.
+    """
+    headers_value = block.resolved_options.lookup.get("HEADERS")
+    if not headers_value:
+        return None
+
+    # Skip if this is a crosstab block (dynamic columns)
+    if "CrossTab->[[" in headers_value:
+        return None
+
+    # Split, strip quotes and whitespace, filter empties
+    stripped = _strip_quotes(headers_value)
+    parts = [p.strip() for p in stripped.split(",")]
+    return [p for p in parts if p]
+
+
 def _value_to_python_expr(value: str | None) -> str:
     if value is None:
         return "None"
@@ -117,6 +140,10 @@ def _emit_reader(
     has_crosstab = bool(ctrow and ctheader and ctvalue)
     row_keys_expr = repr([c.strip() for c in ctrow.split(",") if c.strip()])
 
+    # Extract declared headers (skip for crosstab - dynamic columns)
+    declared_hdrs = _declared_headers(block) if not has_crosstab else None
+    header_arg = f", header={declared_hdrs!r}" if declared_hdrs else ""
+
     func_name = _function_name(block, suffix)
     if has_crosstab:
         ctx.add_import("vg2c.emitter.macro", "apply_crosstab")
@@ -130,7 +157,7 @@ def _emit_reader(
 def {func_name}(ctx):
     result = read(sql={sql_expr}, db_type={repr(db_type)}, macro_state=ctx.macro)
 {crosstab_line}
-    ctx.csv_io.write({output_expr}, result)
+    ctx.csv_io.write({output_expr}, result{header_arg})
 """
     return func_code, f"{func_name}(ctx)"
 
@@ -172,12 +199,16 @@ def _emit_sqlite_query(
     func_name = _function_name(block, "sqlite_query")
     output_name = _resolve_output_path(block, "csv")
 
+    # Extract declared headers
+    declared_hdrs = _declared_headers(block)
+    header_arg = f",\n        header={declared_hdrs!r}" if declared_hdrs else ""
+
     func_code = f"""\
 def {func_name}(ctx):
     ctx.sqlite_engine.run_join(
         sql={sql_expr},
         inputs={inputs_str},
-        output={repr(output_name)},
+        output={repr(output_name)}{header_arg},
     )
 """
 

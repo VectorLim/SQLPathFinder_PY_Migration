@@ -87,7 +87,9 @@ def test_substitute_crosstab_header_mode_n():
 
 
 def test_apply_crosstab_pivots_rows_for_downstream_join():
-    rows = [
+    import pandas as pd
+    
+    rows = pd.DataFrame([
         {
             "facility": "KM",
             "lot": "L1",
@@ -102,7 +104,7 @@ def test_apply_crosstab_pivots_rows_for_downstream_join():
             "test_name": "SUBPLANEANGLEY",
             "Sub_plane": "-0.5",
         },
-    ]
+    ])
 
     out = apply_crosstab(
         rows,
@@ -112,8 +114,8 @@ def test_apply_crosstab_pivots_rows_for_downstream_join():
     )
 
     assert len(out) == 1
-    assert out[0]["facility"] == "KM"
-    assert out[0]["lot"] == "L1"
-    assert out[0]["operation"] == "2090"
-    assert out[0]["SUBPLANEANGLEX"] == "1.5"
-    assert out[0]["SUBPLANEANGLEY"] == "-0.5"
+    assert out.iloc[0]["facility"] == "KM"
+    assert out.iloc[0]["lot"] == "L1"
+    assert out.iloc[0]["operation"] == "2090"
+    assert out.iloc[0]["SUBPLANEANGLEX"] == "1.5"
+    assert out.iloc[0]["SUBPLANEANGLEY"] == "-0.5"

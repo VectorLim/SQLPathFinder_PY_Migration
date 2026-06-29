@@ -112,3 +112,101 @@ def test_crosstab_macro_expansion_in_sqlite_join(tmp_path):
     assert rows[0]["lot"] == "L1"
     assert rows[0]["SUBPLANEANGLEX"] == "1.25"
     assert rows[0]["SUBPLANEANGLEY"] == "-0.75"
+
+
+def test_run_join_uses_declared_header_for_output(tmp_path):
+    """When header is provided, output uses that exact column list and order."""
+    engine = SqliteEngine()
+    inp = tmp_path / "data.csv"
+    _write_csv(inp, [{"b": "2", "a": "1", "c": "3"}])
+
+    out = str(tmp_path / "result.csv")
+    engine.run_join(
+        sql="SELECT a, b, c FROM [data]",
+        inputs=[str(inp)],
+        output=out,
+        header=["a", "b", "c"],
+    )
+
+    lines = Path(out).read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "a,b,c"
+    assert lines[1] == "1,2,3"
+
+
+def test_run_join_zero_rows_with_header_still_writes_header(tmp_path):
+    """When query returns zero rows but header is declared, output contains header."""
+    engine = SqliteEngine()
+    inp = tmp_path / "data.csv"
+    _write_csv(inp, [{"x": "1"}])
+
+    out = str(tmp_path / "empty_result.csv")
+    engine.run_join(
+        sql="SELECT x FROM [data] WHERE x = '999'",
+        inputs=[str(inp)],
+        output=out,
+        header=["x"],
+    )
+
+    content = Path(out).read_text(encoding="utf-8")
+    assert content == "x\n"
+
+
+def test_load_csv_as_table_empty_file_does_not_crash(tmp_path):
+    """Empty CSV files are loaded as empty placeholder tables without crashing."""
+    import sqlite3
+
+    engine = SqliteEngine()
+    empty_csv = tmp_path / "empty.csv"
+    empty_csv.write_text("", encoding="utf-8")
+
+    out = str(tmp_path / "result.csv")
+    # Should not crash; creates placeholder table
+    engine.run_join(
+        sql="SELECT * FROM [empty]",
+        inputs=[str(empty_csv)],
+        output=out,
+    )
+
+    lines = Path(out).read_text(encoding="utf-8").splitlines()
+    # Placeholder table has one column, zero rows
+    assert len(lines) == 1  # just header
+    assert lines[0] == "_empty"
+
+
+def test_load_csv_as_table_skips_duplicated_header_row(tmp_path):
+    """When CSV data includes a row that duplicates the header, it is skipped."""
+    inp = tmp_path / "dup_header.csv"
+    # Write CSV manually with header row duplicated in data
+    inp.write_text("col1,col2\ncol1,col2\nval1,val2\n", encoding="utf-8")
+
+    engine = SqliteEngine()
+    out = str(tmp_path / "result.csv")
+    engine.run_join(
+        sql="SELECT col1, col2 FROM [dup_header]",
+        inputs=[str(inp)],
+        output=out,
+    )
+
+    lines = Path(out).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2  # header + 1 data row (duplicate header row dropped)
+    assert lines[0] == "col1,col2"
+    assert lines[1] == "val1,val2"
+
+
+def test_run_join_declared_header_projects_missing_columns_as_empty(tmp_path):
+    """When declared header includes columns not in result, fill with empty."""
+    engine = SqliteEngine()
+    inp = tmp_path / "data.csv"
+    _write_csv(inp, [{"a": "1", "b": "2"}])
+
+    out = str(tmp_path / "result.csv")
+    engine.run_join(
+        sql="SELECT a, b FROM [data]",
+        inputs=[str(inp)],
+        output=out,
+        header=["a", "b", "c", "d"],
+    )
+
+    lines = Path(out).read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "a,b,c,d"
+    assert lines[1] == "1,2,,"

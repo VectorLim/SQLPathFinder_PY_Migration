@@ -1,41 +1,23 @@
-# Auto-generated Python script from VG2
-"""Pipeline implementation."""
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a0_8852.tab
+/CTROW=lot,operation,test_end_date,tester_id,program_name,ws_loss_code,complevel_1,complevel_2,tray_or_carrier_id,lane_number,carrier_x,carrier_y,visual_id
+/CTVALUE=all_value
+/CTHEADER=test_name
+/CTARRAY=a0,8852
+/HEADERS=lot,operation,test_end_date,tester_id,program_name,ws_loss_code,complevel_1,complevel_2,test_name,tray_or_carrier_id,lane_number,carrier_x,carrier_y,visual_id,all_value
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a0. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-from vg2c.emitter.macro import apply_crosstab
-from vg2c_runtime import ctx as pipeline_ctx
-
-# --- Embedded reader runtime ------------------------------------------------
-from datasyncx.readers import AriesReader, MarsReader, OracleReader
-
-# DATABASE_TYPE_MAP is the single extension point for adding a new database
-# type: map the /ENGINE= identifier used in the VG2 source to a datasyncx
-# Reader subclass. ``read`` below dispatches to it.
-DATABASE_TYPE_MAP = {
-    "MARS": MarsReader,
-    "OASYS": OracleReader,
-    "ARIES": AriesReader,
-}
-
-
-def read(sql, db_type, macro_state=None):
-    """Run *sql* against the Reader registered for *db_type*.
-
-    ``macro_state`` (when given) substitutes ``<<<NAME>>>`` macro
-    placeholders that survive into the SQL body via its own
-    ``substitute_sql`` helper.
-    """
-    if macro_state is not None:
-        sql = macro_state.substitute_sql(sql)
-    if db_type not in DATABASE_TYPE_MAP:
-        raise ValueError(f"Unsupported database type: {db_type!r}")
-    return DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
-
-
-# --- end embedded reader runtime --------------------------------------------
-
-
-def step_0000_step_1_1_a0_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT 
           lot AS lot
@@ -112,14 +94,29 @@ GROUP BY
          ,visual_id
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'ws_loss_code', 'complevel_1', 'complevel_2', 'tray_or_carrier_id', 'lane_number', 'carrier_x', 'carrier_y', 'visual_id'], header_key='test_name', value_key='all_value')
 
-    ctx.csv_io.write('yeuchuan_a0_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a8_8852.tab
+/CTROW=lot_8,operation_8,complevel_1_5,visual_id_8,tester_id_2,complevel_2_2
+/CTVALUE=all_value_2
+/CTHEADER=test_name_2
+/CTARRAY=a8,8852
+/HEADERS=lot_8,operation_8,test_name_2,complevel_1_5,all_value_2,visual_id_8,tester_id_2,complevel_2_2
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a8. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0001_step_1_1_a8_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_8 AS lot_8
@@ -150,7 +147,7 @@ AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = c
 LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
 WHERE ats.data_domain='METROLOGY'
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_8852.tab', 'lot', 'ats.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a0_8852.tab", lot, "ats.lot In") 
  AND      ats.operation In ('1960'
 ,'2090') 
  AND      ctr.complevel_1 Like '%STIM-VI%' 
@@ -171,14 +168,29 @@ GROUP BY
          ,complevel_2_2
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_8', 'operation_8', 'complevel_1_5', 'visual_id_8', 'tester_id_2', 'complevel_2_2'], header_key='test_name_2', value_key='all_value_2')
 
-    ctx.csv_io.write('yeuchuan_a8_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a2_8852.tab
+/CTROW=lot_2,operation_2,tester_id_1,complevel_1_1,visual_id_2
+/CTVALUE=all_value_1
+/CTHEADER=test_name_1
+/CTARRAY=a2,8852
+/HEADERS=lot_2,operation_2,tester_id_1,complevel_1_1,visual_id_2,test_name_1,all_value_1
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a2. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0002_step_1_1_a2_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_2 AS lot_2
@@ -207,11 +219,11 @@ AND ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id
 INNER JOIN A_Test t ON t.t_id = ctr.t_id
 WHERE 1=1
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_8852.tab', 'lot', 'ats.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a0_8852.tab", lot, "ats.lot In") 
  AND      ats.operation In ('1960'
 ,'2090') 
  AND      (di.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_8852.tab', 'visual_id', 'di.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a0_8852.tab", visual_id, "di.visual_id In") 
  AND      t.test_name = 'BINCODE' 
  AND      ats.tester_id Like 'IIS%' 
 )
@@ -224,14 +236,29 @@ GROUP BY
          ,test_name_1
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_2', 'operation_2', 'tester_id_1', 'complevel_1_1', 'visual_id_2'], header_key='test_name_1', value_key='all_value_1')
 
-    ctx.csv_io.write('yeuchuan_a2_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a1_8852.tab
+/CTROW=lot_1,operation_1,processing_end_date,media_id,lane_name,bonding_station,visual_id_1,bin_code,media_in_x,media_in_y
+/CTVALUE=numeric_value_md
+/CTHEADER=parameter_name_md
+/CTARRAY=a1,8852
+/HEADERS=lot_1,operation_1,processing_end_date,media_id,lane_name,bonding_station,parameter_name_md,numeric_value_md,visual_id_1,bin_code,media_in_x,media_in_y
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a1. Fetching ARIES Data
+/RECORD=AT_TDX_DIA@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0003_step_1_1_a1_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_1 AS lot_1
@@ -268,11 +295,11 @@ LEFT JOIN ARIES_Views.AV_dia_media_data z1 ON z1.lao_start_ww = z2.lao_start_ww 
 INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
 WHERE
               (z0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a2_8852.tab', 'lot_2', 'z0.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a2_8852.tab", lot_2, "z0.lot In") 
  AND      z0.operation In ('1960'
 ,'2090') 
  AND      (z8.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a2_8852.tab', 'visual_id_2', 'z8.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a2_8852.tab", visual_id_2, "z8.visual_id In") 
  AND      z1.parameter_name In ('FINALSITTIME'
 ,'MAXFORCE'
 ,'MINFORCE'
@@ -296,14 +323,25 @@ GROUP BY
          ,media_in_y
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_1', 'operation_1', 'processing_end_date', 'media_id', 'lane_name', 'bonding_station', 'visual_id_1', 'bin_code', 'media_in_x', 'media_in_y'], header_key='parameter_name_md', value_key='numeric_value_md')
 
-    ctx.csv_io.write('yeuchuan_a1_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a6_8852.tab
+/HEADERS=lot_6,operation_6,Max_Thermode_Temp,parameter_name_dd,visual_id_6
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a6. Fetching ARIES Data
+/RECORD=AT_TDX_DIA@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0004_step_1_1_a6_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           z0.lot AS lot_6
@@ -318,21 +356,33 @@ INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_
 LEFT JOIN ARIES_Views.AV_dia_devicedata z7 ON z7.lao_start_ww = z8.lao_start_ww AND z7.obj_s_id = z8.obj_s_id AND z7.obj_mt_id = z8.obj_mt_id AND z7.obj_ut_id = z8.obj_ut_id
 WHERE
               (z0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'lot_1', 'z0.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", lot_1, "z0.lot In") 
  AND      z0.operation In ('1960'
 ,'2090') 
  AND      (z8.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'visual_id_1', 'z8.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", visual_id_1, "z8.visual_id In") 
  AND      z7.parameter_name In ('MAXTHERMODETEMPERATURE') 
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
 
-    ctx.csv_io.write('yeuchuan_a6_8852.tab', result, header=['lot_6', 'operation_6', 'Max_Thermode_Temp', 'parameter_name_dd', 'visual_id_6'])
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a7_8852.tab
+/HEADERS=lot_7,operation_7,visual_id_7,parameter_name_dd_1,Min_Thermode_Temp
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a7. Fetching ARIES Data
+/RECORD=AT_TDX_DIA@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0005_step_1_1_a7_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           z0.lot AS lot_7
@@ -347,21 +397,37 @@ INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_
 LEFT JOIN ARIES_Views.AV_dia_devicedata z7 ON z7.lao_start_ww = z8.lao_start_ww AND z7.obj_s_id = z8.obj_s_id AND z7.obj_mt_id = z8.obj_mt_id AND z7.obj_ut_id = z8.obj_ut_id
 WHERE
               (z0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'lot_1', 'z0.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", lot_1, "z0.lot In") 
  AND      z0.operation In ('1960'
 ,'2090') 
  AND      (z8.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'visual_id_1', 'z8.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", visual_id_1, "z8.visual_id In") 
  AND      z7.parameter_name = 'MINTHERMODETEMPERATURE' 
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
 
-    ctx.csv_io.write('yeuchuan_a7_8852.tab', result, header=['lot_7', 'operation_7', 'visual_id_7', 'parameter_name_dd_1', 'Min_Thermode_Temp'])
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a3_8852.tab
+/CTROW=lot_3,operation_3,tester_id_3,program_name_2,complevel_2_1,complevel_1_2,visual_id_3,ws_loss_code_2
+/CTVALUE=all_value_3
+/CTHEADER=test_name_3
+/CTARRAY=a3,8852
+/HEADERS=lot_3,operation_3,tester_id_3,program_name_2,test_name_3,complevel_2_1,complevel_1_2,all_value_3,visual_id_3,ws_loss_code_2
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a3. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0006_step_1_1_a3_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_3 AS lot_3
@@ -396,11 +462,11 @@ AND ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id
 INNER JOIN A_Test t ON t.t_id = ctr.t_id
 WHERE 1=1
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'lot_1', 'ats.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", lot_1, "ats.lot In") 
  AND      ats.operation In ('2090'
 ,'1960') 
  AND      (di.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a1_8852.tab', 'visual_id_1', 'di.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a1_8852.tab", visual_id_1, "di.visual_id In") 
  AND      ats.tester_id Like 'OIS%' 
  AND      ctr.complevel_2 = 'INSPRES' 
  AND      ctr.complevel_1 Like '%LIDPOS%' 
@@ -421,14 +487,29 @@ GROUP BY
          ,ws_loss_code_2
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_3', 'operation_3', 'tester_id_3', 'program_name_2', 'complevel_2_1', 'complevel_1_2', 'visual_id_3', 'ws_loss_code_2'], header_key='test_name_3', value_key='all_value_3')
 
-    ctx.csv_io.write('yeuchuan_a3_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a4_8852.tab
+/CTROW=lot_4,operation_4,tester_id_4,program_name_3,complevel_1_3,visual_id_4
+/CTVALUE=all_value_4
+/CTHEADER=test_name_4
+/CTARRAY=a4,8852
+/HEADERS=lot_4,operation_4,tester_id_4,program_name_3,test_name_4,complevel_1_3,all_value_4,visual_id_4
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a4. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0007_step_1_1_a4_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_4 AS lot_4
@@ -459,7 +540,7 @@ AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = c
 LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
 WHERE ats.data_domain='METROLOGY'
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a3_8852.tab', 'lot_3', 'ats.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a3_8852.tab", lot_3, "ats.lot In") 
  AND      ats.operation In ('2090'
 ,'1960') 
  AND      ats.tester_id Like 'OIS%' 
@@ -483,14 +564,29 @@ GROUP BY
          ,visual_id_4
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_4', 'operation_4', 'tester_id_4', 'program_name_3', 'complevel_1_3', 'visual_id_4'], header_key='test_name_4', value_key='all_value_4')
 
-    ctx.csv_io.write('yeuchuan_a4_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a5_8852.tab
+/CTROW=lot_5,operation_5,tester_id_5,complevel_1_4,ws_loss_code_1,visual_id_5
+/CTVALUE=all_value_5
+/CTHEADER=test_name_5
+/CTARRAY=a5,8852
+/HEADERS=lot_5,operation_5,tester_id_5,test_name_5,complevel_1_4,all_value_5,ws_loss_code_1,visual_id_5
+/INSTANCE=8852
+/PROMPT-TEXT=Step 1.1-a5. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0008_step_1_1_a5_fetching_aries_data(ctx):
-    result = read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
           lot_5 AS lot_5
@@ -521,13 +617,13 @@ AND ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id
 INNER JOIN A_Test t ON t.t_id = ctr.t_id
 WHERE 1=1
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a4_8852.tab', 'lot_4', 'ats.lot In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a4_8852.tab", lot_4, "ats.lot In") 
  AND      ats.operation In ('2090'
 ,'1960') 
  AND      ats.tester_id Like 'OIS%' 
  AND      t.test_name = 'BINCODE' 
  AND      (di.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a4_8852.tab', 'visual_id_4', 'di.visual_id In') + """) 
+SQL_Get_CSV_List(".\yeuchuan_a4_8852.tab", visual_id_4, "di.visual_id In") 
 )
 GROUP BY 
           lot_5
@@ -539,15 +635,28 @@ GROUP BY
          ,visual_id_5
 /*END SQL*/
 
-""", db_type='ARIES', macro_state=ctx.macro)
-    result = apply_crosstab(result, row_keys=['lot_5', 'operation_5', 'tester_id_5', 'complevel_1_4', 'ws_loss_code_1', 'visual_id_5'], header_key='test_name_5', value_key='all_value_5')
 
-    ctx.csv_io.write('yeuchuan_a5_8852.tab', result)
+<---- New Query ---->
 
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/CSV=DLA_KPPs.csv
+/TABLE=yeuchuan_a0_8852.tab,yeuchuan_a8_8852.tab,yeuchuan_a2_8852.tab,yeuchuan_a1_8852.tab,yeuchuan_a6_8852.tab,yeuchuan_a7_8852.tab,yeuchuan_a3_8852.tab,yeuchuan_a4_8852.tab,yeuchuan_a5_8852.tab
+/HEADERS=lot,operation,test_end_date,tester_id,program_name,ws_loss_code,complevel_1,complevel_2,tray_or_carrier_id,lane_number,carrier_x,carrier_y,visual_id,CrossTab->[[a0,8852;:N]],lot_2,operation_2,tester_id_1,complevel_1_1,visual_id_2,CrossTab->[[a2,8852;:N]],lot_1,operation_1,processing_end_date,media_id,lane_name,bonding_station,CrossTab->[[a1,8852;:N]],visual_id_1,bin_code,media_in_x,media_in_y,lot_6,operation_6,Max_Thermode_Temp,parameter_name_dd,visual_id_6,lot_7,operation_7,visual_id_7,parameter_name_dd_1,Min_Thermode_Temp,lot_3,operation_3,tester_id_3,program_name_2,complevel_2_1,complevel_1_2,CrossTab->[[a3,8852;:N]],visual_id_3,ws_loss_code_2,lot_4,operation_4,tester_id_4,program_name_3,complevel_1_3,CrossTab->[[a4,8852;:N]],visual_id_4,lot_5,operation_5,tester_id_5,complevel_1_4,CrossTab->[[a5,8852;:N]],ws_loss_code_1,visual_id_5,Thermode_temp_delta,lot_8,operation_8,complevel_1_5,CrossTab->[[a8,8852;:N]],visual_id_8,tester_id_2,complevel_2_2
+/DELETE=*Instance*
+/INSTANCE=8852
+/SQLITE_DT=,lot(c),operation(c),test_end_date(d),tester_id(c),program_name(c),ws_loss_code(c),complevel_1(c),complevel_2(c),tray_or_carrier_id(c),lane_number(n),carrier_x(n),carrier_y(n),visual_id(c),lot_2(c),operation_2(c),tester_id_1(c),complevel_1_1(c),visual_id_2(c),lot_1(c),operation_1(c),processing_end_date(d),media_id(c),lane_name(c),bonding_station(c),visual_id_1(c),bin_code(c),media_in_x(n),media_in_y(n),lot_6(c),operation_6(c),Max_Thermode_Temp(n),parameter_name_dd(c),visual_id_6(c),lot_7(c),operation_7(c),visual_id_7(c),parameter_name_dd_1(c),Min_Thermode_Temp(n),lot_3(c),operation_3(c),tester_id_3(c),program_name_2(c),complevel_2_1(c),complevel_1_2(c),visual_id_3(c),ws_loss_code_2(c),lot_4(c),operation_4(c),tester_id_4(c),program_name_3(c),complevel_1_3(c),visual_id_4(c),lot_5(c),operation_5(c),tester_id_5(c),complevel_1_4(c),ws_loss_code_1(c),visual_id_5(c),Thermode_temp_delta(n),lot_8(c),operation_8(c),complevel_1_5(c),visual_id_8(c),tester_id_2(c),complevel_2_2(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
 
-def step_0009_sqlite_query(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
 
 DROP INDEX IF EXISTS IdxA8;
 Create Index IF NOT EXISTS IdxA8 ON [yeuchuan_a8_8852] ([visual_id_8]);
@@ -657,24 +766,5 @@ FROM
   ON a3.[visual_id_3] = a4.[visual_id_4] 
  LEFT OUTER JOIN [yeuchuan_a5_8852] a5
   ON a4.[visual_id_4] = a5.[visual_id_5]
-""",
-        inputs=['yeuchuan_a0_8852.tab', 'yeuchuan_a8_8852.tab', 'yeuchuan_a2_8852.tab', 'yeuchuan_a1_8852.tab', 'yeuchuan_a6_8852.tab', 'yeuchuan_a7_8852.tab', 'yeuchuan_a3_8852.tab', 'yeuchuan_a4_8852.tab', 'yeuchuan_a5_8852.tab'],
-        output='DLA_KPPs.csv',
-    )
 
-
-def run() -> None:
-    ctx = pipeline_ctx
-    step_0000_step_1_1_a0_fetching_aries_data(ctx)
-    step_0001_step_1_1_a8_fetching_aries_data(ctx)
-    step_0002_step_1_1_a2_fetching_aries_data(ctx)
-    step_0003_step_1_1_a1_fetching_aries_data(ctx)
-    step_0004_step_1_1_a6_fetching_aries_data(ctx)
-    step_0005_step_1_1_a7_fetching_aries_data(ctx)
-    step_0006_step_1_1_a3_fetching_aries_data(ctx)
-    step_0007_step_1_1_a4_fetching_aries_data(ctx)
-    step_0008_step_1_1_a5_fetching_aries_data(ctx)
-    step_0009_sqlite_query(ctx)
-
-if __name__ == "__main__":
-    run()
+<---- New Query ---->

@@ -21,6 +21,9 @@ def _read_column(path: str, column_ref: int | str) -> list[str]:
         reader = csv.reader(fh)
         header = next(reader, [])
 
+        # Convert header to strings for comparison
+        header_str = [str(h) for h in header]
+
         if isinstance(column_ref, int):
             idx = column_ref - 1
         else:
@@ -32,6 +35,10 @@ def _read_column(path: str, column_ref: int | str) -> list[str]:
 
         seen: dict[str, None] = {}
         for row in reader:
+            # Skip rows that duplicate the header
+            if [str(v) for v in row] == header_str:
+                continue
+
             if idx < len(row):
                 val = row[idx]
                 if val not in seen:

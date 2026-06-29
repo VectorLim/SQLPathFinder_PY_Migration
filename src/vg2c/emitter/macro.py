@@ -21,6 +21,8 @@ because it is part of an earlier pipeline stage.
 from __future__ import annotations
 
 import re
+import pandas as pd
+
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
@@ -47,12 +49,19 @@ __all__ = [
 PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
 CROSSTAB_RE = re.compile(
-    r"CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\]"
+    r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\]|CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\],)"
 )
 
 
 def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
-    """Return selected ``alias.column`` refs from the first SELECT list in *sql*."""
+    """Return selected ``alias.column`` refs from the first SELECT list in *sql*.
+
+    Note: Uses non-greedy matching to find the first FROM keyword. This means
+    it will NOT correctly handle subqueries in the SELECT clause like:
+        SELECT a.col1, (SELECT x FROM b) as sub, a.col2 FROM table_a a
+    In such cases, columns after the nested FROM will be missed. This is a
+    known limitation but acceptable for typical SQLPathFinder query patterns.
+    """
     by_alias: dict[str, set[str]] = {}
     match = re.search(
         r"\bSELECT\b(?P<select_part>.*?)\bFROM\b", sql, flags=re.IGNORECASE | re.DOTALL
@@ -86,66 +95,41 @@ def _ci_get(row: Mapping[str, Any], key: str) -> Any:
 
 
 def apply_crosstab(
-    rows: Any,
+    rows: Any,  # pandas.DataFrame
     row_keys: list[str],
     header_key: str,
     value_key: str,
-) -> list[dict[str, Any]]:
+) -> Any:  # pandas.DataFrame
     """Pivot row-oriented data into SQLPathFinder-style crosstab output.
 
     Args:
-        rows: Iterable of row mappings or a pandas DataFrame.
+        rows: pandas DataFrame.
         row_keys: Grouping columns (``/CTROW``).
         header_key: Dynamic column source (``/CTHEADER``).
         value_key: Dynamic value source (``/CTVALUE``).
+
+    Returns:
+        pandas DataFrame with pivoted data, including row_keys as columns.
     """
-    if not row_keys or not header_key or not value_key:
-        return list(rows) if rows is not None else []
 
-    # Accept DataFrame-like inputs without importing pandas in this module.
-    if hasattr(rows, "to_dict"):
-        try:
-            source_rows = list(rows.to_dict(orient="records"))  # type: ignore[attr-defined]
-        except Exception:
-            source_rows = list(rows) if rows is not None else []
-    else:
-        source_rows = list(rows) if rows is not None else []
+    # Handle empty or invalid inputs
+    if rows.empty or not row_keys or not header_key or not value_key:
+        return pd.DataFrame(columns=row_keys)
 
-    if not source_rows:
-        return []
+    # Filter out rows with empty/null header values
+    df = rows[rows[header_key].notna() & (rows[header_key] != "")]
 
-    grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
-    dynamic_cols: list[str] = []
+    if df.empty:
+        return pd.DataFrame(columns=row_keys)
 
-    for row in source_rows:
-        if not isinstance(row, Mapping):
-            continue
-
-        key_tuple = tuple(_ci_get(row, key) for key in row_keys)
-        out = grouped.get(key_tuple)
-        if out is None:
-            out = {key: _ci_get(row, key) for key in row_keys}
-            grouped[key_tuple] = out
-
-        header_value = _ci_get(row, header_key)
-        if header_value is None or str(header_value) == "":
-            continue
-
-        dynamic_name = str(header_value)
-        if dynamic_name not in dynamic_cols:
-            dynamic_cols.append(dynamic_name)
-
-        val = _ci_get(row, value_key)
-        existing = out.get(dynamic_name)
-        # SQLPathFinder crosstab uses MAX-like behavior for duplicate cells.
-        if existing is None or str(val) > str(existing):
-            out[dynamic_name] = val
-
-    result: list[dict[str, Any]] = []
-    for out in grouped.values():
-        for name in dynamic_cols:
-            out.setdefault(name, "")
-        result.append(out)
+    # Pivot with MAX aggregation to match SQLPathFinder behavior
+    result = df.pivot_table(
+        index=row_keys,
+        columns=header_key,
+        values=value_key,
+        aggfunc="max",
+        fill_value="",
+    ).reset_index()
 
     return result
 
@@ -170,8 +154,9 @@ def substitute_crosstab(
         selected = selected_by_alias.get(alias.lower(), set())
         dynamic_cols = [c for c in all_cols if c.lower() not in selected]
 
+        # If all columns already selected, return empty string (no expansion needed)
         if not dynamic_cols:
-            return "NULL AS [CROSSTAB_EMPTY]" if mode == "Y" else "CROSSTAB_EMPTY"
+            return ""
 
         if mode == "N":
             return ",".join(dynamic_cols)

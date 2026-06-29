@@ -17,21 +17,44 @@ def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
     stem = path.stem
     table_name = stem
 
-    with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-        reader = csv.DictReader(fh)
-        rows = list(reader)
+    try:
+        with path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.DictReader(fh)
+            rows = list(reader)
 
-    cols = list(reader.fieldnames)
-    col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
-    conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-    conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
+            # Handle empty/no-header files gracefully
+            if reader.fieldnames is None:
+                # Create placeholder table with one column, no rows
+                conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
+                return table_name
 
-    placeholders = ", ".join("?" for _ in cols)
-    conn.executemany(
-        f'INSERT INTO "{table_name}" VALUES ({placeholders})',
-        [[r.get(c, "") for c in cols] for r in rows],
-    )
-    return table_name
+            cols = list(reader.fieldnames)
+            if not cols:
+                # Empty header - create placeholder table
+                conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
+                return table_name
+
+            col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
+            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+            conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
+
+            # Drop rows that duplicate the header
+            header_str = [str(c) for c in cols]
+            filtered_rows = [
+                r for r in rows if [str(r.get(c, "")) for c in cols] != header_str
+            ]
+
+            if filtered_rows:
+                placeholders = ", ".join("?" for _ in cols)
+                conn.executemany(
+                    f'INSERT INTO "{table_name}" VALUES ({placeholders})',
+                    [[r.get(c, "") for c in cols] for r in filtered_rows],
+                )
+            return table_name
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load CSV {csv_path}: {exc}") from exc
 
 
 # Split on ';' but protect content inside quotes/brackets.
@@ -50,12 +73,21 @@ def _split_statements(sql: str) -> list[str]:
 class SqliteEngine:
     """Run SQL joins over CSV files using an in-memory SQLite connection."""
 
-    def run_join(self, sql: str, inputs: list[str], output: str) -> None:
+    def run_join(
+        self, sql: str, inputs: list[str], output: str, header: list[str] | None = None
+    ) -> None:
         """
         1. Open in-memory SQLite connection.
         2. Load each *input* CSV as a table.
         3. Split *sql* on ';'; execute non-SELECT statements directly.
         4. Execute the final SELECT; write rows to *output* CSV.
+
+        Args:
+            sql: SQL query (may contain multiple statements separated by ';')
+            inputs: List of CSV file paths to load as tables
+            output: Output CSV file path
+            header: Optional declared column list for output CSV.
+                   When provided, output uses this header exactly.
         """
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -115,9 +147,30 @@ class SqliteEngine:
         # Write output CSV
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Use declared header if provided, otherwise use query result columns
+        output_header = header if header else col_names
+
         with output_path.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
-            if col_names:
-                writer.writerow(col_names)
-            for row in rows:
-                writer.writerow(list(row))
+            if output_header:
+                writer.writerow(output_header)
+
+            # When header is declared, project rows by column name
+            if header and col_names:
+                # Build mapping from col_names to values
+                col_index = {name: idx for idx, name in enumerate(col_names)}
+                header_str = [str(h) for h in header]
+
+                for row in rows:
+                    # Project row to declared header order
+                    projected = [
+                        row[col_index[h]] if h in col_index else "" for h in header
+                    ]
+                    # Skip rows that duplicate the header
+                    if [str(v) for v in projected] != header_str:
+                        writer.writerow(projected)
+            else:
+                # No declared header - write rows as-is
+                for row in rows:
+                    writer.writerow(list(row))

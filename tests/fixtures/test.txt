@@ -1,0 +1,165 @@
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a0_8852.tab
+/HEADERS=lot,operation,test_end_date,tester_id,test_name,all_value,testing_session_sequence,ws_loss_code,test_bond_head_id,test_end_work_week,summary_id,program_name,complevel_1,complevel_2,lane_number,carrier_x,carrier_y,testing_session_tray_id,testing_session_unit_id,MinorID,prodgroup3
+/INSTANCE=8852
+/USE_LEGACY_PIVOT_HEADERS=Y
+/PROMPT-TEXT=Step 1.1-a0. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          ats.lot AS lot
+         ,ats.operation AS operation
+         ,To_Char(ats.test_end_date_time,'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+         ,ats.tester_id AS tester_id
+         ,t.test_name AS test_name
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value
+         ,ats.testing_session_sequence AS testing_session_sequence
+         ,dt.ws_loss_code AS ws_loss_code
+         ,dt.test_head_id AS test_bond_head_id
+         ,ats.test_end_work_week AS test_end_work_week
+         ,ats.summary_number||ats.summary_letter AS summary_id
+         ,ats.program_name AS program_name
+         ,ctr.complevel_1 AS complevel_1
+         ,ctr.complevel_2 AS complevel_2
+         ,dt.lane_number AS lane_number
+         ,dt.carrier_x AS carrier_x
+         ,dt.carrier_y AS carrier_y
+         ,dt.testing_session_tray_id AS testing_session_tray_id
+         ,dt.testing_session_unit_id AS testing_session_unit_id
+         ,di.visual_id AS MinorID
+         ,mp.prodgroup3 AS prodgroup3
+FROM 
+A_Testing_Session ats
+LEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot
+LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      (ats.lot LIKE  '7614G757%'
+) 
+ AND      ats.operation = '1960' 
+ AND      ats.latest_flag = 'Y' 
+ AND      ctr.complevel_2 = 'INSPRES' 
+ AND      (t.test_name LIKE  'POSX%'
+) 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a1_8852.tab
+/HEADERS=LIDvendor,lot_1,LID_VEND,LID_SLI1,LID_SLI2,LID_SLI3,sub_vend,sub_sli,sub_sli2
+/INSTANCE=8852
+/USE_LEGACY_PIVOT_HEADERS=Y
+/PROMPT-TEXT=Step 1.1-a1. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5009 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS LIDvendor
+         ,f0.lot AS lot_1
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5009 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS LID_VEND
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5010 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS LID_SLI1
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5011 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS LID_SLI2
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5012 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS LID_SLI3
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5001 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS sub_vend
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5002 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS sub_sli
+         ,Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5003 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS sub_sli2
+FROM 
+@[]@F_LotHist f0
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      (f0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_8852.tab", lot, "f0.lot In") 
+ AND      (f0.operation In 
+SQL_Get_CSV_List(".\yeuchuan_a0_8852.tab", operation, "f0.operation In") 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/CSV=IIS.csv
+/TABLE=yeuchuan_a0_8852.tab,yeuchuan_a1_8852.tab
+/HEADERS=lot,operation,test_end_date,tester_id,test_name,all_value,testing_session_sequence,ws_loss_code,test_bond_head_id,test_end_work_week,summary_id,program_name,complevel_1,complevel_2,lane_number,carrier_x,carrier_y,testing_session_tray_id,testing_session_unit_id,MinorID,LIDvendor,lot_1,LID_VEND,LID_SLI1,LID_SLI2,LID_SLI3,sub_vend,sub_sli,sub_sli2,prodgroup3
+/DELETE=*Instance*
+/INSTANCE=8852
+/USE_LEGACY_PIVOT_HEADERS=Y
+/SQLITE_DT=,lot(c),operation(c),test_end_date(d),tester_id(c),test_name(c),all_value(c),testing_session_sequence(n),ws_loss_code(c),test_bond_head_id(c),test_end_work_week(n),summary_id(c),program_name(c),complevel_1(c),complevel_2(c),lane_number(n),carrier_x(n),carrier_y(n),testing_session_tray_id(c),testing_session_unit_id(n),MinorID(c),LIDvendor(x),lot_1(c),LID_VEND(x),LID_SLI1(x),LID_SLI2(x),LID_SLI3(x),sub_vend(x),sub_sli(x),sub_sli2(x),prodgroup3(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_8852] ([lot_1]);
+
+SELECT /*L0*/ 
+          a0.[lot] AS [lot]
+         ,a0.[operation] AS [operation]
+         ,a0.[test_end_date] AS [test_end_date]
+         ,a0.[tester_id] AS [tester_id]
+         ,a0.[test_name] AS [test_name]
+         ,a0.[all_value] AS [all_value]
+         ,a0.[testing_session_sequence] AS [testing_session_sequence]
+         ,a0.[ws_loss_code] AS [ws_loss_code]
+         ,a0.[test_bond_head_id] AS [test_bond_head_id]
+         ,a0.[test_end_work_week] AS [test_end_work_week]
+         ,a0.[summary_id] AS [summary_id]
+         ,a0.[program_name] AS [program_name]
+         ,a0.[complevel_1] AS [complevel_1]
+         ,a0.[complevel_2] AS [complevel_2]
+         ,a0.[lane_number] AS [lane_number]
+         ,a0.[carrier_x] AS [carrier_x]
+         ,a0.[carrier_y] AS [carrier_y]
+         ,a0.[testing_session_tray_id] AS [testing_session_tray_id]
+         ,a0.[testing_session_unit_id] AS [testing_session_unit_id]
+         ,a0.[MinorID] AS [MinorID]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[LIDvendor],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [LIDvendor]
+         ,a1.[lot_1] AS [lot_1]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[LID_VEND],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [LID_VEND]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[LID_SLI1],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [LID_SLI1]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[LID_SLI2],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [LID_SLI2]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[LID_SLI3],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [LID_SLI3]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[sub_vend],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [sub_vend]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[sub_sli],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [sub_sli]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a1.[sub_sli2],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [sub_sli2]
+         ,a0.[prodgroup3] AS [prodgroup3]
+FROM 
+           [yeuchuan_a0_8852] a0
+ INNER JOIN [yeuchuan_a1_8852] a1
+  ON a0.[lot] = a1.[lot_1]
