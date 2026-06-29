@@ -24,7 +24,6 @@ class MacroExpansion:
     """Successful parse result from a SQL macro handler."""
 
     call: SqlMacroCall
-    consumed_csv_path: str | None
     appended_text: str = ""
 
 

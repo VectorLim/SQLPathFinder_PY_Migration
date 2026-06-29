@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from vg2c.frontend.models import SourceSpan
-from vg2c.resolver.models import SqlMacroCall
+from vg2c.resolver.models import SqlGetCsvListCall, SqlMacroCall
 from vg2c.resolver.sql_macros.base import (
     MacroExpansion,
     MacroParseError,
@@ -42,7 +42,7 @@ class SqlGetCsvListHandler(SqlMacroHandler):
         lead_in = unquote_arg(args[2])
         column_ref = parse_column_ref(column_raw)
 
-        call = SqlMacroCall(
+        call = SqlGetCsvListCall(
             name=self.name,
             csv_path=csv_path_raw,
             column_ref=column_ref,
@@ -57,7 +57,6 @@ class SqlGetCsvListHandler(SqlMacroHandler):
 
         return MacroExpansion(
             call=call,
-            consumed_csv_path=csv_path_raw,
             appended_text=appended,
         )
 

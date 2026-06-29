@@ -112,15 +112,15 @@ def _expand_body(
         result_parts.append(placeholder)
         result_parts.append(outcome.appended_text)
 
-        if outcome.consumed_csv_path:
-            normalized_csv = normalize_csv_path(outcome.consumed_csv_path)
+        for csv_path_raw in outcome.call.consumed_csv_paths():
+            normalized_csv = normalize_csv_path(csv_path_raw)
             merged_consumers[normalized_csv].add(block_index)
             if normalized_csv not in csv_producers:
                 diagnostics.append(
                     _diag(
                         "info",
                         "sql-macro-csv-unknown-producer",
-                        f"No known producer found for SQL macro CSV path {outcome.consumed_csv_path}.",
+                        f"No known producer found for SQL macro CSV path {csv_path_raw}.",
                         block_index,
                         span,
                     )

@@ -71,13 +71,23 @@ class ScopeNode:
 
 
 @dataclass(frozen=True, slots=True)
-class SqlMacroCall:
-    name: str  # Macro identifier, e.g. "SQL_Get_CSV_List"
+class SqlGetCsvListCall:
+    """Parsed SQL_Get_CSV_List macro call."""
+
+    name: Literal["SQL_Get_CSV_List"]
     csv_path: str
     column_ref: int | str
     lead_in: str
     placeholder: str
     source_span: SourceSpan
+
+    def consumed_csv_paths(self) -> tuple[str, ...]:
+        """Return CSV paths consumed by this call."""
+        return (self.csv_path,)
+
+
+# Union grows as more macros are added (e.g. SqlGetCsvListCall | SqlTimeRangeCall)
+SqlMacroCall = SqlGetCsvListCall
 
 
 @dataclass(frozen=True, slots=True)

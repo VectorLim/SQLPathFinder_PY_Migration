@@ -236,14 +236,15 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
             )
 
         for call in block.sql_macro_calls:
-            consumers.append(
-                ConsumerRecord(
-                    block_index=block.parsed.index,
-                    csv_path=_normalize_csv_path(call.csv_path),
-                    scope_id=block.scope_id,
-                    consumer_kind="sql-macro",
+            for csv_path in call.consumed_csv_paths():
+                consumers.append(
+                    ConsumerRecord(
+                        block_index=block.parsed.index,
+                        csv_path=_normalize_csv_path(csv_path),
+                        scope_id=block.scope_id,
+                        consumer_kind="sql-macro",
+                    )
                 )
-            )
     return consumers
 
 
