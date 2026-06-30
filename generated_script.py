@@ -27,7 +27,6 @@ from typing import Any
 import pandas as pd
 
 
-
 def apply_crosstab(
     rows: pd.DataFrame,  # pandas.DataFrame
     row_keys: list[str],
@@ -83,7 +82,6 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import pandas
-
 
 
 class CsvIO:
@@ -206,35 +204,38 @@ import csv
 from pathlib import Path
 
 
-
 def _read_column(path: str, column_ref: int | str) -> list[str]:
     """Extract unique values from a CSV column (1-based index or header name)."""
     rows: list[str] = []
-    with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
-        reader = csv.reader(fh)
-        header = next(reader, [])
+    try:
+        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, [])
 
-        header_str = [str(h) for h in header]
+            header_str = [str(h) for h in header]
 
-        if isinstance(column_ref, int):
-            idx = column_ref - 1
-        else:
-            col_lower = [h.lower() for h in header]
-            try:
-                idx = col_lower.index(column_ref.lower())
-            except ValueError:
-                return []
+            if isinstance(column_ref, int):
+                idx = column_ref - 1
+            else:
+                col_lower = [h.lower() for h in header]
+                try:
+                    idx = col_lower.index(column_ref.lower())
+                except ValueError:
+                    return []
 
-        seen: dict[str, None] = {}
-        for row in reader:
-            if [str(v) for v in row] == header_str:
-                continue
+            seen: dict[str, None] = {}
+            for row in reader:
+                if [str(v) for v in row] == header_str:
+                    continue
 
-            if idx < len(row):
-                val = row[idx]
-                if val not in seen:
-                    seen[val] = None
-                    rows.append(val)
+                if idx < len(row):
+                    val = row[idx]
+                    if val not in seen:
+                        seen[val] = None
+                        rows.append(val)
+    except (FileNotFoundError, OSError, csv.Error):
+        # Missing/unreadable CSV should not break SQL generation.
+        return []
 
     return rows
 
@@ -278,7 +279,6 @@ from pathlib import Path
 from typing import Callable
 
 import pandas as pd
-
 
 # --- Embedded dependencies from macro subsystem ---
 
@@ -480,7 +480,6 @@ import shutil
 from pathlib import Path
 
 
-
 class FileSystemOps:
 
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
@@ -513,8 +512,6 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Protocol
-
-
 
 # ---------------------------------------------------------------------------
 # Placeholder patterns
@@ -695,7 +692,6 @@ from email.message import EmailMessage
 from pathlib import Path
 
 
-
 class MailService:
     """Send email. Reads connection config from environment variables."""
 
@@ -743,7 +739,6 @@ import subprocess
 from pathlib import Path
 
 
-
 class ExternalProcess:
     """Thin wrapper around subprocess.run."""
 
@@ -767,7 +762,6 @@ class ExternalProcess:
 
 
 from typing import Any, ContextManager
-
 
 
 class PipelineContext:
@@ -820,7 +814,7 @@ class PipelineContext:
         sql = self.macro.substitute_sql(sql)
 
         # 2. Execute query based on source_type
-        if source_type.lower() == 'sqlite':
+        if source_type.lower() == "sqlite":
             result = self.sqlite_engine.execute(sql, inputs or [])
         else:
             # Pass pre-substituted SQL; read() will skip re-substitution
@@ -830,9 +824,9 @@ class PipelineContext:
         if crosstab:
             result = apply_crosstab(
                 result,
-                row_keys=crosstab['row_keys'],
-                header_key=crosstab['header_key'],
-                value_key=crosstab['value_key'],
+                row_keys=crosstab["row_keys"],
+                header_key=crosstab["header_key"],
+                value_key=crosstab["value_key"],
             )
 
         # 4. Write output
@@ -854,8 +848,6 @@ stays owned by the macro subsystem.
 To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` below
 and add the matching ``datasyncx`` Reader import alongside the others below.
 """
-
-
 
 
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
@@ -900,27 +892,44 @@ def step_0002_html_report(ctx):
 
 
 def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
-    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_Maxlidheight_CSR_DXA,N,Y,Y')
+    ctx.write_file(
+        path="macrotmp.csv",
+        template="\nSfolder,underDEV,useCSR,useMMS\nICMPCS_Maxlidheight_CSR_DXA,N,Y,Y",
+    )
 
 
 def step_0004_step_1_4_create_getcsrsu_bat(ctx):
-    ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
+    ctx.write_file(
+        path="getcsrsu.bat",
+        template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe',
+    )
 
 
 def step_0005_step_1_5_run_getcsrsu_bat(ctx):
-    ctx.external.run(['getcsrsu.bat'])
+    ctx.external.run(["getcsrsu.bat"])
 
 
 def step_0007_step_1_7_run_setsiteparam_exe(ctx):
-    ctx.external.run(['setsiteparam.exe', 'VN', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
+    ctx.external.run(
+        [
+            "setsiteparam.exe",
+            "VN",
+            ctx.macro.named("SFOLDER"),
+            ctx.macro.named("UNDERDEV"),
+            ctx.macro.named("USECSR"),
+            ctx.macro.named("USEMMS"),
+        ]
+    )
 
 
 def step_0009_step_1_8_delete_temporary_files(ctx):
-    ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
+    ctx.fs_ops.delete(
+        paths=['"macrotmp.csv', "getcsrsu.bat", "setsiteparam.exe", 'csrsu.txt"']
+    )
 
 
 def step_0011_rows_in_file(ctx):
-    ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
+    ctx.macro.set_named("CONFIG", str(ctx.csv_io.row_count("ICMPCS_config.csv")))
 
 
 def step_0013_step_1_12_trigger_if_config_file_not_found(ctx):
@@ -1018,30 +1027,72 @@ GROUP BY
          ,[CSRV]
          ,[MMSV]
 """,
-        output='configsets.csv',
-        source_type='sqlite',
-        inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'TZONE', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MONGO', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'VFMONGO', 'CSRPATH', 'MMSPATH', 'MIPPATH', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'},
+        output="configsets.csv",
+        source_type="sqlite",
+        inputs=["ICMPCS_config.csv"],
+        crosstab={
+            "row_keys": [
+                "icmpcs",
+                "STARTTS",
+                "UTC",
+                "TZONE",
+                "SFOLDER",
+                "FAC",
+                "MARS",
+                "RIMS",
+                "EIMS",
+                "ARIES",
+                "OASYS",
+                "MONGO",
+                "MMS",
+                "MMSI",
+                "TOOLLOG",
+                "VFMARS",
+                "VFARIES",
+                "VFMONGO",
+                "CSRPATH",
+                "MMSPATH",
+                "MIPPATH",
+                "UNDERDEV",
+                "CSRV",
+                "MMSV",
+            ],
+            "header_key": "parameter",
+            "value_key": "value",
+        },
     )
 
 
 def step_0016_rows_in_file(ctx):
-    ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
+    ctx.macro.set_named("CONFIGSETS", str(ctx.csv_io.row_count("configsets.csv")))
 
 
-def step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(ctx):
+def step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(
+    ctx,
+):
     pass  # TODO: email utility — argv positions unresolved
 
 
-def step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
+def step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    ctx,
+):
+    ctx.write_file(
+        path="CSRVerror.htm",
+        template="\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>",
+    )
 
 
 def step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx):
     pass  # TODO: email utility — argv positions unresolved
 
 
-def step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
+def step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+    ctx,
+):
+    ctx.write_file(
+        path="MMSVerror.htm",
+        template="\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>",
+    )
 
 
 def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx):
@@ -1049,19 +1100,29 @@ def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx)
 
 
 def step_0029_step_1_24_robocopy_hist_txt(ctx):
-    ctx.fs_ops.copy(src=os.path.join('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\VN\\HIST', 'HIST.txt'), dst='.')
+    ctx.fs_ops.copy(
+        src=os.path.join(
+            "\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\"
+            + ctx.macro.named("SFOLDER")
+            + "\\KM\\HIST",
+            "HIST.txt",
+        ),
+        dst=".",
+    )
 
 
 def step_0030_rows_in_file(ctx):
-    ctx.macro.set_named('HIST', str(ctx.csv_io.row_count('HIST.txt')))
+    ctx.macro.set_named("HIST", str(ctx.csv_io.row_count("HIST.txt")))
 
 
 def step_0032_step_1_27_create_dummy_hist_csv(ctx):
-    ctx.write_file(path='HIST.csv', template='\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00')
+    ctx.write_file(
+        path="HIST.csv", template="\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00"
+    )
 
 
 def step_0033_step_1_28_create_histerror_txt(ctx):
-    ctx.write_file(path='HISTERROR.txt', template='\nERROR\nERROR\nERROR')
+    ctx.write_file(path="HISTERROR.txt", template="\nERROR\nERROR\nERROR")
 
 
 def step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx):
@@ -1069,7 +1130,7 @@ def step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx):
 
 
 def step_0042_step_3_delete_files(ctx):
-    ctx.fs_ops.delete(paths=['MAXLIDHEIGHT.CSV'])
+    ctx.fs_ops.delete(paths=["MAXLIDHEIGHT.CSV"])
 
 
 def step_0043_step_4_1_1_a0_fetching_mars_data(ctx):
@@ -1086,13 +1147,16 @@ AND      f0.owner <> 'EMPTYFOUP'
  AND      f0.operation = '2090' 
  AND      f0.out_date >= (SYSDATE - 12/24) 
  AND NOT      (f0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'f0.lot In') + """) 
+"""
+        + ctx.sql_macros.sql_get_csv_list(".\\HIST.csv", 1, "f0.lot In")
+        + """) 
 -- Tail A
 /*END SQL*/
 
 """,
-        output='yeuchuan_a0_9164.tab',
-        source_type='MARS', header=['lot'],
+        output="yeuchuan_a0_9164.tab",
+        source_type="MARS",
+        header=["lot"],
     )
 
 
@@ -1119,7 +1183,9 @@ WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
  AND      (f0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_9164.tab', 'lot', 'f0.lot In') + """) 
+"""
+        + ctx.sql_macros.sql_get_csv_list(".\\yeuchuan_a0_9164.tab", "lot", "f0.lot In")
+        + """) 
  AND      f0.operation In ('1266'
 ,'1366') 
 -- Tail A
@@ -1129,8 +1195,9 @@ WHERE
 /*END SQL*/
 
 """,
-        output='yeuchuan_a1_9164.tab',
-        source_type='MARS', header=['lot_1', 'operation', 'transaction', 'Transaction_Key'],
+        output="yeuchuan_a1_9164.tab",
+        source_type="MARS",
+        header=["lot_1", "operation", "transaction", "Transaction_Key"],
     )
 
 
@@ -1160,9 +1227,10 @@ FROM
 WHERE
               [Cure_Movein_Flag] = 'Y'
 """,
-        output='DLA_LOT.csv',
-        source_type='sqlite',
-        inputs=['yeuchuan_a0_9164.tab', 'yeuchuan_a1_9164.tab'], header=['lot'],
+        output="DLA_LOT.csv",
+        source_type="sqlite",
+        inputs=["yeuchuan_a0_9164.tab", "yeuchuan_a1_9164.tab"],
+        header=["lot"],
     )
 
 
@@ -1204,7 +1272,9 @@ WHERE ats.data_domain='METROLOGY'
  AND      CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END = '4' 
  AND      t.test_name = 'BINCODE' 
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\DLA_LOT.csv', 1, 'ats.lot In') + """) 
+"""
+        + ctx.sql_macros.sql_get_csv_list(".\\DLA_LOT.csv", 1, "ats.lot In")
+        + """) 
 )
 GROUP BY 
           lot
@@ -1217,13 +1287,25 @@ GROUP BY
 /*END SQL*/
 
 """,
-        output='BIN4.csv',
-        source_type='ARIES', crosstab={'row_keys': ['lot', 'operation', 'visual_id', 'test_end_date', 'tester_id', 'prodgroup3'], 'header_key': 'test_name', 'value_key': 'all_value'},
+        output="BIN4.csv",
+        source_type="ARIES",
+        crosstab={
+            "row_keys": [
+                "lot",
+                "operation",
+                "visual_id",
+                "test_end_date",
+                "tester_id",
+                "prodgroup3",
+            ],
+            "header_key": "test_name",
+            "value_key": "all_value",
+        },
     )
 
 
 def step_0047_rows_in_file(ctx):
-    ctx.macro.set_named('ROWSINFILE', str(ctx.csv_io.row_count('BIN4.csv')))
+    ctx.macro.set_named("ROWSINFILE", str(ctx.csv_io.row_count("BIN4.csv")))
 
 
 def step_0050_step_9_1_1_a0_fetching_aries_data(ctx):
@@ -1264,7 +1346,9 @@ WHERE 1=1
  AND      t.test_name In ('MAXLIDHEIGHT'
 ,'MINLIDHEIGHT') 
  AND      (di.visual_id In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\BIN_VID_temp.CSV', 3, 'di.visual_id In') + """) 
+"""
+        + ctx.sql_macros.sql_get_csv_list(".\\BIN_VID_temp.CSV", 3, "di.visual_id In")
+        + """) 
 )
 GROUP BY 
           lot
@@ -1277,8 +1361,20 @@ GROUP BY
 /*END SQL*/
 
 """,
-        output='MAXLIDHEIGHT_temp.csv',
-        source_type='ARIES', crosstab={'row_keys': ['lot', 'operation', 'visual_id', 'test_end_date', 'tester_id', 'prodgroup3'], 'header_key': 'test_name', 'value_key': 'all_value'},
+        output="MAXLIDHEIGHT_temp.csv",
+        source_type="ARIES",
+        crosstab={
+            "row_keys": [
+                "lot",
+                "operation",
+                "visual_id",
+                "test_end_date",
+                "tester_id",
+                "prodgroup3",
+            ],
+            "header_key": "test_name",
+            "value_key": "all_value",
+        },
     )
 
 
@@ -1287,7 +1383,7 @@ def step_0051_step_10_smart_append_data(ctx):
 
 
 def step_0054_rows_in_file(ctx):
-    ctx.macro.set_named('ROWSINFILE', str(ctx.csv_io.row_count('MAXLIDHEIGHT.CSV')))
+    ctx.macro.set_named("ROWSINFILE", str(ctx.csv_io.row_count("MAXLIDHEIGHT.CSV")))
 
 
 def step_0056_step_13_1_1_fetching_text_sqlite_data(ctx):
@@ -1484,9 +1580,21 @@ WHERE
               [outlier_screen] = '0' 
 ;
 """,
-        output='MAXLIDHEIGHT_SCREEN.csv',
-        source_type='sqlite',
-        inputs=['BIN4.CSV', 'MAXLIDHEIGHT.CSV'], header=['prodgroup3', 'operation', 'tester_id', 'lot', 'visual_id', 'maxlidheight', 'outlier', 'minlidheight', 'Min_outlier', 'test_end_date'],
+        output="MAXLIDHEIGHT_SCREEN.csv",
+        source_type="sqlite",
+        inputs=["BIN4.CSV", "MAXLIDHEIGHT.CSV"],
+        header=[
+            "prodgroup3",
+            "operation",
+            "tester_id",
+            "lot",
+            "visual_id",
+            "maxlidheight",
+            "outlier",
+            "minlidheight",
+            "Min_outlier",
+            "test_end_date",
+        ],
     )
 
 
@@ -1610,9 +1718,22 @@ WHERE
               [FLAG] = 1 
 ;
 """,
-        output='MAXLIDHEIGHT_FLAG.csv',
-        source_type='sqlite',
-        inputs=['MAXLIDHEIGHT_SCREEN.CSV'], header=['prodgroup3', 'operation', 'tester_id', 'lot', 'visual_id', 'maxlidheight', 'test_end_date', 'MEAN', 'STD', 'UCL', 'outlier'],
+        output="MAXLIDHEIGHT_FLAG.csv",
+        source_type="sqlite",
+        inputs=["MAXLIDHEIGHT_SCREEN.CSV"],
+        header=[
+            "prodgroup3",
+            "operation",
+            "tester_id",
+            "lot",
+            "visual_id",
+            "maxlidheight",
+            "test_end_date",
+            "MEAN",
+            "STD",
+            "UCL",
+            "outlier",
+        ],
     )
 
 
@@ -1624,37 +1745,55 @@ def run() -> None:
     step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx)
     step_0004_step_1_4_create_getcsrsu_bat(ctx)
     step_0005_step_1_5_run_getcsrsu_bat(ctx)
-    for __row in ctx.csv_io.iter('macrotmp.csv'):
+    for __row in ctx.csv_io.iter("macrotmp.csv"):
         with ctx.macro_scope(__row):
             step_0007_step_1_7_run_setsiteparam_exe(ctx)
     step_0009_step_1_8_delete_temporary_files(ctx)
-    for __row in ctx.csv_io.iter('ctime.csv'):
+    for __row in ctx.csv_io.iter("ctime.csv"):
         with ctx.macro_scope(__row):
             step_0011_rows_in_file(ctx)
-            if int(ctx.macro.named("CONFIG")) <= int('0'):
+            if int(ctx.macro.named("CONFIG")) <= int("0"):
                 step_0013_step_1_12_trigger_if_config_file_not_found(ctx)
             else:
-                step_0015_step_1_13_1_transpose_config_file_to_macro_friendly_format(ctx)
+                step_0015_step_1_13_1_transpose_config_file_to_macro_friendly_format(
+                    ctx
+                )
                 step_0016_rows_in_file(ctx)
-                if int(ctx.macro.named("CONFIGSETS")) != int('1'):
-                    step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(ctx)
+                if int(ctx.macro.named("CONFIGSETS")) != int("1"):
+                    step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1_row(
+                        ctx
+                    )
                 else:
-                    for __row in ctx.csv_io.iter('configsets.csv'):
+                    for __row in ctx.csv_io.iter("configsets.csv"):
                         with ctx.macro_scope(__row):
-                            if ctx.macro.named("CSRV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
-                                step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx)
-                                step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx)
-                            if ctx.macro.named("MMSV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
-                                step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx)
-                                step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx)
+                            if (
+                                ctx.macro.named("CSRV") == "FAIL"
+                                and ctx.macro.named("UNDERDEV") == "N"
+                            ):
+                                step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+                                    ctx
+                                )
+                                step_0023_step_1_20_email_when_user_have_no_access_to_csr(
+                                    ctx
+                                )
+                            if (
+                                ctx.macro.named("MMSV") == "FAIL"
+                                and ctx.macro.named("UNDERDEV") == "N"
+                            ):
+                                step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(
+                                    ctx
+                                )
+                                step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(
+                                    ctx
+                                )
                             step_0029_step_1_24_robocopy_hist_txt(ctx)
                             step_0030_rows_in_file(ctx)
-                            if int(ctx.macro.named("HIST")) <= int('0'):
+                            if int(ctx.macro.named("HIST")) <= int("0"):
                                 step_0032_step_1_27_create_dummy_hist_csv(ctx)
                                 step_0033_step_1_28_create_histerror_txt(ctx)
                             else:
                                 step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx)
-    for __row in ctx.csv_io.iter('configsets.csv'):
+    for __row in ctx.csv_io.iter("configsets.csv"):
         with ctx.macro_scope(__row):
             step_0042_step_3_delete_files(ctx)
             step_0043_step_4_1_1_a0_fetching_mars_data(ctx)
@@ -1662,14 +1801,17 @@ def run() -> None:
             step_0045_sqlite_query(ctx)
             step_0046_step_5_1_1_a0_fetching_aries_data(ctx)
             step_0047_rows_in_file(ctx)
-            if int(ctx.macro.named("ROWSINFILE")) > int('0'):
-                for __chunk_path in ctx.csv_io.iter_chunks('BIN4.csv', 'BIN_VID_temp.CSV', 5000):
+            if int(ctx.macro.named("ROWSINFILE")) > int("0"):
+                for __chunk_path in ctx.csv_io.iter_chunks(
+                    "BIN4.csv", "BIN_VID_temp.CSV", 5000
+                ):
                     step_0050_step_9_1_1_a0_fetching_aries_data(ctx)
                     step_0051_step_10_smart_append_data(ctx)
             step_0054_rows_in_file(ctx)
-            if int(ctx.macro.named("ROWSINFILE")) > int('0'):
+            if int(ctx.macro.named("ROWSINFILE")) > int("0"):
                 step_0056_step_13_1_1_fetching_text_sqlite_data(ctx)
                 step_0057_step_14_1_1_fetching_text_sqlite_data(ctx)
+
 
 if __name__ == "__main__":
     run()

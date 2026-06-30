@@ -139,19 +139,19 @@ def _emit_reader(
 
     sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
-    
+
     # Extract crosstab parameters
     ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
     ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
     ctvalue = _strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
     has_crosstab = bool(ctrow and ctheader and ctvalue)
-    
+
     # Extract declared headers (skip for crosstab - dynamic columns)
     declared_hdrs = _declared_headers(block) if not has_crosstab else None
     header_arg = f", header={declared_hdrs!r}" if declared_hdrs else ""
 
     func_name = _function_name(block, suffix)
-    
+
     if has_crosstab:
         register_utility_emission(ctx, "crosstab")
         row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
@@ -194,7 +194,7 @@ def _emit_sqlite_query(
     assert dispatched is not None
     register_reader_emission(ctx)
     register_utility_emission(ctx, "ctx", "sqlite_engine", "csv_io", "macro")
-    
+
     sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
 
@@ -208,19 +208,19 @@ def _emit_sqlite_query(
                     inputs.append(_value_to_python_expr(table_name))
 
     inputs_str = "[" + ", ".join(inputs) + "]" if inputs else "[]"
-    
+
     # Extract crosstab parameters
     ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
     ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
     ctvalue = _strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
     has_crosstab = bool(ctrow and ctheader and ctvalue)
-    
+
     # Extract declared headers (skip for crosstab - dynamic columns)
     declared_hdrs = _declared_headers(block) if not has_crosstab else None
     header_arg = f", header={declared_hdrs!r}" if declared_hdrs else ""
 
     func_name = _function_name(block, "sqlite_query")
-    
+
     if has_crosstab:
         register_utility_emission(ctx, "crosstab")
         row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]

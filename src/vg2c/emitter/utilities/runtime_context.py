@@ -61,7 +61,7 @@ class PipelineContext:
         sql = self.macro.substitute_sql(sql)
 
         # 2. Execute query based on source_type
-        if source_type.lower() == 'sqlite':
+        if source_type.lower() == "sqlite":
             result = self.sqlite_engine.execute(sql, inputs or [])
         else:
             # Pass pre-substituted SQL; read() will skip re-substitution
@@ -71,9 +71,9 @@ class PipelineContext:
         if crosstab:
             result = apply_crosstab(
                 result,
-                row_keys=crosstab['row_keys'],
-                header_key=crosstab['header_key'],
-                value_key=crosstab['value_key'],
+                row_keys=crosstab["row_keys"],
+                header_key=crosstab["header_key"],
+                value_key=crosstab["value_key"],
             )
 
         # 4. Write output
