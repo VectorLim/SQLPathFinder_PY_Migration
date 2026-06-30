@@ -11,10 +11,11 @@ ProducerKind = Literal[
     "db-read",
     "sqlite-query",
     "external-presumed",
+    "run-loop-chunk",
     "unknown",
 ]
 
-ConsumerKind = Literal["table", "start-macro", "rows-in-file", "sql-macro"]
+ConsumerKind = Literal["table", "start-macro", "rows-in-file", "sql-macro", "run-loop"]
 
 ScopeRelation = Literal[
     "same-scope",

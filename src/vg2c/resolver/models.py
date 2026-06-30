@@ -56,13 +56,28 @@ class RowsInFile:
     prompt_off: bool
 
 
-MacroControlPayload = StartMacro | EndMacro | IfThen | Else | EndIf | RowsInFile
+@dataclass(frozen=True, slots=True)
+class RunLoop:
+    input_csv_path: str
+    chunk_csv_path: str
+    chunk_size: int
+    prompt_off: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EndLoop:
+    pass
+
+
+MacroControlPayload = (
+    StartMacro | EndMacro | IfThen | Else | EndIf | RowsInFile | RunLoop | EndLoop
+)
 
 
 @dataclass(frozen=True, slots=True)
 class ScopeNode:
     scope_id: int
-    kind: Literal["program", "macro", "if", "if-branch", "else-branch", "leaf"]
+    kind: Literal["program", "macro", "loop", "if", "if-branch", "else-branch", "leaf"]
     start_index: int
     end_index: int
     children: tuple["ScopeNode", ...]

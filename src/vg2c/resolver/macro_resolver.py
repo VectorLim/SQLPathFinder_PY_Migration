@@ -15,11 +15,13 @@ from vg2c.frontend.models import (
 from vg2c.resolver.models import (
     Else,
     EndIf,
+    EndLoop,
     EndMacro,
     IfThen,
     MacroControlPayload,
     ResolvedBlock,
     RowsInFile,
+    RunLoop,
     RuntimeMacroRef,
     ScopeNode,
     StartMacro,
@@ -133,6 +135,10 @@ def _collect_runtime_refs(
     def walk(node: ScopeNode) -> None:
         pushed = False
         if node.kind == "macro" and isinstance(node.control_payload, StartMacro):
+            frame_id = node.scope_id
+            mutable_frames.append(_MutableFrame(frame_id=frame_id, kind="row-iter"))
+            pushed = True
+        elif node.kind == "loop" and isinstance(node.control_payload, RunLoop):
             frame_id = node.scope_id
             mutable_frames.append(_MutableFrame(frame_id=frame_id, kind="row-iter"))
             pushed = True
@@ -335,6 +341,23 @@ def _parse_control_payload(
         return RowsInFile(
             csv_path=csv_path, var_name=var_name, prompt_off=prompt_flag.upper() == "Y"
         )
+    if token == "RUN-LOOP":
+        input_csv = args[0] if args else ""
+        chunk_csv = args[1] if len(args) > 1 else ""
+        chunk_size_raw = args[2] if len(args) > 2 else "0"
+        prompt_flag = args[3] if len(args) > 3 else "N"
+        try:
+            chunk_size = int(chunk_size_raw)
+        except ValueError:
+            chunk_size = 0
+        return RunLoop(
+            input_csv_path=input_csv,
+            chunk_csv_path=chunk_csv,
+            chunk_size=chunk_size,
+            prompt_off=prompt_flag.upper() == "Y",
+        )
+    if token == "END-LOOP":
+        return EndLoop()
 
     diagnostics.append(
         Diagnostic(
@@ -352,10 +375,18 @@ def _collect_csv_producers(blocks: list[ClassifiedBlock]) -> dict[str, int]:
     producers: dict[str, int] = {}
     for block in blocks:
         csv_value = block.parsed.options.lookup.get("CSV")
-        if not csv_value:
-            continue
-        normalized = _normalize_csv_path(csv_value)
-        producers.setdefault(normalized, block.parsed.index)
+        if csv_value:
+            normalized = _normalize_csv_path(csv_value)
+            producers.setdefault(normalized, block.parsed.index)
+        if block.kind is Kind.MACRO_CONTROL:
+            utilities = block.parsed.options.lookup.get("UTILITIES", "")
+            token_match = TOKEN_RE.match(utilities)
+            if token_match and token_match.group(1) == "RUN-LOOP":
+                args = QUOTED_RE.findall(utilities)
+                if len(args) > 1 and args[1]:
+                    producers.setdefault(
+                        _normalize_csv_path(args[1]), block.parsed.index
+                    )
     return producers
 
 
@@ -378,6 +409,10 @@ def _collect_csv_consumers(
         payload = payload_by_index.get(block.parsed.index)
         if isinstance(payload, (StartMacro, RowsInFile)) and payload.csv_path:
             consumers[_normalize_csv_path(payload.csv_path)].append(block.parsed.index)
+        elif isinstance(payload, RunLoop) and payload.input_csv_path:
+            consumers[_normalize_csv_path(payload.input_csv_path)].append(
+                block.parsed.index
+            )
 
     return {k: tuple(v) for k, v in consumers.items()}
 

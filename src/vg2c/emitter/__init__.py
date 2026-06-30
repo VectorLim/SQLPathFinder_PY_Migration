@@ -9,8 +9,6 @@ from vg2c.emitter.utilities_embed import (
 from vg2c.emitter.walker import walk_and_emit
 from vg2c.frontend.models import Diagnostic
 
-__all__ = ["emit"]
-
 
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5 entry point: emit a Python script from DispatchedProgram.

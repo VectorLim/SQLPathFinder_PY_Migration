@@ -7,9 +7,11 @@ from vg2c.frontend.models import ClassifiedBlock, Diagnostic, Kind
 from vg2c.resolver.models import (
     Else,
     EndIf,
+    EndLoop,
     EndMacro,
     IfThen,
     RowsInFile,
+    RunLoop,
     ScopeNode,
     StartMacro,
 )
@@ -90,6 +92,12 @@ def _parse_children(
             i = next_i
             continue
 
+        if token == "RUN-LOOP":
+            subtree, next_i = _parse_loop(blocks, i, state, diagnostics)
+            children.append(subtree)
+            i = next_i
+            continue
+
         if token == "IF-THEN":
             subtree, next_i = _parse_if(blocks, i, state, diagnostics)
             children.append(subtree)
@@ -108,6 +116,22 @@ def _parse_children(
             )
             children.append(
                 _leaf_node(state, block.parsed.index, control_payload=EndMacro())
+            )
+            i += 1
+            continue
+
+        if token == "END-LOOP":
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="orphan-end-loop",
+                    message="Found {END-LOOP} without a matching {RUN-LOOP}.",
+                    block_index=block.parsed.index,
+                    span=block.parsed.span,
+                )
+            )
+            children.append(
+                _leaf_node(state, block.parsed.index, control_payload=EndLoop())
             )
             i += 1
             continue
@@ -217,6 +241,61 @@ def _parse_macro(
         ScopeNode(
             scope_id=state.new_scope_id(),
             kind="macro",
+            start_index=start_block.parsed.index,
+            end_index=end_index,
+            children=tuple(children),
+            block_index=None,
+            control_payload=payload,
+        ),
+        i + 1,
+    )
+
+
+def _parse_loop(
+    blocks: list[ClassifiedBlock],
+    start_i: int,
+    state: _ScopeBuilderState,
+    diagnostics: list[Diagnostic],
+) -> tuple[ScopeNode, int]:
+    start_block = blocks[start_i]
+    payload = _parse_run_loop_payload(start_block)
+    children, i, end_token = _parse_children(
+        blocks=blocks,
+        start=start_i + 1,
+        stop_tokens={"END-LOOP"},
+        state=state,
+        diagnostics=diagnostics,
+    )
+
+    if end_token != "END-LOOP":
+        diagnostics.append(
+            Diagnostic(
+                severity="error",
+                code="unclosed-loop",
+                message="Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF.",
+                block_index=start_block.parsed.index,
+                span=start_block.parsed.span,
+            )
+        )
+        end_index = blocks[-1].parsed.index if blocks else start_block.parsed.index
+        return (
+            ScopeNode(
+                scope_id=state.new_scope_id(),
+                kind="loop",
+                start_index=start_block.parsed.index,
+                end_index=end_index,
+                children=tuple(children),
+                block_index=None,
+                control_payload=payload,
+            ),
+            i,
+        )
+
+    end_index = blocks[i].parsed.index
+    return (
+        ScopeNode(
+            scope_id=state.new_scope_id(),
+            kind="loop",
             start_index=start_block.parsed.index,
             end_index=end_index,
             children=tuple(children),
@@ -371,6 +450,24 @@ def _parse_rows_in_file_payload(block: ClassifiedBlock) -> RowsInFile:
     return RowsInFile(
         csv_path=csv_path,
         var_name=var_name,
+        prompt_off=prompt_flag.upper() == "Y",
+    )
+
+
+def _parse_run_loop_payload(block: ClassifiedBlock) -> RunLoop:
+    args = _quoted_args(block.parsed.options.lookup.get("UTILITIES", ""))
+    input_csv = args[0] if args else ""
+    chunk_csv = args[1] if len(args) > 1 else ""
+    chunk_size_raw = args[2] if len(args) > 2 else "0"
+    prompt_flag = args[3] if len(args) > 3 else "N"
+    try:
+        chunk_size = int(chunk_size_raw)
+    except ValueError:
+        chunk_size = 0
+    return RunLoop(
+        input_csv_path=input_csv,
+        chunk_csv_path=chunk_csv,
+        chunk_size=chunk_size,
         prompt_off=prompt_flag.upper() == "Y",
     )
 

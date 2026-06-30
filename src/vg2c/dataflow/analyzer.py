@@ -19,6 +19,7 @@ from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
     RowsInFile,
+    RunLoop,
     ScopeNode,
     StartMacro,
 )
@@ -154,21 +155,37 @@ def _collect_explicit_producers(
     producers: list[ProducerRecord] = []
     for block in blocks:
         csv_value = block.resolved_options.lookup.get("CSV")
-        if not csv_value:
-            continue
-        csv_path = _normalize_csv_path(csv_value)
-        producers.append(
-            ProducerRecord(
-                block_index=block.parsed.index,
-                csv_path=csv_path,
-                scope_id=block.scope_id,
-                producer_kind=_producer_kind_for_block(block.kind),
-                is_conditional=scope_rel.is_under_kind(
-                    block.scope_id, {"if-branch", "else-branch"}
-                ),
-                is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro"}),
+        if csv_value:
+            csv_path = _normalize_csv_path(csv_value)
+            producers.append(
+                ProducerRecord(
+                    block_index=block.parsed.index,
+                    csv_path=csv_path,
+                    scope_id=block.scope_id,
+                    producer_kind=_producer_kind_for_block(block.kind),
+                    is_conditional=scope_rel.is_under_kind(
+                        block.scope_id, {"if-branch", "else-branch"}
+                    ),
+                    is_in_loop=scope_rel.is_under_kind(
+                        block.scope_id, {"macro", "loop"}
+                    ),
+                )
             )
-        )
+
+        payload = block.control_payload
+        if isinstance(payload, RunLoop) and payload.chunk_csv_path:
+            producers.append(
+                ProducerRecord(
+                    block_index=block.parsed.index,
+                    csv_path=_normalize_csv_path(payload.chunk_csv_path),
+                    scope_id=block.scope_id,
+                    producer_kind="run-loop-chunk",
+                    is_conditional=scope_rel.is_under_kind(
+                        block.scope_id, {"if-branch", "else-branch"}
+                    ),
+                    is_in_loop=True,
+                )
+            )
     return producers
 
 
@@ -191,7 +208,9 @@ def _collect_external_utility_candidates(
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
-                    is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro"}),
+                    is_in_loop=scope_rel.is_under_kind(
+                        block.scope_id, {"macro", "loop"}
+                    ),
                 )
             )
     return candidates
@@ -232,6 +251,15 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
                     csv_path=_normalize_csv_path(payload.csv_path),
                     scope_id=block.scope_id,
                     consumer_kind="rows-in-file",
+                )
+            )
+        elif isinstance(payload, RunLoop) and payload.input_csv_path:
+            consumers.append(
+                ConsumerRecord(
+                    block_index=block.parsed.index,
+                    csv_path=_normalize_csv_path(payload.input_csv_path),
+                    scope_id=block.scope_id,
+                    consumer_kind="run-loop",
                 )
             )
 

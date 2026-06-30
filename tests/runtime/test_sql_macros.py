@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.sql_macro import SqlMacros
+from vg2c.emitter.utilities.sql_macros import SqlMacros
 
 
 def _write_csv(path: Path, rows: list[list]) -> None:

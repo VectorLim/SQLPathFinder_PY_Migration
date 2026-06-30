@@ -98,3 +98,47 @@ def test_rows_in_file_is_leaf_not_scope() -> None:
     root, diagnostics = build_scope_tree(blocks)
     assert diagnostics == []
     assert [node.kind for node in root.children] == ["leaf", "leaf"]
+
+
+def test_run_loop_pair_wraps_inner_leaves() -> None:
+    blocks = [
+        _block(
+            0,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "100" "N"'},
+        ),
+        _block(1, Kind.SQL_QUERY, {"NODE": "MARS", "ENGINE": "VA"}),
+        _block(2, Kind.UTILITY, {"UTILITIES": "append.bat"}),
+        _block(3, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"}),
+    ]
+    root, diagnostics = build_scope_tree(blocks)
+
+    assert diagnostics == []
+    assert len(root.children) == 1
+    loop = root.children[0]
+    assert loop.kind == "loop"
+    payload = loop.control_payload
+    assert payload is not None
+    assert payload.input_csv_path == "in.csv"
+    assert payload.chunk_csv_path == "chunk.csv"
+    assert payload.chunk_size == 100
+    assert [c.block_index for c in loop.children] == [1, 2]
+
+
+def test_unclosed_run_loop_emits_diagnostic() -> None:
+    blocks = [
+        _block(
+            0,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "5" "N"'},
+        ),
+        _block(1, Kind.UTILITY, {"UTILITIES": "x.bat"}),
+    ]
+    _, diagnostics = build_scope_tree(blocks)
+    assert any(d.code == "unclosed-loop" for d in diagnostics)
+
+
+def test_orphan_end_loop_emits_diagnostic() -> None:
+    blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"})]
+    _, diagnostics = build_scope_tree(blocks)
+    assert any(d.code == "orphan-end-loop" for d in diagnostics)

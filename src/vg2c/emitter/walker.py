@@ -15,6 +15,7 @@ from vg2c.resolver.models import (
     IfThen,
     ResolvedBlock,
     RowsInFile,
+    RunLoop,
     ScopeNode,
     StartMacro,
 )
@@ -174,6 +175,31 @@ def _walk_scope(
                 )
             if row_iter:
                 writer.pop_indent()
+            writer.pop_indent()
+
+    elif node.kind == "loop":
+        # {RUN-LOOP}: emit a chunked for-loop over the input CSV.
+        payload = node.control_payload
+        if isinstance(payload, RunLoop):
+            register_utility_emission(ctx, "csv_io", "macro")
+            writer.write(
+                "for __chunk_path in ctx.csv_io.iter_chunks("
+                f"{repr(payload.input_csv_path)}, "
+                f"{repr(payload.chunk_csv_path)}, "
+                f"{int(payload.chunk_size)}):"
+            )
+            writer.push_indent()
+            for child in node.children:
+                _walk_scope(
+                    child,
+                    dispatched,
+                    block_by_index,
+                    handlers,
+                    ctx,
+                    writer,
+                    functions,
+                    diagnostics,
+                )
             writer.pop_indent()
 
     elif node.kind == "if":

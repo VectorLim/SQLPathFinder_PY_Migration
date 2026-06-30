@@ -114,6 +114,43 @@ class CsvIO:
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
+    def iter_chunks(
+        self, input_name: str, chunk_name: str, chunk_size: int
+    ) -> Iterator[Path]:
+        """Stream *input_name* in fixed-size chunks, materializing each batch to *chunk_name*.
+
+        Yields the chunk file path once per batch. The header of *input_name* is
+        re-written at the top of each chunk so downstream readers can use it.
+        """
+        if chunk_size <= 0:
+            chunk_size = 1
+        in_path = Path(input_name)
+        out_path = Path(chunk_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, None)
+            batch: list[list[str]] = []
+            for row in reader:
+                batch.append(row)
+                if len(batch) >= chunk_size:
+                    self._write_chunk(out_path, header, batch)
+                    yield out_path
+                    batch = []
+            if batch:
+                self._write_chunk(out_path, header, batch)
+                yield out_path
+
+    @staticmethod
+    def _write_chunk(
+        path: Path, header: list[str] | None, rows: list[list[str]]
+    ) -> None:
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            if header is not None:
+                writer.writerow(header)
+            writer.writerows(rows)
+
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------
@@ -162,54 +199,31 @@ class CsvIO:
                 writer_plain.writerows(rows)
 
 
-"""MailService — send email via stdlib smtplib."""
+"""ExternalProcess — run system commands via subprocess."""
 
 
-import os
-import smtplib
-from email.message import EmailMessage
+import subprocess
 from pathlib import Path
 
 
 
-class MailService:
-    """Send email. Reads connection config from environment variables."""
+class ExternalProcess:
+    """Thin wrapper around subprocess.run."""
 
-    def send(
+    def run(
         self,
-        to: str,
-        subject: str,
-        body: str,
-        attachments: list[str] | None = None,
-        from_addr: str | None = None,
-    ) -> None:
-        host = os.environ.get("VG2C_SMTP_HOST", "")
-        if not host:
-            raise RuntimeError(
-                "MailService: VG2C_SMTP_HOST is not set. "
-                "Set the environment variable to your SMTP server hostname."
-            )
-        port = int(os.environ.get("VG2C_SMTP_PORT", "25"))
-        sender = from_addr or os.environ.get("VG2C_FROM_ADDRESS", "vg2c@localhost")
-
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = to
-        msg.set_content(body)
-
-        for att_path in attachments or []:
-            p = Path(att_path)
-            if p.exists():
-                msg.add_attachment(
-                    p.read_bytes(),
-                    maintype="application",
-                    subtype="octet-stream",
-                    filename=p.name,
-                )
-
-        with smtplib.SMTP(host, port) as smtp:
-            smtp.send_message(msg)
+        argv: list[str],
+        cwd: str | Path | None = None,
+        env: dict | None = None,
+        check: bool = False,
+    ) -> int:
+        result = subprocess.run(
+            argv,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            check=check,
+        )
+        return result.returncode
 
 
 """FileSystemOps — copy / rename / delete via pathlib + shutil."""
@@ -243,6 +257,75 @@ class FileSystemOps:
             else:
                 # path.unlink(missing_ok=True)
                 pass
+
+
+"""SqlMacros — SQL macro expansion helpers (embeddable)."""
+
+
+import csv
+from pathlib import Path
+
+
+
+def _read_column(path: str, column_ref: int | str) -> list[str]:
+    """Extract unique values from a CSV column (1-based index or header name)."""
+    rows: list[str] = []
+    with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
+        reader = csv.reader(fh)
+        header = next(reader, [])
+
+        header_str = [str(h) for h in header]
+
+        if isinstance(column_ref, int):
+            idx = column_ref - 1
+        else:
+            col_lower = [h.lower() for h in header]
+            try:
+                idx = col_lower.index(column_ref.lower())
+            except ValueError:
+                return []
+
+        seen: dict[str, None] = {}
+        for row in reader:
+            if [str(v) for v in row] == header_str:
+                continue
+
+            if idx < len(row):
+                val = row[idx]
+                if val not in seen:
+                    seen[val] = None
+                    rows.append(val)
+
+    return rows
+
+
+def _single_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+class SqlMacros:
+    """SQL macro expansion helpers used by emitted scripts."""
+
+    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
+        """Return chunked IN-list clause for Oracle-style SQL.
+
+        Oracle hard-limits IN lists to 1000 values. When there are more, the
+        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
+        """
+        values = _read_column(path, column_ref)
+        if not values:
+            return "('__NO_VALUES__')"
+
+        chunk_size = 1000
+        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
+        parts: list[str] = []
+        for i, chunk in enumerate(chunks):
+            quoted = ", ".join(_single_quote(v) for v in chunk)
+            parts.append(f"({quoted})")
+            if i < len(chunks) - 1:
+                parts.append(f"\nOR {lead_in} ")
+
+        return "".join(parts)
 
 
 """SqliteEngine — execute SQL joins over CSV inputs (embeddable)."""
@@ -642,100 +725,54 @@ class MacroState:
             self.pop_frame()
 
 
-"""ExternalProcess — run system commands via subprocess."""
+"""MailService — send email via stdlib smtplib."""
 
 
-import subprocess
+import os
+import smtplib
+from email.message import EmailMessage
 from pathlib import Path
 
 
 
-class ExternalProcess:
-    """Thin wrapper around subprocess.run."""
+class MailService:
+    """Send email. Reads connection config from environment variables."""
 
-    def run(
+    def send(
         self,
-        argv: list[str],
-        cwd: str | Path | None = None,
-        env: dict | None = None,
-        check: bool = False,
-    ) -> int:
-        result = subprocess.run(
-            argv,
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-        )
-        return result.returncode
+        to: str,
+        subject: str,
+        body: str,
+        attachments: list[str] | None = None,
+        from_addr: str | None = None,
+    ) -> None:
+        host = os.environ.get("VG2C_SMTP_HOST", "")
+        if not host:
+            raise RuntimeError(
+                "MailService: VG2C_SMTP_HOST is not set. "
+                "Set the environment variable to your SMTP server hostname."
+            )
+        port = int(os.environ.get("VG2C_SMTP_PORT", "25"))
+        sender = from_addr or os.environ.get("VG2C_FROM_ADDRESS", "vg2c@localhost")
 
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = to
+        msg.set_content(body)
 
-"""SqlMacros — SQL macro expansion helpers (embeddable)."""
+        for att_path in attachments or []:
+            p = Path(att_path)
+            if p.exists():
+                msg.add_attachment(
+                    p.read_bytes(),
+                    maintype="application",
+                    subtype="octet-stream",
+                    filename=p.name,
+                )
 
-
-import csv
-from pathlib import Path
-
-
-
-def _read_column(path: str, column_ref: int | str) -> list[str]:
-    """Extract unique values from a CSV column (1-based index or header name)."""
-    rows: list[str] = []
-    with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
-        reader = csv.reader(fh)
-        header = next(reader, [])
-
-        header_str = [str(h) for h in header]
-
-        if isinstance(column_ref, int):
-            idx = column_ref - 1
-        else:
-            col_lower = [h.lower() for h in header]
-            try:
-                idx = col_lower.index(column_ref.lower())
-            except ValueError:
-                return []
-
-        seen: dict[str, None] = {}
-        for row in reader:
-            if [str(v) for v in row] == header_str:
-                continue
-
-            if idx < len(row):
-                val = row[idx]
-                if val not in seen:
-                    seen[val] = None
-                    rows.append(val)
-
-    return rows
-
-
-def _single_quote(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-class SqlMacros:
-    """SQL macro expansion helpers used by emitted scripts."""
-
-    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
-        """Return chunked IN-list clause for Oracle-style SQL.
-
-        Oracle hard-limits IN lists to 1000 values. When there are more, the
-        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
-        """
-        values = _read_column(path, column_ref)
-        if not values:
-            return "('__NO_VALUES__')"
-
-        chunk_size = 1000
-        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
-        parts: list[str] = []
-        for i, chunk in enumerate(chunks):
-            quoted = ", ".join(_single_quote(v) for v in chunk)
-            parts.append(f"({quoted})")
-            if i < len(chunks) - 1:
-                parts.append(f"\nOR {lead_in} ")
-
-        return "".join(parts)
+        with smtplib.SMTP(host, port) as smtp:
+            smtp.send_message(msg)
 
 
 """PipelineContext — runtime context for generated scripts (embeddable)."""
@@ -832,7 +869,7 @@ def step_0002_html_report(ctx):
 
 
 def step_0003_step_1_2_create_macro_tmp_update_script_name_here(ctx):
-    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y')
+    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_Maxlidheight_CSR_DXA,N,Y,Y')
 
 
 def step_0004_step_1_4_create_getcsrsu_bat(ctx):
@@ -844,7 +881,7 @@ def step_0005_step_1_5_run_getcsrsu_bat(ctx):
 
 
 def step_0007_step_1_7_run_setsiteparam_exe(ctx):
-    ctx.external.run(['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
+    ctx.external.run(['setsiteparam.exe', 'VN', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
 
 
 def step_0009_step_1_8_delete_temporary_files(ctx):
@@ -868,6 +905,7 @@ SELECT /*L10*/  DISTINCT
          ,Max([value]) AS [value]
          ,[STARTTS] AS [STARTTS]
          ,[UTC] AS [UTC]
+         ,[TZONE] AS [TZONE]
          ,[SFOLDER] AS [SFOLDER]
          ,[FAC] AS [FAC]
          ,[MARS] AS [MARS]
@@ -875,13 +913,16 @@ SELECT /*L10*/  DISTINCT
          ,[EIMS] AS [EIMS]
          ,[ARIES] AS [ARIES]
          ,[OASYS] AS [OASYS]
+         ,[MONGO] AS [MONGO]
          ,[MMS] AS [MMS]
          ,[MMSI] AS [MMSI]
          ,[TOOLLOG] AS [TOOLLOG]
          ,[VFMARS] AS [VFMARS]
          ,[VFARIES] AS [VFARIES]
+         ,[VFMONGO] AS [VFMONGO]
          ,[CSRPATH] AS [CSRPATH]
          ,[MMSPATH] AS [MMSPATH]
+         ,[MIPPATH] AS [MIPPATH]
          ,[UNDERDEV] AS [UNDERDEV]
          ,[CSRV] AS [CSRV]
          ,[MMSV] AS [MMSV]
@@ -893,6 +934,7 @@ SELECT /*L0*/
          ,a0.[value] AS [value]
          ,'<<<STARTTS>>>' AS [STARTTS]
          ,'<<<UTC>>>' AS [UTC]
+         ,'<<<TZONE>>>' AS [TZONE]
          ,'<<<SFOLDER>>>' AS [SFOLDER]
          ,'<<<FAC>>>' AS [FAC]
          ,'<<<MARS>>>' AS [MARS]
@@ -900,13 +942,16 @@ SELECT /*L0*/
          ,'<<<EIMS>>>' AS [EIMS]
          ,'<<<ARIES>>>' AS [ARIES]
          ,'<<<OASYS>>>' AS [OASYS]
+         ,'<<<MONGO>>>' AS [MONGO]
          ,'<<<MMS>>>' AS [MMS]
          ,'<<<MMSI>>>' AS [MMSI]
          ,'<<<TOOLLOG>>>' AS [TOOLLOG]
          ,'<<<VFMARS>>>' AS [VFMARS]
          ,'<<<VFARIES>>>' AS [VFARIES]
+         ,'<<<VFMONGO>>>' AS [VFMONGO]
          ,'<<<CSRPATH>>>' AS [CSRPATH]
          ,'<<<MMSPATH>>>' AS [MMSPATH]
+         ,'<<<MIPPATH>>>' AS [MIPPATH]
          ,'<<<UNDERDEV>>>' AS [UNDERDEV]
          ,'<<<CSRV>>>' AS [CSRV]
          ,'<<<MMSV>>>' AS [MMSV]
@@ -920,6 +965,7 @@ GROUP BY
          ,[parameter]
          ,[STARTTS]
          ,[UTC]
+         ,[TZONE]
          ,[SFOLDER]
          ,[FAC]
          ,[MARS]
@@ -927,20 +973,23 @@ GROUP BY
          ,[EIMS]
          ,[ARIES]
          ,[OASYS]
+         ,[MONGO]
          ,[MMS]
          ,[MMSI]
          ,[TOOLLOG]
          ,[VFMARS]
          ,[VFARIES]
+         ,[VFMONGO]
          ,[CSRPATH]
          ,[MMSPATH]
+         ,[MIPPATH]
          ,[UNDERDEV]
          ,[CSRV]
          ,[MMSV]
 """,
         inputs=['ICMPCS_config.csv'],
         output='configsets.csv',
-        header=['icmpcs', 'STARTTS', 'UTC', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'CSRPATH', 'MMSPATH', 'UNDERDEV', 'CSRV', 'MMSV'],
+        header=['icmpcs', 'STARTTS', 'UTC', 'TZONE', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MONGO', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'VFMONGO', 'CSRPATH', 'MMSPATH', 'MIPPATH', 'UNDERDEV', 'CSRV', 'MMSV'],
     )
 
 
@@ -953,7 +1002,7 @@ def step_0018_step_1_16_trigger_if_converted_config_file_contains_not_equal_to_1
 
 
 def step_0022_step_1_19_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
+    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
 
 
 def step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx):
@@ -961,7 +1010,7 @@ def step_0023_step_1_20_email_when_user_have_no_access_to_csr(ctx):
 
 
 def step_0026_step_1_22_write_text_to_a_file_optionally_use_eof_to_mark_end_of_file(ctx):
-    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
+    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>VN</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
 
 
 def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx):
@@ -969,7 +1018,7 @@ def step_0027_step_1_23_email_when_user_have_no_access_to_mms_signal_tracer(ctx)
 
 
 def step_0029_step_1_24_robocopy_hist_txt(ctx):
-    ctx.fs_ops.copy(src='HIST.txt', dst='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\KM\\HIST')
+    ctx.fs_ops.copy(src='HIST.txt', dst='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\VN\\HIST')
 
 
 def step_0030_rows_in_file(ctx):
@@ -988,148 +1037,123 @@ def step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx):
     pass  # TODO: unhandled utility shape=unknown
 
 
-def step_0042_step_4_1_copy_files_folders(ctx):
-    ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst='.\\')
+def step_0042_step_3_delete_files(ctx):
+    ctx.fs_ops.delete(paths=['MAXLIDHEIGHT.CSV'])
 
 
-def step_0043_step_4_2_1_fetching_text_sqlite_data(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
-SELECT /*L0*/ 
-          a0.[site] AS [site]
-         ,a0.[prodgroup3] AS [prodgroup3]
-         ,a0.[upper_y_limit] AS [upper_y_limit]
-         ,a0.[lower_y_limit] AS [lower_y_limit]
-         ,a0.[upper_x_limit] AS [upper_x_limit]
-         ,a0.[lower_x_limit] AS [lower_x_limit]
-FROM 
-[Product_Lookup] a0
-""",
-        inputs=['Product_Lookup.csv'],
-        output='CSR_Server_OIS_Product_List.csv',
-        header=['site', 'prodgroup3', 'upper_y_limit', 'lower_y_limit', 'upper_x_limit', 'lower_x_limit'],
-    )
-
-
-def step_0044_step_5_1_1_a0_fetching_mars_data(ctx):
+def step_0043_step_4_1_1_a0_fetching_mars_data(ctx):
     result = ctx.read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
-          c0.ww AS site_work_week
-         ,f0.lot AS lot
-         ,f0.operation AS operation
-         ,To_Char(f0.load_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
-         ,f0.route AS route
-         ,f0.owner AS owner
-         ,f0.oldqty1 AS oldqty1
-         ,f0.newqty1 AS newqty1
-         ,f4.entity AS entity
-         ,p.prodgroup3 AS prodgroup3
-         ,f0.facility AS facility
+          f0.lot AS lot
 FROM 
 @[]@.F_LotHist f0
-INNER JOIN @[]@.F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
-LEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
-INNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot
-LEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
- AND      f4.entity Like 'DIA%' 
-LEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
-LEFT JOIN @[]@.F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility
 WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
- AND      p.prodgroup3 In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + """ 
- AND      f0.operation In ('2090'
-,'1960') 
- AND      f0.load_date >= (SYSDATE - 8/24) 
- AND      f0.movedout_txn In ('MVOU') 
+ AND      f0.operation = '2090' 
+ AND      f0.out_date >= (SYSDATE - 12/24) 
+ AND NOT      (f0.lot In 
+""" + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'f0.lot In') + """) 
 -- Tail A
 /*END SQL*/
 
 """, db_type='MARS')
 
-    ctx.csv_io.write('CSR_Server_OIS_subplane_lotlist.csv', result, header=['site_work_week', 'lot', 'operation', 'out_date', 'route', 'owner', 'oldqty1', 'newqty1', 'entity', 'prodgroup3', 'facility'])
+    ctx.csv_io.write('yeuchuan_a0_9164.tab', result, header=['lot'])
 
 
-def step_0045_rows_in_file(ctx):
-    ctx.macro.set_named('LOTS', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_lotlist.csv')))
-
-
-def step_0047_step_8_1_1_a0_fetching_aries_data(ctx):
+def step_0044_step_4_1_1_a1_fetching_mars_data(ctx):
     result = ctx.read(sql="""
 /*BEGIN SQL*/
-SELECT 
-          facility AS facility
-         ,lot AS lot
+SELECT  DISTINCT 
+          lot_1 AS lot_1
          ,operation AS operation
-         ,To_Char(Max(test_end_date),'yyyy-mm-dd hh24:mi:ss') AS test_end_date
-         ,tester_id AS tester_id
-         ,program_name AS program_name
-         ,prodgroup3 AS prodgroup3
-         ,visual_id AS visual_id
-         ,tray_or_carrier_id AS tray_or_carrier_id
-         ,test_name AS test_name
-         ,ws_loss_code AS ws_loss_code
-         ,carrier_x AS carrier_x
-         ,carrier_y AS carrier_y
-         ,lane_number AS lane_number
-         ,Max(Sub_plane) AS Sub_plane
-FROM
-(
-SELECT 
-          facility AS facility
-         ,lot AS lot
-         ,operation AS operation
-         ,test_end_date AS test_end_date
-         ,tester_id AS tester_id
-         ,program_name AS program_name
-         ,prodgroup3 AS prodgroup3
-         ,visual_id AS visual_id
-         ,tray_or_carrier_id AS tray_or_carrier_id
-         ,test_name AS test_name
-         ,ws_loss_code AS ws_loss_code
-         ,carrier_x AS carrier_x
-         ,carrier_y AS carrier_y
-         ,lane_number AS lane_number
-         ,TO_CHAR(  carrier_y   ||   carrier_x   ) AS Socket
-         ,Sub_plane AS Sub_plane
-FROM
-(
-SELECT 
-          facility AS facility
-         ,lot AS lot
-         ,operation AS operation
-         ,test_end_date AS test_end_date
-         ,tester_id AS tester_id
-         ,program_name AS program_name
-         ,prodgroup3 AS prodgroup3
-         ,visual_id AS visual_id
-         ,tray_or_carrier_id AS tray_or_carrier_id
-         ,test_name AS test_name
-         ,ws_loss_code AS ws_loss_code
-         ,carrier_x AS carrier_x
-         ,carrier_y AS carrier_y
-         ,lane_number AS lane_number
-         ,Sub_plane AS Sub_plane
+         ,transaction AS transaction
+         ,Transaction_Key AS Transaction_Key
 FROM
 (
 SELECT  
-          ats.facility AS facility
-         ,ats.lot AS lot
+          f0.lot AS lot_1
+         ,f0.operation AS operation
+         ,f5.transaction AS transaction
+         ,f5.transaction AS Transaction_Key
+FROM 
+@[]@.F_LotHist f0
+LEFT JOIN @[]@.F_LotTxnHist f5 ON f5.lot = f0.lot AND f5.operation = f0.operation AND f5.prevout_date = f0.prevout_date AND NVL(f5.history_deleted_flag,'N') = 'N'
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      (f0.lot In 
+""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_9164.tab', 'lot', 'f0.lot In') + """) 
+ AND      f0.operation In ('1266'
+,'1366') 
+-- Tail A
+)
+WHERE
+              Transaction_Key = 'MVIN' 
+/*END SQL*/
+
+""", db_type='MARS')
+
+    ctx.csv_io.write('yeuchuan_a1_9164.tab', result, header=['lot_1', 'operation', 'transaction', 'Transaction_Key'])
+
+
+def step_0045_sqlite_query(ctx):
+    ctx.sqlite_engine.run_join(
+        sql="""
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_9164] ([lot_1]);
+
+SELECT /*L1*/  DISTINCT 
+          [lot] AS [lot]
+FROM
+(
+SELECT /*L0*/  
+          a0.[lot] AS [lot]
+         ,a1.[lot_1] AS [lot_1]
+         ,a1.[operation] AS [operation]
+         ,a1.[transaction] AS [transaction]
+         ,a1.[Transaction_Key] AS [Transaction_Key]
+         ,CASE WHEN  [lot]= [lot_1]   THEN 'Y' ELSE 'N' END AS [Cure_Movein_Flag]
+FROM 
+           [yeuchuan_a0_9164] a0
+ LEFT OUTER JOIN [yeuchuan_a1_9164] a1
+  ON a0.[lot] = a1.[lot_1] 
+) t /*L0*/
+WHERE
+              [Cure_Movein_Flag] = 'Y'
+""",
+        inputs=['yeuchuan_a0_9164.tab', 'yeuchuan_a1_9164.tab'],
+        output='DLA_LOT.csv',
+        header=['lot'],
+    )
+
+
+def step_0046_step_5_1_1_a0_fetching_aries_data(ctx):
+    result = ctx.read(sql="""
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          lot AS lot
+         ,operation AS operation
+         ,visual_id AS visual_id
+         ,To_Char(test_end_date,'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+         ,tester_id AS tester_id
+         ,test_name AS test_name
+         ,Max(all_value) AS all_value
+         ,prodgroup3 AS prodgroup3
+FROM
+(
+SELECT  
+          ats.lot AS lot
          ,ats.operation AS operation
+         ,di.visual_id AS visual_id
          ,ats.test_end_date_time AS test_end_date
          ,ats.tester_id AS tester_id
-         ,ats.program_name AS program_name
-         ,mp.prodgroup3 AS prodgroup3
-         ,di.visual_id AS visual_id
-         ,dt.testing_session_tray_id AS tray_or_carrier_id
          ,t.test_name AS test_name
-         ,dt.ws_loss_code AS ws_loss_code
-         ,dt.carrier_x AS carrier_x
-         ,dt.carrier_y AS carrier_y
-         ,dt.lane_number AS lane_number
-         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS Sub_plane
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value
+         ,mp.prodgroup3 AS prodgroup3
 FROM 
 A_Testing_Session ats
 LEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot
@@ -1140,414 +1164,418 @@ INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_i
 AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
 LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
 WHERE ats.data_domain='METROLOGY'
+ AND      ats.operation = '2090' 
+ AND      CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END = '4' 
+ AND      t.test_name = 'BINCODE' 
  AND      (ats.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """) 
- AND      (ats.operation In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """) 
- AND      (ats.tester_id LIKE  'OIS%'
-) 
- AND      t.test_name In ('SUBPLANEANGLEX'
-,'SUBPLANEANGLEY') 
- AND      dt.ws_loss_code Is Null  
-)
-)
+""" + ctx.sql_macros.sql_get_csv_list('.\\DLA_LOT.csv', 1, 'ats.lot In') + """) 
 )
 GROUP BY 
-          facility
-         ,lot
+          lot
          ,operation
-         ,tester_id
-         ,program_name
-         ,prodgroup3
          ,visual_id
-         ,tray_or_carrier_id
+         ,test_end_date
+         ,tester_id
          ,test_name
-         ,ws_loss_code
-         ,carrier_x
-         ,carrier_y
-         ,lane_number
+         ,prodgroup3
 /*END SQL*/
 
 """, db_type='ARIES')
-    result = apply_crosstab(result, row_keys=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'carrier_x', 'carrier_y', 'lane_number'], header_key='test_name', value_key='Sub_plane')
+    result = apply_crosstab(result, row_keys=['lot', 'operation', 'visual_id', 'test_end_date', 'tester_id', 'prodgroup3'], header_key='test_name', value_key='all_value')
 
-    ctx.csv_io.write('yeuchuan_a0_15507.tab', result)
+    ctx.csv_io.write('BIN4.csv', result)
 
 
-def step_0048_step_8_1_1_a2_fetching_aries_data(ctx):
+def step_0047_rows_in_file(ctx):
+    ctx.macro.set_named('ROWSINFILE', str(ctx.csv_io.row_count('BIN4.csv')))
+
+
+def step_0050_step_9_1_1_a0_fetching_aries_data(ctx):
     result = ctx.read(sql="""
 /*BEGIN SQL*/
 SELECT  DISTINCT 
-          z0.primary_entity AS entity
-         ,z2.bonding_station AS bond_station
-         ,z0.lot AS lot_2
-         ,z8.visual_id AS visual_id_1
+          lot AS lot
+         ,operation AS operation
+         ,visual_id AS visual_id
+         ,To_Char(test_end_date,'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+         ,tester_id AS tester_id
+         ,test_name AS test_name
+         ,Max(all_value) AS all_value
+         ,prodgroup3 AS prodgroup3
+FROM
+(
+SELECT /*+  ordered */ 
+          ats.lot AS lot
+         ,ats.operation AS operation
+         ,di.visual_id AS visual_id
+         ,ats.test_end_date_time AS test_end_date
+         ,ats.tester_id AS tester_id
+         ,t.test_name AS test_name
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value
+         ,mp.prodgroup3 AS prodgroup3
 FROM 
-ARIES_Views.AV_dia_session z0
-LEFT JOIN ARIES_Views.AV_dia_media_testing z2 ON z2.lao_start_ww = z0.lao_start_ww AND z2.obj_s_id = z0.obj_s_id
-INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
-WHERE
-              (z0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """) 
- AND      z0.tool_entity Like 'TGB%' 
- AND      (z0.operation In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """) 
+A_Device_Item di
+INNER JOIN A_Device_Testing dt ON dt.di_id = di.di_id
+INNER JOIN A_Testing_Session ats ON ats.lao_start_ww = dt.lao_start_ww AND ats.ts_id = dt.ts_id AND ats.data_domain='METROLOGY'
+LEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot
+LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = dt.lao_start_ww AND ctr.ts_id = dt.ts_id AND ctr.dt_id = dt.dt_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+AND ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+WHERE 1=1
+ AND      ats.operation = '2090' 
+ AND      t.test_name In ('MAXLIDHEIGHT'
+,'MINLIDHEIGHT') 
+ AND      (di.visual_id In 
+""" + ctx.sql_macros.sql_get_csv_list('.\\BIN_VID_temp.CSV', 3, 'di.visual_id In') + """) 
+)
+GROUP BY 
+          lot
+         ,operation
+         ,visual_id
+         ,test_end_date
+         ,tester_id
+         ,test_name
+         ,prodgroup3
 /*END SQL*/
 
 """, db_type='ARIES')
+    result = apply_crosstab(result, row_keys=['lot', 'operation', 'visual_id', 'test_end_date', 'tester_id', 'prodgroup3'], header_key='test_name', value_key='all_value')
 
-    ctx.csv_io.write('yeuchuan_a2_15507.tab', result, header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
-
-
-def step_0049_sqlite_query(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
-
-DROP INDEX IF EXISTS IdxA2;
-Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_15507] ([visual_id_1]);
-
-SELECT /*L0*/  DISTINCT 
-          a0.[facility] AS [facility]
-         ,a0.[lot] AS [lot]
-         ,a0.[operation] AS [operation]
-         ,a0.[test_end_date] AS [test_end_date]
-         ,a0.[tester_id] AS [tester_id]
-         ,a0.[program_name] AS [program_name]
-         ,a0.[prodgroup3] AS [prodgroup3]
-         ,a0.[visual_id] AS [visual_id]
-         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,a0.[ws_loss_code] AS [ws_loss_code]
-         ,a2.[entity] AS [entity]
-         ,a2.[bond_station] AS [bond_station]
-         ,a0.[carrier_x] AS [carrier_x]
-         ,a0.[carrier_y] AS [carrier_y]
-         ,a0.[lane_number] AS [lane_number]
-         ,CrossTab->[[a0,15507;:Y]]
-         ,[entity]  ||  '_' || [bond_station]  ||  '_' ||  [carrier_x]  ||   '_' || [carrier_y] AS [Entity_BS_X_Y]
-FROM 
-           [yeuchuan_a0_15507] a0
- LEFT OUTER JOIN [yeuchuan_a2_15507] a2
-  ON a0.[visual_id] = a2.[visual_id_1]
-""",
-        inputs=['yeuchuan_a0_15507.tab', 'yeuchuan_a2_15507.tab'],
-        output='CSR_Server_OIS_subplane.csv',
-    )
+    ctx.csv_io.write('MAXLIDHEIGHT_temp.csv', result)
 
 
-def step_0050_step_9_1_1_fetching_text_sqlite_data(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
-
-DROP INDEX IF EXISTS IdxA0;
-Create Index IF NOT EXISTS IdxA0 ON [CSR_Server_OIS_Product_List] ([prodgroup3],[site]);
-
-SELECT /*L3*/  DISTINCT 
-          [facility] AS [facility]
-         ,[lot] AS [lot]
-         ,[operation] AS [operation]
-         ,[test_end_date] AS [test_end_date]
-         ,[tester_id] AS [tester_id]
-         ,[program_name] AS [program_name]
-         ,[prodgroup3] AS [prodgroup3]
-         ,[visual_id] AS [visual_id]
-         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,[ws_loss_code] AS [ws_loss_code]
-         ,[entity] AS [entity]
-         ,[bond_station] AS [bond_station]
-         ,[carrier_x] AS [carrier_x]
-         ,[carrier_y] AS [carrier_y]
-         ,[lane_number] AS [lane_number]
-         ,[entity_bs_x_y] AS [entity_bs_x_y]
-         ,[site] AS [site]
-         ,[prodgroup3_1] AS [prodgroup3_1]
-         ,[sub_plane_x] AS [sub_plane_x]
-         ,[sub_plane_y] AS [sub_plane_y]
-         ,[lower_x_limit] AS [lower_x_limit]
-         ,[upper_x_limit] AS [upper_x_limit]
-         ,[lower_y_limit] AS [lower_y_limit]
-         ,[upper_y_limit] AS [upper_y_limit]
-         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]
-         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]
-         ,[Flag] AS [Flag]
-         ,DENSE_RANK () OVER (PARTITION BY  [entity_bs_x_y]  ORDER BY    [visual_id]    ASC) AS [Dense_rank]
-FROM
-(
-SELECT /*L2*/ 
-          [facility] AS [facility]
-         ,[lot] AS [lot]
-         ,[operation] AS [operation]
-         ,[test_end_date] AS [test_end_date]
-         ,[tester_id] AS [tester_id]
-         ,[program_name] AS [program_name]
-         ,[prodgroup3] AS [prodgroup3]
-         ,[visual_id] AS [visual_id]
-         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,[ws_loss_code] AS [ws_loss_code]
-         ,[entity] AS [entity]
-         ,[bond_station] AS [bond_station]
-         ,[carrier_x] AS [carrier_x]
-         ,[carrier_y] AS [carrier_y]
-         ,[lane_number] AS [lane_number]
-         ,[entity_bs_x_y] AS [entity_bs_x_y]
-         ,[site] AS [site]
-         ,[prodgroup3_1] AS [prodgroup3_1]
-         ,[sub_plane_x] AS [sub_plane_x]
-         ,[sub_plane_y] AS [sub_plane_y]
-         ,[lower_x_limit] AS [lower_x_limit]
-         ,[upper_x_limit] AS [upper_x_limit]
-         ,[lower_y_limit] AS [lower_y_limit]
-         ,[upper_y_limit] AS [upper_y_limit]
-         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]
-         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]
-         ,CASE  WHEN   [Set_Limit_plane_Y]  = 'Y_flag' AND   [Set_Limit_plane_X]   <> 'X_flag' THEN 'Y_flag_only'  ELSE '' END AS [BeyondY_Flag]
-         ,CASE  WHEN  [Set_Limit_plane_Y]    = 'Y_flag' THEN 'flag'   ELSE '' END AS [Flag]
-FROM
-(
-SELECT /*L1*/ 
-          [facility] AS [facility]
-         ,[lot] AS [lot]
-         ,[operation] AS [operation]
-         ,[test_end_date] AS [test_end_date]
-         ,[tester_id] AS [tester_id]
-         ,[program_name] AS [program_name]
-         ,[prodgroup3] AS [prodgroup3]
-         ,[visual_id] AS [visual_id]
-         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,[ws_loss_code] AS [ws_loss_code]
-         ,[entity] AS [entity]
-         ,[bond_station] AS [bond_station]
-         ,[carrier_x] AS [carrier_x]
-         ,[carrier_y] AS [carrier_y]
-         ,[lane_number] AS [lane_number]
-         ,[entity_bs_x_y] AS [entity_bs_x_y]
-         ,[site] AS [site]
-         ,[prodgroup3_1] AS [prodgroup3_1]
-         ,[sub_plane_x] AS [sub_plane_x]
-         ,[sub_plane_y] AS [sub_plane_y]
-         ,[lower_x_limit] AS [lower_x_limit]
-         ,[upper_x_limit] AS [upper_x_limit]
-         ,[lower_y_limit] AS [lower_y_limit]
-         ,[upper_y_limit] AS [upper_y_limit]
-         ,CASE WHEN     [sub_plane_x]    Not Between    [lower_x_limit]  AND     [upper_x_limit]  THEN 'X_flag' ELSE '' END AS [Set_Limit_plane_X]
-         ,CASE WHEN     [sub_plane_y]    Not Between    [lower_y_limit]    AND      [upper_y_limit]  THEN 'Y_flag' ELSE '' END AS [Set_Limit_plane_Y]
-FROM
-(
-SELECT /*L0*/  
-          a1.[facility] AS [facility]
-         ,a1.[lot] AS [lot]
-         ,a1.[operation] AS [operation]
-         ,a1.[test_end_date] AS [test_end_date]
-         ,a1.[tester_id] AS [tester_id]
-         ,a1.[program_name] AS [program_name]
-         ,a1.[prodgroup3] AS [prodgroup3]
-         ,a1.[visual_id] AS [visual_id]
-         ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,a1.[ws_loss_code] AS [ws_loss_code]
-         ,a1.[entity] AS [entity]
-         ,a1.[bond_station] AS [bond_station]
-         ,a1.[carrier_x] AS [carrier_x]
-         ,a1.[carrier_y] AS [carrier_y]
-         ,a1.[lane_number] AS [lane_number]
-         ,a1.[entity_bs_x_y] AS [entity_bs_x_y]
-         ,a0.[site] AS [site]
-         ,a0.[prodgroup3] AS [prodgroup3_1]
-         ,CASE WHEN a1.[subplaneanglex] = '' THEN NULL ELSE CAST (a1.[subplaneanglex] AS REAL) END AS [sub_plane_x]
-         ,CASE WHEN a1.[subplaneangley] = '' THEN NULL ELSE CAST (a1.[subplaneangley] AS REAL) END AS [sub_plane_y]
-         ,CASE WHEN a0.[lower_x_limit] = '' THEN NULL ELSE CAST (a0.[lower_x_limit] AS REAL) END AS [lower_x_limit]
-         ,CASE WHEN a0.[upper_x_limit] = '' THEN NULL ELSE CAST (a0.[upper_x_limit] AS REAL) END AS [upper_x_limit]
-         ,CASE WHEN a0.[lower_y_limit] = '' THEN NULL ELSE CAST (a0.[lower_y_limit] AS REAL) END AS [lower_y_limit]
-         ,CASE WHEN a0.[upper_y_limit] = '' THEN NULL ELSE CAST (a0.[upper_y_limit] AS REAL) END AS [upper_y_limit]
-FROM 
-           [CSR_Server_OIS_subplane] a1
- LEFT OUTER JOIN [CSR_Server_OIS_Product_List] a0
-  ON a0.[prodgroup3] = a1.[prodgroup3] 
- AND a0.[site] = a1.[facility] 
-) t /*L0*/
-) t /*L1*/
-) t /*L2*/
-WHERE
-              [Flag] = 'flag'
-""",
-        inputs=['CSR_Server_OIS_subplane.csv', 'CSR_Server_OIS_Product_List.csv'],
-        output='CSR_Server_OIS_subplane_interim.csv',
-        header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'Set_Limit_plane_X', 'Set_Limit_plane_Y', 'Flag', 'Dense_rank'],
-    )
+def step_0051_step_10_smart_append_data(ctx):
+    pass  # TODO: unhandled utility shape=unknown
 
 
-def step_0051_step_10_1_1_fetching_text_sqlite_data(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
-SELECT /*L0*/ 
-          a0.[facility] AS [facility]
-         ,a0.[lot] AS [lot]
-         ,a0.[operation] AS [operation]
-         ,a0.[test_end_date] AS [test_end_date]
-         ,a0.[tester_id] AS [tester_id]
-         ,a0.[program_name] AS [program_name]
-         ,a0.[prodgroup3] AS [prodgroup3]
-         ,a0.[visual_id] AS [visual_id]
-         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
-         ,a0.[ws_loss_code] AS [ws_loss_code]
-         ,a0.[entity] AS [entity]
-         ,a0.[bond_station] AS [bond_station]
-         ,a0.[carrier_x] AS [carrier_x]
-         ,a0.[carrier_y] AS [carrier_y]
-         ,a0.[lane_number] AS [lane_number]
-         ,a0.[entity_bs_x_y] AS [entity_bs_x_y]
-         ,a0.[site] AS [site]
-         ,a0.[prodgroup3_1] AS [prodgroup3_1]
-         ,a0.[sub_plane_x] AS [sub_plane_x]
-         ,a0.[sub_plane_y] AS [sub_plane_y]
-         ,a0.[lower_x_limit] AS [lower_x_limit]
-         ,a0.[upper_x_limit] AS [upper_x_limit]
-         ,a0.[lower_y_limit] AS [lower_y_limit]
-         ,a0.[upper_y_limit] AS [upper_y_limit]
-         ,a0.[set_limit_plane_x] AS [set_limit_plane_x]
-         ,a0.[set_limit_plane_y] AS [set_limit_plane_y]
-         ,a0.[flag] AS [flag]
-         ,a0.[dense_rank] AS [dense_rank]
-         ,'CSR_HOLD' AS [CSR_trigger]
-FROM 
-[CSR_Server_OIS_subplane_interim] a0
-WHERE
-              a0.[dense_rank] Not In ('1'
-,'2')
-""",
-        inputs=['CSR_Server_OIS_subplane_interim.csv'],
-        output='CSR_Server_OIS_subplane_output.csv',
-        header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'set_limit_plane_x', 'set_limit_plane_y', 'flag', 'dense_rank', 'CSR_trigger'],
-    )
+def step_0054_rows_in_file(ctx):
+    ctx.macro.set_named('ROWSINFILE', str(ctx.csv_io.row_count('MAXLIDHEIGHT.CSV')))
 
 
-def step_0052_rows_in_file(ctx):
-    ctx.macro.set_named('FLAG', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_output.csv')))
-
-
-def step_0054_step_13_1_1_fetching_text_sqlite_data(ctx):
-    ctx.sqlite_engine.run_join(
-        sql="""
-SELECT /*L0*/ 
-          a0.[facility] AS [facility]
-         ,a0.[lot] AS [lot]
-         ,a0.[prodgroup3] AS [prodgroup3]
-         ,a0.[operation] AS [DLA_operation]
-         ,a0.[entity] AS [entity]
-         ,a0.[bond_station] AS [bond_station]
-         ,a0.[carrier_x] AS [carrier_x]
-         ,a0.[carrier_y] AS [carrier_y]
-         ,a0.[visual_id] AS [visual_id]
-         ,a0.[sub_plane_x] AS [sub_plane_x]
-         ,a0.[sub_plane_y] AS [sub_plane_y]
-         ,a0.[lower_x_limit] AS [lower_x_limit]
-         ,a0.[upper_x_limit] AS [upper_x_limit]
-         ,a0.[lower_y_limit] AS [lower_y_limit]
-         ,a0.[upper_y_limit] AS [upper_y_limit]
-FROM 
-[CSR_Server_OIS_subplane_output] a0
-WHERE
- NOT          (a0.[lot] In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)
-""",
-        inputs=['CSR_Server_OIS_subplane_output.csv'],
-        output='yeuchuan_SQL_15507.tab',
-        header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'],
-    )
-
-
-def step_0055_step_13_1_2_a1_fetching_mars_data(ctx):
-    result = ctx.read(sql="""
-/*BEGIN SQL*/
-SELECT 
-          f0.lot AS lot_1
-         ,f0.operation AS Current_operation
-         ,f0.movedin AS movedin
-         ,f0.onrework AS onrework
-         ,f0.onhold AS onhold
-         ,f0.route AS route
-         ,f0.qty1 AS quantity
-FROM 
-@[]@.F_Lot f0
-WHERE f0.owner <> 'EMPTYFOUP'
- AND      f0.terminated = 'N' 
- AND      f0.qty1 > 0 
- AND      f0.src_erase_date Is Null  
- AND      (f0.lot In 
-""" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """) 
-/*END SQL*/
-
-""", db_type='MARS')
-
-    ctx.csv_io.write('yeuchuan_a1_15507.tab', result, header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])
-
-
-def step_0056_sqlite_query(ctx):
+def step_0056_step_13_1_1_fetching_text_sqlite_data(ctx):
     ctx.sqlite_engine.run_join(
         sql="""
 
 DROP INDEX IF EXISTS IdxA1;
-Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_15507] ([lot_1]);
+Create Index IF NOT EXISTS IdxA1 ON [MAXLIDHEIGHT] ([visual_id]);
 
-SELECT /*L1*/  DISTINCT 
-          [facility] AS [facility]
+
+DROP TABLE IF EXISTS T_L1_Init;
+CREATE TABLE T_L1_Init AS
+SELECT /*L1*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
          ,[lot] AS [lot]
-         ,[prodgroup3] AS [prodgroup3]
-         ,[DLA_operation] AS [DLA_operation]
-         ,[lot_1] AS [lot_1]
-         ,[Current_operation] AS [Current_operation]
-         ,[movedin] AS [movedin]
-         ,[onrework] AS [onrework]
-         ,[onhold] AS [onhold]
-         ,[route] AS [route]
-         ,[quantity] AS [quantity]
-         ,[Lot_MVIN_CURE] AS [Lot_MVIN_CURE]
-         ,[entity] AS [entity]
-         ,[bond_station] AS [bond_station]
-         ,[carrier_x] AS [carrier_x]
-         ,[carrier_y] AS [carrier_y]
          ,[visual_id] AS [visual_id]
-         ,[sub_plane_x] AS [sub_plane_x]
-         ,[sub_plane_y] AS [sub_plane_y]
-         ,[lower_x_limit] AS [lower_x_limit]
-         ,[upper_x_limit] AS [upper_x_limit]
-         ,[lower_y_limit] AS [lower_y_limit]
-         ,[upper_y_limit] AS [upper_y_limit]
+         ,[visual_id_1] AS [visual_id_1]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[minlidheight] AS [minlidheight]
+         ,[test_end_date] AS [test_end_date]
 FROM
 (
 SELECT /*L0*/  
-          sql.[facility] AS [facility]
-         ,sql.[lot] AS [lot]
-         ,sql.[prodgroup3] AS [prodgroup3]
-         ,sql.[DLA_operation] AS [DLA_operation]
-         ,a1.[lot_1] AS [lot_1]
-         ,a1.[Current_operation] AS [Current_operation]
-         ,a1.[movedin] AS [movedin]
-         ,a1.[onrework] AS [onrework]
-         ,a1.[onhold] AS [onhold]
-         ,a1.[route] AS [route]
-         ,a1.[quantity] AS [quantity]
-         ,CASE  WHEN [Current_operation]  IN ('1266') THEN 'N' WHEN [Current_operation]  IN ('1501') THEN 'N' WHEN [Current_operation]  IN ('1366') THEN 'N' WHEN [Current_operation]  IN ('1265') THEN 'N' WHEN [Current_operation]  IN ('1264') THEN 'N'  ELSE 'Y' END AS [Lot_MVIN_CURE]
-         ,sql.[entity] AS [entity]
-         ,sql.[bond_station] AS [bond_station]
-         ,sql.[carrier_x] AS [carrier_x]
-         ,sql.[carrier_y] AS [carrier_y]
-         ,sql.[visual_id] AS [visual_id]
-         ,sql.[sub_plane_x] AS [sub_plane_x]
-         ,sql.[sub_plane_y] AS [sub_plane_y]
-         ,sql.[lower_x_limit] AS [lower_x_limit]
-         ,sql.[upper_x_limit] AS [upper_x_limit]
-         ,sql.[lower_y_limit] AS [lower_y_limit]
-         ,sql.[upper_y_limit] AS [upper_y_limit]
+          a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[operation] AS [operation]
+         ,a0.[tester_id] AS [tester_id]
+         ,a0.[lot] AS [lot]
+         ,a0.[visual_id] AS [visual_id]
+         ,a1.[visual_id] AS [visual_id_1]
+         ,CASE WHEN a1.[maxlidheight] = '' THEN NULL ELSE CAST (a1.[maxlidheight] AS REAL) END AS [maxlidheight]
+         ,CASE WHEN a1.[minlidheight] = '' THEN NULL ELSE CAST (a1.[minlidheight] AS REAL) END AS [minlidheight]
+         ,a0.[test_end_date] AS [test_end_date]
 FROM 
-           [yeuchuan_SQL_15507] sql
- LEFT OUTER JOIN [yeuchuan_a1_15507] a1
-  ON sql.[lot] = a1.[lot_1] 
+           [BIN4] a0
+ LEFT OUTER JOIN [MAXLIDHEIGHT] a1
+  ON a0.[visual_id] = a1.[visual_id] 
 ) t /*L0*/
+;
+
+DROP TABLE IF EXISTS T_L1_1_1;
+CREATE TABLE T_L1_1_1 AS
+SELECT P75(maxlidheight) AS AF$S1
+,lot AS AF$PB1
+FROM T_L1_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L1_1_1_Idx ON T_L1_1_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L1_1_Result;
+CREATE TABLE T_L1_1_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [P75]
+FROM T_L1_Init a0 LEFT JOIN T_L1_1_1 a1 ON 
+lot = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L1_1_1;
+
+CREATE INDEX T_L1_1_Result_Idx ON T_L1_1_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L1_2_1;
+CREATE TABLE T_L1_2_1 AS
+SELECT P50(maxlidheight) AS AF$S1
+,lot AS AF$PB1
+FROM T_L1_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L1_2_1_Idx ON T_L1_2_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L1_2_Result;
+CREATE TABLE T_L1_2_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [P50]
+FROM T_L1_Init a0 LEFT JOIN T_L1_2_1 a1 ON 
+lot = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L1_2_1;
+
+CREATE INDEX T_L1_2_Result_Idx ON T_L1_2_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L1_3_1;
+CREATE TABLE T_L1_3_1 AS
+SELECT P75(minlidheight) AS AF$S1
+,lot AS AF$PB1
+FROM T_L1_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L1_3_1_Idx ON T_L1_3_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L1_3_Result;
+CREATE TABLE T_L1_3_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [Min_P75]
+FROM T_L1_Init a0 LEFT JOIN T_L1_3_1 a1 ON 
+lot = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L1_3_1;
+
+CREATE INDEX T_L1_3_Result_Idx ON T_L1_3_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L1_4_1;
+CREATE TABLE T_L1_4_1 AS
+SELECT P50(minlidheight) AS AF$S1
+,lot AS AF$PB1
+FROM T_L1_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L1_4_1_Idx ON T_L1_4_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L1_4_Result;
+CREATE TABLE T_L1_4_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [Min_P50]
+FROM T_L1_Init a0 LEFT JOIN T_L1_4_1 a1 ON 
+lot = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L1_4_1;
+
+CREATE INDEX T_L1_4_Result_Idx ON T_L1_4_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L1_Result;
+CREATE TABLE T_L1_Result AS
+SELECT
+
+[prodgroup3]
+,[operation]
+,[tester_id]
+,[lot]
+,[visual_id]
+,[visual_id_1]
+,[maxlidheight]
+,[P75]
+,[P50]
+,[minlidheight]
+,[Min_P75]
+,[Min_P50]
+,[test_end_date]
+FROM T_L1_Init a0
+LEFT JOIN T_L1_1_Result a1 ON a0.rowid = a1.orig_rowid
+LEFT JOIN T_L1_2_Result a2 ON a0.rowid = a2.orig_rowid
+LEFT JOIN T_L1_3_Result a3 ON a0.rowid = a3.orig_rowid
+LEFT JOIN T_L1_4_Result a4 ON a0.rowid = a4.orig_rowid
+;
+DROP TABLE IF EXISTS T_L1_1_Result;
+DROP TABLE IF EXISTS T_L1_2_Result;
+DROP TABLE IF EXISTS T_L1_3_Result;
+DROP TABLE IF EXISTS T_L1_4_Result;
+DROP TABLE IF EXISTS T_L1_Init;
+
+SELECT /*L4*/  DISTINCT 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[outlier] AS [outlier]
+         ,[minlidheight] AS [minlidheight]
+         ,[Min_outlier] AS [Min_outlier]
+         ,[test_end_date] AS [test_end_date]
+FROM
+(
+SELECT /*L3*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[visual_id_1] AS [visual_id_1]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[P75] AS [P75]
+         ,[P50] AS [P50]
+         ,[outlier] AS [outlier]
+         ,[minlidheight] AS [minlidheight]
+         ,[Min_P75] AS [Min_P75]
+         ,[Min_P50] AS [Min_P50]
+         ,[Min_outlier] AS [Min_outlier]
+         ,CASE WHEN   ( [maxlidheight] > [outlier] and  [minlidheight] >  [Min_outlier] )  THEN '0' ELSE '1' END AS [outlier_screen]
+         ,[test_end_date] AS [test_end_date]
+FROM
+(
+SELECT /*L2*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[visual_id_1] AS [visual_id_1]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[P75] AS [P75]
+         ,[P50] AS [P50]
+         ,[P50] +5.5*(( [P75] - [P50] )/0.6745) AS [outlier]
+         ,[minlidheight] AS [minlidheight]
+         ,[Min_P75] AS [Min_P75]
+         ,[Min_P50] AS [Min_P50]
+         ,[Min_P50] +5.5*((  [Min_P75] -  [Min_P50] )/0.6745) AS [Min_outlier]
+         ,[test_end_date] AS [test_end_date]
+FROM
+(
+T_L1_Result
+)
+) t /*L2*/
+) t /*L3*/
 WHERE
-              [Lot_MVIN_CURE] = 'Y'
+              [outlier_screen] = '0' 
+;
 """,
-        inputs=['yeuchuan_SQL_15507.tab', 'yeuchuan_a1_15507.tab'],
-        output='Data.csv',
-        header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity', 'Lot_MVIN_CURE', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'],
+        inputs=['BIN4.CSV', 'MAXLIDHEIGHT.CSV'],
+        output='MAXLIDHEIGHT_SCREEN.csv',
+        header=['prodgroup3', 'operation', 'tester_id', 'lot', 'visual_id', 'maxlidheight', 'outlier', 'minlidheight', 'Min_outlier', 'test_end_date'],
+    )
+
+
+def step_0057_step_14_1_1_fetching_text_sqlite_data(ctx):
+    ctx.sqlite_engine.run_join(
+        sql="""
+
+DROP TABLE IF EXISTS T_L1_Init;
+CREATE TABLE T_L1_Init AS
+SELECT /*L1*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[test_end_date] AS [test_end_date]
+         ,AVG ( [maxlidheight] ) OVER (PARTITION BY  [lot]  ) AS [MEAN]
+         ,[outlier] AS [outlier]
+FROM
+(
+SELECT /*L0*/  
+          a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[operation] AS [operation]
+         ,a0.[tester_id] AS [tester_id]
+         ,a0.[lot] AS [lot]
+         ,a0.[visual_id] AS [visual_id]
+         ,CASE WHEN a0.[maxlidheight] = '' THEN NULL ELSE CAST (a0.[maxlidheight] AS REAL) END AS [maxlidheight]
+         ,a0.[test_end_date] AS [test_end_date]
+         ,a0.[outlier] AS [outlier]
+FROM 
+[MAXLIDHEIGHT_SCREEN] a0
+) t /*L0*/
+;
+
+DROP TABLE IF EXISTS T_L1_1_1;
+CREATE TABLE T_L1_1_1 AS
+SELECT STDEV(maxlidheight) AS AF$S1
+,lot AS AF$PB1
+FROM T_L1_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L1_1_1_Idx ON T_L1_1_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L1_1_Result;
+CREATE TABLE T_L1_1_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [STD]
+FROM T_L1_Init a0 LEFT JOIN T_L1_1_1 a1 ON 
+lot = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L1_1_1;
+
+CREATE INDEX T_L1_1_Result_Idx ON T_L1_1_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L1_Result;
+CREATE TABLE T_L1_Result AS
+SELECT
+
+[prodgroup3]
+,[operation]
+,[tester_id]
+,[lot]
+,[visual_id]
+,[maxlidheight]
+,[test_end_date]
+,[MEAN]
+,[STD]
+,[outlier]
+FROM T_L1_Init a0
+LEFT JOIN T_L1_1_Result a1 ON a0.rowid = a1.orig_rowid
+;
+DROP TABLE IF EXISTS T_L1_1_Result;
+DROP TABLE IF EXISTS T_L1_Init;
+
+SELECT /*L4*/  DISTINCT 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[test_end_date] AS [test_end_date]
+         ,[MEAN] AS [MEAN]
+         ,[STD] AS [STD]
+         ,[UCL] AS [UCL]
+         ,[outlier] AS [outlier]
+FROM
+(
+SELECT /*L3*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[test_end_date] AS [test_end_date]
+         ,[MEAN] AS [MEAN]
+         ,[STD] AS [STD]
+         ,[UCL] AS [UCL]
+         ,CASE WHEN  [maxlidheight] > [UCL]  THEN '1' ELSE '0' END AS [FLAG]
+         ,[outlier] AS [outlier]
+FROM
+(
+SELECT /*L2*/ 
+          [prodgroup3] AS [prodgroup3]
+         ,[operation] AS [operation]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[maxlidheight] AS [maxlidheight]
+         ,[test_end_date] AS [test_end_date]
+         ,[MEAN] AS [MEAN]
+         ,[STD] AS [STD]
+         ,[MEAN] +4.5* [STD] AS [UCL]
+         ,[outlier] AS [outlier]
+FROM
+(
+T_L1_Result
+)
+) t /*L2*/
+) t /*L3*/
+WHERE
+              [FLAG] = 1 
+;
+""",
+        inputs=['MAXLIDHEIGHT_SCREEN.CSV'],
+        output='MAXLIDHEIGHT_FLAG.csv',
+        header=['prodgroup3', 'operation', 'tester_id', 'lot', 'visual_id', 'maxlidheight', 'test_end_date', 'MEAN', 'STD', 'UCL', 'outlier'],
     )
 
 
@@ -1591,21 +1619,20 @@ def run() -> None:
                                 step_0035_step_1_29_convert_hist_txt_to_hist_csv(ctx)
     for __row in ctx.csv_io.iter('configsets.csv'):
         with ctx.macro_scope(__row):
-            step_0042_step_4_1_copy_files_folders(ctx)
-            step_0043_step_4_2_1_fetching_text_sqlite_data(ctx)
-            step_0044_step_5_1_1_a0_fetching_mars_data(ctx)
-            step_0045_rows_in_file(ctx)
-            if int(ctx.macro.named("LOTS")) > int('0'):
-                step_0047_step_8_1_1_a0_fetching_aries_data(ctx)
-                step_0048_step_8_1_1_a2_fetching_aries_data(ctx)
-                step_0049_sqlite_query(ctx)
-                step_0050_step_9_1_1_fetching_text_sqlite_data(ctx)
-                step_0051_step_10_1_1_fetching_text_sqlite_data(ctx)
-                step_0052_rows_in_file(ctx)
-                if int(ctx.macro.named("FLAG")) > int('0'):
-                    step_0054_step_13_1_1_fetching_text_sqlite_data(ctx)
-                    step_0055_step_13_1_2_a1_fetching_mars_data(ctx)
-                    step_0056_sqlite_query(ctx)
+            step_0042_step_3_delete_files(ctx)
+            step_0043_step_4_1_1_a0_fetching_mars_data(ctx)
+            step_0044_step_4_1_1_a1_fetching_mars_data(ctx)
+            step_0045_sqlite_query(ctx)
+            step_0046_step_5_1_1_a0_fetching_aries_data(ctx)
+            step_0047_rows_in_file(ctx)
+            if int(ctx.macro.named("ROWSINFILE")) > int('0'):
+                for __chunk_path in ctx.csv_io.iter_chunks('BIN4.csv', 'BIN_VID_temp.CSV', 5000):
+                    step_0050_step_9_1_1_a0_fetching_aries_data(ctx)
+                    step_0051_step_10_smart_append_data(ctx)
+            step_0054_rows_in_file(ctx)
+            if int(ctx.macro.named("ROWSINFILE")) > int('0'):
+                step_0056_step_13_1_1_fetching_text_sqlite_data(ctx)
+                step_0057_step_14_1_1_fetching_text_sqlite_data(ctx)
 
 if __name__ == "__main__":
     run()

@@ -48,6 +48,43 @@ class CsvIO:
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
+    def iter_chunks(
+        self, input_name: str, chunk_name: str, chunk_size: int
+    ) -> Iterator[Path]:
+        """Stream *input_name* in fixed-size chunks, materializing each batch to *chunk_name*.
+
+        Yields the chunk file path once per batch. The header of *input_name* is
+        re-written at the top of each chunk so downstream readers can use it.
+        """
+        if chunk_size <= 0:
+            chunk_size = 1
+        in_path = Path(input_name)
+        out_path = Path(chunk_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, None)
+            batch: list[list[str]] = []
+            for row in reader:
+                batch.append(row)
+                if len(batch) >= chunk_size:
+                    self._write_chunk(out_path, header, batch)
+                    yield out_path
+                    batch = []
+            if batch:
+                self._write_chunk(out_path, header, batch)
+                yield out_path
+
+    @staticmethod
+    def _write_chunk(
+        path: Path, header: list[str] | None, rows: list[list[str]]
+    ) -> None:
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            if header is not None:
+                writer.writerow(header)
+            writer.writerows(rows)
+
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------
