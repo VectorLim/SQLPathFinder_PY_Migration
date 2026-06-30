@@ -6,6 +6,7 @@ from vg2c.dispatch.models import DispatchedBlock
 from vg2c.emitter.macro import placeholders_to_python_expr
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.readers import register_reader_emission
+from vg2c.emitter.utilities_embed import register_utility_emission
 from vg2c.emitter.utility_shapes import classify_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import ResolvedBlock
@@ -87,7 +88,7 @@ def _function_name(block: ResolvedBlock, suffix: str) -> str:
     return prefix + base
 
 
-def _sql_macro_expr(block: ResolvedBlock, call_index: int) -> str:
+def _sql_macro_expr(ctx: EmitContext, block: ResolvedBlock, call_index: int) -> str:
     if call_index < 0 or call_index >= len(block.sql_macro_calls):
         return repr(f"@@SQLMACRO:{call_index}@@")
 
@@ -95,10 +96,11 @@ def _sql_macro_expr(block: ResolvedBlock, call_index: int) -> str:
     path_expr = _value_to_python_expr(call.csv_path)
     col_expr = repr(call.column_ref)
     lead_expr = repr(call.lead_in)
+    register_utility_emission(ctx, "sql_macros")
     return f"ctx.sql_macros.sql_get_csv_list({path_expr}, {col_expr}, {lead_expr})"
 
 
-def _sql_to_python_expr(sql: str, block: ResolvedBlock) -> str:
+def _sql_to_python_expr(ctx: EmitContext, sql: str, block: ResolvedBlock) -> str:
     if "@@SQLMACRO:" not in sql:
         return _python_multiline_literal(sql)
 
@@ -109,7 +111,7 @@ def _sql_to_python_expr(sql: str, block: ResolvedBlock) -> str:
         if literal:
             parts.append(_python_multiline_literal(literal))
 
-        parts.append(_sql_macro_expr(block, int(match.group(1))))
+        parts.append(_sql_macro_expr(ctx, block, int(match.group(1))))
         cursor = match.end()
 
     tail = sql[cursor:]
@@ -131,8 +133,9 @@ def _emit_reader(
     suffix: str,
 ) -> tuple[str, str]:
     register_reader_emission(ctx)
+    register_utility_emission(ctx, "csv_io", "macro")
 
-    sql_expr = _sql_to_python_expr(dispatched.rewritten_sql, block)
+    sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
     ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
     ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
@@ -146,7 +149,7 @@ def _emit_reader(
 
     func_name = _function_name(block, suffix)
     if has_crosstab:
-        ctx.add_import("vg2c.emitter.macro", "apply_crosstab")
+        register_utility_emission(ctx, "crosstab")
     crosstab_line = (
         f"    result = apply_crosstab(result, row_keys={row_keys_expr}, header_key={ctheader!r}, value_key={ctvalue!r})\n"
         if has_crosstab
@@ -184,7 +187,8 @@ def _emit_sqlite_query(
 ) -> tuple[str, str]:
     """Emit SQLite query runner."""
     assert dispatched is not None
-    sql_expr = _sql_to_python_expr(dispatched.rewritten_sql, block)
+    register_utility_emission(ctx, "sqlite_engine")
+    sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
 
     # Extract input CSVs from /TABLE= options
     inputs = []
@@ -220,6 +224,7 @@ def _emit_write_file(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock | None
 ) -> tuple[str, str]:
     """Emit write_file call."""
+    register_utility_emission(ctx, "macro")
     path_expr = _value_to_python_expr(_resolve_output_path(block, "txt"))
     template_expr = repr(block.resolved_body)
 
@@ -249,12 +254,14 @@ def _emit_utility(
     func_name = _function_name(block, "utility")
 
     if shape_info.shape == "run-python-script":
+        register_utility_emission(ctx, "external")
         func_code = f"def {func_name}(ctx):\n    ctx.external.run({argv_expr})\n"
     elif shape_info.shape == "email":
         # TODO: SQLPathFinder_Email.va argv positions not yet standardised.
         # Emit a stub + diagnostic until a real fixture pins the positions.
         func_code = f"def {func_name}(ctx):\n    pass  # TODO: email utility — argv positions unresolved\n"
     elif shape_info.shape in ("robocopy", "spf-copy"):
+        register_utility_emission(ctx, "fs_ops")
         # Typical: robocopy <src> <dst> [flags...]
         src_expr = (
             _value_to_python_expr(shape_info.argv[1])
@@ -268,6 +275,7 @@ def _emit_utility(
         )
         func_code = f"def {func_name}(ctx):\n    ctx.fs_ops.copy(src={src_expr}, dst={dst_expr})\n"
     elif shape_info.shape == "spf-delete":
+        register_utility_emission(ctx, "fs_ops")
         # SPFDelete arg[1] is a comma-joined path list; split into individual paths
         paths_raw = shape_info.argv[1] if len(shape_info.argv) > 1 else ""
         paths_items = [p.strip() for p in paths_raw.split(",") if p.strip()]
@@ -278,6 +286,7 @@ def _emit_utility(
             f"def {func_name}(ctx):\n    ctx.fs_ops.delete(paths={paths_expr})\n"
         )
     elif shape_info.shape == "bat-file" or shape_info.shape == "exe-direct":
+        register_utility_emission(ctx, "external")
         func_code = f"def {func_name}(ctx):\n    ctx.external.run({argv_expr})\n"
     else:
         func_code = f"def {func_name}(ctx):\n    pass  # TODO: unhandled utility shape={shape_info.shape}\n"

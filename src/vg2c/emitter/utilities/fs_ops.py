@@ -5,7 +5,16 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from vg2c.emitter.utilities._registry import register_utility
 
+
+@register_utility(
+    "fs_ops",
+    imports=(
+        "import shutil",
+        "from pathlib import Path",
+    ),
+)
 class FileSystemOps:
 
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:

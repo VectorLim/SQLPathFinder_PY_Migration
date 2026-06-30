@@ -38,7 +38,10 @@ def read(sql, db_type, macro_state=None):
         sql = macro_state.substitute_sql(sql)
     if db_type not in DATABASE_TYPE_MAP:
         raise ValueError(f"Unsupported database type: {db_type!r}")
-    return DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
+    result = DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
+    result.columns = [col.lower() for col in result.columns]
+
+    return result
 
 
 # --- end embedded reader runtime --------------------------------------------

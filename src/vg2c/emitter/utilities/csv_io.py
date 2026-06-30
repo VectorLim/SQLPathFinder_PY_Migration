@@ -8,7 +8,18 @@ from typing import Any, Iterator
 
 import pandas
 
+from vg2c.emitter.utilities._registry import register_utility
 
+
+@register_utility(
+    "csv_io",
+    imports=(
+        "import csv",
+        "from pathlib import Path",
+        "from typing import Any, Iterator",
+        "import pandas",
+    ),
+)
 class CsvIO:
     """Read and write CSV files relative to ``cwd``."""
 
@@ -49,18 +60,14 @@ class CsvIO:
         - a list of lists  → written via writer (optional *header* for first row)
         - a string         → written as raw text (no CSV encoding)
         - a Path           → copied verbatim
-
-        When *header* is provided, it becomes the authoritative column list:
-        - Empty content → writes header-only CSV
-        - List-of-dicts → projects each dict to *header* columns (missing keys → "")
-        - DataFrame → reindexes columns to *header* (missing → "")
-        - List-of-lists → writes *header* then data rows
-        - Rows that duplicate the header are dropped
         """
         path = Path(name)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Raw string/Path pass-through (no header processing)
+        if isinstance(content, pandas.DataFrame):
+            content.to_csv(path, index=False, encoding="utf-8")
+            return
+
         if isinstance(content, str):
             path.write_text(content, encoding="utf-8")
             return
@@ -71,44 +78,19 @@ class CsvIO:
             shutil.copy2(content, path)
             return
 
-        # DataFrame with header reindexing
-        if isinstance(content, pandas.DataFrame):
-            if header:
-                # Reindex to declared header, fill missing with empty string
-                content = content.reindex(columns=header, fill_value="")
-            content.to_csv(path, index=False, encoding="utf-8")
-            return
-
-        # Tabular content (list of dicts/lists)
         rows = list(content) if content is not None else []
-
-        # Empty content: write header-only when header is provided
         if not rows:
-            if header:
-                with path.open("w", newline="", encoding="utf-8") as fh:
-                    csv.writer(fh).writerow(header)
-            else:
-                path.write_text("", encoding="utf-8")
+            path.write_text("", encoding="utf-8")
             return
 
         with path.open("w", newline="", encoding="utf-8") as fh:
-            if isinstance(rows[0], dict):
-                # List-of-dicts: use declared header or infer from first row
-                fieldnames = header if header else list(rows[0].keys())
-                writer = csv.DictWriter(
-                    fh, fieldnames=fieldnames, extrasaction="ignore"
-                )
+            if rows and isinstance(rows[0], dict):
+                fieldnames = list(rows[0].keys())
+                writer = csv.DictWriter(fh, fieldnames=fieldnames)
                 writer.writeheader()
-                # Project each dict to fieldnames (missing keys → "")
-                filtered = _drop_duplicate_header_rows(rows, fieldnames)
-                for row in filtered:
-                    writer.writerow({k: row.get(k, "") for k in fieldnames})
+                writer.writerows(rows)
             else:
-                # List-of-lists
                 writer_plain = csv.writer(fh)
                 if header:
                     writer_plain.writerow(header)
-                    filtered = _drop_duplicate_header_rows(rows, header)
-                    writer_plain.writerows(filtered)
-                else:
-                    writer_plain.writerows(rows)
+                writer_plain.writerows(rows)

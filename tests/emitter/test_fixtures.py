@@ -80,9 +80,10 @@ def test_sql_script_emitted_has_multiple_steps(FIXTURES: Path) -> None:
 
 
 def test_actual_script_emitted_has_imports(FIXTURES: Path) -> None:
-    """Emitted script should have runtime imports."""
+    """Emitted script should embed utilities, not import from vg2c_runtime."""
     emitted = _run_full_pipeline(FIXTURES, "actual_script.txt")
-    assert "from vg2c_runtime import" in emitted.source or "import" in emitted.source
+    assert "vg2c_runtime" not in emitted.source
+    assert "class PipelineContext" in emitted.source
 
 
 def test_actual_script_uses_declared_output_paths(FIXTURES: Path) -> None:

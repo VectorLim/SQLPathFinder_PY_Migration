@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
-from vg2c_runtime.external import ExternalProcess
-from vg2c_runtime.fs_ops import FileSystemOps
+from vg2c.emitter.utilities.external import ExternalProcess
+from vg2c.emitter.utilities.fs_ops import FileSystemOps
 
 # --- FileSystemOps ---
 

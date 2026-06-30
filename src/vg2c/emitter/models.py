@@ -28,12 +28,13 @@ class EmitContext:
     )  # block_index -> DispatchedBlock
     registry: Any | None = None  # HandlerRegistry instance
     needs_reader: bool = False  # set by reader handlers to inject reader snippet
+    needed_utilities: set[str] = field(default_factory=set)  # utility keys to embed
 
     def add_import(self, module: str, name: str | None = None) -> None:
         """Register an import statement.
 
         Args:
-            module: The module name (e.g., 'pathlib' or 'vg2c_runtime')
+            module: The module name (e.g., 'pathlib' or 'datasyncx')
             name: Optional name to import. If None, does `import module`.
                   If provided, does `from module import name`.
         """

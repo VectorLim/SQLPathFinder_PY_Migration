@@ -1,8 +1,7 @@
 """Embedded reader runtime for emitted pipeline scripts.
 
 Stage 5 injects ``READER_SNIPPET`` into translated VG2 scripts so the
-generated file can dispatch SQL reads on its own, without depending on
-``vg2c_runtime.context.PipelineContext.read``.
+generated file can dispatch SQL reads on its own.
 
 The actual runtime code lives in ``_reader.py`` as real Python (for tooling
 and editing). This module slices the snippet out of that file at import time

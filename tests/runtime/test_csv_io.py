@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c_runtime.csv_io import CsvIO
+from vg2c.emitter.utilities.csv_io import CsvIO
 
 
 def test_write_and_iter(tmp_path):

@@ -33,7 +33,8 @@ def test_translate_happy_path_writes_file(tmp_path):
     assert out_file.exists()
     text = out_file.read_text(encoding="utf-8")
     assert "def run() -> None:" in text
-    assert "from vg2c_runtime import ctx as pipeline_ctx" in text
+    assert "vg2c_runtime" not in text
+    assert "ctx = PipelineContext()" in text
 
 
 def test_translate_stdout_when_no_output_path():

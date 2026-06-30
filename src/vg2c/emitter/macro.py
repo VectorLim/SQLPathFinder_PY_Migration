@@ -36,7 +36,6 @@ __all__ = [
     "normalize_macro_name",
     "apply_crosstab",
     "substitute_crosstab",
-    "write_file",
     "placeholders_to_python_expr",
     "macro_token_to_python_expr",
 ]
@@ -240,8 +239,30 @@ class MacroState:
     def write_file(
         self, path: str, template: str, vars: dict[str, str] | None = None
     ) -> None:
-        """Write a template to disk using this macro state for substitutions."""
-        write_file(path, template, vars=vars, macro_state=self)
+        """Write *template* to *path*, substituting ``<<<NAME>>>`` / ``<<>>`` placeholders.
+
+        Named placeholders are resolved against *vars* when supplied, otherwise
+        against this macro state. Positional placeholders resolve via this macro state.
+        """
+
+        def _lookup(name: str) -> str:
+            key = normalize_macro_name(name)
+            if vars is not None:
+                return vars.get(key, "")
+            return self.named(key)
+
+        def _replace(match: re.Match[str]) -> str:
+            named = match.group(1)
+            if named is not None:
+                return _lookup(named)
+            return self.positional()
+
+        content = PLACEHOLDER_RE.sub(_replace, template)
+        content = content.lstrip("\n")
+
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content, encoding="utf-8")
 
     def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
         """Legacy condition evaluation kept for backward compatibility."""
@@ -273,48 +294,6 @@ class MacroState:
             yield
         finally:
             self.pop_frame()
-
-
-# ---------------------------------------------------------------------------
-# Runtime template substitution
-# ---------------------------------------------------------------------------
-
-
-def write_file(
-    path: str,
-    template: str,
-    vars: dict[str, str] | None,
-    macro_state: MacroLookup | None = None,
-) -> None:
-    """Write *template* to *path*, substituting ``<<<NAME>>>`` / ``<<>>`` placeholders.
-
-    Named placeholders are resolved against *vars* when supplied, otherwise
-    against *macro_state*. Positional placeholders only resolve when
-    *macro_state* is provided.
-    """
-
-    def _lookup(name: str) -> str:
-        key = normalize_macro_name(name)
-        if vars is not None:
-            return vars.get(key, "")
-        if macro_state is not None:
-            return macro_state.named(key)
-        return ""
-
-    def _replace(match: re.Match[str]) -> str:
-        named = match.group(1)
-        if named is not None:
-            return _lookup(named)
-        if macro_state is not None:
-            return macro_state.positional()
-        return ""
-
-    content = PLACEHOLDER_RE.sub(_replace, template)
-    content = content.lstrip("\n")
-
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(content, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

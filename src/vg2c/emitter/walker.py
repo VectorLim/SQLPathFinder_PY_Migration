@@ -9,6 +9,7 @@ from vg2c.emitter.macro import (
     macro_token_to_python_expr,
 )
 from vg2c.emitter.models import EmitContext, IndentWriter
+from vg2c.emitter.utilities_embed import register_utility_emission
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
     IfThen,
@@ -152,6 +153,7 @@ def _walk_scope(
         if isinstance(payload, StartMacro):
             row_iter = bool(payload.csv_path)
             if row_iter:
+                register_utility_emission(ctx, "csv_io", "macro")
                 writer.write(f"for __row in ctx.csv_io.iter({repr(payload.csv_path)}):")
                 writer.push_indent()
                 writer.write("with ctx.macro_scope(__row):")
@@ -248,6 +250,7 @@ def _walk_scope(
         if block.kind is Kind.MACRO_CONTROL:
             payload = block.control_payload
             if isinstance(payload, RowsInFile):
+                register_utility_emission(ctx, "csv_io", "macro")
                 func_name = f"step_{block.parsed.index:04d}_rows_in_file"
                 csv_path = payload.csv_path
                 var_name = payload.var_name.upper()

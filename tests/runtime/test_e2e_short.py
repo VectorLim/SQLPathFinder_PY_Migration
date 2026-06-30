@@ -8,15 +8,12 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-import vg2c_runtime
-
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.dispatch.models import DispatchConfig
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
-from vg2c_runtime.context import PipelineContext
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -34,19 +31,14 @@ def _run_full_pipeline(fixture_name: str) -> str:
 
 def test_e2e_script_short(tmp_path, monkeypatch):
     """Translate script_short.txt, exec it, assert output CSV exists."""
-    source = _run_full_pipeline("test_long.txt")
+    source = _run_full_pipeline("actual_script.txt")
     (Path.cwd() / "generated_script.py").write_text(source, encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
 
-    # Build a fresh context and patch vg2c_runtime singleton used by emitted import.
-    old_ctx = vg2c_runtime.ctx
-    vg2c_runtime.ctx = PipelineContext()
-    try:
-        ns: dict[str, object] = {}
-        exec(source, ns)  # noqa: S102
-        run_fn = ns["run"]
-        assert callable(run_fn)
-        run_fn()
-    finally:
-        vg2c_runtime.ctx = old_ctx
+    # Execute the generated script (it's self-contained now, no patching needed)
+    ns: dict[str, object] = {}
+    exec(source, ns)  # noqa: S102
+    run_fn = ns["run"]
+    assert callable(run_fn)
+    run_fn()

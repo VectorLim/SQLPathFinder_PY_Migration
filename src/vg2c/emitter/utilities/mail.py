@@ -7,7 +7,18 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
+from vg2c.emitter.utilities._registry import register_utility
 
+
+@register_utility(
+    "mail",
+    imports=(
+        "import os",
+        "import smtplib",
+        "from email.message import EmailMessage",
+        "from pathlib import Path",
+    ),
+)
 class MailService:
     """Send email. Reads connection config from environment variables."""
 

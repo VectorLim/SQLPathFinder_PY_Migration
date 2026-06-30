@@ -5,7 +5,16 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from vg2c.emitter.utilities._registry import register_utility
 
+
+@register_utility(
+    "external",
+    imports=(
+        "import subprocess",
+        "from pathlib import Path",
+    ),
+)
 class ExternalProcess:
     """Thin wrapper around subprocess.run."""
 
