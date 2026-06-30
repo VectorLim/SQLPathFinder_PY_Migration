@@ -18,6 +18,7 @@ from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.runtime_context import PipelineContext
 from vg2c.emitter.utilities.sql_macros import SqlMacros
 from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
+from vg2c.emitter.readers import read
 
 __all__ = [
     "UTILITIES",
@@ -30,6 +31,7 @@ __all__ = [
     "MacroState",
     "MailService",
     "PipelineContext",
+    "read",
     "SqlMacros",
     "SqliteEngine",
 ]

@@ -1,8 +1,7 @@
 """Reader runtime injected into emitted pipeline scripts.
 
-The code between the ``BEGIN`` / ``END`` sentinel comments below is read as
-source text by :mod:`vg2c.emitter.readers` and embedded verbatim into every
-generated VG2 script that performs a SQL read.
+The runtime is registered with :func:`register_utility` so emitter embedding
+uses the same registry-driven flow as other utilities.
 
 The runtime relies on ``macro_state.substitute_sql(sql)`` (provided by
 :class:`vg2c.emitter.macro.MacroState`) so SQL placeholder substitution
@@ -14,7 +13,9 @@ and add the matching ``datasyncx`` Reader import alongside the others below.
 
 from __future__ import annotations
 
-# --- Embedded reader runtime ------------------------------------------------
+from vg2c.emitter.utilities._registry import register_utility
+
+
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
 
 # DATABASE_TYPE_MAP is the single extension point for adding a new database
@@ -27,6 +28,7 @@ DATABASE_TYPE_MAP = {
 }
 
 
+@register_utility("reader_runtime")
 def read(sql, db_type, macro_state=None):
     """Run *sql* against the Reader registered for *db_type*.
 
@@ -42,6 +44,3 @@ def read(sql, db_type, macro_state=None):
     result.columns = [col.lower() for col in result.columns]
 
     return result
-
-
-# --- end embedded reader runtime --------------------------------------------

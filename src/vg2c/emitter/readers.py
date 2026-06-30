@@ -1,51 +1,46 @@
-"""Embedded reader runtime for emitted pipeline scripts.
+"""Reader runtime injected into emitted pipeline scripts.
 
-Stage 5 injects ``READER_SNIPPET`` into translated VG2 scripts so the
-generated file can dispatch SQL reads on its own.
+The runtime is registered with :func:`register_utility` so emitter embedding
+uses the same registry-driven flow as other utilities.
 
-The actual runtime code lives in ``_reader.py`` as real Python (for tooling
-and editing). This module slices the snippet out of that file at import time
-between the ``BEGIN`` / ``END`` sentinel comments.
+The runtime relies on ``macro_state.substitute_sql(sql)`` (provided by
+:class:`vg2c.emitter.macro.MacroState`) so SQL placeholder substitution
+stays owned by the macro subsystem.
 
-To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` inside
-``_reader.py``. The top-level ``read(sql, db_type, macro_state=None)``
-function in the emitted script will dispatch to it.
+To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` below
+and add the matching ``datasyncx`` Reader import alongside the others below.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from vg2c.emitter.models import EmitContext
-
-__all__ = ["READER_SNIPPET", "register_reader_emission"]
+from vg2c.emitter.utilities._registry import register_utility
 
 
-_READER_SOURCE_PATH = Path(__file__).parent / "_reader.py"
-_BEGIN_SENTINEL = "# --- Embedded reader runtime"
-_END_SENTINEL = "# --- end embedded reader runtime"
+from datasyncx.readers import AriesReader, MarsReader, OracleReader
+
+# DATABASE_TYPE_MAP is the single extension point for adding a new database
+# type: map the /ENGINE= identifier used in the VG2 source to a datasyncx
+# Reader subclass. ``read`` below dispatches to it.
+DATABASE_TYPE_MAP = {
+    "MARS": MarsReader,
+    "OASYS": OracleReader,
+    "ARIES": AriesReader,
+}
 
 
-def _load_reader_snippet() -> str:
-    """Read ``_reader.py`` and return the runtime block between sentinels."""
-    source = _READER_SOURCE_PATH.read_text(encoding="utf-8")
-    lines = source.splitlines(keepends=True)
-    start = next(
-        (i for i, line in enumerate(lines) if line.startswith(_BEGIN_SENTINEL)),
-        None,
-    )
-    end = next(
-        (i for i, line in enumerate(lines) if line.startswith(_END_SENTINEL)),
-        None,
-    )
-    if start is None or end is None or end < start:
-        raise RuntimeError(f"Reader sentinels not found in {_READER_SOURCE_PATH}")
-    return "".join(lines[start : end + 1])
+@register_utility("reader_runtime")
+def read(sql, db_type, macro_state=None):
+    """Run *sql* against the Reader registered for *db_type*.
 
+    ``macro_state`` (when given) substitutes ``<<<NAME>>>`` macro
+    placeholders that survive into the SQL body via its own
+    ``substitute_sql`` helper.
+    """
+    if macro_state is not None:
+        sql = macro_state.substitute_sql(sql)
+    if db_type not in DATABASE_TYPE_MAP:
+        raise ValueError(f"Unsupported database type: {db_type!r}")
+    result = DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
+    result.columns = [col.lower() for col in result.columns]
 
-READER_SNIPPET = _load_reader_snippet()
-
-
-def register_reader_emission(ctx: EmitContext) -> None:
-    """Mark the emitted script as needing the reader snippet."""
-    ctx.needs_reader = True
+    return result

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from vg2c.emitter.macro import MacroState
-from vg2c.emitter.readers import READER_SNIPPET
+from vg2c.emitter.utilities_embed import READER_SNIPPET
 
 # --- MacroState.write_file ---
 

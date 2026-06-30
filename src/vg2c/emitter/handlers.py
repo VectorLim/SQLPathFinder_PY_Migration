@@ -5,8 +5,10 @@ import re
 from vg2c.dispatch.models import DispatchedBlock
 from vg2c.emitter.macro import placeholders_to_python_expr
 from vg2c.emitter.models import EmitContext
-from vg2c.emitter.readers import register_reader_emission
-from vg2c.emitter.utilities_embed import register_utility_emission
+from vg2c.emitter.utilities_embed import (
+    register_reader_emission,
+    register_utility_emission,
+)
 from vg2c.emitter.utility_shapes import classify_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import ResolvedBlock

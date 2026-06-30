@@ -16,7 +16,6 @@ class DialectHandler(ABC):
     reader_class_hint: ClassVar[Literal["OracleReader", "SQLiteReader"]]
     database_arg: ClassVar[str | None]
     schema_placeholder: ClassVar[str | None] = None
-    one_shot_note: ClassVar[tuple[str, str] | None] = None
 
     @classmethod
     @abstractmethod
