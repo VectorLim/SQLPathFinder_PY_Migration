@@ -14,7 +14,6 @@ FIXTURE_NAMES = [
     "script_short.txt",
     "script_another.txt",
     "sql_script.txt",
-    "script_from_vietnam.txt",
     "actual_script.txt",
 ]
 

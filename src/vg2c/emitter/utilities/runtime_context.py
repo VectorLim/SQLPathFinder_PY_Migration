@@ -36,5 +36,48 @@ class PipelineContext:
         """Run SQL through reader runtime using current macro scope."""
         return read(sql=sql, db_type=db_type, macro_state=self.macro)
 
+    def run_query(
+        self,
+        sql: str,
+        output: str,
+        source_type: str,
+        inputs: list[str] | None = None,
+        header: list[str] | None = None,
+        crosstab: dict | None = None,
+    ):
+        """
+        Unified query execution method for both SQLite and external databases.
+
+        Args:
+            sql: SQL query string (may contain macro placeholders)
+            output: Output CSV path
+            source_type: 'sqlite' | 'MARS' | 'ARIES' | 'OASYS'
+            inputs: List of input CSV paths (required for sqlite)
+            header: Optional declared header for output CSV
+            crosstab: Optional crosstab config dict with keys:
+                     'row_keys', 'header_key', 'value_key'
+        """
+        # 1. Substitute macros
+        sql = self.macro.substitute_sql(sql)
+
+        # 2. Execute query based on source_type
+        if source_type.lower() == 'sqlite':
+            result = self.sqlite_engine.execute(sql, inputs or [])
+        else:
+            # Pass pre-substituted SQL; read() will skip re-substitution
+            result = read(sql=sql, db_type=source_type, macro_state=None)
+
+        # 3. Apply crosstab if configured
+        if crosstab:
+            result = apply_crosstab(
+                result,
+                row_keys=crosstab['row_keys'],
+                header_key=crosstab['header_key'],
+                value_key=crosstab['value_key'],
+            )
+
+        # 4. Write output
+        self.csv_io.write(output, result, header=header)
+
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)

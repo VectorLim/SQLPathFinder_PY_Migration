@@ -135,34 +135,37 @@ def _emit_reader(
     suffix: str,
 ) -> tuple[str, str]:
     register_reader_emission(ctx)
-    register_utility_emission(ctx, "csv_io", "macro")
+    register_utility_emission(ctx, "ctx", "csv_io", "macro")
 
     sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
     output_expr = repr(_resolve_output_path(block, "csv"))
+    
+    # Extract crosstab parameters
     ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
     ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
     ctvalue = _strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
     has_crosstab = bool(ctrow and ctheader and ctvalue)
-    row_keys_expr = repr([c.strip() for c in ctrow.split(",") if c.strip()])
-
+    
     # Extract declared headers (skip for crosstab - dynamic columns)
     declared_hdrs = _declared_headers(block) if not has_crosstab else None
     header_arg = f", header={declared_hdrs!r}" if declared_hdrs else ""
 
     func_name = _function_name(block, suffix)
+    
     if has_crosstab:
         register_utility_emission(ctx, "crosstab")
-    crosstab_line = (
-        f"    result = apply_crosstab(result, row_keys={row_keys_expr}, header_key={ctheader!r}, value_key={ctvalue!r})\n"
-        if has_crosstab
-        else ""
-    )
+        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
+        crosstab_arg = f", crosstab={{'row_keys': {row_keys!r}, 'header_key': {ctheader!r}, 'value_key': {ctvalue!r}}}"
+    else:
+        crosstab_arg = ""
 
     func_code = f"""\
 def {func_name}(ctx):
-    result = ctx.read(sql={sql_expr}, db_type={repr(db_type)})
-{crosstab_line}
-    ctx.csv_io.write({output_expr}, result{header_arg})
+    ctx.run_query(
+        sql={sql_expr},
+        output={output_expr},
+        source_type={repr(db_type)}{header_arg}{crosstab_arg},
+    )
 """
     return func_code, f"{func_name}(ctx)"
 
@@ -187,10 +190,13 @@ def _emit_sql_query(
 def _emit_sqlite_query(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock
 ) -> tuple[str, str]:
-    """Emit SQLite query runner."""
+    """Emit SQLite query runner using unified run_query interface."""
     assert dispatched is not None
-    register_utility_emission(ctx, "sqlite_engine")
+    register_reader_emission(ctx)
+    register_utility_emission(ctx, "ctx", "sqlite_engine", "csv_io", "macro")
+    
     sql_expr = _sql_to_python_expr(ctx, dispatched.rewritten_sql, block)
+    output_expr = repr(_resolve_output_path(block, "csv"))
 
     # Extract input CSVs from /TABLE= options
     inputs = []
@@ -202,19 +208,33 @@ def _emit_sqlite_query(
                     inputs.append(_value_to_python_expr(table_name))
 
     inputs_str = "[" + ", ".join(inputs) + "]" if inputs else "[]"
-    func_name = _function_name(block, "sqlite_query")
-    output_name = _resolve_output_path(block, "csv")
+    
+    # Extract crosstab parameters
+    ctrow = _strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
+    ctheader = _strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
+    ctvalue = _strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
+    has_crosstab = bool(ctrow and ctheader and ctvalue)
+    
+    # Extract declared headers (skip for crosstab - dynamic columns)
+    declared_hdrs = _declared_headers(block) if not has_crosstab else None
+    header_arg = f", header={declared_hdrs!r}" if declared_hdrs else ""
 
-    # Extract declared headers
-    declared_hdrs = _declared_headers(block)
-    header_arg = f",\n        header={declared_hdrs!r}" if declared_hdrs else ""
+    func_name = _function_name(block, "sqlite_query")
+    
+    if has_crosstab:
+        register_utility_emission(ctx, "crosstab")
+        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
+        crosstab_arg = f", crosstab={{'row_keys': {row_keys!r}, 'header_key': {ctheader!r}, 'value_key': {ctvalue!r}}}"
+    else:
+        crosstab_arg = ""
 
     func_code = f"""\
 def {func_name}(ctx):
-    ctx.sqlite_engine.run_join(
+    ctx.run_query(
         sql={sql_expr},
-        inputs={inputs_str},
-        output={repr(output_name)}{header_arg},
+        output={output_expr},
+        source_type='sqlite',
+        inputs={inputs_str}{header_arg}{crosstab_arg},
     )
 """
 
@@ -264,17 +284,26 @@ def _emit_utility(
         func_code = f"def {func_name}(ctx):\n    pass  # TODO: email utility — argv positions unresolved\n"
     elif shape_info.shape in ("robocopy", "spf-copy"):
         register_utility_emission(ctx, "fs_ops")
-        # Typical: robocopy <src> <dst> [flags...]
-        src_expr = (
+        # RoboCopy.va argv: <filename> <source_dir> <dest_dir> [flags...]
+        # argv[0]=exe, argv[1]=filename, argv[2]=source_dir, argv[3]=dest_dir
+        # src = source_dir\filename  (remote → local)
+        # dst = dest_dir (shutil.copy2 handles placing the file there)
+        filename_expr = (
             _value_to_python_expr(shape_info.argv[1])
             if len(shape_info.argv) > 1
             else repr("")
         )
-        dst_expr = (
+        src_dir_expr = (
             _value_to_python_expr(shape_info.argv[2])
             if len(shape_info.argv) > 2
             else repr("")
         )
+        dst_expr = (
+            _value_to_python_expr(shape_info.argv[3])
+            if len(shape_info.argv) > 3
+            else repr(".")
+        )
+        src_expr = f"os.path.join({src_dir_expr}, {filename_expr})"
         func_code = f"def {func_name}(ctx):\n    ctx.fs_ops.copy(src={src_expr}, dst={dst_expr})\n"
     elif shape_info.shape == "spf-delete":
         register_utility_emission(ctx, "fs_ops")

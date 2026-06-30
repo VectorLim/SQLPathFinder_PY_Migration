@@ -7,6 +7,8 @@ import re
 import sqlite3
 from pathlib import Path
 
+import pandas as pd
+
 from vg2c.emitter.macro import substitute_crosstab
 
 
@@ -73,21 +75,16 @@ def _split_statements(sql: str) -> list[str]:
 class SqliteEngine:
     """Run SQL joins over CSV files using an in-memory SQLite connection."""
 
-    def run_join(
-        self, sql: str, inputs: list[str], output: str, header: list[str] | None = None
-    ) -> None:
+    def execute(self, sql: str, inputs: list[str]) -> pd.DataFrame:
         """
-        1. Open in-memory SQLite connection.
-        2. Load each *input* CSV as a table.
-        3. Split *sql* on ';'; execute non-SELECT statements directly.
-        4. Execute the final SELECT; write rows to *output* CSV.
+        Execute SQL query over CSV inputs and return result as DataFrame.
 
         Args:
             sql: SQL query (may contain multiple statements separated by ';')
             inputs: List of CSV file paths to load as tables
-            output: Output CSV file path
-            header: Optional declared column list for output CSV.
-                   When provided, output uses this header exactly.
+
+        Returns:
+            pandas DataFrame with query results
         """
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -139,38 +136,15 @@ class SqliteEngine:
         except sqlite3.Error as exc:
             conn.close()
             raise RuntimeError(
-                f"SQLite error in run_join: {exc}\nSQL:\n{final_stmt}"
+                f"SQLite error in execute: {exc}\nSQL:\n{final_stmt}"
             ) from exc
 
         conn.close()
 
-        # Write output CSV
-        output_path = Path(output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Convert to DataFrame
+        if not rows or not col_names:
+            return pd.DataFrame()
 
-        # Use declared header if provided, otherwise use query result columns
-        output_header = header if header else col_names
-
-        with output_path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
-            if output_header:
-                writer.writerow(output_header)
-
-            # When header is declared, project rows by column name
-            if header and col_names:
-                # Build mapping from col_names to values
-                col_index = {name: idx for idx, name in enumerate(col_names)}
-                header_str = [str(h) for h in header]
-
-                for row in rows:
-                    # Project row to declared header order
-                    projected = [
-                        row[col_index[h]] if h in col_index else "" for h in header
-                    ]
-                    # Skip rows that duplicate the header
-                    if [str(v) for v in projected] != header_str:
-                        writer.writerow(projected)
-            else:
-                # No declared header - write rows as-is
-                for row in rows:
-                    writer.writerow(list(row))
+        # Convert sqlite3.Row objects to list of dicts
+        data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
+        return pd.DataFrame(data)

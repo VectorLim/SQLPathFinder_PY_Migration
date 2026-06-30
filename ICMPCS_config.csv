@@ -1,0 +1,8 @@
+ICMPCS,Parameter,Value,Remarks
+ICMPCS,dEmail,vnat.dxa.csr@intel.com,PDL for CSR notification
+ICMPCS,dCSR,Y,Enable CSR (Y or N)?
+ICMPCS,dMST,N,Enable MST (Y or N)?
+ICMPCS,dCCB,2020.27.AT Integrated CCB.6.FWP.34,CCB number
+ICMPCS,dHNote,AE Own DLA MAXLH CSR on hold,Hold note that limited to only 35 characters; followed by #xx where xx is the registered ID from ICMPCS
+ICMPCS,dHCat,AE,Hold for what HDR user group to dispose the lot (e.g. AE, TE, QRE, MFG)
+ICMPCS,dSUBJECT,DLA MAX/MIN LIDHEIGHT Outlier Alert CSR,Email subsject
