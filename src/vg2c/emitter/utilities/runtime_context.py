@@ -9,9 +9,7 @@ from vg2c.emitter.utilities._registry import register_utility
 
 @register_utility(
     "ctx",
-    imports=(
-        "from typing import Any, ContextManager",
-    ),
+    imports=("from typing import Any, ContextManager",),
 )
 class PipelineContext:
     """Single runtime context object for generated scripts."""
@@ -33,6 +31,10 @@ class PipelineContext:
         self, path: str, template: str, vars: dict[str, str] | None = None
     ) -> None:
         self.macro.write_file(path, template, vars=vars)
+
+    def read(self, sql: str, db_type: str):
+        """Run SQL through reader runtime using current macro scope."""
+        return read(sql=sql, db_type=db_type, macro_state=self.macro)
 
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)

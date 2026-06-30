@@ -77,6 +77,9 @@ def test_sql_script_emitted_has_multiple_steps(FIXTURES: Path) -> None:
     emitted = _run_full_pipeline(FIXTURES, "sql_script.txt")
     step_count = emitted.source.count("def step_")
     assert step_count >= 2  # At least MARS, OASYS, SQLite
+    assert "ctx.read(" in emitted.source
+    assert "def read(sql, db_type, macro_state=None):" in emitted.source
+    assert "result = read(" not in emitted.source
 
 
 def test_actual_script_emitted_has_imports(FIXTURES: Path) -> None:

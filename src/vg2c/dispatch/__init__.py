@@ -83,6 +83,14 @@ def dispatch(
 
         # --- Step 6: reader target ---
         reader_target, target_diags = handler.build_reader_target(block)
+        dispatched.append(
+            DispatchedBlock(
+                block_index=block.parsed.index,
+                dialect=handler.dialect,
+                reader_target=reader_target,
+                rewritten_sql=rewritten_sql,
+            )
+        )
 
     return DispatchedProgram(
         analyzed=analyzed,

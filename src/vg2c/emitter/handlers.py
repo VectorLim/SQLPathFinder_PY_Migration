@@ -160,7 +160,7 @@ def _emit_reader(
 
     func_code = f"""\
 def {func_name}(ctx):
-    result = read(sql={sql_expr}, db_type={repr(db_type)}, macro_state=ctx.macro)
+    result = ctx.read(sql={sql_expr}, db_type={repr(db_type)})
 {crosstab_line}
     ctx.csv_io.write({output_expr}, result{header_arg})
 """

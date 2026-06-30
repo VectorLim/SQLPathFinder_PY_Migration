@@ -123,6 +123,12 @@ def _strip_embed_artifacts(source: str) -> str:
             continue
 
         if line.strip().startswith("@register_utility"):
+            stripped = line.strip()
+            i += 1
+            # Single-line decorator: @register_utility("reader_runtime")
+            if ")" in stripped and not stripped.endswith("("):
+                continue
+            # Multi-line decorator block: consume until a standalone closing paren.
             while i < len(lines):
                 current_line = lines[i]
                 i += 1
