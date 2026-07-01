@@ -3,12 +3,20 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.models import DispatchedProgram
+from vg2c.emitter.codegen import (
+    CTX_VAR,
+    FunctionDef,
+    PyExpr,
+    emit_call,
+    register_call_embed,
+)
 from vg2c.emitter.handlers import create_handlers
 from vg2c.emitter.macro import (
     NAMED_PLACEHOLDER_RE,
     macro_token_to_python_expr,
 )
 from vg2c.emitter.models import EmitContext, IndentWriter
+from vg2c.emitter.utilities import CsvIO, MacroState, PipelineContext
 from vg2c.emitter.utilities_embed import register_utility_emission
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
@@ -155,12 +163,17 @@ def _walk_scope(
             row_iter = bool(payload.csv_path)
             if row_iter:
                 register_utility_emission(ctx, "csv_io", "macro")
-                writer.write(f"for __row in ctx.csv_io.iter({repr(payload.csv_path)}):")
+                iter_call = emit_call(CsvIO.iter, PyExpr.literal(payload.csv_path))
+                scope_call = emit_call(
+                    PipelineContext.macro_scope, PyExpr.raw("__row")
+                )
+                writer.write(f"for __row in {iter_call.render()}:")
                 writer.push_indent()
-                writer.write("with ctx.macro_scope(__row):")
+                writer.write(f"with {scope_call.render()}:")
                 writer.push_indent()
             else:
-                writer.write("with ctx.macro_scope():")
+                scope_call = emit_call(PipelineContext.macro_scope)
+                writer.write(f"with {scope_call.render()}:")
                 writer.push_indent()
             for child in node.children:
                 _walk_scope(
@@ -182,12 +195,13 @@ def _walk_scope(
         payload = node.control_payload
         if isinstance(payload, RunLoop):
             register_utility_emission(ctx, "csv_io", "macro")
-            writer.write(
-                "for __chunk_path in ctx.csv_io.iter_chunks("
-                f"{repr(payload.input_csv_path)}, "
-                f"{repr(payload.chunk_csv_path)}, "
-                f"{int(payload.chunk_size)}):"
+            chunks_call = emit_call(
+                CsvIO.iter_chunks,
+                PyExpr.literal(payload.input_csv_path),
+                PyExpr.literal(payload.chunk_csv_path),
+                PyExpr.literal(int(payload.chunk_size)),
             )
+            writer.write(f"for __chunk_path in {chunks_call.render()}:")
             writer.push_indent()
             for child in node.children:
                 _walk_scope(
@@ -278,14 +292,17 @@ def _walk_scope(
             if isinstance(payload, RowsInFile):
                 register_utility_emission(ctx, "csv_io", "macro")
                 func_name = f"step_{block.parsed.index:04d}_rows_in_file"
-                csv_path = payload.csv_path
-                var_name = payload.var_name.upper()
-                func_code = f"""\
-def {func_name}(ctx):
-    ctx.macro.set_named({var_name!r}, str(ctx.csv_io.row_count({csv_path!r})))
-"""
-                functions.append(func_code)
-                writer.write(f"{func_name}(ctx)")
+                row_count_call = emit_call(
+                    CsvIO.row_count, PyExpr.literal(payload.csv_path)
+                )
+                set_named_call = emit_call(
+                    MacroState.set_named,
+                    PyExpr.literal(payload.var_name.upper()),
+                    PyExpr.raw(f"str({row_count_call.render()})"),
+                )
+                fdef = FunctionDef.from_call(func_name, set_named_call)
+                functions.append(fdef.source)
+                writer.write(fdef.call_site)
             return
 
         # Look up handler
