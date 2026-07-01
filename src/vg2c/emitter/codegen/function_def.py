@@ -70,7 +70,9 @@ class FunctionDef:
     @staticmethod
     def name_for(block, suffix: str) -> str:
         """Build ``step_NNNN_<slug>`` from a block's ``PROMPT-TEXT`` option."""
-        prompt_text = _strip_quotes(block.resolved_options.lookup.get("PROMPT-TEXT", ""))
+        prompt_text = _strip_quotes(
+            block.resolved_options.lookup.get("PROMPT-TEXT", "")
+        )
         slug = _SLUG_RE.sub("_", prompt_text.lower()).strip("_")
         base = slug or suffix
 

@@ -57,7 +57,9 @@ def _iter_scope(node, depth: int = 0):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Show intermediate pipeline outputs for a fixture")
+    parser = argparse.ArgumentParser(
+        description="Show intermediate pipeline outputs for a fixture"
+    )
     parser.add_argument(
         "--fixture",
         type=Path,
@@ -109,7 +111,6 @@ def main() -> None:
     # Stage 2: resolve
     resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
     print(f"\n[Stage 2: resolve] blocks={len(resolved.blocks)}")
-    print(f"  csv_producers={len(resolved.csv_producers)} csv_consumers={len(resolved.csv_consumers)}")
 
     scope_nodes = list(_iter_scope(resolved.scope_tree))
     print(f"  scope_nodes={len(scope_nodes)}")
@@ -121,8 +122,7 @@ def main() -> None:
         )
 
     all_sql_calls = sum(len(b.sql_macro_calls) for b in resolved.blocks)
-    all_runtime_refs = sum(len(b.runtime_macro_refs) for b in resolved.blocks)
-    print(f"  sql_macro_calls={all_sql_calls} runtime_macro_refs={all_runtime_refs}")
+    print(f"  sql_macro_calls={all_sql_calls}")
 
     # Stage 2 diagnostics are cumulative from parse+classify input
     stage2_new_diags = resolved.diagnostics[len(pdiag) + len(cdiag) :]
@@ -130,7 +130,11 @@ def main() -> None:
 
     # Stage 3: analyze
     analyzed = analyze(resolved)
-    print(f"\n[Stage 3: analyze] producers={len(analyzed.producers)} consumers={len(analyzed.consumers)} edges={len(analyzed.edges)}")
+    print(
+        f"\n[Stage 3: analyze] producers={len(analyzed.producers)} consumers={len(analyzed.consumers)} edges={len(analyzed.edges)}"
+    )
+    analyzed_sql_calls = sum(len(b.sql_macro_calls) for b in analyzed.resolved.blocks)
+    print(f"  sql_macro_calls={analyzed_sql_calls}")
     for edge in analyzed.edges[: args.max_items]:
         p = edge.producer.block_index if edge.producer is not None else None
         print(

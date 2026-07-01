@@ -13,7 +13,6 @@ from vg2c.emitter.codegen import (
     register_call_embed,
     strip_quotes,
 )
-from vg2c.emitter.codegen.utility_shapes import build_shape_result
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities import (
     CsvIO,
@@ -30,7 +29,7 @@ from vg2c.emitter.utilities_embed import (
     register_reader_emission,
     register_utility_emission,
 )
-from vg2c.emitter.utility_shapes import classify_utility
+from vg2c.emitter.utility_shapes import UtilityInfo, classify_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import ResolvedBlock
 
@@ -239,21 +238,76 @@ def _emit_write_file(
     return fdef.source, fdef.call_site
 
 
+def _utility_argv_expr(argv: tuple[str, ...]) -> PyExpr:
+    return PyExpr.list_of([python_literal_for_option(token) for token in argv])
+
+
+def _build_utility_call(info: UtilityInfo) -> CallSpec | None:
+    if info.shape in {"run-python-script", "bat-file", "exe-direct"}:
+        return emit_call(ExternalProcess.run, _utility_argv_expr(info.argv))
+
+    if info.shape in {"robocopy"}:
+        # RoboCopy/SPFCopy argv: <exe> <filename> <source_dir> <dest_dir> [flags...]
+        filename = (
+            python_literal_for_option(info.argv[1])
+            if len(info.argv) > 1
+            else PyExpr.literal("")
+        )
+        src_dir = (
+            python_literal_for_option(info.argv[2])
+            if len(info.argv) > 2
+            else PyExpr.literal("")
+        )
+        dst = (
+            python_literal_for_option(info.argv[3])
+            if len(info.argv) > 3
+            else PyExpr.literal(".")
+        )
+        src = PyExpr.raw(f"os.path.join({src_dir.source}, {filename.source})")
+        return emit_call(FileSystemOps.copy, src=src, dst=dst)
+    if info.shape in {"spf-copy"}:
+        src = (
+            python_literal_for_option(info.argv[1])
+            if len(info.argv) > 1
+            else PyExpr.literal("")
+        )
+        dst = (
+            python_literal_for_option(info.argv[2])
+            if len(info.argv) > 2
+            else PyExpr.literal("")
+        )
+        filename = info.argv[1].split("\\")[-1]
+        src = PyExpr.raw(f"os.path.join({src_dir.source}, {filename.source})")
+        return emit_call(FileSystemOps.copy, src=src, dst=dst)
+
+    if info.shape == "spf-delete":
+        # SPFDelete arg[1] is a comma-joined path list.
+        raw = info.argv[1] if len(info.argv) > 1 else ""
+        items = [p.strip() for p in raw.split(",") if p.strip()]
+        paths_expr = PyExpr.list_of([python_literal_for_option(p) for p in items])
+        return emit_call(FileSystemOps.delete, paths=paths_expr)
+
+    # Email and unknown shapes are not translated yet.
+    return None
+
+
 def _emit_utility(
     ctx: EmitContext, block: ResolvedBlock, dispatched: DispatchedBlock | None
 ) -> tuple[str, str]:
     """Emit a utility call by dispatching on its classified shape."""
     utilities_str = block.resolved_options.lookup.get("UTILITIES", "")
     shape_info = classify_utility(utilities_str)
-    result = build_shape_result(shape_info)
+    call = _build_utility_call(shape_info)
 
     func_name = FunctionDef.name_for(block, "utility")
-    if result.call is not None:
-        register_call_embed(ctx, result.call)
-        fdef = FunctionDef.from_call(func_name, result.call)
+    if call is not None:
+        register_call_embed(ctx, call)
+        fdef = FunctionDef.from_call(func_name, call)
     else:
-        message = result.stub_message or f"unhandled utility shape={shape_info.shape}"
-        fdef = FunctionDef.from_body(func_name, [f"pass  # TODO: {message}"])
+        fdef = FunctionDef.from_body(
+            func_name,
+            [f"pass  # TODO: utility shape not translated: {shape_info.shape}"],
+        )
     return fdef.source, fdef.call_site
 
 

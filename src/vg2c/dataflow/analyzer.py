@@ -14,6 +14,7 @@ from vg2c.dataflow.models import (
     ProducerRecord,
     ScopeRelation,
 )
+from vg2c.dataflow.sql_macro_expander import expand_sql_macros
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -28,10 +29,17 @@ _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    diagnostics: list[Diagnostic] = list(resolved.diagnostics)
-    blocks = list(resolved.blocks)
+    expanded_blocks, sql_macro_diags = expand_sql_macros(list(resolved.blocks))
+    expanded_resolved = ResolvedProgram(
+        blocks=tuple(expanded_blocks),
+        scope_tree=resolved.scope_tree,
+        diagnostics=tuple([*resolved.diagnostics, *sql_macro_diags]),
+    )
+
+    diagnostics: list[Diagnostic] = list(expanded_resolved.diagnostics)
+    blocks = list(expanded_resolved.blocks)
     block_by_index = {block.parsed.index: block for block in blocks}
-    scope_rel = _ScopeRelations(resolved.scope_tree)
+    scope_rel = _ScopeRelations(expanded_resolved.scope_tree)
 
     explicit_producers = _collect_explicit_producers(blocks, scope_rel)
     utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
@@ -138,7 +146,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
     producers_map = {k: tuple(v) for k, v in producers_by_path.items()}
     return AnalyzedProgram(
-        resolved=resolved,
+        resolved=expanded_resolved,
         producers=tuple(explicit_producers),
         producers_by_path=MappingProxyType(producers_map),
         consumers=tuple(consumers),

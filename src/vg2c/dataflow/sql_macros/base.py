@@ -4,10 +4,9 @@ To add support for a new SQL macro (e.g. SQL_Time_Range):
 1. Create a new file sql_time_range.py in this package.
 2. Subclass SqlMacroHandler, set name = "SQL_Time_Range".
 3. Implement build_call() to parse arguments and return MacroExpansion or MacroParseError.
-4. Implement emit_runtime_call() to generate Python code for runtime execution.
-5. In sql_macros/__init__.py, import your handler class and add an instance to the HANDLERS tuple.
+4. In sql_macros/__init__.py, import your handler class and add an instance to the HANDLERS tuple.
 
-No edits to sql_macro_expander.py are required.
+No edits to dataflow/sql_macro_expander.py are required.
 """
 
 from __future__ import annotations
@@ -37,9 +36,8 @@ class MacroParseError:
 class SqlMacroHandler(ABC):
     """Base class for SQL macro handlers.
 
-    Each handler is responsible for:
-    - Parsing SQL macro call arguments into a structured SqlMacroCall.
-    - Emitting the Python runtime code that executes the macro.
+    Each handler is responsible for parsing SQL macro call arguments into a
+    structured SqlMacroCall.
     """
 
     name: str
@@ -48,7 +46,6 @@ class SqlMacroHandler(ABC):
     def build_call(
         self,
         args: list[str],
-        placeholder: str,
         span: SourceSpan,
         before_text: str,
     ) -> MacroExpansion | MacroParseError:
@@ -56,24 +53,11 @@ class SqlMacroHandler(ABC):
 
         Args:
             args: List of argument strings extracted from the SQL call.
-            placeholder: Unique placeholder string (e.g. "@@SQLMACRO:0@@").
             span: Source location of the containing block.
             before_text: Text preceding the macro call site (for context-sensitive parsing).
 
         Returns:
             MacroExpansion on success, MacroParseError on failure.
-        """
-        ...
-
-    @abstractmethod
-    def emit_runtime_call(self, call: SqlMacroCall) -> str:
-        """Generate Python code that executes this macro at runtime.
-
-        Args:
-            call: The parsed SqlMacroCall from build_call.
-
-        Returns:
-            Python expression string (typically a function call).
         """
         ...
 

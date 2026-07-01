@@ -13,9 +13,8 @@ This module consolidates every emitter/runtime macro concern in one place:
   compile-time rewriting used by the emitter to lower placeholders to
   ``ctx.macro.named(...)`` / ``ctx.macro.positional()`` expressions.
 
-Compile-stage *discovery* of placeholders (scope-aware analysis producing
-``RuntimeMacroRef`` metadata) lives in :mod:`vg2c.resolver.macro_resolver`
-because it is part of an earlier pipeline stage.
+Compile-stage discovery of placeholders is intentionally lightweight now.
+Emitter lowering handles placeholder token rewriting directly.
 """
 
 from __future__ import annotations

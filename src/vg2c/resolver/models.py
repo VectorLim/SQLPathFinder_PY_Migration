@@ -93,7 +93,6 @@ class SqlGetCsvListCall:
     csv_path: str
     column_ref: int | str
     lead_in: str
-    placeholder: str
     source_span: SourceSpan
 
     def consumed_csv_paths(self) -> tuple[str, ...]:
@@ -106,22 +105,12 @@ SqlMacroCall = SqlGetCsvListCall
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeMacroRef:
-    name: str
-    frame_id: int
-    location: Literal["option-value", "body", "utility-string"]
-    option_key: str | None
-    source_span: SourceSpan
-
-
-@dataclass(frozen=True, slots=True)
 class ResolvedBlock:
     parsed: ParsedBlock
     kind: Kind
     resolved_options: BlockOptions
     resolved_body: str
     sql_macro_calls: tuple[SqlMacroCall, ...]
-    runtime_macro_refs: tuple[RuntimeMacroRef, ...]
     control_payload: MacroControlPayload | None
     scope_id: int
 
@@ -130,6 +119,4 @@ class ResolvedBlock:
 class ResolvedProgram:
     blocks: tuple[ResolvedBlock, ...]
     scope_tree: ScopeNode
-    csv_producers: Mapping[str, int]
-    csv_consumers: Mapping[str, tuple[int, ...]]
     diagnostics: tuple[Diagnostic, ...]

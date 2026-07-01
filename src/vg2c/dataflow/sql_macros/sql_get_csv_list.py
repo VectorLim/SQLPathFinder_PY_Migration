@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 
 from vg2c.frontend.models import SourceSpan
-from vg2c.resolver.models import SqlGetCsvListCall, SqlMacroCall
-from vg2c.resolver.sql_macros.base import (
+from vg2c.resolver.models import SqlGetCsvListCall
+from vg2c.dataflow.sql_macros.base import (
     MacroExpansion,
     MacroParseError,
     SqlMacroHandler,
@@ -15,7 +15,7 @@ from vg2c.resolver.sql_macros.base import (
 )
 
 # Detects the `(<col> In ` wrap that some VG2 scripts put before
-# SQL_Get_CSV_List(...) — an unmatched `(` that relies on the macro expansion
+# SQL_Get_CSV_List(...) - an unmatched `(` that relies on the macro expansion
 # to close it. Anchored to the end of before_text.
 _CALL_SITE_WRAP_RE = re.compile(r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE)
 
@@ -28,7 +28,6 @@ class SqlGetCsvListHandler(SqlMacroHandler):
     def build_call(
         self,
         args: list[str],
-        placeholder: str,
         span: SourceSpan,
         before_text: str,
     ) -> MacroExpansion | MacroParseError:
@@ -47,7 +46,6 @@ class SqlGetCsvListHandler(SqlMacroHandler):
             csv_path=csv_path_raw,
             column_ref=column_ref,
             lead_in=lead_in,
-            placeholder=placeholder,
             source_span=span,
         )
 
@@ -58,13 +56,4 @@ class SqlGetCsvListHandler(SqlMacroHandler):
         return MacroExpansion(
             call=call,
             appended_text=appended,
-        )
-
-    def emit_runtime_call(self, call: SqlMacroCall) -> str:
-        """Emit Python code: ctx.sql_macros.sql_get_csv_list(...)."""
-        # NOTE: Implementation deferred; emitter currently handles this in
-        # src/vg2c/emitter/handlers.py::_sql_macro_expr. When emitter adopts
-        # handler-based dispatch, this will become the source of truth.
-        raise NotImplementedError(
-            f"emit_runtime_call for {self.name} is not yet integrated into the emitter."
         )

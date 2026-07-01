@@ -8,7 +8,7 @@ from vg2c.frontend.models import (
     SourceSpan,
 )
 from vg2c.resolver.macro_resolver import resolve_macros
-from vg2c.resolver.models import RowsInFile
+from vg2c.resolver.models import IfThen, RowsInFile, RunLoop, StartMacro
 from vg2c.resolver.scope_builder import build_scope_tree
 
 
@@ -28,88 +28,78 @@ def _block(
     return ClassifiedBlock(parsed=parsed, kind=kind, reason="test")
 
 
-def test_named_placeholder_binds_to_enclosing_macro_frame() -> None:
+def test_start_macro_payload_is_parsed() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "config.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "run <<<SFOLDER>>>"}),
+        _block(1, Kind.UTILITY, {"UTILITIES": "echo run"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     tree, _ = build_scope_tree(blocks)
-    resolved, _, _, diags = resolve_macros(blocks, tree)
-    assert not [d for d in diags if d.code == "unbound-macro-var"]
+    resolved, _ = resolve_macros(blocks, tree)
 
-    refs = resolved[1].runtime_macro_refs
-    assert len(refs) == 1
-    assert refs[0].name == "SFOLDER"
-    assert refs[0].frame_id != -1
+    payload = resolved[0].control_payload
+    assert isinstance(payload, StartMacro)
+    assert payload.csv_path == "config.csv"
+    assert payload.prompt_off is False
 
 
-def test_same_name_in_sibling_macros_uses_distinct_frame_ids() -> None:
+def test_if_then_payload_is_parsed() -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "<<<X>>>"}),
-        _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
-        _block(3, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "b.csv" "N"'}),
-        _block(4, Kind.UTILITY, {"UTILITIES": "<<<X>>>"}),
-        _block(5, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
-    ]
-    tree, _ = build_scope_tree(blocks)
-    resolved, _, _, _ = resolve_macros(blocks, tree)
-
-    assert (
-        resolved[1].runtime_macro_refs[0].frame_id
-        != resolved[4].runtime_macro_refs[0].frame_id
-    )
-
-
-def test_case_insensitive_named_resolution() -> None:
-    blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
         _block(
-            1,
-            Kind.WRITE_FILE,
-            {"WRITE-FILE": "Y"},
-            body="<<<sfolder>>> <<<SFOLDER>>> <<<SFolder>>>",
-        ),
-        _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
+            0,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{IF-THEN} "A" "EQS" "B" "AND" "C" "NE" "D"'},
+        )
     ]
     tree, _ = build_scope_tree(blocks)
-    resolved, _, _, _ = resolve_macros(blocks, tree)
-    names = [r.name for r in resolved[1].runtime_macro_refs]
-    assert names == ["SFOLDER", "SFOLDER", "SFOLDER"]
-    assert all(r.frame_id != -1 for r in resolved[1].runtime_macro_refs)
+    resolved, _ = resolve_macros(blocks, tree)
+
+    payload = resolved[0].control_payload
+    assert isinstance(payload, IfThen)
+    assert payload.lhs == "A"
+    assert payload.op == "EQS"
+    assert payload.rhs == "B"
+    assert payload.conj == "AND"
+    assert payload.lhs2 == "C"
+    assert payload.op2 == "NE"
+    assert payload.rhs2 == "D"
 
 
-def test_rows_in_file_payload_present_but_no_scope_push() -> None:
+def test_rows_in_file_payload_present() -> None:
     blocks = [
         _block(
             0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "f.csv" "COUNT" "N"'}
-        ),
-        _block(1, Kind.UTILITY, {"UTILITIES": "echo <<<COUNT>>>"}),
+        )
     ]
     tree, _ = build_scope_tree(blocks)
-    resolved, _, _, _ = resolve_macros(blocks, tree)
+    resolved, _ = resolve_macros(blocks, tree)
     assert isinstance(resolved[0].control_payload, RowsInFile)
-    assert resolved[1].runtime_macro_refs[0].frame_id == 0
 
 
-def test_unbound_macro_var_emits_warning() -> None:
-    blocks = [_block(0, Kind.UTILITY, {"UTILITIES": "echo <<<MISSING>>>"})]
+def test_run_loop_payload_is_parsed() -> None:
+    blocks = [
+        _block(
+            0,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "123" "N"'},
+        )
+    ]
     tree, _ = build_scope_tree(blocks)
-    resolved, _, _, diags = resolve_macros(blocks, tree)
-    assert resolved[0].runtime_macro_refs[0].frame_id == -1
-    assert any(d.code == "unbound-macro-var" for d in diags)
+    resolved, _ = resolve_macros(blocks, tree)
+    payload = resolved[0].control_payload
+    assert isinstance(payload, RunLoop)
+    assert payload.input_csv_path == "in.csv"
+    assert payload.chunk_csv_path == "chunk.csv"
+    assert payload.chunk_size == 123
+    assert payload.prompt_off is False
 
 
-def test_positional_placeholder_cursor_advances() -> None:
+def test_scope_id_assigned_for_every_block() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "<<>> <<>>"}),
+        _block(1, Kind.UTILITY, {"UTILITIES": "echo hello"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     tree, _ = build_scope_tree(blocks)
-    resolved, _, _, _ = resolve_macros(blocks, tree)
-    refs = resolved[1].runtime_macro_refs
-    assert len(refs) == 2
-    assert all(r.name == "__POSITIONAL__" for r in refs)
-    assert all(r.frame_id != -1 for r in refs)
+    resolved, _ = resolve_macros(blocks, tree)
+    assert all(block.scope_id >= 0 for block in resolved)
