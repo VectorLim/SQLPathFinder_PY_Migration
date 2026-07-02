@@ -1,46 +1,45 @@
 """Reader runtime injected into emitted pipeline scripts.
 
-The runtime is registered with :func:`register_utility` so emitter embedding
-uses the same registry-driven flow as other utilities.
-
-The runtime relies on ``macro_state.substitute_sql(sql)`` (provided by
-:class:`vg2c.emitter.macro.MacroState`) so SQL placeholder substitution
-stays owned by the macro subsystem.
-
-To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` below
-and add the matching ``datasyncx`` Reader import alongside the others below.
+To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` in
+``ReaderRuntime`` and add the matching ``datasyncx`` reader import.
 """
 
 from __future__ import annotations
 
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._registry import register_utility
 
 
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
 
-# DATABASE_TYPE_MAP is the single extension point for adding a new database
-# type: map the /ENGINE= identifier used in the VG2 source to a datasyncx
-# Reader subclass. ``read`` below dispatches to it.
-DATABASE_TYPE_MAP = {
-    "MARS": MarsReader,
-    "OASYS": OracleReader,
-    "ARIES": AriesReader,
-}
 
+@register_utility
+class ReaderRuntime(UtilitySpec):
+    utility_name = "reader_runtime"
+    utility_imports = (
+        "from datasyncx.readers import AriesReader, MarsReader, OracleReader",
+    )
+    DATABASE_TYPE_MAP = {
+        "MARS": MarsReader,
+        "OASYS": OracleReader,
+        "ARIES": AriesReader,
+    }
 
-@register_utility("reader_runtime")
-def read(sql, db_type, macro_state=None):
-    """Run *sql* against the Reader registered for *db_type*.
+    @classmethod
+    def emit(
+        cls,
+        ctx,
+        block,
+        dispatched,
+    ) -> tuple[str, str]:
+        raise NotImplementedError("ReaderRuntime has no direct block emitter")
 
-    ``macro_state`` (when given) substitutes ``<<<NAME>>>`` macro
-    placeholders that survive into the SQL body via its own
-    ``substitute_sql`` helper.
-    """
-    if macro_state is not None:
-        sql = macro_state.substitute_sql(sql)
-    if db_type not in DATABASE_TYPE_MAP:
-        raise ValueError(f"Unsupported database type: {db_type!r}")
-    result = DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
-    result.columns = [col.lower() for col in result.columns]
-
-    return result
+    def read(self, sql, db_type, macro_state=None):
+        """Run *sql* against the Reader registered for *db_type*."""
+        if macro_state is not None:
+            sql = macro_state.substitute_sql(sql)
+        if db_type not in self.DATABASE_TYPE_MAP:
+            raise ValueError(f"Unsupported database type: {db_type!r}")
+        result = self.DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
+        result.columns = [col.lower() for col in result.columns]
+        return result

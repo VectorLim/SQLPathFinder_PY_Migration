@@ -8,20 +8,30 @@ from typing import Any, Iterator
 
 import pandas
 
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._registry import register_utility
 
 
-@register_utility(
-    "csv_io",
-    imports=(
+@register_utility
+class CsvIO(UtilitySpec):
+    """Read and write CSV files relative to ``cwd``."""
+
+    utility_name = "csv_io"
+    utility_imports = (
         "import csv",
         "from pathlib import Path",
         "from typing import Any, Iterator",
         "import pandas",
-    ),
-)
-class CsvIO:
-    """Read and write CSV files relative to ``cwd``."""
+    )
+
+    @classmethod
+    def emit(
+        cls,
+        ctx,
+        block,
+        dispatched,
+    ) -> tuple[str, str]:
+        raise NotImplementedError("CsvIO has no direct block emitter")
 
     # ------------------------------------------------------------------
     # Read

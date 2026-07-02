@@ -124,10 +124,9 @@ def register_call_embed(ctx, *specs: CallSpec) -> None:
     """
     if ctx is None:
         return
-    # Import locally to avoid an import cycle: utilities_embed imports the
-    # registry, and the registry would otherwise import the embed helpers.
-    from vg2c.emitter.utilities_embed import register_utility_emission
+    # Import locally to avoid an import cycle with utility modules.
+    from vg2c.emitter.utilities import require_utility
 
     keys = tuple(s.embed_key for s in specs if s.embed_key)
     if keys:
-        register_utility_emission(ctx, *keys)
+        require_utility(ctx, *keys)

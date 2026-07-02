@@ -5,54 +5,61 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._registry import register_utility
 
 
-def _read_column(path: str, column_ref: int | str) -> list[str]:
-    """Extract unique values from a CSV column (1-based index or header name)."""
-    rows: list[str] = []
-    with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
-        reader = csv.reader(fh)
-        header = next(reader, [])
+@register_utility
+class SqlMacros(UtilitySpec):
+    """SQL macro expansion helpers used by emitted scripts."""
 
-        header_str = [str(h) for h in header]
-
-        if isinstance(column_ref, int):
-            idx = column_ref - 1
-        else:
-            col_lower = [h.lower() for h in header]
-            try:
-                idx = col_lower.index(column_ref.lower())
-            except ValueError:
-                return []
-
-        seen: dict[str, None] = {}
-        for row in reader:
-            if [str(v) for v in row] == header_str:
-                continue
-
-            if idx < len(row):
-                val = row[idx]
-                if val not in seen:
-                    seen[val] = None
-                    rows.append(val)
-
-    return rows
-
-
-def _single_quote(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-@register_utility(
-    "sql_macros",
-    imports=(
+    utility_name = "sql_macros"
+    utility_imports = (
         "import csv",
         "from pathlib import Path",
-    ),
-)
-class SqlMacros:
-    """SQL macro expansion helpers used by emitted scripts."""
+    )
+
+    @classmethod
+    def emit(
+        cls,
+        ctx,
+        block,
+        dispatched,
+    ) -> tuple[str, str]:
+        raise NotImplementedError("SqlMacros has no direct block emitter")
+
+    @staticmethod
+    def _read_column(path: str, column_ref: int | str) -> list[str]:
+        rows: list[str] = []
+        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, [])
+            header_str = [str(h) for h in header]
+
+            if isinstance(column_ref, int):
+                idx = column_ref - 1
+            else:
+                col_lower = [h.lower() for h in header]
+                try:
+                    idx = col_lower.index(column_ref.lower())
+                except ValueError:
+                    return []
+
+            seen: dict[str, None] = {}
+            for row in reader:
+                if [str(v) for v in row] == header_str:
+                    continue
+                if idx < len(row):
+                    val = row[idx]
+                    if val not in seen:
+                        seen[val] = None
+                        rows.append(val)
+
+        return rows
+
+    @staticmethod
+    def _single_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
         """Return chunked IN-list clause for Oracle-style SQL.
@@ -60,7 +67,7 @@ class SqlMacros:
         Oracle hard-limits IN lists to 1000 values. When there are more, the
         result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
         """
-        values = _read_column(path, column_ref)
+        values = self._read_column(path, column_ref)
         if not values:
             return "('__NO_VALUES__')"
 
@@ -68,7 +75,7 @@ class SqlMacros:
         chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
         parts: list[str] = []
         for i, chunk in enumerate(chunks):
-            quoted = ", ".join(_single_quote(v) for v in chunk)
+            quoted = ", ".join(self._single_quote(v) for v in chunk)
             parts.append(f"({quoted})")
             if i < len(chunks) - 1:
                 parts.append(f"\nOR {lead_in} ")
