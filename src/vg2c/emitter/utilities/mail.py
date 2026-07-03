@@ -7,7 +7,6 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
-from vg2c.emitter.codegen import FunctionDef
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._registry import register_utility
 
@@ -24,19 +23,6 @@ class MailService(UtilitySpec):
         "from pathlib import Path",
     )
     utility_command_contains = (("email", ("email", "sqlpathfinder_email")),)
-
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        fdef = FunctionDef.from_body(
-            FunctionDef.name_for(block, "utility"),
-            ["pass  # TODO: utility shape not translated: email"],
-        )
-        return fdef.source, fdef.call_site
 
     def send(
         self,

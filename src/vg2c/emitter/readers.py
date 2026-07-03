@@ -25,15 +25,6 @@ class ReaderRuntime(UtilitySpec):
         "ARIES": AriesReader,
     }
 
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        raise NotImplementedError("ReaderRuntime has no direct block emitter")
-
     def read(self, sql, db_type, macro_state=None):
         """Run *sql* against the Reader registered for *db_type*."""
         if macro_state is not None:

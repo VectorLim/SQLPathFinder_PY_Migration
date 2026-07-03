@@ -10,8 +10,9 @@ from vg2c.emitter.utilities._registry import (
     UTILITY_IMPORTS,
     assemble_registered_utilities,
     classify_utility_command,
+    emit_block,
     get_registered_source,
-    require_utility,
+    mark_utility_used,
     register_utility,
 )
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
@@ -31,8 +32,9 @@ __all__ = [
     "UTILITY_IMPORTS",
     "assemble_registered_utilities",
     "classify_utility_command",
+    "emit_block",
     "get_registered_source",
-    "require_utility",
+    "mark_utility_used",
     "register_utility",
     "CrosstabUtility",
     "CsvIO",

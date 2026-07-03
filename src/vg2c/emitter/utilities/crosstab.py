@@ -18,15 +18,6 @@ class CrosstabUtility(UtilitySpec):
         "import pandas as pd",
     )
 
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        raise NotImplementedError("CrosstabUtility has no direct block emitter")
-
     def apply(
         self,
         rows: pd.DataFrame,

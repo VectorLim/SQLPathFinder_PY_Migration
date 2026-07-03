@@ -7,10 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Protocol
 
-from vg2c.emitter.codegen import FunctionDef, PyExpr, emit_call
-from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import require_utility, register_utility
+from vg2c.emitter.utilities._registry import register_utility
 
 
 class MacroLookup(Protocol):
@@ -38,30 +36,6 @@ class MacroState(UtilitySpec):
     CROSSTAB_RE = re.compile(
         r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\]|CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\],)"
     )
-
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        payload = block.control_payload
-        require_utility(ctx, "csv_io", "macro")
-        row_count_call = emit_call(
-            CsvIO.row_count,
-            PyExpr.literal(payload.csv_path),
-        )
-        set_named_call = emit_call(
-            MacroState.set_named,
-            PyExpr.literal(payload.var_name.upper()),
-            PyExpr.raw(f"str({row_count_call.render()})"),
-        )
-        fdef = FunctionDef.from_call(
-            f"step_{block.parsed.index:04d}_rows_in_file",
-            set_named_call,
-        )
-        return fdef.source, fdef.call_site
 
     @staticmethod
     def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:

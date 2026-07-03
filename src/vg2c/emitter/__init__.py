@@ -4,7 +4,7 @@ from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmitContext, EmittedScript, IndentWriter
 from vg2c.emitter.utilities import (
     assemble_registered_utilities,
-    require_utility,
+    mark_utility_used,
 )
 from vg2c.emitter.walker import walk_and_emit
 from vg2c.frontend.models import Diagnostic
@@ -26,7 +26,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)
 
     # Always include ctx (PipelineContext) in the emitted script
-    require_utility(ctx, "ctx")
+    mark_utility_used(ctx, "ctx")
 
     # Assemble embedded utility classes.
     utility_imports, utility_sources = assemble_registered_utilities(ctx)

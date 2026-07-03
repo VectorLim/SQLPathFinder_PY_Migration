@@ -37,15 +37,6 @@ class SqliteEngine(UtilitySpec):
         re.DOTALL,
     )
 
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        raise NotImplementedError("SqliteEngine has no direct block emitter")
-
     @staticmethod
     def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
         by_alias: dict[str, set[str]] = {}

@@ -3,25 +3,24 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.codegen import (
-    PyExpr,
-    emit_call,
-)
 from vg2c.emitter.macro import (
     NAMED_PLACEHOLDER_RE,
     macro_token_to_python_expr,
 )
 from vg2c.emitter.models import EmitContext, IndentWriter
-from vg2c.emitter.utilities import CsvIO, MacroState, PipelineContext
-from vg2c.emitter.utilities import require_utility
+from vg2c.emitter.semtypes import RawExpr
+from vg2c.emitter.utilities._registry import (
+    emit_block,
+    mark_utility_used,
+    render_method_call,
+)
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
-    IfThen,
     ResolvedBlock,
-    RowsInFile,
     RunLoop,
     ScopeNode,
     StartMacro,
+    IfThen,
 )
 
 __all__ = ["walk_and_emit"]
@@ -154,16 +153,25 @@ def _walk_scope(
         if isinstance(payload, StartMacro):
             row_iter = bool(payload.csv_path)
             if row_iter:
-                require_utility(ctx, "csv_io", "macro")
-                iter_call = emit_call(CsvIO.iter, PyExpr.literal(payload.csv_path))
-                scope_call = emit_call(PipelineContext.macro_scope, PyExpr.raw("__row"))
-                writer.write(f"for __row in {iter_call.render()}:")
+                iter_call = render_method_call(
+                    ctx,
+                    "csv_io",
+                    "iter",
+                    args=(payload.csv_path,),
+                )
+                scope_call = render_method_call(
+                    ctx,
+                    "ctx",
+                    "macro_scope",
+                    args=(RawExpr("__row"),),
+                )
+                writer.write(f"for __row in {iter_call}:")
                 writer.push_indent()
-                writer.write(f"with {scope_call.render()}:")
+                writer.write(f"with {scope_call}:")
                 writer.push_indent()
             else:
-                scope_call = emit_call(PipelineContext.macro_scope)
-                writer.write(f"with {scope_call.render()}:")
+                mark_utility_used(ctx, "ctx")
+                writer.write("with ctx.macro_scope():")
                 writer.push_indent()
             for child in node.children:
                 _walk_scope(
@@ -183,14 +191,17 @@ def _walk_scope(
         # {RUN-LOOP}: emit a chunked for-loop over the input CSV.
         payload = node.control_payload
         if isinstance(payload, RunLoop):
-            require_utility(ctx, "csv_io", "macro")
-            chunks_call = emit_call(
-                CsvIO.iter_chunks,
-                PyExpr.literal(payload.input_csv_path),
-                PyExpr.literal(payload.chunk_csv_path),
-                PyExpr.literal(int(payload.chunk_size)),
+            chunks_call = render_method_call(
+                ctx,
+                "csv_io",
+                "iter_chunks",
+                args=(
+                    payload.input_csv_path,
+                    payload.chunk_csv_path,
+                    int(payload.chunk_size),
+                ),
             )
-            writer.write(f"for __chunk_path in {chunks_call.render()}:")
+            writer.write(f"for __chunk_path in {chunks_call}:")
             writer.push_indent()
             for child in node.children:
                 _walk_scope(
@@ -272,24 +283,11 @@ def _walk_scope(
         if block is None:
             return
 
-        if block.kind is Kind.MACRO_CONTROL:
-            payload = block.control_payload
-            if isinstance(payload, RowsInFile):
-                func_code, call_site = MacroState.emit(ctx, block, None)
-                functions.append(func_code)
-                writer.write(call_site)
-            return
-
-        # Find dispatch metadata
-        dispatched_block = None
-        for db in dispatched.dispatched:
-            if db.block_index == block_index:
-                dispatched_block = db
-                break
+        dispatched_block = ctx.dispatch_map.get(block_index)
 
         # Emit the function
         try:
-            func_code, call_site = PipelineContext.emit(ctx, block, dispatched_block)
+            func_code, call_site = emit_block(ctx, block, dispatched_block)
             functions.append(func_code)
             writer.write(call_site)
         except Exception as exc:

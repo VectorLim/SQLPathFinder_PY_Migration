@@ -19,15 +19,6 @@ class SqlMacros(UtilitySpec):
         "from pathlib import Path",
     )
 
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        raise NotImplementedError("SqlMacros has no direct block emitter")
-
     @staticmethod
     def _read_column(path: str, column_ref: int | str) -> list[str]:
         rows: list[str] = []

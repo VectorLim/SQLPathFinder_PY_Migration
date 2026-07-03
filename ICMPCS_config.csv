@@ -1,0 +1,9 @@
+ICMPCS,Parameter,Value,Remarks
+ICMPCS,dEmail,kuat.dxa.csr@intel.com,PDL for CSR notification
+ICMPCS,dCSR,Y,Enable CSR (Y or N)?
+ICMPCS,dMST,N,Enable MST (Y or N)?
+ICMPCS,dMWF,Y,Enable MWF (Y or N)?
+ICMPCS,dCCB,2020.27.AT Integrated CCB .6.FWP.40,CCB number
+ICMPCS,dHNote,DLA CSR hold!,Hold note that limited to only 35 characters; followed by #xx where xx is the registered ID from ICMPCS
+ICMPCS,dHCat,AE,Hold for what HDR user group to dispose the lot (e.g. AE, TE, QRE, MFG)
+ICMPCS,dSubject,Alert: DLA Subplane CSR Hold,Email subject for CSR triggering

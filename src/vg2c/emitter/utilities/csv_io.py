@@ -24,15 +24,6 @@ class CsvIO(UtilitySpec):
         "import pandas",
     )
 
-    @classmethod
-    def emit(
-        cls,
-        ctx,
-        block,
-        dispatched,
-    ) -> tuple[str, str]:
-        raise NotImplementedError("CsvIO has no direct block emitter")
-
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
