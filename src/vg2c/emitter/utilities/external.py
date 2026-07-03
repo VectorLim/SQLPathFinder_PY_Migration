@@ -6,7 +6,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.semtypes import RawExpr, option_to_python_expr
+from vg2c.emitter.utilities._base import UtilityShape, UtilitySpec
+from vg2c.emitter.utilities._emit_helpers import render_method_call
 from vg2c.emitter.utilities._registry import register_utility
 
 
@@ -20,11 +22,17 @@ class ExternalProcess(UtilitySpec):
         "import subprocess",
         "from pathlib import Path",
     )
-    utility_command_contains = (("run-python-script", ("run_python_script",)),)
-    utility_command_suffixes = (
-        ("bat-file", (".bat",)),
-        ("exe-direct", (".exe",)),
-    )
+
+    @classmethod
+    def _emit_run(cls, ctx, argv: list[str]) -> str:
+        expr_items = [option_to_python_expr(token) for token in argv]
+        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
+        return render_method_call(
+            ctx,
+            "external",
+            "run",
+            kwargs={"argv": argv_expr},
+        )
 
     @staticmethod
     def _resolve_exedir() -> str:
@@ -62,3 +70,22 @@ class ExternalProcess(UtilitySpec):
             shell=use_shell,
         )
         return result.returncode
+
+
+ExternalProcess.utility_shapes = (
+    UtilityShape(
+        name="run-python-script",
+        contains=("run_python_script",),
+        emit=ExternalProcess._emit_run,
+    ),
+    UtilityShape(
+        name="bat-file",
+        suffixes=(".bat",),
+        emit=ExternalProcess._emit_run,
+    ),
+    UtilityShape(
+        name="exe-direct",
+        suffixes=(".exe",),
+        emit=ExternalProcess._emit_run,
+    ),
+)

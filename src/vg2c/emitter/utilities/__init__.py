@@ -4,13 +4,13 @@ All classes in this package are registered for emission into the final
 generated Python script via the `register_utility` decorator.
 """
 
+from vg2c.emitter.utilities._emit_helpers import emit_block
 from vg2c.emitter.utilities._registry import (
     UTILITIES,
     UTILITY_DEPENDENCIES,
     UTILITY_IMPORTS,
     assemble_registered_utilities,
     classify_utility_command,
-    emit_block,
     get_registered_source,
     mark_utility_used,
     register_utility,

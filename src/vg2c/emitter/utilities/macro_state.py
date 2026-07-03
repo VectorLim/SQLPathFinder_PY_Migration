@@ -7,8 +7,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Protocol
 
+from vg2c.emitter.semtypes import RawExpr, option_to_python_expr
 from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._emit_helpers import (
+    _emit_step_source,
+    _step_name,
+    render_method_call,
+)
 from vg2c.emitter.utilities._registry import register_utility
+from vg2c.frontend.models import Kind
+from vg2c.resolver.models import RowsInFile
 
 
 class MacroLookup(Protocol):
@@ -24,6 +32,7 @@ class MacroState(UtilitySpec):
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
+    handles = (Kind.MACRO_CONTROL,)
     utility_imports = (
         "import re",
         "from contextlib import contextmanager",
@@ -95,6 +104,28 @@ class MacroState(UtilitySpec):
             return "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
 
         return cls.CROSSTAB_RE.sub(_replace, sql)
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        payload = block.control_payload
+        if not isinstance(payload, RowsInFile):
+            return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
+
+        csv_path_expr = option_to_python_expr(payload.csv_path)
+        set_name = payload.var_name.upper()
+        row_count_call = render_method_call(
+            ctx,
+            "csv_io",
+            "row_count",
+            args=(RawExpr(csv_path_expr),),
+        )
+        stmt = render_method_call(
+            ctx,
+            "macro",
+            "set_named",
+            args=(set_name, RawExpr(f"str({row_count_call})")),
+        )
+        return _emit_step_source(_step_name(block, "rows_in_file"), [stmt])
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]

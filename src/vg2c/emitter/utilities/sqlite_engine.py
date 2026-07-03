@@ -10,8 +10,22 @@ from typing import Callable
 
 import pandas as pd
 
+from vg2c.emitter.semtypes import (
+    Crosstab,
+    Header,
+    OutputPath,
+    SourceType,
+    SqlText,
+    TableInputs,
+)
 from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._emit_helpers import (
+    _emit_step_source,
+    _step_name,
+    render_method_call,
+)
 from vg2c.emitter.utilities._registry import register_utility
+from vg2c.frontend.models import Kind
 
 
 @register_utility
@@ -19,6 +33,7 @@ class SqliteEngine(UtilitySpec):
     """Run SQL joins over CSV files using in-memory SQLite."""
 
     utility_name = "sqlite_engine"
+    handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
     utility_imports = (
         "import csv",
         "import re",
@@ -136,6 +151,45 @@ class SqliteEngine(UtilitySpec):
             for match in cls.STMT_SPLIT_RE.finditer(sql)
             if match.group(0).strip()
         ]
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        sqlite = block.kind is Kind.SQLITE_QUERY
+        return cls._emit_sql(ctx, block, dispatched, sqlite=sqlite)
+
+    @classmethod
+    def _emit_sql(
+        cls,
+        ctx,
+        block,
+        dispatched,
+        *,
+        sqlite: bool,
+    ) -> tuple[str, str]:
+        if dispatched is None:
+            raise ValueError("SQL emission requires dispatch metadata")
+
+        sql = SqlText.extract(block, dispatched)
+        output = OutputPath.extract(block, dispatched)
+        source_type = "sqlite" if sqlite else SourceType.extract(block, dispatched)
+        crosstab = Crosstab.extract(block, dispatched)
+        header = None if crosstab else Header.extract(block, dispatched)
+
+        kwargs: dict[str, object] = {
+            "sql": sql,
+            "output": output,
+            "source_type": source_type,
+        }
+        if sqlite:
+            kwargs["inputs"] = TableInputs.extract(block, dispatched)
+        if header:
+            kwargs["header"] = header
+        if crosstab:
+            kwargs["crosstab"] = crosstab
+
+        stmt = render_method_call(ctx, "ctx", "run_query", kwargs=kwargs)
+        suffix = "sqlite_query" if sqlite else "sql_query"
+        return _emit_step_source(_step_name(block, suffix), [stmt])
 
     def execute(self, sql: str, inputs: list[str]) -> pd.DataFrame:
         conn = sqlite3.connect(":memory:")
