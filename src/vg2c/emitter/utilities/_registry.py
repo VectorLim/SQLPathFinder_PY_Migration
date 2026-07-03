@@ -119,6 +119,7 @@ def classify_utility_command(utilities_string: str) -> UtilityCommandMatch:
         for shape, markers in cls.utility_command_contains:
             if any(marker in basename for marker in markers):
                 return UtilityCommandMatch(shape=shape, argv=argv, utility_cls=cls)
+    for cls in UTILITIES.values():
         for shape, suffixes in cls.utility_command_suffixes:
             if any(basename.endswith(suffix) for suffix in suffixes):
                 return UtilityCommandMatch(shape=shape, argv=argv, utility_cls=cls)
@@ -292,22 +293,39 @@ def _utility_call_for_shape(ctx: Any, match: UtilityCommandMatch) -> str | None:
             kwargs={"argv": argv_expr},
         )
 
-    if shape in {"robocopy", "spf-copy"}:
-        filename = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        src_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
-        dst = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
-        src_expr = RawExpr(f"str(Path({src_dir}) / {filename})")
+    if shape == "robocopy":
+        # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
+        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
+        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
+        dst_expr = RawExpr(dest_dir)
         return render_method_call(
             ctx,
             "fs_ops",
             "copy",
-            kwargs={"src": src_expr, "dst": RawExpr(dst)},
+            kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    if shape == "spf-copy":
+        # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
+        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        src_expr = RawExpr(src)
+        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
+        return render_method_call(
+            ctx,
+            "fs_ops",
+            "copy",
+            kwargs={"src": src_expr, "dst": dst_expr},
         )
 
     if shape == "spf-delete":
         raw = argv[1] if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = RawExpr("[" + ", ".join(option_to_python_expr(p) for p in items) + "]")
+        paths_expr = RawExpr(
+            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        )
         return render_method_call(
             ctx,
             "fs_ops",

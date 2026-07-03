@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,7 @@ class ExternalProcess(UtilitySpec):
 
     utility_name = "external"
     utility_imports = (
+        "import os",
         "import subprocess",
         "from pathlib import Path",
     )
@@ -24,6 +26,24 @@ class ExternalProcess(UtilitySpec):
         ("exe-direct", (".exe",)),
     )
 
+    @staticmethod
+    def _resolve_exedir() -> str:
+        """Return the SPF tools directory from env var VG2C_EXEDIR."""
+        return os.environ.get("VG2C_EXEDIR", "")
+
+    @staticmethod
+    def _resolve_path(path: str) -> str:
+        return os.path.normpath(path)
+
+    @classmethod
+    def _resolve_argv(cls, argv: list[str]) -> list[str]:
+        """Substitute @EXEDIR@ tokens and normalise path-like arguments."""
+        exedir = cls._resolve_exedir()
+        return [
+            cls._resolve_path(a) if os.sep in a else a
+            for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
+        ]
+
     def run(
         self,
         argv: list[str],
@@ -31,10 +51,14 @@ class ExternalProcess(UtilitySpec):
         env: dict | None = None,
         check: bool = False,
     ) -> int:
+        resolved = self._resolve_argv(argv)
+        first = resolved[0] if resolved else ""
+        use_shell = Path(first).suffix.lower() in {".bat", ".va", ".exe"}
         result = subprocess.run(
-            argv,
+            resolved,
             cwd=str(cwd) if cwd else None,
             env=env,
             check=check,
+            shell=use_shell,
         )
         return result.returncode

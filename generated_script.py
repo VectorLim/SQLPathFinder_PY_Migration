@@ -674,6 +674,7 @@ class ExternalProcess:
 
     utility_name = "external"
     utility_imports = (
+        "import os",
         "import subprocess",
         "from pathlib import Path",
     )
@@ -683,6 +684,24 @@ class ExternalProcess:
         ("exe-direct", (".exe",)),
     )
 
+    @staticmethod
+    def _resolve_exedir() -> str:
+        """Return the SPF tools directory from env var VG2C_EXEDIR."""
+        return os.environ.get("VG2C_EXEDIR", "")
+
+    @staticmethod
+    def _resolve_path(path: str) -> str:
+        return os.path.normpath(path)
+
+    @classmethod
+    def _resolve_argv(cls, argv: list[str]) -> list[str]:
+        """Substitute @EXEDIR@ tokens and normalise path-like arguments."""
+        exedir = cls._resolve_exedir()
+        return [
+            cls._resolve_path(a) if os.sep in a else a
+            for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
+        ]
+
     def run(
         self,
         argv: list[str],
@@ -690,11 +709,15 @@ class ExternalProcess:
         env: dict | None = None,
         check: bool = False,
     ) -> int:
+        resolved = self._resolve_argv(argv)
+        first = resolved[0] if resolved else ""
+        use_shell = Path(first).suffix.lower() in {".bat", ".va", ".exe"}
         result = subprocess.run(
-            argv,
+            resolved,
             cwd=str(cwd) if cwd else None,
             env=env,
             check=check,
+            shell=use_shell,
         )
         return result.returncode
 
@@ -816,7 +839,7 @@ def step_0007_utility(ctx) -> None:
     ctx.external.run(argv=['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
 
 def step_0009_utility(ctx) -> None:
-    ctx.external.run(argv=['@EXEDIR@\\SPFDelete.bat', 'macrotmp.csv,getcsrsu.bat,setsiteparam.exe,csrsu.txt', 'N'])
+    ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
 
 def step_0011_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
@@ -861,7 +884,7 @@ def step_0035_utility(ctx) -> None:
     pass  # TODO: utility shape not translated: unknown
 
 def step_0042_utility(ctx) -> None:
-    ctx.external.run(argv=['@EXEDIR@\\SPFCopy.bat', '\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', '.\\', 'N'])
+    ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst=str(Path('.\\') / Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv').name))
 
 def step_0043_sqlite_query(ctx) -> None:
     ctx.run_query(sql='\nSELECT /*L0*/ \n          a0.[site] AS [site]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\nFROM \n[Product_Lookup] a0\n', output='CSR_Server_OIS_Product_List.csv', source_type='sqlite', inputs=['Product_Lookup.csv'], header=['site', 'prodgroup3', 'upper_y_limit', 'lower_y_limit', 'upper_x_limit', 'lower_x_limit'])
