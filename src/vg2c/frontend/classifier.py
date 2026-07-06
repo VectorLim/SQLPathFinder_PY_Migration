@@ -73,6 +73,20 @@ def _rule_macro_control(options: BlockOptions, body: str) -> tuple[Kind, str] | 
 
 
 def _rule_utility(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
+    utilities = options.lookup.get("UTILITIES")
+    if not utilities:
+        return None
+
+    first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
+    basename = first_token.split("/")[-1].split("\\")[-1].lower()
+
+    if "robocopy" in basename or "spfcopy" in basename:
+        return Kind.FS_COPY, "/UTILITIES command maps to FS copy"
+    if "spfdelete" in basename:
+        return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
+    if "run_python_script" in basename or basename.endswith((".bat", ".exe")):
+        return Kind.EXTERNAL_RUN, "/UTILITIES command maps to external run"
+
     if "UTILITIES" in options.lookup:
         return Kind.UTILITY, "/UTILITIES present"
     return None

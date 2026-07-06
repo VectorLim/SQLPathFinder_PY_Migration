@@ -46,15 +46,42 @@ def test_macro_control_rule_for_all_known_tokens() -> None:
         assert not diagnostics
 
 
-def test_utility_rule_for_non_macro_values() -> None:
+def test_external_run_utility_rule_for_non_macro_values() -> None:
     values = (
         '@EXEDIR@\\Run_Python_Script.va "script.py" "" "N" "atd_atm.hadoop" "Python-v3"',
         "getcsrsu.bat",
     )
     for value in values:
         classified, diagnostics = classify([_block({"UTILITIES": value})])
-        assert classified[0].kind is Kind.UTILITY
+        assert classified[0].kind is Kind.EXTERNAL_RUN
         assert not diagnostics
+
+
+def test_fs_copy_utility_rule() -> None:
+    values = (
+        '@EXEDIR@\\RoboCopy.va "a.txt" "src" "dst" "N"',
+        '@EXEDIR@\\SPFCopy.bat "a.txt" "dst"',
+    )
+    for value in values:
+        classified, diagnostics = classify([_block({"UTILITIES": value})])
+        assert classified[0].kind is Kind.FS_COPY
+        assert not diagnostics
+
+
+def test_fs_delete_utility_rule() -> None:
+    classified, diagnostics = classify(
+        [_block({"UTILITIES": '@EXEDIR@\\SPFDelete.bat "a.txt" "N"'})]
+    )
+    assert classified[0].kind is Kind.FS_DELETE
+    assert not diagnostics
+
+
+def test_email_utility_falls_back_to_generic_utility_kind() -> None:
+    classified, diagnostics = classify(
+        [_block({"UTILITIES": '@EXEDIR@\\SQLPathFinder_Email.va "to" "sub" "body"'})]
+    )
+    assert classified[0].kind is Kind.UTILITY
+    assert not diagnostics
 
 
 def test_sqlite_rule_for_oledb_or_engine() -> None:

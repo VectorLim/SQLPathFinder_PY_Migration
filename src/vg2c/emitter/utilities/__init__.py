@@ -10,7 +10,6 @@ from vg2c.emitter.utilities._registry import (
     UTILITY_DEPENDENCIES,
     UTILITY_IMPORTS,
     assemble_registered_utilities,
-    classify_utility_command,
     get_registered_source,
     mark_utility_used,
     register_utility,
@@ -19,6 +18,7 @@ from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities.external import ExternalProcess
 from vg2c.emitter.utilities.fs_ops import FileSystemOps
+from vg2c.emitter.utilities.kind_enum import KindEnum
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
@@ -31,7 +31,6 @@ __all__ = [
     "UTILITY_DEPENDENCIES",
     "UTILITY_IMPORTS",
     "assemble_registered_utilities",
-    "classify_utility_command",
     "emit_block",
     "get_registered_source",
     "mark_utility_used",
@@ -40,6 +39,7 @@ __all__ = [
     "CsvIO",
     "ExternalProcess",
     "FileSystemOps",
+    "KindEnum",
     "MacroState",
     "MailService",
     "PipelineContext",

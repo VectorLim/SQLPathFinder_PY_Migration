@@ -7,13 +7,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Protocol
 
-from vg2c.emitter.semtypes import RawExpr, option_to_python_expr
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     render_method_call,
 )
+from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
 from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import RowsInFile

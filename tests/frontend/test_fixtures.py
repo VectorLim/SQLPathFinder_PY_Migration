@@ -40,7 +40,10 @@ def test_script_another_has_mars_write_and_utility(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "script_another.txt")
     assert _has_kind(classified, Kind.SQL_QUERY)
     assert _has_kind(classified, Kind.WRITE_FILE)
-    assert _has_kind(classified, Kind.UTILITY)
+    assert _has_any_kind(
+        classified,
+        (Kind.UTILITY, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
+    )
 
 
 def test_sql_script_has_mars_oasys_and_sqlite(FIXTURES: Path) -> None:
@@ -53,7 +56,10 @@ def test_script_from_vietnam_has_mars_write_and_utility(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "script_from_vietnam.txt")
     assert _has_kind(classified, Kind.SQL_QUERY)
     assert _has_kind(classified, Kind.WRITE_FILE)
-    assert _has_kind(classified, Kind.UTILITY)
+    assert _has_any_kind(
+        classified,
+        (Kind.UTILITY, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
+    )
 
 
 def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
@@ -102,11 +108,24 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         for item in classified
         if item.kind is Kind.UTILITY
     ]
+    external_values = [
+        item.parsed.options.lookup.get("UTILITIES", "")
+        for item in classified
+        if item.kind is Kind.EXTERNAL_RUN
+    ]
+    fs_copy_values = [
+        item.parsed.options.lookup.get("UTILITIES", "")
+        for item in classified
+        if item.kind is Kind.FS_COPY
+    ]
+
     assert any(
         marker in value
-        for value in utility_values
-        for marker in ("Run_Python_Script.va", "SQLPathFinder_Email.va", "RoboCopy.va")
+        for value in external_values
+        for marker in ("getcsrsu.bat", "setsiteparam.exe")
     )
+    assert any("RoboCopy.va" in value for value in fs_copy_values)
+    assert any("SQLPathFinder_Email.va" in value for value in utility_values)
 
     unknown_blocks = [item for item in classified if item.kind is Kind.UNKNOWN]
     assert not unknown_blocks, _unknown_failure_message(unknown_blocks)
@@ -132,6 +151,10 @@ def _classify_fixture(fixtures: Path, file_name: str):
 
 def _has_kind(classified, kind: Kind) -> bool:
     return any(item.kind is kind for item in classified)
+
+
+def _has_any_kind(classified, kinds: tuple[Kind, ...]) -> bool:
+    return any(item.kind in kinds for item in classified)
 
 
 def _unknown_failure_message(unknown_blocks) -> str:

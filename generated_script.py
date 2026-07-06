@@ -4,6 +4,7 @@
 from contextlib import contextmanager
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
 from email.message import EmailMessage
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Any, ContextManager
@@ -178,10 +179,27 @@ class CsvIO:
                     writer_plain.writerow(header)
                 writer_plain.writerows(rows)
 
+class Kind(str, Enum):
+    """Block-kind discriminator shared between the translator and the runtime."""
+
+    SQL_QUERY = "SQL_QUERY"
+    SQLITE_QUERY = "SQLITE_QUERY"
+    WRITE_FILE = "WRITE_FILE"
+    FS_COPY = "FS_COPY"
+    FS_DELETE = "FS_DELETE"
+    EXTERNAL_RUN = "EXTERNAL_RUN"
+    HTML_REPORT = "HTML_REPORT"
+    UTILITY = "UTILITY"
+    MACRO_CONTROL = "MACRO_CONTROL"
+    UNKNOWN = "UNKNOWN"
+    MALFORMED = "MALFORMED"
+
+
 class MacroState:
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
+    handles = (Kind.MACRO_CONTROL,)
     utility_imports = (
         "import re",
         "from contextlib import contextmanager",
@@ -253,6 +271,28 @@ class MacroState:
             return "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
 
         return cls.CROSSTAB_RE.sub(_replace, sql)
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        payload = block.control_payload
+        if not isinstance(payload, RowsInFile):
+            return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
+
+        csv_path_expr = option_to_python_expr(payload.csv_path)
+        set_name = payload.var_name.upper()
+        row_count_call = render_method_call(
+            ctx,
+            "csv_io",
+            "row_count",
+            args=(RawExpr(csv_path_expr),),
+        )
+        stmt = render_method_call(
+            ctx,
+            "macro",
+            "set_named",
+            args=(set_name, RawExpr(f"str({row_count_call})")),
+        )
+        return _emit_step_source(_step_name(block, "rows_in_file"), [stmt])
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]
@@ -344,6 +384,7 @@ class SqliteEngine:
     """Run SQL joins over CSV files using in-memory SQLite."""
 
     utility_name = "sqlite_engine"
+    handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
     utility_imports = (
         "import csv",
         "import re",
@@ -461,6 +502,135 @@ class SqliteEngine:
             for match in cls.STMT_SPLIT_RE.finditer(sql)
             if match.group(0).strip()
         ]
+
+    @staticmethod
+    def _extract_sql_text(block, dispatched) -> str | RawExpr:
+        sql = (
+            dispatched.rewritten_sql if dispatched is not None else block.resolved_body
+        )
+        if "@@SQLMACRO:" not in sql:
+            return sql
+
+        parts: list[str] = []
+        cursor = 0
+        for match in _SQL_MACRO_TOKEN_RE.finditer(sql):
+            literal = sql[cursor : match.start()]
+            if literal:
+                parts.append(repr(literal))
+
+            call_index = int(match.group(1))
+            if call_index < 0 or call_index >= len(block.sql_macro_calls):
+                parts.append(repr(match.group(0)))
+            else:
+                call = block.sql_macro_calls[call_index]
+                csv_path_expr = option_to_python_expr(call.csv_path)
+                col_ref = repr(call.column_ref)
+                lead_in = repr(call.lead_in)
+                parts.append(
+                    f"ctx.sql_macros.sql_get_csv_list({csv_path_expr}, {col_ref}, {lead_in})"
+                )
+
+            cursor = match.end()
+
+        tail = sql[cursor:]
+        if tail:
+            parts.append(repr(tail))
+
+        if not parts:
+            return sql
+        return RawExpr(" + ".join(parts))
+
+    @staticmethod
+    def _extract_source_type(dispatched) -> str:
+        if dispatched is None:
+            return "MARS"
+
+        db_by_dialect = {
+            "oracle_mars": "MARS",
+            "oracle_oasys": "OASYS",
+            "oracle_aries": "ARIES",
+            "sqlite": "sqlite",
+        }
+        return db_by_dialect.get(
+            dispatched.dialect,
+            dispatched.reader_target.database_arg or "MARS",
+        )
+
+    @staticmethod
+    def _extract_table_inputs(block) -> list[str]:
+        inputs: list[str] = []
+        for key, value in block.resolved_options.pairs:
+            if key != "TABLE":
+                continue
+            for table_name in value.split(","):
+                table_name = strip_quotes(table_name.strip())
+                if table_name:
+                    inputs.append(table_name)
+        return inputs
+
+    @staticmethod
+    def _extract_header(block) -> list[str] | None:
+        headers_value = block.resolved_options.lookup.get("HEADERS")
+        if not headers_value:
+            return None
+        if "CrossTab->[[" in headers_value:
+            return None
+        stripped = strip_quotes(headers_value)
+        parts = [p.strip() for p in stripped.split(",")]
+        return [p for p in parts if p]
+
+    @staticmethod
+    def _extract_crosstab(block) -> dict[str, Any] | None:
+        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
+        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
+        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
+        if not (ctrow and ctheader and ctvalue):
+            return None
+        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
+        return {
+            "row_keys": row_keys,
+            "header_key": ctheader,
+            "value_key": ctvalue,
+        }
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        sqlite = block.kind is Kind.SQLITE_QUERY
+        return cls._emit_sql(ctx, block, dispatched, sqlite=sqlite)
+
+    @classmethod
+    def _emit_sql(
+        cls,
+        ctx,
+        block,
+        dispatched,
+        *,
+        sqlite: bool,
+    ) -> tuple[str, str]:
+        if dispatched is None:
+            raise ValueError("SQL emission requires dispatch metadata")
+
+        sql = cls._extract_sql_text(block, dispatched)
+        output = resolve_output_path(block)
+        source_type = "sqlite" if sqlite else cls._extract_source_type(dispatched)
+        crosstab = cls._extract_crosstab(block)
+        header = None if crosstab else cls._extract_header(block)
+
+        kwargs: dict[str, object] = {
+            "sql": sql,
+            "output": output,
+            "source_type": source_type,
+        }
+        if sqlite:
+            kwargs["inputs"] = cls._extract_table_inputs(block)
+        if header:
+            kwargs["header"] = header
+        if crosstab:
+            kwargs["crosstab"] = crosstab
+
+        stmt = render_method_call(ctx, "ctx", "run_query", kwargs=kwargs)
+        suffix = "sqlite_query" if sqlite else "sql_query"
+        return _emit_step_source(_step_name(block, suffix), [stmt])
 
     def execute(self, sql: str, inputs: list[str]) -> pd.DataFrame:
         conn = sqlite3.connect(":memory:")
@@ -589,15 +759,106 @@ class SqlMacros:
 class FileSystemOps:
 
     utility_name = "fs_ops"
+    handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
     utility_imports = (
         "import shutil",
         "from pathlib import Path",
     )
-    utility_command_contains = (
-        ("robocopy", ("robocopy",)),
-        ("spf-copy", ("spfcopy",)),
-        ("spf-delete", ("spfdelete",)),
-    )
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        if block.kind is Kind.FS_COPY:
+            return cls._emit_copy_block(ctx, block)
+        if block.kind is Kind.FS_DELETE:
+            return cls._emit_delete_block(ctx, block)
+
+        stmt = render_method_call(
+            ctx,
+            "ctx",
+            "write_file",
+            kwargs={
+                "path": resolve_output_path(block),
+                "template": block.resolved_body,
+            },
+        )
+        return _emit_step_source(_step_name(block, "write_file"), [stmt])
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def _emit_copy_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "robocopy" in basename:
+            stmt = cls._emit_robocopy(ctx, argv)
+        elif "spfcopy" in basename:
+            stmt = cls._emit_spf_copy(ctx, argv)
+        else:
+            return _emit_step_source(
+                _step_name(block, "fs_copy"),
+                ["pass  # TODO: unsupported FS copy utility command"],
+            )
+        return _emit_step_source(_step_name(block, "fs_copy"), [stmt])
+
+    @classmethod
+    def _emit_delete_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "spfdelete" not in basename:
+            return _emit_step_source(
+                _step_name(block, "fs_delete"),
+                ["pass  # TODO: unsupported FS delete utility command"],
+            )
+        stmt = cls._emit_spf_delete(ctx, argv)
+        return _emit_step_source(_step_name(block, "fs_delete"), [stmt])
+
+    @classmethod
+    def _emit_robocopy(cls, ctx, argv: list[str]) -> str:
+        # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
+        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
+        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
+        dst_expr = RawExpr(dest_dir)
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "copy",
+            kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    @classmethod
+    def _emit_spf_copy(cls, ctx, argv: list[str]) -> str:
+        # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
+        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        src_expr = RawExpr(src)
+        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "copy",
+            kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    @classmethod
+    def _emit_spf_delete(cls, ctx, argv: list[str]) -> str:
+        raw = argv[1] if len(argv) > 1 else ""
+        items = [p.strip() for p in raw.split(",") if p.strip()]
+        paths_expr = RawExpr(
+            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        )
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "delete",
+            kwargs={"paths": paths_expr},
+        )
 
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
         src, dst = Path(src), Path(dst)
@@ -631,7 +892,10 @@ class MailService:
         "from email.message import EmailMessage",
         "from pathlib import Path",
     )
-    utility_command_contains = (("email", ("email", "sqlpathfinder_email")),)
+
+    @classmethod
+    def _emit_email(cls, ctx, argv: list[str]) -> None:
+        return None
 
     def send(
         self,
@@ -673,16 +937,42 @@ class ExternalProcess:
     """Thin wrapper around subprocess.run."""
 
     utility_name = "external"
+    handles = (Kind.EXTERNAL_RUN,)
     utility_imports = (
         "import os",
         "import subprocess",
         "from pathlib import Path",
     )
-    utility_command_contains = (("run-python-script", ("run_python_script",)),)
-    utility_command_suffixes = (
-        ("bat-file", (".bat",)),
-        ("exe-direct", (".exe",)),
-    )
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        argv = cls._utility_argv(block)
+        if not argv:
+            return _emit_step_source(
+                _step_name(block, "external"),
+                ["pass  # TODO: empty external utility command"],
+            )
+
+        stmt = cls._emit_run(ctx, argv)
+        return _emit_step_source(_step_name(block, "external"), [stmt])
+
+    @classmethod
+    def _emit_run(cls, ctx, argv: list[str]) -> str:
+        expr_items = [option_to_python_expr(token) for token in argv]
+        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
+        return render_method_call(
+            ctx,
+            "external",
+            "run",
+            kwargs={"argv": argv_expr},
+        )
 
     @staticmethod
     def _resolve_exedir() -> str:
@@ -748,6 +1038,7 @@ class PipelineContext:
     utility_name = "ctx"
     utility_imports = ("from typing import Any, ContextManager",)
     utility_dependencies = (
+        "kind_enum",
         "macro",
         "csv_io",
         "sqlite_engine",
@@ -832,20 +1123,20 @@ def step_0003_write_file(ctx) -> None:
 def step_0004_write_file(ctx) -> None:
     ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
 
-def step_0005_utility(ctx) -> None:
+def step_0005_external(ctx) -> None:
     ctx.external.run(argv=['getcsrsu.bat'])
 
-def step_0007_utility(ctx) -> None:
+def step_0007_external(ctx) -> None:
     ctx.external.run(argv=['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
 
-def step_0009_utility(ctx) -> None:
+def step_0009_fs_delete(ctx) -> None:
     ctx.fs_ops.delete(paths=['"macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt"'])
 
 def step_0011_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
 
 def step_0013_utility(ctx) -> None:
-    pass  # TODO: utility shape not translated: email
+    pass  # TODO: utility command not classified
 
 def step_0015_sqlite_query(ctx) -> None:
     ctx.run_query(sql="\nSELECT /*L10*/  DISTINCT \n          [icmpcs] AS [icmpcs]\n         ,[parameter] AS [parameter]\n         ,Max([value]) AS [value]\n         ,[STARTTS] AS [STARTTS]\n         ,[UTC] AS [UTC]\n         ,[SFOLDER] AS [SFOLDER]\n         ,[FAC] AS [FAC]\n         ,[MARS] AS [MARS]\n         ,[RIMS] AS [RIMS]\n         ,[EIMS] AS [EIMS]\n         ,[ARIES] AS [ARIES]\n         ,[OASYS] AS [OASYS]\n         ,[MMS] AS [MMS]\n         ,[MMSI] AS [MMSI]\n         ,[TOOLLOG] AS [TOOLLOG]\n         ,[VFMARS] AS [VFMARS]\n         ,[VFARIES] AS [VFARIES]\n         ,[CSRPATH] AS [CSRPATH]\n         ,[MMSPATH] AS [MMSPATH]\n         ,[UNDERDEV] AS [UNDERDEV]\n         ,[CSRV] AS [CSRV]\n         ,[MMSV] AS [MMSV]\nFROM\n(\nSELECT /*L0*/  \n          a0.[icmpcs] AS [icmpcs]\n         ,a0.[parameter] AS [parameter]\n         ,a0.[value] AS [value]\n         ,'<<<STARTTS>>>' AS [STARTTS]\n         ,'<<<UTC>>>' AS [UTC]\n         ,'<<<SFOLDER>>>' AS [SFOLDER]\n         ,'<<<FAC>>>' AS [FAC]\n         ,'<<<MARS>>>' AS [MARS]\n         ,'<<<RIMS>>>' AS [RIMS]\n         ,'<<<EIMS>>>' AS [EIMS]\n         ,'<<<ARIES>>>' AS [ARIES]\n         ,'<<<OASYS>>>' AS [OASYS]\n         ,'<<<MMS>>>' AS [MMS]\n         ,'<<<MMSI>>>' AS [MMSI]\n         ,'<<<TOOLLOG>>>' AS [TOOLLOG]\n         ,'<<<VFMARS>>>' AS [VFMARS]\n         ,'<<<VFARIES>>>' AS [VFARIES]\n         ,'<<<CSRPATH>>>' AS [CSRPATH]\n         ,'<<<MMSPATH>>>' AS [MMSPATH]\n         ,'<<<UNDERDEV>>>' AS [UNDERDEV]\n         ,'<<<CSRV>>>' AS [CSRV]\n         ,'<<<MMSV>>>' AS [MMSV]\nFROM \n[ICMPCS_config] a0\nWHERE\n              a0.[icmpcs] = 'ICMPCS' \n) t /*L0*/\nGROUP BY \n          [icmpcs]\n         ,[parameter]\n         ,[STARTTS]\n         ,[UTC]\n         ,[SFOLDER]\n         ,[FAC]\n         ,[MARS]\n         ,[RIMS]\n         ,[EIMS]\n         ,[ARIES]\n         ,[OASYS]\n         ,[MMS]\n         ,[MMSI]\n         ,[TOOLLOG]\n         ,[VFMARS]\n         ,[VFARIES]\n         ,[CSRPATH]\n         ,[MMSPATH]\n         ,[UNDERDEV]\n         ,[CSRV]\n         ,[MMSV]\n", output='configsets.csv', source_type='sqlite', inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'CSRPATH', 'MMSPATH', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
@@ -854,21 +1145,21 @@ def step_0016_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
 
 def step_0018_utility(ctx) -> None:
-    pass  # TODO: utility shape not translated: email
+    pass  # TODO: utility command not classified
 
 def step_0022_write_file(ctx) -> None:
     ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
 
 def step_0023_utility(ctx) -> None:
-    pass  # TODO: utility shape not translated: email
+    pass  # TODO: utility command not classified
 
 def step_0026_write_file(ctx) -> None:
     ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
 
 def step_0027_utility(ctx) -> None:
-    pass  # TODO: utility shape not translated: email
+    pass  # TODO: utility command not classified
 
-def step_0029_utility(ctx) -> None:
+def step_0029_fs_copy(ctx) -> None:
     ctx.fs_ops.copy(src=str(Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\KM\\HIST') / 'HIST.txt'), dst='.')
 
 def step_0030_rows_in_file(ctx) -> None:
@@ -881,9 +1172,9 @@ def step_0033_write_file(ctx) -> None:
     ctx.write_file(path='HISTERROR.txt', template='\nERROR\nERROR\nERROR')
 
 def step_0035_utility(ctx) -> None:
-    pass  # TODO: utility shape not translated: unknown
+    pass  # TODO: utility command not classified
 
-def step_0042_utility(ctx) -> None:
+def step_0042_fs_copy(ctx) -> None:
     ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst=str(Path('.\\') / Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv').name))
 
 def step_0043_sqlite_query(ctx) -> None:
@@ -929,11 +1220,11 @@ def run() -> None:
     step_0002_html_report(ctx)
     step_0003_write_file(ctx)
     step_0004_write_file(ctx)
-    step_0005_utility(ctx)
+    step_0005_external(ctx)
     for __row in ctx.csv_io.iter('macrotmp.csv'):
         with ctx.macro_scope(__row):
-            step_0007_utility(ctx)
-    step_0009_utility(ctx)
+            step_0007_external(ctx)
+    step_0009_fs_delete(ctx)
     for __row in ctx.csv_io.iter('ctime.csv'):
         with ctx.macro_scope(__row):
             step_0011_rows_in_file(ctx)
@@ -953,7 +1244,7 @@ def run() -> None:
                             if ctx.macro.named("MMSV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
                                 step_0026_write_file(ctx)
                                 step_0027_utility(ctx)
-                            step_0029_utility(ctx)
+                            step_0029_fs_copy(ctx)
                             step_0030_rows_in_file(ctx)
                             if int(ctx.macro.named("HIST")) <= int('0'):
                                 step_0032_write_file(ctx)
@@ -962,7 +1253,7 @@ def run() -> None:
                                 step_0035_utility(ctx)
     for __row in ctx.csv_io.iter('configsets.csv'):
         with ctx.macro_scope(__row):
-            step_0042_utility(ctx)
+            step_0042_fs_copy(ctx)
             step_0043_sqlite_query(ctx)
             step_0044_sql_query(ctx)
             step_0045_rows_in_file(ctx)

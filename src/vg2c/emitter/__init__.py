@@ -25,8 +25,9 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Walk the scope tree and emit code
     functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)
 
-    # Always include ctx (PipelineContext) in the emitted script
+    # Always include ctx (PipelineContext) and Kind enum in the emitted script
     mark_utility_used(ctx, "ctx")
+    mark_utility_used(ctx, "kind_enum")
 
     # Assemble embedded utility classes.
     utility_imports, utility_sources = assemble_registered_utilities(ctx)

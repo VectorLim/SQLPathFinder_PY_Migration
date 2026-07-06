@@ -6,10 +6,15 @@ import os
 import subprocess
 from pathlib import Path
 
-from vg2c.emitter.semtypes import RawExpr, option_to_python_expr
-from vg2c.emitter.utilities._base import UtilityShape, UtilitySpec
-from vg2c.emitter.utilities._emit_helpers import render_method_call
+from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._emit_helpers import (
+    _emit_step_source,
+    _step_name,
+    render_method_call,
+)
+from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
 from vg2c.emitter.utilities._registry import register_utility
+from vg2c.frontend.models import Kind
 
 
 @register_utility
@@ -17,11 +22,31 @@ class ExternalProcess(UtilitySpec):
     """Thin wrapper around subprocess.run."""
 
     utility_name = "external"
+    handles = (Kind.EXTERNAL_RUN,)
     utility_imports = (
         "import os",
         "import subprocess",
         "from pathlib import Path",
     )
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        argv = cls._utility_argv(block)
+        if not argv:
+            return _emit_step_source(
+                _step_name(block, "external"),
+                ["pass  # TODO: empty external utility command"],
+            )
+
+        stmt = cls._emit_run(ctx, argv)
+        return _emit_step_source(_step_name(block, "external"), [stmt])
 
     @classmethod
     def _emit_run(cls, ctx, argv: list[str]) -> str:
@@ -70,22 +95,3 @@ class ExternalProcess(UtilitySpec):
             shell=use_shell,
         )
         return result.returncode
-
-
-ExternalProcess.utility_shapes = (
-    UtilityShape(
-        name="run-python-script",
-        contains=("run_python_script",),
-        emit=ExternalProcess._emit_run,
-    ),
-    UtilityShape(
-        name="bat-file",
-        suffixes=(".bat",),
-        emit=ExternalProcess._emit_run,
-    ),
-    UtilityShape(
-        name="exe-direct",
-        suffixes=(".exe",),
-        emit=ExternalProcess._emit_run,
-    ),
-)

@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import inspect
 import re
-from dataclasses import dataclass
 from typing import Any, Callable
 
-from vg2c.emitter.utilities._base import UtilityShape, UtilitySpec
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.frontend.models import Kind
 
 __all__ = [
     "UTILITIES",
     "UTILITY_IMPORTS",
     "UTILITY_DEPENDENCIES",
+    "KIND_HANDLERS",
     "CLASS_TO_UTILITY_NAME",
-    "UtilityCommandMatch",
-    "classify_utility_command",
     "mark_utility_used",
     "assemble_registered_utilities",
     "get_registered_source",
@@ -39,19 +37,11 @@ KIND_HANDLERS: dict[Kind, type[UtilitySpec]] = {}
 CLASS_TO_UTILITY_NAME: dict[type, str] = {}
 
 
-@dataclass(frozen=True, slots=True)
-class UtilityCommandMatch:
-    shape: UtilityShape | None
-    argv: tuple[str, ...]
-    utility_cls: type[UtilitySpec] | None
-
-
 def register_utility(
     cls: type[UtilitySpec] | None = None,
     *,
     name: str | None = None,
     imports: tuple[str, ...] | None = None,
-    depends_on: tuple[str, ...] | None = None,
     handles: Kind | tuple[Kind, ...] | None = None,
 ) -> type[UtilitySpec] | Callable[[type[UtilitySpec]], type[UtilitySpec]]:
     """Register one utility class from decorator args or class metadata."""
@@ -67,9 +57,7 @@ def register_utility(
             raise ValueError(f"duplicate utility_name: {reg_name}")
 
         reg_imports = tuple(imports if imports is not None else target.utility_imports)
-        reg_deps = tuple(
-            depends_on if depends_on is not None else target.utility_dependencies
-        )
+        reg_deps = tuple(target.utility_dependencies)
         if handles is None:
             reg_handles = tuple(target.handles)
         elif isinstance(handles, tuple):
@@ -96,30 +84,6 @@ def register_utility(
     if cls is None:
         return _register
     return _register(cls)
-
-
-def classify_utility_command(argv: list[str]) -> UtilityCommandMatch:
-    argv_tuple = tuple(argv)
-    if not argv:
-        return UtilityCommandMatch(shape=None, argv=argv_tuple, utility_cls=None)
-
-    first = argv[0]
-    basename = first.split("/")[-1].split("\\")[-1].lower()
-
-    for cls in UTILITIES.values():
-        for shape in cls.utility_shapes:
-            if shape.contains and any(marker in basename for marker in shape.contains):
-                return UtilityCommandMatch(
-                    shape=shape, argv=argv_tuple, utility_cls=cls
-                )
-            if shape.suffixes and any(
-                basename.endswith(suffix) for suffix in shape.suffixes
-            ):
-                return UtilityCommandMatch(
-                    shape=shape, argv=argv_tuple, utility_cls=cls
-                )
-
-    return UtilityCommandMatch(shape=None, argv=argv_tuple, utility_cls=None)
 
 
 def mark_utility_used(ctx: Any, *names: str) -> None:
@@ -161,6 +125,11 @@ def assemble_registered_utilities(ctx) -> tuple[list[str], list[str]]:
 
 def get_registered_source(name: str) -> str:
     cls = UTILITIES[name]
+    # Allow a utility to provide its own verbatim source instead of relying on
+    # inspect.getsource (useful when the class is a thin registration wrapper).
+    custom = getattr(cls, "__vg2c_source__", None)
+    if custom is not None:
+        return custom
     source = inspect.getsource(cls)
     return _strip_embed_artifacts(source, cls.__name__)
 

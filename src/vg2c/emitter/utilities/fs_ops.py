@@ -5,17 +5,16 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from vg2c.emitter.semtypes import (
-    OutputPath,
-    RawExpr,
-    WriteFileTemplate,
-    option_to_python_expr,
-)
-from vg2c.emitter.utilities._base import UtilityShape, UtilitySpec
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     render_method_call,
+)
+from vg2c.emitter.utilities._emit_types import (
+    RawExpr,
+    option_to_python_expr,
+    resolve_output_path,
 )
 from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
@@ -25,7 +24,7 @@ from vg2c.frontend.models import Kind
 class FileSystemOps(UtilitySpec):
 
     utility_name = "fs_ops"
-    handles = (Kind.WRITE_FILE,)
+    handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
     utility_imports = (
         "import shutil",
         "from pathlib import Path",
@@ -33,16 +32,55 @@ class FileSystemOps(UtilitySpec):
 
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        if block.kind is Kind.FS_COPY:
+            return cls._emit_copy_block(ctx, block)
+        if block.kind is Kind.FS_DELETE:
+            return cls._emit_delete_block(ctx, block)
+
         stmt = render_method_call(
             ctx,
             "ctx",
             "write_file",
             kwargs={
-                "path": OutputPath.extract(block, None),
-                "template": WriteFileTemplate.extract(block, None),
+                "path": resolve_output_path(block),
+                "template": block.resolved_body,
             },
         )
         return _emit_step_source(_step_name(block, "write_file"), [stmt])
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def _emit_copy_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "robocopy" in basename:
+            stmt = cls._emit_robocopy(ctx, argv)
+        elif "spfcopy" in basename:
+            stmt = cls._emit_spf_copy(ctx, argv)
+        else:
+            return _emit_step_source(
+                _step_name(block, "fs_copy"),
+                ["pass  # TODO: unsupported FS copy utility command"],
+            )
+        return _emit_step_source(_step_name(block, "fs_copy"), [stmt])
+
+    @classmethod
+    def _emit_delete_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "spfdelete" not in basename:
+            return _emit_step_source(
+                _step_name(block, "fs_delete"),
+                ["pass  # TODO: unsupported FS delete utility command"],
+            )
+        stmt = cls._emit_spf_delete(ctx, argv)
+        return _emit_step_source(_step_name(block, "fs_delete"), [stmt])
 
     @classmethod
     def _emit_robocopy(cls, ctx, argv: list[str]) -> str:
@@ -108,22 +146,3 @@ class FileSystemOps(UtilitySpec):
             else:
                 # path.unlink(missing_ok=True)
                 pass
-
-
-FileSystemOps.utility_shapes = (
-    UtilityShape(
-        name="robocopy",
-        contains=("robocopy",),
-        emit=FileSystemOps._emit_robocopy,
-    ),
-    UtilityShape(
-        name="spf-copy",
-        contains=("spfcopy",),
-        emit=FileSystemOps._emit_spf_copy,
-    ),
-    UtilityShape(
-        name="spf-delete",
-        contains=("spfdelete",),
-        emit=FileSystemOps._emit_spf_delete,
-    ),
-)

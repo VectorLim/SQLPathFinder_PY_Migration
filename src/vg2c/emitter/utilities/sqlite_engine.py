@@ -6,26 +6,26 @@ import csv
 import re
 import sqlite3
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pandas as pd
 
-from vg2c.emitter.semtypes import (
-    Crosstab,
-    Header,
-    OutputPath,
-    SourceType,
-    SqlText,
-    TableInputs,
-)
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     render_method_call,
 )
+from vg2c.emitter.utilities._emit_types import (
+    RawExpr,
+    option_to_python_expr,
+    resolve_output_path,
+    strip_quotes,
+)
 from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
+
+_SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
 
 @register_utility
@@ -152,6 +152,96 @@ class SqliteEngine(UtilitySpec):
             if match.group(0).strip()
         ]
 
+    @staticmethod
+    def _extract_sql_text(block, dispatched) -> str | RawExpr:
+        sql = (
+            dispatched.rewritten_sql if dispatched is not None else block.resolved_body
+        )
+        if "@@SQLMACRO:" not in sql:
+            return sql
+
+        parts: list[str] = []
+        cursor = 0
+        for match in _SQL_MACRO_TOKEN_RE.finditer(sql):
+            literal = sql[cursor : match.start()]
+            if literal:
+                parts.append(repr(literal))
+
+            call_index = int(match.group(1))
+            if call_index < 0 or call_index >= len(block.sql_macro_calls):
+                parts.append(repr(match.group(0)))
+            else:
+                call = block.sql_macro_calls[call_index]
+                csv_path_expr = option_to_python_expr(call.csv_path)
+                col_ref = repr(call.column_ref)
+                lead_in = repr(call.lead_in)
+                parts.append(
+                    f"ctx.sql_macros.sql_get_csv_list({csv_path_expr}, {col_ref}, {lead_in})"
+                )
+
+            cursor = match.end()
+
+        tail = sql[cursor:]
+        if tail:
+            parts.append(repr(tail))
+
+        if not parts:
+            return sql
+        return RawExpr(" + ".join(parts))
+
+    @staticmethod
+    def _extract_source_type(dispatched) -> str:
+        if dispatched is None:
+            return "MARS"
+
+        db_by_dialect = {
+            "oracle_mars": "MARS",
+            "oracle_oasys": "OASYS",
+            "oracle_aries": "ARIES",
+            "sqlite": "sqlite",
+        }
+        return db_by_dialect.get(
+            dispatched.dialect,
+            dispatched.reader_target.database_arg or "MARS",
+        )
+
+    @staticmethod
+    def _extract_table_inputs(block) -> list[str]:
+        inputs: list[str] = []
+        for key, value in block.resolved_options.pairs:
+            if key != "TABLE":
+                continue
+            for table_name in value.split(","):
+                table_name = strip_quotes(table_name.strip())
+                if table_name:
+                    inputs.append(table_name)
+        return inputs
+
+    @staticmethod
+    def _extract_header(block) -> list[str] | None:
+        headers_value = block.resolved_options.lookup.get("HEADERS")
+        if not headers_value:
+            return None
+        if "CrossTab->[[" in headers_value:
+            return None
+        stripped = strip_quotes(headers_value)
+        parts = [p.strip() for p in stripped.split(",")]
+        return [p for p in parts if p]
+
+    @staticmethod
+    def _extract_crosstab(block) -> dict[str, Any] | None:
+        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
+        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
+        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
+        if not (ctrow and ctheader and ctvalue):
+            return None
+        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
+        return {
+            "row_keys": row_keys,
+            "header_key": ctheader,
+            "value_key": ctvalue,
+        }
+
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
         sqlite = block.kind is Kind.SQLITE_QUERY
@@ -169,11 +259,11 @@ class SqliteEngine(UtilitySpec):
         if dispatched is None:
             raise ValueError("SQL emission requires dispatch metadata")
 
-        sql = SqlText.extract(block, dispatched)
-        output = OutputPath.extract(block, dispatched)
-        source_type = "sqlite" if sqlite else SourceType.extract(block, dispatched)
-        crosstab = Crosstab.extract(block, dispatched)
-        header = None if crosstab else Header.extract(block, dispatched)
+        sql = cls._extract_sql_text(block, dispatched)
+        output = resolve_output_path(block)
+        source_type = "sqlite" if sqlite else cls._extract_source_type(dispatched)
+        crosstab = cls._extract_crosstab(block)
+        header = None if crosstab else cls._extract_header(block)
 
         kwargs: dict[str, object] = {
             "sql": sql,
@@ -181,7 +271,7 @@ class SqliteEngine(UtilitySpec):
             "source_type": source_type,
         }
         if sqlite:
-            kwargs["inputs"] = TableInputs.extract(block, dispatched)
+            kwargs["inputs"] = cls._extract_table_inputs(block)
         if header:
             kwargs["header"] = header
         if crosstab:

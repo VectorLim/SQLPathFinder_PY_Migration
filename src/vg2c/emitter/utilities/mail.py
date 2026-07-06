@@ -7,7 +7,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import UtilityShape, UtilitySpec
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._registry import register_utility
 
 
@@ -62,12 +62,3 @@ class MailService(UtilitySpec):
 
         with smtplib.SMTP(host, port) as smtp:
             smtp.send_message(msg)
-
-
-MailService.utility_shapes = (
-    UtilityShape(
-        name="email",
-        contains=("email", "sqlpathfinder_email"),
-        emit=MailService._emit_email,
-    ),
-)

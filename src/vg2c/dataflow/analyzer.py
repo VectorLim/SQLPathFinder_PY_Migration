@@ -203,7 +203,12 @@ def _collect_external_utility_candidates(
 ) -> list[ProducerRecord]:
     candidates: list[ProducerRecord] = []
     for block in blocks:
-        if block.kind is not Kind.UTILITY:
+        if block.kind not in {
+            Kind.UTILITY,
+            Kind.EXTERNAL_RUN,
+            Kind.FS_COPY,
+            Kind.FS_DELETE,
+        }:
             continue
         utilities = block.resolved_options.lookup.get("UTILITIES", "")
         for token in _CSV_TOKEN_RE.findall(utilities):

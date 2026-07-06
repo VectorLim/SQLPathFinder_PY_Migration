@@ -24,6 +24,7 @@ class PipelineContext(UtilitySpec):
     utility_name = "ctx"
     utility_imports = ("from typing import Any, ContextManager",)
     utility_dependencies = (
+        "kind_enum",
         "macro",
         "csv_io",
         "sqlite_engine",

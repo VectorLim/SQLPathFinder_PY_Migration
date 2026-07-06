@@ -8,8 +8,8 @@ from vg2c.emitter.macro import (
     macro_token_to_python_expr,
 )
 from vg2c.emitter.models import EmitContext, IndentWriter
-from vg2c.emitter.semtypes import RawExpr
 from vg2c.emitter.utilities._emit_helpers import emit_block, render_method_call
+from vg2c.emitter.utilities._emit_types import RawExpr
 from vg2c.emitter.utilities._registry import mark_utility_used
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (

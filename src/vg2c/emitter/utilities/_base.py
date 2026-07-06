@@ -1,21 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
 
 from vg2c.frontend.models import Kind
 
-
-@dataclass(frozen=True, slots=True)
-class UtilityShape:
-    name: str
-    contains: tuple[str, ...] = ()
-    suffixes: tuple[str, ...] = ()
-    emit: Callable[[Any, list[str]], str | None] | None = None
-
-
-__all__ = ["UtilityShape", "UtilitySpec"]
+__all__ = ["UtilitySpec"]
 
 
 class UtilitySpec(ABC):
@@ -24,7 +14,6 @@ class UtilitySpec(ABC):
     utility_name: ClassVar[str]
     utility_imports: ClassVar[tuple[str, ...]] = ()
     utility_dependencies: ClassVar[tuple[str, ...]] = ()
-    utility_shapes: ClassVar[tuple[UtilityShape, ...]] = ()
     handles: ClassVar[tuple[Kind, ...]] = ()
 
     @classmethod
