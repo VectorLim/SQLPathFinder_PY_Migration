@@ -13,11 +13,6 @@ class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
-    DATASYNCX_READER_NAMES = {
-        "MARS": "MarsReader",
-        "OASYS": "OracleReader",
-        "ARIES": "AriesReader",
-    }
     DATASYNCX_READER_MAP = {
         "MARS": MarsReader,
         "OASYS": OracleReader,

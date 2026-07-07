@@ -6,11 +6,11 @@ import csv
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Callable
 
 import pandas as pd
 
 from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
@@ -33,68 +33,10 @@ class SqliteEngine(UtilitySpec):
     utility_name = "sqlite_engine"
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
 
-    CROSSTAB_RE = re.compile(
-        r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\])",
-        re.IGNORECASE,
-    )
     STMT_SPLIT_RE = re.compile(
         r"(?:'[^']*'|\"[^\"]*\"|\[[^\]]*\]|`[^`]*`|[^;])+",
         re.DOTALL,
     )
-
-    @staticmethod
-    def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
-        by_alias: dict[str, set[str]] = {}
-        match = re.search(
-            r"\bSELECT\b(?P<select_part>.*?)\bFROM\b",
-            sql,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        if not match:
-            return by_alias
-
-        select_part = match.group("select_part")
-        col_ref_re = re.compile(
-            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
-        )
-        for col_match in col_ref_re.finditer(select_part):
-            alias = col_match.group(1).lower()
-            col_name = col_match.group(2) or col_match.group(3) or col_match.group(4)
-            if not col_name:
-                continue
-            by_alias.setdefault(alias, set()).add(col_name.lower())
-
-        return by_alias
-
-    @classmethod
-    def _substitute_crosstab(
-        cls,
-        sql: str,
-        alias_columns_lookup: Callable[[str], list[str]] | None = None,
-    ) -> str:
-        if alias_columns_lookup is None or "CrossTab->[[" not in sql:
-            return sql
-
-        selected_by_alias = cls._extract_selected_columns_by_alias(sql)
-
-        def _replace(match: re.Match[str]) -> str:
-            alias = match.group(1)
-            mode = match.group(3).upper()
-            all_cols = alias_columns_lookup(alias)
-            selected = selected_by_alias.get(alias.lower(), set())
-            dynamic_cols = [c for c in all_cols if c.lower() not in selected]
-
-            if not dynamic_cols:
-                return ""
-
-            if mode == "N":
-                return "," + ",".join(dynamic_cols)
-
-            return "," + "\n         ,".join(
-                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
-            )
-
-        return cls.CROSSTAB_RE.sub(_replace, sql)
 
     @staticmethod
     def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
@@ -212,25 +154,11 @@ class SqliteEngine(UtilitySpec):
         headers_value = block.resolved_options.lookup.get("HEADERS")
         if not headers_value:
             return None
-        if "CrossTab->[[" in headers_value:
+        if CrosstabUtility.has_token(headers_value):
             return None
         stripped = strip_quotes(headers_value)
         parts = [p.strip() for p in stripped.split(",")]
         return [p for p in parts if p]
-
-    @staticmethod
-    def _extract_crosstab(block) -> dict[str, Any] | None:
-        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
-        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
-        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
-        if not (ctrow and ctheader and ctvalue):
-            return None
-        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
-        return {
-            "row_keys": row_keys,
-            "header_key": ctheader,
-            "value_key": ctvalue,
-        }
 
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
@@ -252,7 +180,7 @@ class SqliteEngine(UtilitySpec):
         sql = cls._extract_sql_text(block, dispatched)
         output = resolve_output_path(block)
         source_type = "sqlite" if sqlite else cls._extract_source_type(dispatched)
-        crosstab = cls._extract_crosstab(block)
+        crosstab = CrosstabUtility.extract_options(block)
         header = None if crosstab else cls._extract_header(block)
 
         kwargs: dict[str, object] = {
@@ -309,7 +237,7 @@ class SqliteEngine(UtilitySpec):
             pragma_rows = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
             return [str(row[1]) for row in pragma_rows if len(row) > 1]
 
-        final_stmt = self._substitute_crosstab(
+        final_stmt = CrosstabUtility.substitute_sql(
             final_stmt,
             alias_columns_lookup=_lookup_alias_columns,
         )
