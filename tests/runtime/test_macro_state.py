@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c.emitter.utilities.crosstab import apply_crosstab, substitute_crosstab
+from vg2c.emitter.utilities.crosstab import substitute_crosstab
 from vg2c.emitter.utilities.macro_state import MacroState
 
 
@@ -92,40 +92,3 @@ def test_substitute_sql_named_placeholder_only():
     sql = "SELECT * FROM tab WHERE facility = '<<<SITE>>>'"
     out = m.substitute_sql(sql)
     assert out == "SELECT * FROM tab WHERE facility = 'KM'"
-
-
-def test_apply_crosstab_pivots_rows_for_downstream_join():
-    import pandas as pd
-
-    rows = pd.DataFrame(
-        [
-            {
-                "facility": "KM",
-                "lot": "L1",
-                "operation": "2090",
-                "test_name": "SUBPLANEANGLEX",
-                "Sub_plane": "1.5",
-            },
-            {
-                "facility": "KM",
-                "lot": "L1",
-                "operation": "2090",
-                "test_name": "SUBPLANEANGLEY",
-                "Sub_plane": "-0.5",
-            },
-        ]
-    )
-
-    out = apply_crosstab(
-        rows,
-        row_keys=["facility", "lot", "operation"],
-        header_key="test_name",
-        value_key="Sub_plane",
-    )
-
-    assert len(out) == 1
-    assert out.iloc[0]["facility"] == "KM"
-    assert out.iloc[0]["lot"] == "L1"
-    assert out.iloc[0]["operation"] == "2090"
-    assert out.iloc[0]["SUBPLANEANGLEX"] == "1.5"
-    assert out.iloc[0]["SUBPLANEANGLEY"] == "-0.5"

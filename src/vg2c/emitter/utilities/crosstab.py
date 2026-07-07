@@ -75,16 +75,6 @@ def substitute_crosstab(
     return CROSSTAB_RE.sub(_replace, sql)
 
 
-def apply_crosstab(
-    rows: Any,
-    row_keys: list[str],
-    header_key: str,
-    value_key: str,
-) -> Any:
-    # ! To be DELETED
-    pass
-
-
 class CrosstabUtility(UtilitySpec):
     utility_name = "crosstab"
 
