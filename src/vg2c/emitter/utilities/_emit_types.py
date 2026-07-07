@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from vg2c.emitter.macro import placeholders_to_python_expr
 from vg2c.frontend.models import Kind
 
 __all__ = [
@@ -29,6 +28,8 @@ def strip_quotes(value: str) -> str:
 def option_to_python_expr(value: str | None) -> str:
     if value is None:
         return "None"
+    from vg2c.emitter.utilities._emit_helpers import placeholders_to_python_expr
+
     return placeholders_to_python_expr(strip_quotes(value))
 
 

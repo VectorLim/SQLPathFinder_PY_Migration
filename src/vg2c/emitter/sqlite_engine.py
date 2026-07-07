@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from vg2c.emitter.macro import substitute_crosstab
+from vg2c.emitter.utilities.crosstab import substitute_crosstab
 
 
 def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:

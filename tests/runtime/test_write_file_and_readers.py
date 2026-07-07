@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.macro import MacroState
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities import get_registered_source
 
 READER_SNIPPET = get_registered_source("reader_runtime")

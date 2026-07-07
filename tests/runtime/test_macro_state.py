@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c.emitter.macro import MacroState, apply_crosstab, substitute_crosstab
+from vg2c.emitter.utilities.crosstab import apply_crosstab, substitute_crosstab
+from vg2c.emitter.utilities.macro_state import MacroState
 
 
 def test_set_and_get_named():
@@ -62,11 +63,10 @@ def test_frame_variables_uppercased_on_push():
 
 
 def test_substitute_sql_expands_crosstab_projection():
-    m = MacroState()
     sql = "SELECT a0.[facility], CrossTab->[[a0,15507;:Y]] FROM [t] a0"
-    out = m.substitute_sql(
+    out = substitute_crosstab(
         sql,
-        crosstab_alias_columns=lambda alias: [
+        alias_columns_lookup=lambda alias: [
             "facility",
             "SUBPLANEANGLEX",
             "SUBPLANEANGLEY",
@@ -86,25 +86,35 @@ def test_substitute_crosstab_header_mode_n():
     assert out == "SUBPLANEANGLEX,SUBPLANEANGLEY"
 
 
+def test_substitute_sql_named_placeholder_only():
+    m = MacroState()
+    m.set_named("SITE", "KM")
+    sql = "SELECT * FROM tab WHERE facility = '<<<SITE>>>'"
+    out = m.substitute_sql(sql)
+    assert out == "SELECT * FROM tab WHERE facility = 'KM'"
+
+
 def test_apply_crosstab_pivots_rows_for_downstream_join():
     import pandas as pd
-    
-    rows = pd.DataFrame([
-        {
-            "facility": "KM",
-            "lot": "L1",
-            "operation": "2090",
-            "test_name": "SUBPLANEANGLEX",
-            "Sub_plane": "1.5",
-        },
-        {
-            "facility": "KM",
-            "lot": "L1",
-            "operation": "2090",
-            "test_name": "SUBPLANEANGLEY",
-            "Sub_plane": "-0.5",
-        },
-    ])
+
+    rows = pd.DataFrame(
+        [
+            {
+                "facility": "KM",
+                "lot": "L1",
+                "operation": "2090",
+                "test_name": "SUBPLANEANGLEX",
+                "Sub_plane": "1.5",
+            },
+            {
+                "facility": "KM",
+                "lot": "L1",
+                "operation": "2090",
+                "test_name": "SUBPLANEANGLEY",
+                "Sub_plane": "-0.5",
+            },
+        ]
+    )
 
     out = apply_crosstab(
         rows,

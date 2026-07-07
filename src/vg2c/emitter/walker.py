@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.macro import (
+from vg2c.emitter.utilities._emit_helpers import (
     NAMED_PLACEHOLDER_RE,
     macro_token_to_python_expr,
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator, Protocol
+from typing import Iterator, Protocol
 
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
@@ -37,38 +37,11 @@ class MacroState(UtilitySpec):
         "import re",
         "from contextlib import contextmanager",
         "from pathlib import Path",
-        "from typing import Callable, Iterator, Protocol",
+        "from typing import Iterator, Protocol",
     )
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
-    CROSSTAB_RE = re.compile(
-        r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\]|CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\],)"
-    )
-
-    @staticmethod
-    def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
-        by_alias: dict[str, set[str]] = {}
-        match = re.search(
-            r"\bSELECT\b(?P<select_part>.*?)\bFROM\b",
-            sql,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        if not match:
-            return by_alias
-
-        select_part = match.group("select_part")
-        col_ref_re = re.compile(
-            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
-        )
-        for col_match in col_ref_re.finditer(select_part):
-            alias = col_match.group(1).lower()
-            col_name = col_match.group(2) or col_match.group(3) or col_match.group(4)
-            if not col_name:
-                continue
-            by_alias.setdefault(alias, set()).add(col_name.lower())
-
-        return by_alias
 
     @classmethod
     def normalize_macro_name(cls, raw: str) -> str:
@@ -76,34 +49,6 @@ class MacroState(UtilitySpec):
         if name.startswith("<<<") and name.endswith(">>>"):
             name = name[3:-3]
         return name.strip().upper()
-
-    @classmethod
-    def substitute_crosstab(
-        cls,
-        sql: str,
-        alias_columns_lookup: Callable[[str], list[str]] | None = None,
-    ) -> str:
-        if alias_columns_lookup is None or "CrossTab->[[" not in sql:
-            return sql
-
-        selected_by_alias = cls._extract_selected_columns_by_alias(sql)
-
-        def _replace(match: re.Match[str]) -> str:
-            alias = match.group(1)
-            mode = match.group(3).upper()
-            all_cols = alias_columns_lookup(alias)
-            selected = selected_by_alias.get(alias.lower(), set())
-            dynamic_cols = [c for c in all_cols if c.lower() not in selected]
-
-            if not dynamic_cols:
-                return ""
-
-            if mode == "N":
-                return ",".join(dynamic_cols)
-
-            return "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
-
-        return cls.CROSSTAB_RE.sub(_replace, sql)
 
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
@@ -149,19 +94,13 @@ class MacroState(UtilitySpec):
             return pos_list[cursor]
         return ""
 
-    def substitute_sql(
-        self,
-        sql: str,
-        crosstab_alias_columns: Callable[[str], list[str]] | None = None,
-    ) -> str:
+    def substitute_sql(self, sql: str) -> str:
         if "<<<" in sql:
             sql = self.NAMED_PLACEHOLDER_RE.sub(
                 lambda m: self.named(self.normalize_macro_name(m.group(1))),
                 sql,
             )
-        return self.substitute_crosstab(
-            sql, alias_columns_lookup=crosstab_alias_columns
-        )
+        return sql
 
     def write_file(
         self,
