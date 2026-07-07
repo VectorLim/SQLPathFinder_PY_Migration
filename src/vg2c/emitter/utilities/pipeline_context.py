@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, ContextManager
 
+from datasyncx.readers import AriesReader, MarsReader, OracleReader
+
 from vg2c.emitter.utilities._base import UtilitySpec
 
 
@@ -11,6 +13,16 @@ class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
+    DATASYNCX_READER_NAMES = {
+        "MARS": "MarsReader",
+        "OASYS": "OracleReader",
+        "ARIES": "AriesReader",
+    }
+    DATASYNCX_READER_MAP = {
+        "MARS": MarsReader,
+        "OASYS": OracleReader,
+        "ARIES": AriesReader,
+    }
 
     def __init__(self) -> None:
         registry = getattr(type(self), "_registry", None)
@@ -50,10 +62,16 @@ class PipelineContext(UtilitySpec):
     ) -> None:
         self.macro.write_file(path, template, vars=vars)
 
-    def read(self, sql: str, db_type: str):
-        return self.reader_runtime.read(
-            sql=sql, db_type=db_type, macro_state=self.macro
+    def _read_datasyncx(self, sql: str, source_type: str):
+        source_type_u = source_type.upper()
+        if source_type_u not in self.DATASYNCX_READER_MAP:
+            raise ValueError(f"Unsupported database type: {source_type!r}")
+        result = self.DATASYNCX_READER_MAP[source_type_u]().read(
+            site="KM",
+            query=sql,
         )
+        result.columns = [col.lower() for col in result.columns]
+        return result
 
     def run_query(
         self,
@@ -69,9 +87,7 @@ class PipelineContext(UtilitySpec):
         if source_type.lower() == "sqlite":
             result = self.sqlite_engine.execute(sql, inputs or [])
         else:
-            result = self.reader_runtime.read(
-                sql=sql, db_type=source_type, macro_state=None
-            )
+            result = self._read_datasyncx(sql, source_type)
 
         if crosstab:
             result = self.crosstab.apply(

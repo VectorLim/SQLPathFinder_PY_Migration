@@ -77,7 +77,9 @@ def test_sql_script_emitted_has_multiple_steps(FIXTURES: Path) -> None:
     step_count = emitted.source.count("def step_")
     assert step_count >= 2  # At least MARS, OASYS, SQLite
     assert "ctx.run_query(" in emitted.source
-    assert "class ReaderRuntime" in emitted.source
+    assert "reader_runtime" not in emitted.source
+    assert "DATASYNCX_READER_MAP" in emitted.source
+    assert "def _read_datasyncx" in emitted.source
 
 
 def test_actual_script_emitted_has_imports(FIXTURES: Path) -> None:

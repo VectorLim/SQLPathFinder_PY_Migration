@@ -38,10 +38,6 @@ def test_mars_placeholder_in_emitted_sql():
         "@[]@F_" not in source
     ), "Found @[]@F_ without dot - should be normalized to @[]@.F_"
 
-    # Verify the reader is being called with a node parameter that can be used as site
-    assert (
-        "reader_mars(" in source
-        or "reader_oasys(" in source
-        or "reader_aries(" in source
-    ), "Expected reader method call in emitted source"
-    assert "node=" in source, "Expected node parameter in reader call"
+    assert "def _read_datasyncx" in source
+    assert "DATASYNCX_READER_MAP" in source
+    assert "source_type='MARS'" in source or 'source_type="MARS"' in source

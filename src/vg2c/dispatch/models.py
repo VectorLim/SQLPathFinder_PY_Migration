@@ -13,7 +13,6 @@ Dialect = Literal["oracle_mars", "oracle_oasys", "oracle_aries", "sqlite"]
 @dataclass(frozen=True, slots=True)
 class ReaderTarget:
     dialect: Dialect
-    reader_class_hint: Literal["OracleReader", "SQLiteReader"]
     database_arg: str | None
     record_name: str | None
     record_version: str | None

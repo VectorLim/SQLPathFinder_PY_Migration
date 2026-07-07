@@ -24,7 +24,6 @@ from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
 from vg2c.emitter.utilities.sql_macros import SqlMacros
 from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
-from vg2c.emitter.readers import ReaderRuntime
 
 
 def _alias_text(alias: ast.alias) -> str:
@@ -216,7 +215,6 @@ __all__ = [
     "MacroState",
     "MailService",
     "PipelineContext",
-    "ReaderRuntime",
     "SqlMacros",
     "SqliteEngine",
 ]

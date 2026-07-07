@@ -1,4 +1,4 @@
-"""Unit tests for MacroState.write_file and reader snippets."""
+"""Unit tests for MacroState.write_file and PipelineContext reader snippets."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.readers import ReaderRuntime
+from vg2c.emitter.utilities.pipeline_context import PipelineContext
 
-READER_SNIPPET = ReaderRuntime.get_source()
+PIPELINE_CONTEXT_SNIPPET = PipelineContext.get_source()
 
 # --- MacroState.write_file ---
 
@@ -51,6 +51,55 @@ def test_write_file_auto_mkdir(tmp_path):
     assert Path(out).exists()
 
 
-def test_reader_snippet_includes_runtime_imports():
-    assert "class ReaderRuntime" in READER_SNIPPET
-    assert "DATABASE_TYPE_MAP" in READER_SNIPPET
+def test_pipeline_context_snippet_includes_datasyncx_reader_logic():
+    assert "class PipelineContext" in PIPELINE_CONTEXT_SNIPPET
+    assert "DATASYNCX_READER_MAP" in PIPELINE_CONTEXT_SNIPPET
+    assert "def _read_datasyncx" in PIPELINE_CONTEXT_SNIPPET
+
+
+def test_run_query_reads_datasyncx_and_lowercases_columns(monkeypatch):
+    calls: list[tuple[str, str]] = []
+    captured: dict[str, object] = {}
+
+    class FakeResult:
+        columns = ["COL_A", "COL_B"]
+
+    class FakeReader:
+        def read(self, site: str, query: str):
+            calls.append((site, query))
+            return FakeResult()
+
+    class FakeMacro:
+        def substitute_sql(self, sql: str) -> str:
+            return sql.replace("<<<X>>>", "42")
+
+    class FakeCsvIo:
+        def write(self, output: str, result, header=None) -> None:
+            captured["output"] = output
+            captured["result"] = result
+            captured["header"] = header
+
+    ctx = object.__new__(PipelineContext)
+    ctx.macro = FakeMacro()
+    ctx.csv_io = FakeCsvIo()
+    monkeypatch.setattr(PipelineContext, "DATASYNCX_READER_MAP", {"MARS": FakeReader})
+
+    ctx.run_query("select <<<X>>> as COL_A", "out.csv", "MARS", header=["col_a"])
+
+    assert calls == [("KM", "select 42 as COL_A")]
+    assert captured["output"] == "out.csv"
+    assert captured["header"] == ["col_a"]
+    assert captured["result"].columns == ["col_a", "col_b"]
+
+
+def test_run_query_rejects_unknown_datasyncx_source(monkeypatch):
+    class FakeMacro:
+        def substitute_sql(self, sql: str) -> str:
+            return sql
+
+    ctx = object.__new__(PipelineContext)
+    ctx.macro = FakeMacro()
+    monkeypatch.setattr(PipelineContext, "DATASYNCX_READER_MAP", {})
+
+    with pytest.raises(ValueError, match="Unsupported database type"):
+        ctx.run_query("select 1", "out.csv", "NOPE")

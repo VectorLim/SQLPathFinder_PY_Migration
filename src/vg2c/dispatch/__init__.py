@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from vg2c.dataflow.models import AnalyzedProgram
+from vg2c.dispatch import dialects as _dialects  # noqa: F401
+from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.models import (
     Dialect,
     DispatchConfig,
     DispatchedBlock,
     DispatchedProgram,
     ReaderTarget,
-)
-from vg2c.dispatch.registry import (
-    HANDLERS,
-    derive_handler_from_signals,
-    get_handler_for_kind,
 )
 from vg2c.frontend.models import Diagnostic, Kind
 
@@ -21,8 +18,19 @@ __all__ = [
     "DispatchConfig",
     "DispatchedBlock",
     "DispatchedProgram",
+    "DialectHandler",
     "ReaderTarget",
+    "get_datasyncx_reader_name",
 ]
+
+
+def get_datasyncx_reader_name(source_type: str) -> str | None:
+    source_type_u = source_type.upper()
+    for dialect in ("oracle_mars", "oracle_oasys", "oracle_aries", "sqlite"):
+        handler = DialectHandler.for_dialect(dialect)
+        if handler is not None and handler.database_arg == source_type_u:
+            return handler.datasyncx_reader_name
+    return None
 
 
 def dispatch(
@@ -46,32 +54,26 @@ def dispatch(
 
     for block in analyzed.resolved.blocks:
         # --- Step 1: resolve handler ---
-        is_fallback = False
         opts = block.resolved_options.lookup
 
         if block.kind is Kind.SQL_QUERY:
-            handler = derive_handler_from_signals(
+            handler = DialectHandler.derive_handler_from_signals(
                 node=opts.get("NODE", ""),
                 engine=opts.get("ENGINE", ""),
                 oledb=opts.get("OLEDB", ""),
             )
         else:
-            handler = get_handler_for_kind(block.kind)
+            handler = DialectHandler.for_kind(block.kind)
 
         if handler is None and block.kind is Kind.UNKNOWN:
-            handler = derive_handler_from_signals(
+            handler = DialectHandler.derive_handler_from_signals(
                 node=opts.get("NODE", ""),
                 engine=opts.get("ENGINE", ""),
                 oledb=opts.get("OLEDB", ""),
             )
-            is_fallback = handler is not None
 
         if handler is None:
             continue  # Non-SQL block; no DispatchedBlock emitted
-
-        # --- Step 3: unknown-dialect fallback note ---
-        if is_fallback:
-            pass
 
         # --- Step 4: schema substitution ---
         rewritten_sql, schema_diags = handler.substitute(
@@ -80,9 +82,11 @@ def dispatch(
             span=block.parsed.span,
             block_index=block.parsed.index,
         )
+        diagnostics.extend(schema_diags)
 
         # --- Step 6: reader target ---
         reader_target, target_diags = handler.build_reader_target(block)
+        diagnostics.extend(target_diags)
         dispatched.append(
             DispatchedBlock(
                 block_index=block.parsed.index,

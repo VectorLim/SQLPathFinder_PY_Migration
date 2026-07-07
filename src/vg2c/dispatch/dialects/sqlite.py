@@ -2,17 +2,14 @@ from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.models import DispatchConfig
-from vg2c.dispatch.registry import register
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 
 
-@register
 class SqliteDialect(DialectHandler):
     """Handler for SQLite dialect."""
 
     dialect = "sqlite"
     kind = Kind.SQLITE_QUERY
-    reader_class_hint = "SQLiteReader"
     database_arg = None
 
     @classmethod

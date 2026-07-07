@@ -152,8 +152,8 @@ def main() -> None:
     for d in dispatched.dispatched[: args.max_items]:
         target = d.reader_target
         print(
-            f"  - idx={d.block_index} dialect={d.dialect} reader={target.reader_class_hint} "
-            f"db={target.database_arg} record={target.record_name}@{target.record_version} "
+            f"  - idx={d.block_index} dialect={d.dialect} db={target.database_arg} "
+            f"record={target.record_name}@{target.record_version} "
             f"node='{target.node}' instance='{target.instance}'"
         )
         print(f"    sql='{_preview(d.rewritten_sql, max_len=140)}'")

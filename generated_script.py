@@ -300,6 +300,16 @@ class PipelineContext:
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
+    DATASYNCX_READER_NAMES = {
+        "MARS": "MarsReader",
+        "OASYS": "OracleReader",
+        "ARIES": "AriesReader",
+    }
+    DATASYNCX_READER_MAP = {
+        "MARS": MarsReader,
+        "OASYS": OracleReader,
+        "ARIES": AriesReader,
+    }
 
     def __init__(self) -> None:
         registry = getattr(type(self), "_registry", None)
@@ -339,10 +349,16 @@ class PipelineContext:
     ) -> None:
         self.macro.write_file(path, template, vars=vars)
 
-    def read(self, sql: str, db_type: str):
-        return self.reader_runtime.read(
-            sql=sql, db_type=db_type, macro_state=self.macro
+    def _read_datasyncx(self, sql: str, source_type: str):
+        source_type_u = source_type.upper()
+        if source_type_u not in self.DATASYNCX_READER_MAP:
+            raise ValueError(f"Unsupported database type: {source_type!r}")
+        result = self.DATASYNCX_READER_MAP[source_type_u]().read(
+            site="KM",
+            query=sql,
         )
+        result.columns = [col.lower() for col in result.columns]
+        return result
 
     def run_query(
         self,
@@ -358,9 +374,7 @@ class PipelineContext:
         if source_type.lower() == "sqlite":
             result = self.sqlite_engine.execute(sql, inputs or [])
         else:
-            result = self.reader_runtime.read(
-                sql=sql, db_type=source_type, macro_state=None
-            )
+            result = self._read_datasyncx(sql, source_type)
 
         if crosstab:
             result = self.crosstab.apply(
@@ -729,24 +743,6 @@ class MailService:
 
         with smtplib.SMTP(host, port) as smtp:
             smtp.send_message(msg)
-
-class ReaderRuntime:
-    utility_name = "reader_runtime"
-    DATABASE_TYPE_MAP = {
-        "MARS": MarsReader,
-        "OASYS": OracleReader,
-        "ARIES": AriesReader,
-    }
-
-    def read(self, sql, db_type, macro_state=None):
-        """Run *sql* against the Reader registered for *db_type*."""
-        if macro_state is not None:
-            sql = macro_state.substitute_sql(sql)
-        if db_type not in self.DATABASE_TYPE_MAP:
-            raise ValueError(f"Unsupported database type: {db_type!r}")
-        result = self.DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
-        result.columns = [col.lower() for col in result.columns]
-        return result
 
 class SqlMacros:
     """SQL macro expansion helpers used by emitted scripts."""

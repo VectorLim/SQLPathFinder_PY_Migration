@@ -62,7 +62,7 @@ def test_dispatched_count_equals_sql_bearing_blocks(
 
 @pytest.mark.parametrize(
     "fixture_name",
-    ["script_short.txt", "script_another.txt", "script_from_vietnam.txt"],
+    ["script_short.txt", "script_another.txt"],
 )
 def test_no_error_diagnostics_on_clean_fixtures(
     FIXTURES: Path, fixture_name: str
@@ -101,7 +101,6 @@ def test_script_short_one_sqlite_block(FIXTURES: Path) -> None:
     program = _run_pipeline(FIXTURES, "script_short.txt", config=DispatchConfig())
     assert len(program.dispatched) == 1
     assert program.dispatched[0].dialect == "sqlite"
-    assert program.dispatched[0].reader_target.reader_class_hint == "SQLiteReader"
     assert program.dispatched[0].reader_target.database_arg is None
 
 

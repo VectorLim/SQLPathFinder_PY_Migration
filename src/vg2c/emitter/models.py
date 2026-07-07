@@ -5,16 +5,7 @@ from typing import Any
 
 from vg2c.frontend.models import Diagnostic
 
-__all__ = ["EmitContext", "EmittedFunction", "EmittedScript", "IndentWriter"]
-
-
-@dataclass
-class EmittedFunction:
-    """One helper function emitted for a step in the VG2 script."""
-
-    name: str
-    source: str
-    call_site: str
+__all__ = ["EmitContext", "EmittedScript", "IndentWriter"]
 
 
 @dataclass
