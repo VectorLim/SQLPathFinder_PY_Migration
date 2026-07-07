@@ -11,7 +11,6 @@ from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
-    render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
 from vg2c.frontend.models import Kind
@@ -50,14 +49,12 @@ class MacroState(UtilitySpec):
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = render_method_call(
-            ctx,
+        row_count_call = ctx.render_method_call(
             "csv_io",
             "row_count",
             args=(RawExpr(csv_path_expr),),
         )
-        stmt = render_method_call(
-            ctx,
+        stmt = ctx.render_method_call(
             "macro",
             "set_named",
             args=(set_name, RawExpr(f"str({row_count_call})")),

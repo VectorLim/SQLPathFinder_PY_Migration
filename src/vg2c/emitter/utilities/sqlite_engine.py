@@ -9,7 +9,6 @@ from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
-    render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import (
     RawExpr,
@@ -124,6 +123,6 @@ class SqliteEngine(UtilitySpec):
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = render_method_call(ctx, "ctx", "run_query", kwargs=kwargs)
+        stmt = ctx.render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return _emit_step_source(_step_name(block, suffix), [stmt])

@@ -10,7 +10,6 @@ from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
-    render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
 from vg2c.frontend.models import Kind
@@ -45,8 +44,7 @@ class ExternalProcess(UtilitySpec):
     def _emit_run(cls, ctx, argv: list[str]) -> str:
         expr_items = [option_to_python_expr(token) for token in argv]
         argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             "external",
             "run",
             kwargs={"argv": argv_expr},

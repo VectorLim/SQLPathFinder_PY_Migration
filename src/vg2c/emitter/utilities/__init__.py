@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._emit_helpers import emit_block
 from vg2c.emitter.utilities._topo_sort import topological_sort
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.csv_io import CsvIO
@@ -197,7 +196,6 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
 
 __all__ = [
     "assemble_all_utilities",
-    "emit_block",
     "CrosstabUtility",
     "CsvIO",
     "ExternalProcess",

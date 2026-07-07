@@ -9,7 +9,6 @@ from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
-    render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import (
     RawExpr,
@@ -31,8 +30,7 @@ class FileSystemOps(UtilitySpec):
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(ctx, block)
 
-        stmt = render_method_call(
-            ctx,
+        stmt = ctx.render_method_call(
             "ctx",
             "write_file",
             kwargs={
@@ -84,8 +82,7 @@ class FileSystemOps(UtilitySpec):
         dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
         dst_expr = RawExpr(dest_dir)
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -98,8 +95,7 @@ class FileSystemOps(UtilitySpec):
         dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = RawExpr(src)
         dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -112,8 +108,7 @@ class FileSystemOps(UtilitySpec):
         paths_expr = RawExpr(
             "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
         )
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "delete",
             kwargs={"paths": paths_expr},

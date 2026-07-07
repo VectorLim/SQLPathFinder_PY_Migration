@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from vg2c.frontend.models import Diagnostic
+from vg2c.frontend.models import Diagnostic, Kind
 
 __all__ = ["EmitContext", "EmittedScript", "IndentWriter"]
 
@@ -30,6 +30,70 @@ class EmitContext:
             self.imports.add(f"from {module} import {name}")
         else:
             self.imports.add(f"import {module}")
+
+    def render_method_call(
+        self,
+        utility_name: str,
+        method_name: str,
+        *,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> str:
+        """Render a Python method-call expression for the generated script.
+
+        Args:
+            utility_name: The utility sub-object to call on (e.g. ``'csv_io'``,
+                ``'fs_ops'``).  Pass ``'ctx'`` to address the context object itself.
+            method_name: The method to invoke on that object.
+            args: Positional argument values (raw Python values or
+                :class:`~vg2c.emitter.utilities._emit_types.RawExpr` instances).
+            kwargs: Keyword argument values (same accepted types as *args*).
+
+        Returns:
+            A string such as ``"ctx.csv_io.iter('file.csv')"``.
+        """
+        from vg2c.emitter.utilities._emit_helpers import _render_value
+
+        receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
+        parts: list[str] = [_render_value(arg) for arg in args]
+        for key, value in (kwargs or {}).items():
+            parts.append(f"{key}={_render_value(value)}")
+        return f"{receiver}.{method_name}({', '.join(parts)})"
+
+    def emit_block(self, block: Any, dispatched: Any) -> tuple[str, str]:
+        """Dispatch a resolved block to its registered handler.
+
+        Tries the registered :class:`~vg2c.emitter.utilities._base.UtilitySpec`
+        handler for the block kind first.  Falls back to a ``pass``-stub for
+        unclassified utility commands, HTML reports, and any other unhandled kind.
+
+        Returns:
+            A ``(func_source, call_site)`` pair suitable for appending to the
+            emitted function list and the run-body respectively.
+        """
+        from vg2c.emitter.utilities._base import UtilitySpec
+        from vg2c.emitter.utilities._emit_helpers import _emit_step_source, _step_name
+
+        handler_cls = UtilitySpec._kind_handlers.get(block.kind)
+        if handler_cls is not None:
+            emitted = handler_cls.emit_block(self, block, dispatched)
+            if emitted is not None:
+                return emitted
+
+        if block.kind is Kind.UTILITY:
+            return _emit_step_source(
+                _step_name(block, "utility"),
+                ["pass  # TODO: utility command not classified"],
+            )
+        if block.kind is Kind.HTML_REPORT:
+            return _emit_step_source(
+                _step_name(block, "html_report"),
+                ["pass  # HTML report not translated"],
+            )
+        return _emit_step_source(
+            _step_name(block, "unknown"),
+            [f"pass  # TODO: unhandled kind={block.kind}"],
+        )
 
 
 @dataclass(frozen=True, slots=True)

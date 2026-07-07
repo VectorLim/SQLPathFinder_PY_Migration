@@ -3,12 +3,11 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.models import DispatchedProgram
+from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import (
     NAMED_PLACEHOLDER_RE,
     macro_token_to_python_expr,
 )
-from vg2c.emitter.models import EmitContext, IndentWriter
-from vg2c.emitter.utilities._emit_helpers import emit_block, render_method_call
 from vg2c.emitter.utilities._emit_types import RawExpr
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
@@ -149,14 +148,12 @@ def _walk_scope(
         if isinstance(payload, StartMacro):
             row_iter = bool(payload.csv_path)
             if row_iter:
-                iter_call = render_method_call(
-                    ctx,
+                iter_call = ctx.render_method_call(
                     "csv_io",
                     "iter",
                     args=(payload.csv_path,),
                 )
-                scope_call = render_method_call(
-                    ctx,
+                scope_call = ctx.render_method_call(
                     "ctx",
                     "macro_scope",
                     args=(RawExpr("__row"),),
@@ -186,8 +183,7 @@ def _walk_scope(
         # {RUN-LOOP}: emit a chunked for-loop over the input CSV.
         payload = node.control_payload
         if isinstance(payload, RunLoop):
-            chunks_call = render_method_call(
-                ctx,
+            chunks_call = ctx.render_method_call(
                 "csv_io",
                 "iter_chunks",
                 args=(
@@ -282,7 +278,7 @@ def _walk_scope(
 
         # Emit the function
         try:
-            func_code, call_site = emit_block(ctx, block, dispatched_block)
+            func_code, call_site = ctx.emit_block(block, dispatched_block)
             functions.append(func_code)
             writer.write(call_site)
         except Exception as exc:
