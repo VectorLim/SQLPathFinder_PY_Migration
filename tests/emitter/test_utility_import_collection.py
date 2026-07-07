@@ -19,13 +19,14 @@ def test_scan_imports_collects_external_and_filters_vg2c() -> None:
         / "csv_io.py"
     )
 
-    imports, deps = _scan_imports_and_dependencies(
+    imports, deps, helpers = _scan_imports_and_dependencies(
         csv_io_path,
         current_name="csv_io",
         module_to_name={},
     )
 
     assert deps == set()
+    assert "vg2c.emitter.utilities._base" in helpers
     assert "import csv" in imports
     assert "from pathlib import Path" in imports
     assert "from typing import Any, Iterator" in imports
