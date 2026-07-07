@@ -22,26 +22,16 @@ from vg2c.emitter.utilities._emit_types import (
     resolve_output_path,
     strip_quotes,
 )
-from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
 
 _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
 
-@register_utility
 class SqliteEngine(UtilitySpec):
     """Run SQL joins over CSV files using in-memory SQLite."""
 
     utility_name = "sqlite_engine"
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
-    utility_imports = (
-        "import csv",
-        "import re",
-        "import sqlite3",
-        "from pathlib import Path",
-        "from typing import Callable",
-        "import pandas as pd",
-    )
 
     CROSSTAB_RE = re.compile(
         r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\])",

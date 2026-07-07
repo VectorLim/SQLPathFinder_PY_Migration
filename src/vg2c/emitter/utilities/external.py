@@ -1,4 +1,4 @@
-"""ExternalProcess — run system commands via subprocess."""
+"""ExternalProcess - run system commands via subprocess."""
 
 from __future__ import annotations
 
@@ -13,21 +13,14 @@ from vg2c.emitter.utilities._emit_helpers import (
     render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
-from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
 
 
-@register_utility
 class ExternalProcess(UtilitySpec):
     """Thin wrapper around subprocess.run."""
 
     utility_name = "external"
     handles = (Kind.EXTERNAL_RUN,)
-    utility_imports = (
-        "import os",
-        "import subprocess",
-        "from pathlib import Path",
-    )
 
     @staticmethod
     def _utility_argv(block) -> list[str]:

@@ -1,15 +1,15 @@
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
 
+
+from __future__ import annotations
 from contextlib import contextmanager
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
 from email.message import EmailMessage
-from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from typing import Any, ContextManager
 from typing import Any, Iterator
-from typing import Callable
 from typing import Iterator, Protocol
 import csv
 import os
@@ -23,10 +23,6 @@ import subprocess
 
 class CrosstabUtility:
     utility_name = "crosstab"
-    utility_imports = (
-        "from typing import Any",
-        "import pandas as pd",
-    )
 
     def apply(
         self,
@@ -63,12 +59,6 @@ class CsvIO:
     """Read and write CSV files relative to ``cwd``."""
 
     utility_name = "csv_io"
-    utility_imports = (
-        "import csv",
-        "from pathlib import Path",
-        "from typing import Any, Iterator",
-        "import pandas",
-    )
 
     # ------------------------------------------------------------------
     # Read
@@ -140,10 +130,10 @@ class CsvIO:
         """Write *content* to a CSV file.
 
         *content* can be:
-        - a list of dicts  → written via DictWriter (keys as header)
-        - a list of lists  → written via writer (optional *header* for first row)
-        - a string         → written as raw text (no CSV encoding)
-        - a Path           → copied verbatim
+        - a list of dicts  -> written via DictWriter (keys as header)
+        - a list of lists  -> written via writer (optional *header* for first row)
+        - a string         -> written as raw text (no CSV encoding)
+        - a Path           -> copied verbatim
         """
         path = Path(name)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,33 +169,282 @@ class CsvIO:
                     writer_plain.writerow(header)
                 writer_plain.writerows(rows)
 
-class Kind(str, Enum):
-    """Block-kind discriminator shared between the translator and the runtime."""
+class PipelineContext:
+    """Single runtime context object for generated scripts."""
 
-    SQL_QUERY = "SQL_QUERY"
-    SQLITE_QUERY = "SQLITE_QUERY"
-    WRITE_FILE = "WRITE_FILE"
-    FS_COPY = "FS_COPY"
-    FS_DELETE = "FS_DELETE"
-    EXTERNAL_RUN = "EXTERNAL_RUN"
-    HTML_REPORT = "HTML_REPORT"
-    UTILITY = "UTILITY"
-    MACRO_CONTROL = "MACRO_CONTROL"
-    UNKNOWN = "UNKNOWN"
-    MALFORMED = "MALFORMED"
+    utility_name = "ctx"
 
+    def __init__(self) -> None:
+        registry = getattr(type(self), "_registry", None)
+        if isinstance(registry, dict) and registry:
+            candidates = list(registry.items())
+        else:
+            candidates = []
+            for obj in globals().values():
+                if not isinstance(obj, type):
+                    continue
+                utility_name = getattr(obj, "utility_name", None)
+                if isinstance(utility_name, str):
+                    candidates.append((utility_name, obj))
+
+        for utility_name, utility_cls in candidates:
+            if utility_name == self.utility_name:
+                continue
+            try:
+                setattr(self, utility_name, utility_cls())
+            except TypeError:
+                continue
+
+    def __getattr__(self, name: str):
+        def _missing(*args: Any, **kwargs: Any) -> None:
+            print("not implemented yet")
+
+        return _missing
+
+    def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
+        return self.macro.scope(row=row)
+
+    def write_file(
+        self,
+        path: str,
+        template: str,
+        vars: dict[str, str] | None = None,
+    ) -> None:
+        self.macro.write_file(path, template, vars=vars)
+
+    def read(self, sql: str, db_type: str):
+        return self.reader_runtime.read(
+            sql=sql, db_type=db_type, macro_state=self.macro
+        )
+
+    def run_query(
+        self,
+        sql,
+        output: str,
+        source_type: str,
+        inputs: list[str] | None = None,
+        header: list[str] | None = None,
+        crosstab: dict | None = None,
+    ):
+        sql = self.macro.substitute_sql(sql)
+
+        if source_type.lower() == "sqlite":
+            result = self.sqlite_engine.execute(sql, inputs or [])
+        else:
+            result = self.reader_runtime.read(
+                sql=sql, db_type=source_type, macro_state=None
+            )
+
+        if crosstab:
+            result = self.crosstab.apply(
+                result,
+                row_keys=crosstab["row_keys"],
+                header_key=crosstab["header_key"],
+                value_key=crosstab["value_key"],
+            )
+
+        self.csv_io.write(output, result, header=header)
+
+    def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
+        return self.macro.eval_condition(lhs, op, rhs)
+
+class ExternalProcess:
+    """Thin wrapper around subprocess.run."""
+
+    utility_name = "external"
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        argv = cls._utility_argv(block)
+        if not argv:
+            return _emit_step_source(
+                _step_name(block, "external"),
+                ["pass  # TODO: empty external utility command"],
+            )
+
+        stmt = cls._emit_run(ctx, argv)
+        return _emit_step_source(_step_name(block, "external"), [stmt])
+
+    @classmethod
+    def _emit_run(cls, ctx, argv: list[str]) -> str:
+        expr_items = [option_to_python_expr(token) for token in argv]
+        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
+        return render_method_call(
+            ctx,
+            "external",
+            "run",
+            kwargs={"argv": argv_expr},
+        )
+
+    @staticmethod
+    def _resolve_exedir() -> str:
+        """Return the SPF tools directory from env var VG2C_EXEDIR."""
+        return os.environ.get("VG2C_EXEDIR", "")
+
+    @staticmethod
+    def _resolve_path(path: str) -> str:
+        return os.path.normpath(path)
+
+    @classmethod
+    def _resolve_argv(cls, argv: list[str]) -> list[str]:
+        """Substitute @EXEDIR@ tokens and normalise path-like arguments."""
+        exedir = cls._resolve_exedir()
+        return [
+            cls._resolve_path(a) if os.sep in a else a
+            for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
+        ]
+
+    def run(
+        self,
+        argv: list[str],
+        cwd: str | Path | None = None,
+        env: dict | None = None,
+        check: bool = False,
+    ) -> int:
+        resolved = self._resolve_argv(argv)
+        first = resolved[0] if resolved else ""
+        use_shell = Path(first).suffix.lower() in {".bat", ".va", ".exe"}
+        result = subprocess.run(
+            resolved,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            check=check,
+            shell=use_shell,
+        )
+        return result.returncode
+
+class FileSystemOps:
+
+    utility_name = "fs_ops"
+
+    @classmethod
+    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+        if block.kind is Kind.FS_COPY:
+            return cls._emit_copy_block(ctx, block)
+        if block.kind is Kind.FS_DELETE:
+            return cls._emit_delete_block(ctx, block)
+
+        stmt = render_method_call(
+            ctx,
+            "ctx",
+            "write_file",
+            kwargs={
+                "path": resolve_output_path(block),
+                "template": block.resolved_body,
+            },
+        )
+        return _emit_step_source(_step_name(block, "write_file"), [stmt])
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return []
+        return text.split()
+
+    @classmethod
+    def _emit_copy_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "robocopy" in basename:
+            stmt = cls._emit_robocopy(ctx, argv)
+        elif "spfcopy" in basename:
+            stmt = cls._emit_spf_copy(ctx, argv)
+        else:
+            return _emit_step_source(
+                _step_name(block, "fs_copy"),
+                ["pass  # TODO: unsupported FS copy utility command"],
+            )
+        return _emit_step_source(_step_name(block, "fs_copy"), [stmt])
+
+    @classmethod
+    def _emit_delete_block(cls, ctx, block) -> tuple[str, str]:
+        argv = cls._utility_argv(block)
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if "spfdelete" not in basename:
+            return _emit_step_source(
+                _step_name(block, "fs_delete"),
+                ["pass  # TODO: unsupported FS delete utility command"],
+            )
+        stmt = cls._emit_spf_delete(ctx, argv)
+        return _emit_step_source(_step_name(block, "fs_delete"), [stmt])
+
+    @classmethod
+    def _emit_robocopy(cls, ctx, argv: list[str]) -> str:
+        # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
+        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
+        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
+        dst_expr = RawExpr(dest_dir)
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "copy",
+            kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    @classmethod
+    def _emit_spf_copy(cls, ctx, argv: list[str]) -> str:
+        # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
+        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        src_expr = RawExpr(src)
+        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "copy",
+            kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    @classmethod
+    def _emit_spf_delete(cls, ctx, argv: list[str]) -> str:
+        raw = argv[1] if len(argv) > 1 else ""
+        items = [p.strip() for p in raw.split(",") if p.strip()]
+        paths_expr = RawExpr(
+            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        )
+        return render_method_call(
+            ctx,
+            cls.utility_name,
+            "delete",
+            kwargs={"paths": paths_expr},
+        )
+
+    def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
+        src, dst = Path(src), Path(dst)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
+
+    def rename(self, src: str | Path, dst: str | Path) -> None:
+        Path(src).replace(Path(dst))
+
+    def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
+        for p in paths:
+            path = Path(p)
+            if path.is_dir():
+                # if recurse:
+                # shutil.rmtree(path, ignore_errors=True)
+                pass
+            else:
+                # path.unlink(missing_ok=True)
+                pass
 
 class MacroState:
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
-    handles = (Kind.MACRO_CONTROL,)
-    utility_imports = (
-        "import re",
-        "from contextlib import contextmanager",
-        "from pathlib import Path",
-        "from typing import Iterator, Protocol",
-    )
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
@@ -319,19 +558,132 @@ class MacroState:
         finally:
             self.pop_frame()
 
+class MailService:
+    """Send email. Reads connection config from environment variables."""
+
+    utility_name = "mail"
+
+    @classmethod
+    def _emit_email(cls, ctx, argv: list[str]) -> None:
+        return None
+
+    def send(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        attachments: list[str] | None = None,
+        from_addr: str | None = None,
+    ) -> None:
+        host = os.environ.get("VG2C_SMTP_HOST", "")
+        if not host:
+            raise RuntimeError(
+                "MailService: VG2C_SMTP_HOST is not set. "
+                "Set the environment variable to your SMTP server hostname."
+            )
+        port = int(os.environ.get("VG2C_SMTP_PORT", "25"))
+        sender = from_addr or os.environ.get("VG2C_FROM_ADDRESS", "vg2c@localhost")
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = to
+        msg.set_content(body)
+
+        for att_path in attachments or []:
+            p = Path(att_path)
+            if p.exists():
+                msg.add_attachment(
+                    p.read_bytes(),
+                    maintype="application",
+                    subtype="octet-stream",
+                    filename=p.name,
+                )
+
+        with smtplib.SMTP(host, port) as smtp:
+            smtp.send_message(msg)
+
+class ReaderRuntime:
+    utility_name = "reader_runtime"
+    DATABASE_TYPE_MAP = {
+        "MARS": MarsReader,
+        "OASYS": OracleReader,
+        "ARIES": AriesReader,
+    }
+
+    def read(self, sql, db_type, macro_state=None):
+        """Run *sql* against the Reader registered for *db_type*."""
+        if macro_state is not None:
+            sql = macro_state.substitute_sql(sql)
+        if db_type not in self.DATABASE_TYPE_MAP:
+            raise ValueError(f"Unsupported database type: {db_type!r}")
+        result = self.DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
+        result.columns = [col.lower() for col in result.columns]
+        return result
+
+class SqlMacros:
+    """SQL macro expansion helpers used by emitted scripts."""
+
+    utility_name = "sql_macros"
+
+    @staticmethod
+    def _read_column(path: str, column_ref: int | str) -> list[str]:
+        rows: list[str] = []
+        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, [])
+            header_str = [str(h) for h in header]
+
+            if isinstance(column_ref, int):
+                idx = column_ref - 1
+            else:
+                col_lower = [h.lower() for h in header]
+                try:
+                    idx = col_lower.index(column_ref.lower())
+                except ValueError:
+                    return []
+
+            seen: dict[str, None] = {}
+            for row in reader:
+                if [str(v) for v in row] == header_str:
+                    continue
+                if idx < len(row):
+                    val = row[idx]
+                    if val not in seen:
+                        seen[val] = None
+                        rows.append(val)
+
+        return rows
+
+    @staticmethod
+    def _single_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
+        """Return chunked IN-list clause for Oracle-style SQL.
+
+        Oracle hard-limits IN lists to 1000 values. When there are more, the
+        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
+        """
+        values = self._read_column(path, column_ref)
+        if not values:
+            return "('__NO_VALUES__')"
+
+        chunk_size = 1000
+        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
+        parts: list[str] = []
+        for i, chunk in enumerate(chunks):
+            quoted = ", ".join(self._single_quote(v) for v in chunk)
+            parts.append(f"({quoted})")
+            if i < len(chunks) - 1:
+                parts.append(f"\nOR {lead_in} ")
+
+        return "".join(parts)
+
 class SqliteEngine:
     """Run SQL joins over CSV files using in-memory SQLite."""
 
     utility_name = "sqlite_engine"
-    handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
-    utility_imports = (
-        "import csv",
-        "import re",
-        "import sqlite3",
-        "from pathlib import Path",
-        "from typing import Callable",
-        "import pandas as pd",
-    )
 
     CROSSTAB_RE = re.compile(
         r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\])",
@@ -631,421 +983,6 @@ class SqliteEngine:
 
         data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
         return pd.DataFrame(data)
-
-class SqlMacros:
-    """SQL macro expansion helpers used by emitted scripts."""
-
-    utility_name = "sql_macros"
-    utility_imports = (
-        "import csv",
-        "from pathlib import Path",
-    )
-
-    @staticmethod
-    def _read_column(path: str, column_ref: int | str) -> list[str]:
-        rows: list[str] = []
-        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
-            header = next(reader, [])
-            header_str = [str(h) for h in header]
-
-            if isinstance(column_ref, int):
-                idx = column_ref - 1
-            else:
-                col_lower = [h.lower() for h in header]
-                try:
-                    idx = col_lower.index(column_ref.lower())
-                except ValueError:
-                    return []
-
-            seen: dict[str, None] = {}
-            for row in reader:
-                if [str(v) for v in row] == header_str:
-                    continue
-                if idx < len(row):
-                    val = row[idx]
-                    if val not in seen:
-                        seen[val] = None
-                        rows.append(val)
-
-        return rows
-
-    @staticmethod
-    def _single_quote(value: str) -> str:
-        return "'" + value.replace("'", "''") + "'"
-
-    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
-        """Return chunked IN-list clause for Oracle-style SQL.
-
-        Oracle hard-limits IN lists to 1000 values. When there are more, the
-        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
-        """
-        values = self._read_column(path, column_ref)
-        if not values:
-            return "('__NO_VALUES__')"
-
-        chunk_size = 1000
-        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
-        parts: list[str] = []
-        for i, chunk in enumerate(chunks):
-            quoted = ", ".join(self._single_quote(v) for v in chunk)
-            parts.append(f"({quoted})")
-            if i < len(chunks) - 1:
-                parts.append(f"\nOR {lead_in} ")
-
-        return "".join(parts)
-
-class FileSystemOps:
-
-    utility_name = "fs_ops"
-    handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
-    utility_imports = (
-        "import shutil",
-        "from pathlib import Path",
-    )
-
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
-        if block.kind is Kind.FS_COPY:
-            return cls._emit_copy_block(ctx, block)
-        if block.kind is Kind.FS_DELETE:
-            return cls._emit_delete_block(ctx, block)
-
-        stmt = render_method_call(
-            ctx,
-            "ctx",
-            "write_file",
-            kwargs={
-                "path": resolve_output_path(block),
-                "template": block.resolved_body,
-            },
-        )
-        return _emit_step_source(_step_name(block, "write_file"), [stmt])
-
-    @staticmethod
-    def _utility_argv(block) -> list[str]:
-        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
-
-    @classmethod
-    def _emit_copy_block(cls, ctx, block) -> tuple[str, str]:
-        argv = cls._utility_argv(block)
-        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
-        if "robocopy" in basename:
-            stmt = cls._emit_robocopy(ctx, argv)
-        elif "spfcopy" in basename:
-            stmt = cls._emit_spf_copy(ctx, argv)
-        else:
-            return _emit_step_source(
-                _step_name(block, "fs_copy"),
-                ["pass  # TODO: unsupported FS copy utility command"],
-            )
-        return _emit_step_source(_step_name(block, "fs_copy"), [stmt])
-
-    @classmethod
-    def _emit_delete_block(cls, ctx, block) -> tuple[str, str]:
-        argv = cls._utility_argv(block)
-        basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
-        if "spfdelete" not in basename:
-            return _emit_step_source(
-                _step_name(block, "fs_delete"),
-                ["pass  # TODO: unsupported FS delete utility command"],
-            )
-        stmt = cls._emit_spf_delete(ctx, argv)
-        return _emit_step_source(_step_name(block, "fs_delete"), [stmt])
-
-    @classmethod
-    def _emit_robocopy(cls, ctx, argv: list[str]) -> str:
-        # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
-        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
-        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
-        dst_expr = RawExpr(dest_dir)
-        return render_method_call(
-            ctx,
-            cls.utility_name,
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
-
-    @classmethod
-    def _emit_spf_copy(cls, ctx, argv: list[str]) -> str:
-        # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
-        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        src_expr = RawExpr(src)
-        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
-        return render_method_call(
-            ctx,
-            cls.utility_name,
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
-
-    @classmethod
-    def _emit_spf_delete(cls, ctx, argv: list[str]) -> str:
-        raw = argv[1] if len(argv) > 1 else ""
-        items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = RawExpr(
-            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
-        )
-        return render_method_call(
-            ctx,
-            cls.utility_name,
-            "delete",
-            kwargs={"paths": paths_expr},
-        )
-
-    def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
-        src, dst = Path(src), Path(dst)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-        else:
-            shutil.copy2(src, dst)
-
-    def rename(self, src: str | Path, dst: str | Path) -> None:
-        Path(src).replace(Path(dst))
-
-    def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
-        for p in paths:
-            path = Path(p)
-            if path.is_dir():
-                # if recurse:
-                # shutil.rmtree(path, ignore_errors=True)
-                pass
-            else:
-                # path.unlink(missing_ok=True)
-                pass
-
-class MailService:
-    """Send email. Reads connection config from environment variables."""
-
-    utility_name = "mail"
-    utility_imports = (
-        "import os",
-        "import smtplib",
-        "from email.message import EmailMessage",
-        "from pathlib import Path",
-    )
-
-    @classmethod
-    def _emit_email(cls, ctx, argv: list[str]) -> None:
-        return None
-
-    def send(
-        self,
-        to: str,
-        subject: str,
-        body: str,
-        attachments: list[str] | None = None,
-        from_addr: str | None = None,
-    ) -> None:
-        host = os.environ.get("VG2C_SMTP_HOST", "")
-        if not host:
-            raise RuntimeError(
-                "MailService: VG2C_SMTP_HOST is not set. "
-                "Set the environment variable to your SMTP server hostname."
-            )
-        port = int(os.environ.get("VG2C_SMTP_PORT", "25"))
-        sender = from_addr or os.environ.get("VG2C_FROM_ADDRESS", "vg2c@localhost")
-
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = to
-        msg.set_content(body)
-
-        for att_path in attachments or []:
-            p = Path(att_path)
-            if p.exists():
-                msg.add_attachment(
-                    p.read_bytes(),
-                    maintype="application",
-                    subtype="octet-stream",
-                    filename=p.name,
-                )
-
-        with smtplib.SMTP(host, port) as smtp:
-            smtp.send_message(msg)
-
-class ExternalProcess:
-    """Thin wrapper around subprocess.run."""
-
-    utility_name = "external"
-    handles = (Kind.EXTERNAL_RUN,)
-    utility_imports = (
-        "import os",
-        "import subprocess",
-        "from pathlib import Path",
-    )
-
-    @staticmethod
-    def _utility_argv(block) -> list[str]:
-        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
-
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
-        argv = cls._utility_argv(block)
-        if not argv:
-            return _emit_step_source(
-                _step_name(block, "external"),
-                ["pass  # TODO: empty external utility command"],
-            )
-
-        stmt = cls._emit_run(ctx, argv)
-        return _emit_step_source(_step_name(block, "external"), [stmt])
-
-    @classmethod
-    def _emit_run(cls, ctx, argv: list[str]) -> str:
-        expr_items = [option_to_python_expr(token) for token in argv]
-        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return render_method_call(
-            ctx,
-            "external",
-            "run",
-            kwargs={"argv": argv_expr},
-        )
-
-    @staticmethod
-    def _resolve_exedir() -> str:
-        """Return the SPF tools directory from env var VG2C_EXEDIR."""
-        return os.environ.get("VG2C_EXEDIR", "")
-
-    @staticmethod
-    def _resolve_path(path: str) -> str:
-        return os.path.normpath(path)
-
-    @classmethod
-    def _resolve_argv(cls, argv: list[str]) -> list[str]:
-        """Substitute @EXEDIR@ tokens and normalise path-like arguments."""
-        exedir = cls._resolve_exedir()
-        return [
-            cls._resolve_path(a) if os.sep in a else a
-            for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
-        ]
-
-    def run(
-        self,
-        argv: list[str],
-        cwd: str | Path | None = None,
-        env: dict | None = None,
-        check: bool = False,
-    ) -> int:
-        resolved = self._resolve_argv(argv)
-        first = resolved[0] if resolved else ""
-        use_shell = Path(first).suffix.lower() in {".bat", ".va", ".exe"}
-        result = subprocess.run(
-            resolved,
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-            shell=use_shell,
-        )
-        return result.returncode
-
-class ReaderRuntime:
-    utility_name = "reader_runtime"
-    utility_imports = (
-        "from datasyncx.readers import AriesReader, MarsReader, OracleReader",
-    )
-    DATABASE_TYPE_MAP = {
-        "MARS": MarsReader,
-        "OASYS": OracleReader,
-        "ARIES": AriesReader,
-    }
-
-    def read(self, sql, db_type, macro_state=None):
-        """Run *sql* against the Reader registered for *db_type*."""
-        if macro_state is not None:
-            sql = macro_state.substitute_sql(sql)
-        if db_type not in self.DATABASE_TYPE_MAP:
-            raise ValueError(f"Unsupported database type: {db_type!r}")
-        result = self.DATABASE_TYPE_MAP[db_type]().read(site="KM", query=sql)
-        result.columns = [col.lower() for col in result.columns]
-        return result
-
-class PipelineContext:
-    """Single runtime context object for generated scripts."""
-
-    utility_name = "ctx"
-    utility_imports = ("from typing import Any, ContextManager",)
-    utility_dependencies = (
-        "kind_enum",
-        "macro",
-        "csv_io",
-        "sqlite_engine",
-        "sql_macros",
-        "fs_ops",
-        "mail",
-        "external",
-        "crosstab",
-        "reader_runtime",
-    )
-
-    def __init__(self) -> None:
-        self.macro = MacroState()
-        self.csv_io = CsvIO()
-        self.sqlite_engine = SqliteEngine()
-        self.sql_macros = SqlMacros()
-        self.fs_ops = FileSystemOps()
-        self.mail = MailService()
-        self.external = ExternalProcess()
-        self.reader_runtime = ReaderRuntime()
-        self.crosstab = CrosstabUtility()
-
-    def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
-        return self.macro.scope(row=row)
-
-    def write_file(
-        self,
-        path: str,
-        template: str,
-        vars: dict[str, str] | None = None,
-    ) -> None:
-        self.macro.write_file(path, template, vars=vars)
-
-    def read(self, sql: str, db_type: str):
-        return self.reader_runtime.read(
-            sql=sql, db_type=db_type, macro_state=self.macro
-        )
-
-    def run_query(
-        self,
-        sql,
-        output: str,
-        source_type: str,
-        inputs: list[str] | None = None,
-        header: list[str] | None = None,
-        crosstab: dict | None = None,
-    ):
-        sql = self.macro.substitute_sql(sql)
-
-        if source_type.lower() == "sqlite":
-            result = self.sqlite_engine.execute(sql, inputs or [])
-        else:
-            result = self.reader_runtime.read(
-                sql=sql, db_type=source_type, macro_state=None
-            )
-
-        if crosstab:
-            result = self.crosstab.apply(
-                result,
-                row_keys=crosstab["row_keys"],
-                header_key=crosstab["header_key"],
-                value_key=crosstab["value_key"],
-            )
-
-        self.csv_io.write(output, result, header=header)
-
-    def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
-        return self.macro.eval_condition(lhs, op, rhs)
 
 def step_0000_html_report(ctx) -> None:
     pass  # HTML report not translated

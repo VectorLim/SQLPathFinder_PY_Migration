@@ -4,48 +4,40 @@ from __future__ import annotations
 
 from typing import Any, ContextManager
 
-from vg2c.emitter.readers import ReaderRuntime
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
-from vg2c.emitter.utilities.crosstab import CrosstabUtility
-from vg2c.emitter.utilities.csv_io import CsvIO
-from vg2c.emitter.utilities.external import ExternalProcess
-from vg2c.emitter.utilities.fs_ops import FileSystemOps
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities.mail import MailService
-from vg2c.emitter.utilities.sql_macros import SqlMacros
-from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
 
 
-@register_utility
 class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
-    utility_imports = ("from typing import Any, ContextManager",)
-    utility_dependencies = (
-        "kind_enum",
-        "macro",
-        "csv_io",
-        "sqlite_engine",
-        "sql_macros",
-        "fs_ops",
-        "mail",
-        "external",
-        "crosstab",
-        "reader_runtime",
-    )
 
     def __init__(self) -> None:
-        self.macro = MacroState()
-        self.csv_io = CsvIO()
-        self.sqlite_engine = SqliteEngine()
-        self.sql_macros = SqlMacros()
-        self.fs_ops = FileSystemOps()
-        self.mail = MailService()
-        self.external = ExternalProcess()
-        self.reader_runtime = ReaderRuntime()
-        self.crosstab = CrosstabUtility()
+        registry = getattr(type(self), "_registry", None)
+        if isinstance(registry, dict) and registry:
+            candidates = list(registry.items())
+        else:
+            candidates = []
+            for obj in globals().values():
+                if not isinstance(obj, type):
+                    continue
+                utility_name = getattr(obj, "utility_name", None)
+                if isinstance(utility_name, str):
+                    candidates.append((utility_name, obj))
+
+        for utility_name, utility_cls in candidates:
+            if utility_name == self.utility_name:
+                continue
+            try:
+                setattr(self, utility_name, utility_cls())
+            except TypeError:
+                continue
+
+    def __getattr__(self, name: str):
+        def _missing(*args: Any, **kwargs: Any) -> None:
+            print("not implemented yet")
+
+        return _missing
 
     def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
         return self.macro.scope(row=row)

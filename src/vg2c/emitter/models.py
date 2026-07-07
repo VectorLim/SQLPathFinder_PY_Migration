@@ -26,7 +26,6 @@ class EmitContext:
     dispatch_map: dict[int, Any] = field(
         default_factory=dict
     )  # block_index -> DispatchedBlock
-    needed_utilities: set[str] = field(default_factory=set)
 
     def add_import(self, module: str, name: str | None = None) -> None:
         """Register an import statement.

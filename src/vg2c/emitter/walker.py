@@ -10,7 +10,6 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import emit_block, render_method_call
 from vg2c.emitter.utilities._emit_types import RawExpr
-from vg2c.emitter.utilities._registry import mark_utility_used
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -167,7 +166,6 @@ def _walk_scope(
                 writer.write(f"with {scope_call}:")
                 writer.push_indent()
             else:
-                mark_utility_used(ctx, "ctx")
                 writer.write("with ctx.macro_scope():")
                 writer.push_indent()
             for child in node.children:

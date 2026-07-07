@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities import get_registered_source
+from vg2c.emitter.readers import ReaderRuntime
 
-READER_SNIPPET = get_registered_source("reader_runtime")
+READER_SNIPPET = ReaderRuntime.get_source()
 
 # --- MacroState.write_file ---
 
@@ -52,8 +52,5 @@ def test_write_file_auto_mkdir(tmp_path):
 
 
 def test_reader_snippet_includes_runtime_imports():
-    assert (
-        "from datasyncx.readers import AriesReader, MarsReader, OracleReader"
-        in READER_SNIPPET
-    )
+    assert "class ReaderRuntime" in READER_SNIPPET
     assert "DATABASE_TYPE_MAP" in READER_SNIPPET

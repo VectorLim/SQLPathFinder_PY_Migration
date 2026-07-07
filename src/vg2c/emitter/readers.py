@@ -7,18 +7,13 @@ To support a new database type, add an entry to ``DATABASE_TYPE_MAP`` in
 from __future__ import annotations
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
 
 
 from datasyncx.readers import AriesReader, MarsReader, OracleReader
 
 
-@register_utility
 class ReaderRuntime(UtilitySpec):
     utility_name = "reader_runtime"
-    utility_imports = (
-        "from datasyncx.readers import AriesReader, MarsReader, OracleReader",
-    )
     DATABASE_TYPE_MAP = {
         "MARS": MarsReader,
         "OASYS": OracleReader,

@@ -1,4 +1,4 @@
-"""SqlMacros — SQL macro expansion helpers (embeddable)."""
+"""SqlMacros - SQL macro expansion helpers (embeddable)."""
 
 from __future__ import annotations
 
@@ -6,18 +6,12 @@ import csv
 from pathlib import Path
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
 
 
-@register_utility
 class SqlMacros(UtilitySpec):
     """SQL macro expansion helpers used by emitted scripts."""
 
     utility_name = "sql_macros"
-    utility_imports = (
-        "import csv",
-        "from pathlib import Path",
-    )
 
     @staticmethod
     def _read_column(path: str, column_ref: int | str) -> list[str]:

@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmitContext, EmittedScript, IndentWriter
-from vg2c.emitter.utilities import (
-    assemble_registered_utilities,
-    mark_utility_used,
-)
+from vg2c.emitter.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
 from vg2c.frontend.models import Diagnostic
 
@@ -25,12 +22,8 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Walk the scope tree and emit code
     functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)
 
-    # Always include ctx (PipelineContext) and Kind enum in the emitted script
-    mark_utility_used(ctx, "ctx")
-    mark_utility_used(ctx, "kind_enum")
-
     # Assemble embedded utility classes.
-    utility_imports, utility_sources = assemble_registered_utilities(ctx)
+    utility_imports, utility_sources = assemble_all_utilities()
 
     # Merge utility imports into ctx.imports
     ctx.imports.update(utility_imports)

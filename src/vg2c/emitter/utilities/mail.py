@@ -1,4 +1,4 @@
-"""MailService — send email via stdlib smtplib."""
+"""MailService - send email via stdlib smtplib."""
 
 from __future__ import annotations
 
@@ -8,20 +8,12 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
 
 
-@register_utility
 class MailService(UtilitySpec):
     """Send email. Reads connection config from environment variables."""
 
     utility_name = "mail"
-    utility_imports = (
-        "import os",
-        "import smtplib",
-        "from email.message import EmailMessage",
-        "from pathlib import Path",
-    )
 
     @classmethod
     def _emit_email(cls, ctx, argv: list[str]) -> None:

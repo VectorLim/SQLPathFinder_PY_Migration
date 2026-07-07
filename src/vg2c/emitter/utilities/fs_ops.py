@@ -1,4 +1,4 @@
-"""FileSystemOps — copy / rename / delete via pathlib + shutil."""
+"""FileSystemOps - copy / rename / delete via pathlib + shutil."""
 
 from __future__ import annotations
 
@@ -16,19 +16,13 @@ from vg2c.emitter.utilities._emit_types import (
     option_to_python_expr,
     resolve_output_path,
 )
-from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
 
 
-@register_utility
 class FileSystemOps(UtilitySpec):
 
     utility_name = "fs_ops"
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
-    utility_imports = (
-        "import shutil",
-        "from pathlib import Path",
-    )
 
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:

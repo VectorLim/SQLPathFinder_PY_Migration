@@ -3,11 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_types import RawExpr
-from vg2c.emitter.utilities._registry import (
-    KIND_HANDLERS,
-    mark_utility_used,
-)
 from vg2c.frontend.models import Kind
 
 __all__ = [
@@ -81,7 +78,6 @@ def render_method_call(
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
 ) -> str:
-    mark_utility_used(ctx, utility_name)
     receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
     parts: list[str] = [_render_value(arg) for arg in args]
     for key, value in (kwargs or {}).items():
@@ -103,7 +99,7 @@ def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
 
 
 def emit_block(ctx: Any, block: Any, dispatched: Any) -> tuple[str, str]:
-    handler_cls = KIND_HANDLERS.get(block.kind)
+    handler_cls = UtilitySpec._kind_handlers.get(block.kind)
     if handler_cls is not None:
         emitted = handler_cls.emit_block(ctx, block, dispatched)
         if emitted is not None:

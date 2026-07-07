@@ -1,4 +1,4 @@
-"""CsvIO — lightweight CSV reader/writer over stdlib csv."""
+"""CsvIO - lightweight CSV reader/writer over stdlib csv."""
 
 from __future__ import annotations
 
@@ -9,20 +9,12 @@ from typing import Any, Iterator
 import pandas
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
 
 
-@register_utility
 class CsvIO(UtilitySpec):
     """Read and write CSV files relative to ``cwd``."""
 
     utility_name = "csv_io"
-    utility_imports = (
-        "import csv",
-        "from pathlib import Path",
-        "from typing import Any, Iterator",
-        "import pandas",
-    )
 
     # ------------------------------------------------------------------
     # Read
@@ -94,10 +86,10 @@ class CsvIO(UtilitySpec):
         """Write *content* to a CSV file.
 
         *content* can be:
-        - a list of dicts  → written via DictWriter (keys as header)
-        - a list of lists  → written via writer (optional *header* for first row)
-        - a string         → written as raw text (no CSV encoding)
-        - a Path           → copied verbatim
+        - a list of dicts  -> written via DictWriter (keys as header)
+        - a list of lists  -> written via writer (optional *header* for first row)
+        - a string         -> written as raw text (no CSV encoding)
+        - a Path           -> copied verbatim
         """
         path = Path(name)
         path.parent.mkdir(parents=True, exist_ok=True)

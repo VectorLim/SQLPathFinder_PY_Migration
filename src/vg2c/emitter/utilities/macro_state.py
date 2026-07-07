@@ -14,7 +14,6 @@ from vg2c.emitter.utilities._emit_helpers import (
     render_method_call,
 )
 from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
-from vg2c.emitter.utilities._registry import register_utility
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import RowsInFile
 
@@ -27,18 +26,11 @@ class MacroLookup(Protocol):
     def positional(self) -> str: ...
 
 
-@register_utility
 class MacroState(UtilitySpec):
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
     handles = (Kind.MACRO_CONTROL,)
-    utility_imports = (
-        "import re",
-        "from contextlib import contextmanager",
-        "from pathlib import Path",
-        "from typing import Iterator, Protocol",
-    )
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")

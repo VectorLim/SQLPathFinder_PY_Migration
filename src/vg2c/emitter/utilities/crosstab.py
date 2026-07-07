@@ -1,4 +1,4 @@
-"""apply_crosstab — pivot utility for DataFrames (embeddable)."""
+"""apply_crosstab - pivot utility for DataFrames (embeddable)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from typing import Any, Callable
 import pandas as pd
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._registry import register_utility
 
 __all__ = [
     "CROSSTAB_RE",
@@ -86,13 +85,8 @@ def apply_crosstab(
     pass
 
 
-@register_utility
 class CrosstabUtility(UtilitySpec):
     utility_name = "crosstab"
-    utility_imports = (
-        "from typing import Any",
-        "import pandas as pd",
-    )
 
     def apply(
         self,
