@@ -3,6 +3,7 @@ from __future__ import annotations
 from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.models import DispatchConfig
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from datasyncx import OracleReader
 
 _OASYS_PLACEHOLDER = "@OASYSSCHEMA@"
 
@@ -10,11 +11,9 @@ _OASYS_PLACEHOLDER = "@OASYSSCHEMA@"
 class OasysDialect(DialectHandler):
     """Handler for Oracle OASYS dialect."""
 
-    dialect = "oracle_oasys"
+    reader_cls = OracleReader
     kind = Kind.SQL_QUERY
-    database_arg = "OASYS"
     schema_placeholder = _OASYS_PLACEHOLDER
-    datasyncx_reader_name = "OracleReader"
 
     @classmethod
     def matches_signals(cls, node: str, engine: str, oledb: str) -> bool:

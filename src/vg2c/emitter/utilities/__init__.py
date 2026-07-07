@@ -162,16 +162,6 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
         external_imports.update(imports)
         helper_modules_used.update(helper_modules)
 
-    helper_modules_used = {
-        name
-        for name in helper_modules_used
-        if name
-        not in {
-            "vg2c.emitter.utilities._base",
-            "vg2c.emitter.utilities._topo_sort",
-        }
-    }
-
     helper_edges: dict[str, set[str]] = {name: set() for name in helper_modules_used}
     helper_imports: set[str] = set()
     helper_bodies: dict[str, str] = {}

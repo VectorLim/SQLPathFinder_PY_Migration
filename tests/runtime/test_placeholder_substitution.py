@@ -39,5 +39,5 @@ def test_mars_placeholder_in_emitted_sql():
     ), "Found @[]@F_ without dot - should be normalized to @[]@.F_"
 
     assert "def _read_datasyncx" in source
-    assert "DATASYNCX_READER_MAP" in source
-    assert "source_type='MARS'" in source or 'source_type="MARS"' in source
+    assert "DATASYNCX_READER_MAP" not in source
+    assert "reader_cls=MarsReader" in source

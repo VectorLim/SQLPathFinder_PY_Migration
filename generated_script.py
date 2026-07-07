@@ -3,25 +3,97 @@
 
 
 from __future__ import annotations
+from abc import ABC
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datasyncx.readers import AriesReader, MarsReader, OracleReader
+from datasyncx.readers.aries_reader import AriesReader
+from datasyncx.readers.mars_reader import MarsReader
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 from typing import Any, Callable
+from typing import Any, ClassVar
 from typing import Any, ContextManager
 from typing import Any, Iterator
 from typing import Iterator, Protocol
+from vg2c.dispatch.dialects.sqlite import SqliteReader
 import csv
+import inspect
 import os
 import pandas
 import pandas as pd
 import re
 import shutil
 import smtplib
-import sqlite3
 import subprocess
+
+_CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
+
+def _strip_embed_artifacts(source: str, class_name: str) -> str:
+    lines = source.split("\n")
+
+    while lines and lines[0].lstrip().startswith("@"):
+        lines.pop(0)
+
+    if not lines:
+        return ""
+
+    lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
+    lines[0] = lines[0].replace("(UtilitySpec):", ":")
+    lines[0] = lines[0].replace(f"({class_name}, UtilitySpec):", f"({class_name}):")
+
+    lines = [line for line in lines if not line.lstrip().startswith("handles =")]
+
+    return "\n".join(lines).rstrip()
+
+class UtilitySpec(ABC):
+    """Base contract for all embeddable utilities."""
+
+    utility_name: ClassVar[str]
+    handles: ClassVar[tuple[Kind, ...]] = ()
+    _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
+    _kind_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        raw_name = cls.__dict__.get("utility_name")
+        if not isinstance(raw_name, str):
+            return
+
+        name = raw_name.strip()
+        if not name:
+            raise ValueError(f"{cls.__name__}: utility_name must be non-empty")
+
+        existing = UtilitySpec._registry.get(name)
+        if existing is not None and existing is not cls:
+            raise ValueError(f"duplicate utility_name: {name}")
+
+        UtilitySpec._registry[name] = cls
+
+        for handled_kind in tuple(getattr(cls, "handles", ())):
+            owner = UtilitySpec._kind_handlers.get(handled_kind)
+            if owner is not None and owner is not cls:
+                raise ValueError(
+                    "duplicate handler for "
+                    f"{handled_kind}: {owner.__name__} and {cls.__name__}"
+                )
+            UtilitySpec._kind_handlers[handled_kind] = cls
+
+    @classmethod
+    def get_source(cls) -> str:
+        custom = getattr(cls, "__vg2c_source__", None)
+        if custom is not None:
+            return str(custom).rstrip()
+
+        source = inspect.getsource(cls)
+        return _strip_embed_artifacts(source, cls.__name__)
+
+    @classmethod
+    def emit_block(
+        cls, ctx: Any, block: Any, dispatched: Any
+    ) -> tuple[str, str] | None:
+        return None
 
 class RawExpr:
     source: str
@@ -150,6 +222,86 @@ def emit_block(ctx: Any, block: Any, dispatched: Any) -> tuple[str, str]:
 
 class CrosstabUtility:
     utility_name = "crosstab"
+    TOKEN = "CrossTab->[["
+    TOKEN_RE = re.compile(
+        r"(?P<prefix>,?)\s*CrossTab->\[\[\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*(?P<instance>[^;\]]+)\s*;\s*:(?P<mode>[YyNn])\s*\]\](?P<suffix>,?)"
+    )
+
+    @classmethod
+    def has_token(cls, value: str | None) -> bool:
+        return bool(value and cls.TOKEN in value)
+
+    @staticmethod
+    def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
+        by_alias: dict[str, set[str]] = {}
+        match = re.search(
+            r"\bSELECT\b(?P<select_part>.*?)\bFROM\b",
+            sql,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return by_alias
+
+        select_part = match.group("select_part")
+        col_ref_re = re.compile(
+            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
+        )
+        for col_match in col_ref_re.finditer(select_part):
+            alias = col_match.group(1).lower()
+            col_name = col_match.group(2) or col_match.group(3) or col_match.group(4)
+            if not col_name:
+                continue
+            by_alias.setdefault(alias, set()).add(col_name.lower())
+
+        return by_alias
+
+    @staticmethod
+    def extract_options(block) -> dict[str, Any] | None:
+        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
+        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
+        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
+        if not (ctrow and ctheader and ctvalue):
+            return None
+        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
+        return {
+            "row_keys": row_keys,
+            "header_key": ctheader,
+            "value_key": ctvalue,
+        }
+
+    @classmethod
+    def substitute_sql(
+        cls,
+        sql: str,
+        alias_columns_lookup: Callable[[str], list[str]] | None = None,
+    ) -> str:
+        if alias_columns_lookup is None or not cls.has_token(sql):
+            return sql
+
+        selected_by_alias = cls._extract_selected_columns_by_alias(sql)
+
+        def _replace(match: re.Match[str]) -> str:
+            prefix = match.group("prefix")
+            suffix = match.group("suffix")
+            alias = match.group("alias").strip()
+            mode = match.group("mode").upper()
+            all_cols = alias_columns_lookup(alias)
+            selected = selected_by_alias.get(alias.lower(), set())
+            dynamic_cols = [c for c in all_cols if c.lower() not in selected]
+
+            if not dynamic_cols:
+                return ""
+
+            if mode == "N":
+                body = ",".join(dynamic_cols)
+                return f"{prefix}{body}{suffix}"
+
+            body = "\n         ,".join(
+                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
+            )
+            return f"{prefix}{body}{suffix}"
+
+        return cls.TOKEN_RE.sub(_replace, sql)
 
     def apply(
         self,
@@ -300,16 +452,6 @@ class PipelineContext:
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
-    DATASYNCX_READER_NAMES = {
-        "MARS": "MarsReader",
-        "OASYS": "OracleReader",
-        "ARIES": "AriesReader",
-    }
-    DATASYNCX_READER_MAP = {
-        "MARS": MarsReader,
-        "OASYS": OracleReader,
-        "ARIES": AriesReader,
-    }
 
     def __init__(self) -> None:
         registry = getattr(type(self), "_registry", None)
@@ -349,14 +491,8 @@ class PipelineContext:
     ) -> None:
         self.macro.write_file(path, template, vars=vars)
 
-    def _read_datasyncx(self, sql: str, source_type: str):
-        source_type_u = source_type.upper()
-        if source_type_u not in self.DATASYNCX_READER_MAP:
-            raise ValueError(f"Unsupported database type: {source_type!r}")
-        result = self.DATASYNCX_READER_MAP[source_type_u]().read(
-            site="KM",
-            query=sql,
-        )
+    def _read_datasyncx(self, sql: str, reader: Any):
+        result = reader.read(site="KM", query=sql)
         result.columns = [col.lower() for col in result.columns]
         return result
 
@@ -364,17 +500,18 @@ class PipelineContext:
         self,
         sql,
         output: str,
-        source_type: str,
+        reader_cls: type[Any],
         inputs: list[str] | None = None,
         header: list[str] | None = None,
         crosstab: dict | None = None,
     ):
         sql = self.macro.substitute_sql(sql)
+        reader = reader_cls()
 
-        if source_type.lower() == "sqlite":
-            result = self.sqlite_engine.execute(sql, inputs or [])
+        if hasattr(reader, "execute"):
+            result = reader.execute(sql, inputs or [])
         else:
-            result = self._read_datasyncx(sql, source_type)
+            result = self._read_datasyncx(sql, reader)
 
         if crosstab:
             result = self.crosstab.apply(
@@ -804,118 +941,11 @@ class SqlMacros:
         return "".join(parts)
 
 class SqliteEngine:
-    """Run SQL joins over CSV files using in-memory SQLite."""
+    """Emit query calls for external and SQLite readers."""
 
     utility_name = "sqlite_engine"
 
-    CROSSTAB_RE = re.compile(
-        r"(?:,CrossTab->\[\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^;\]]+)\s*;\s*:([YyNn])\s*\]\])",
-        re.IGNORECASE,
-    )
-    STMT_SPLIT_RE = re.compile(
-        r"(?:'[^']*'|\"[^\"]*\"|\[[^\]]*\]|`[^`]*`|[^;])+",
-        re.DOTALL,
-    )
-
-    @staticmethod
-    def _extract_selected_columns_by_alias(sql: str) -> dict[str, set[str]]:
-        by_alias: dict[str, set[str]] = {}
-        match = re.search(
-            r"\bSELECT\b(?P<select_part>.*?)\bFROM\b",
-            sql,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        if not match:
-            return by_alias
-
-        select_part = match.group("select_part")
-        col_ref_re = re.compile(
-            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
-        )
-        for col_match in col_ref_re.finditer(select_part):
-            alias = col_match.group(1).lower()
-            col_name = col_match.group(2) or col_match.group(3) or col_match.group(4)
-            if not col_name:
-                continue
-            by_alias.setdefault(alias, set()).add(col_name.lower())
-
-        return by_alias
-
-    @classmethod
-    def _substitute_crosstab(
-        cls,
-        sql: str,
-        alias_columns_lookup: Callable[[str], list[str]] | None = None,
-    ) -> str:
-        if alias_columns_lookup is None or "CrossTab->[[" not in sql:
-            return sql
-
-        selected_by_alias = cls._extract_selected_columns_by_alias(sql)
-
-        def _replace(match: re.Match[str]) -> str:
-            alias = match.group(1)
-            mode = match.group(3).upper()
-            all_cols = alias_columns_lookup(alias)
-            selected = selected_by_alias.get(alias.lower(), set())
-            dynamic_cols = [c for c in all_cols if c.lower() not in selected]
-
-            if not dynamic_cols:
-                return ""
-
-            if mode == "N":
-                return "," + ",".join(dynamic_cols)
-
-            return "," + "\n         ,".join(
-                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
-            )
-
-        return cls.CROSSTAB_RE.sub(_replace, sql)
-
-    @staticmethod
-    def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
-        path = Path(csv_path)
-        table_name = path.stem
-
-        with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.DictReader(fh)
-            rows = list(reader)
-
-        if reader.fieldnames is None:
-            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-            conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
-            return table_name
-
-        cols = list(reader.fieldnames)
-        if not cols:
-            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-            conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
-            return table_name
-
-        col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
-        conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-        conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
-
-        header_str = [str(c) for c in cols]
-        filtered_rows = [
-            row for row in rows if [str(row.get(c, "")) for c in cols] != header_str
-        ]
-
-        if filtered_rows:
-            placeholders = ", ".join("?" for _ in cols)
-            conn.executemany(
-                f'INSERT INTO "{table_name}" VALUES ({placeholders})',
-                [[row.get(c, "") for c in cols] for row in filtered_rows],
-            )
-
-        return table_name
-
-    @classmethod
-    def _split_statements(cls, sql: str) -> list[str]:
-        return [
-            match.group(0).strip()
-            for match in cls.STMT_SPLIT_RE.finditer(sql)
-            if match.group(0).strip()
-        ]
+    _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
     @staticmethod
     def _extract_sql_text(block, dispatched) -> str | RawExpr:
@@ -927,7 +957,7 @@ class SqliteEngine:
 
         parts: list[str] = []
         cursor = 0
-        for match in _SQL_MACRO_TOKEN_RE.finditer(sql):
+        for match in SqliteEngine._SQL_MACRO_TOKEN_RE.finditer(sql):
             literal = sql[cursor : match.start()]
             if literal:
                 parts.append(repr(literal))
@@ -955,22 +985,6 @@ class SqliteEngine:
         return RawExpr(" + ".join(parts))
 
     @staticmethod
-    def _extract_source_type(dispatched) -> str:
-        if dispatched is None:
-            return "MARS"
-
-        db_by_dialect = {
-            "oracle_mars": "MARS",
-            "oracle_oasys": "OASYS",
-            "oracle_aries": "ARIES",
-            "sqlite": "sqlite",
-        }
-        return db_by_dialect.get(
-            dispatched.dialect,
-            dispatched.reader_target.database_arg or "MARS",
-        )
-
-    @staticmethod
     def _extract_table_inputs(block) -> list[str]:
         inputs: list[str] = []
         for key, value in block.resolved_options.pairs:
@@ -987,25 +1001,11 @@ class SqliteEngine:
         headers_value = block.resolved_options.lookup.get("HEADERS")
         if not headers_value:
             return None
-        if "CrossTab->[[" in headers_value:
+        if CrosstabUtility.has_token(headers_value):
             return None
         stripped = strip_quotes(headers_value)
         parts = [p.strip() for p in stripped.split(",")]
         return [p for p in parts if p]
-
-    @staticmethod
-    def _extract_crosstab(block) -> dict[str, Any] | None:
-        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
-        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
-        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
-        if not (ctrow and ctheader and ctvalue):
-            return None
-        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
-        return {
-            "row_keys": row_keys,
-            "header_key": ctheader,
-            "value_key": ctvalue,
-        }
 
     @classmethod
     def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
@@ -1026,14 +1026,15 @@ class SqliteEngine:
 
         sql = cls._extract_sql_text(block, dispatched)
         output = resolve_output_path(block)
-        source_type = "sqlite" if sqlite else cls._extract_source_type(dispatched)
-        crosstab = cls._extract_crosstab(block)
+        reader_cls = dispatched.reader_cls
+        ctx.add_import(reader_cls.__module__, reader_cls.__name__)
+        crosstab = CrosstabUtility.extract_options(block)
         header = None if crosstab else cls._extract_header(block)
 
         kwargs: dict[str, object] = {
             "sql": sql,
             "output": output,
-            "source_type": source_type,
+            "reader_cls": RawExpr(reader_cls.__name__),
         }
         if sqlite:
             kwargs["inputs"] = cls._extract_table_inputs(block)
@@ -1045,67 +1046,6 @@ class SqliteEngine:
         stmt = render_method_call(ctx, "ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return _emit_step_source(_step_name(block, suffix), [stmt])
-
-    def execute(self, sql: str, inputs: list[str]) -> pd.DataFrame:
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-
-        for csv_path in inputs:
-            self._load_csv_as_table(conn, csv_path)
-
-        stmts = self._split_statements(sql)
-        if not stmts:
-            conn.close()
-            return pd.DataFrame()
-
-        for stmt in stmts[:-1]:
-            try:
-                conn.execute(stmt)
-            except sqlite3.Error:
-                pass
-
-        final_stmt = stmts[-1]
-
-        alias_to_table: dict[str, str] = {}
-        alias_map_re = re.compile(
-            r"\b(?:FROM|JOIN)\s+(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))\s+([A-Za-z_][A-Za-z0-9_]*)\b",
-            re.IGNORECASE,
-        )
-        for match in alias_map_re.finditer(final_stmt):
-            table_name = match.group(1) or match.group(2) or match.group(3)
-            alias = match.group(4)
-            if table_name and alias:
-                alias_to_table[alias.lower()] = table_name
-
-        def _lookup_alias_columns(alias: str) -> list[str]:
-            table_name = alias_to_table.get(alias.lower())
-            if not table_name:
-                return []
-            pragma_rows = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
-            return [str(row[1]) for row in pragma_rows if len(row) > 1]
-
-        final_stmt = self._substitute_crosstab(
-            final_stmt,
-            alias_columns_lookup=_lookup_alias_columns,
-        )
-
-        try:
-            cursor = conn.execute(final_stmt)
-            rows = cursor.fetchall()
-            col_names = [d[0] for d in cursor.description] if cursor.description else []
-        except sqlite3.Error as exc:
-            conn.close()
-            raise RuntimeError(
-                f"SQLite error in execute: {exc}\nSQL:\n{final_stmt}"
-            ) from exc
-
-        conn.close()
-
-        if not rows or not col_names:
-            return pd.DataFrame()
-
-        data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
-        return pd.DataFrame(data)
 
 def step_0000_html_report(ctx) -> None:
     pass  # HTML report not translated
@@ -1138,7 +1078,7 @@ def step_0013_utility(ctx) -> None:
     pass  # TODO: utility command not classified
 
 def step_0015_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="\nSELECT /*L10*/  DISTINCT \n          [icmpcs] AS [icmpcs]\n         ,[parameter] AS [parameter]\n         ,Max([value]) AS [value]\n         ,[STARTTS] AS [STARTTS]\n         ,[UTC] AS [UTC]\n         ,[SFOLDER] AS [SFOLDER]\n         ,[FAC] AS [FAC]\n         ,[MARS] AS [MARS]\n         ,[RIMS] AS [RIMS]\n         ,[EIMS] AS [EIMS]\n         ,[ARIES] AS [ARIES]\n         ,[OASYS] AS [OASYS]\n         ,[MMS] AS [MMS]\n         ,[MMSI] AS [MMSI]\n         ,[TOOLLOG] AS [TOOLLOG]\n         ,[VFMARS] AS [VFMARS]\n         ,[VFARIES] AS [VFARIES]\n         ,[CSRPATH] AS [CSRPATH]\n         ,[MMSPATH] AS [MMSPATH]\n         ,[UNDERDEV] AS [UNDERDEV]\n         ,[CSRV] AS [CSRV]\n         ,[MMSV] AS [MMSV]\nFROM\n(\nSELECT /*L0*/  \n          a0.[icmpcs] AS [icmpcs]\n         ,a0.[parameter] AS [parameter]\n         ,a0.[value] AS [value]\n         ,'<<<STARTTS>>>' AS [STARTTS]\n         ,'<<<UTC>>>' AS [UTC]\n         ,'<<<SFOLDER>>>' AS [SFOLDER]\n         ,'<<<FAC>>>' AS [FAC]\n         ,'<<<MARS>>>' AS [MARS]\n         ,'<<<RIMS>>>' AS [RIMS]\n         ,'<<<EIMS>>>' AS [EIMS]\n         ,'<<<ARIES>>>' AS [ARIES]\n         ,'<<<OASYS>>>' AS [OASYS]\n         ,'<<<MMS>>>' AS [MMS]\n         ,'<<<MMSI>>>' AS [MMSI]\n         ,'<<<TOOLLOG>>>' AS [TOOLLOG]\n         ,'<<<VFMARS>>>' AS [VFMARS]\n         ,'<<<VFARIES>>>' AS [VFARIES]\n         ,'<<<CSRPATH>>>' AS [CSRPATH]\n         ,'<<<MMSPATH>>>' AS [MMSPATH]\n         ,'<<<UNDERDEV>>>' AS [UNDERDEV]\n         ,'<<<CSRV>>>' AS [CSRV]\n         ,'<<<MMSV>>>' AS [MMSV]\nFROM \n[ICMPCS_config] a0\nWHERE\n              a0.[icmpcs] = 'ICMPCS' \n) t /*L0*/\nGROUP BY \n          [icmpcs]\n         ,[parameter]\n         ,[STARTTS]\n         ,[UTC]\n         ,[SFOLDER]\n         ,[FAC]\n         ,[MARS]\n         ,[RIMS]\n         ,[EIMS]\n         ,[ARIES]\n         ,[OASYS]\n         ,[MMS]\n         ,[MMSI]\n         ,[TOOLLOG]\n         ,[VFMARS]\n         ,[VFARIES]\n         ,[CSRPATH]\n         ,[MMSPATH]\n         ,[UNDERDEV]\n         ,[CSRV]\n         ,[MMSV]\n", output='configsets.csv', source_type='sqlite', inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'CSRPATH', 'MMSPATH', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
+    ctx.run_query(sql="\nSELECT /*L10*/  DISTINCT \n          [icmpcs] AS [icmpcs]\n         ,[parameter] AS [parameter]\n         ,Max([value]) AS [value]\n         ,[STARTTS] AS [STARTTS]\n         ,[UTC] AS [UTC]\n         ,[SFOLDER] AS [SFOLDER]\n         ,[FAC] AS [FAC]\n         ,[MARS] AS [MARS]\n         ,[RIMS] AS [RIMS]\n         ,[EIMS] AS [EIMS]\n         ,[ARIES] AS [ARIES]\n         ,[OASYS] AS [OASYS]\n         ,[MMS] AS [MMS]\n         ,[MMSI] AS [MMSI]\n         ,[TOOLLOG] AS [TOOLLOG]\n         ,[VFMARS] AS [VFMARS]\n         ,[VFARIES] AS [VFARIES]\n         ,[CSRPATH] AS [CSRPATH]\n         ,[MMSPATH] AS [MMSPATH]\n         ,[UNDERDEV] AS [UNDERDEV]\n         ,[CSRV] AS [CSRV]\n         ,[MMSV] AS [MMSV]\nFROM\n(\nSELECT /*L0*/  \n          a0.[icmpcs] AS [icmpcs]\n         ,a0.[parameter] AS [parameter]\n         ,a0.[value] AS [value]\n         ,'<<<STARTTS>>>' AS [STARTTS]\n         ,'<<<UTC>>>' AS [UTC]\n         ,'<<<SFOLDER>>>' AS [SFOLDER]\n         ,'<<<FAC>>>' AS [FAC]\n         ,'<<<MARS>>>' AS [MARS]\n         ,'<<<RIMS>>>' AS [RIMS]\n         ,'<<<EIMS>>>' AS [EIMS]\n         ,'<<<ARIES>>>' AS [ARIES]\n         ,'<<<OASYS>>>' AS [OASYS]\n         ,'<<<MMS>>>' AS [MMS]\n         ,'<<<MMSI>>>' AS [MMSI]\n         ,'<<<TOOLLOG>>>' AS [TOOLLOG]\n         ,'<<<VFMARS>>>' AS [VFMARS]\n         ,'<<<VFARIES>>>' AS [VFARIES]\n         ,'<<<CSRPATH>>>' AS [CSRPATH]\n         ,'<<<MMSPATH>>>' AS [MMSPATH]\n         ,'<<<UNDERDEV>>>' AS [UNDERDEV]\n         ,'<<<CSRV>>>' AS [CSRV]\n         ,'<<<MMSV>>>' AS [MMSV]\nFROM \n[ICMPCS_config] a0\nWHERE\n              a0.[icmpcs] = 'ICMPCS' \n) t /*L0*/\nGROUP BY \n          [icmpcs]\n         ,[parameter]\n         ,[STARTTS]\n         ,[UTC]\n         ,[SFOLDER]\n         ,[FAC]\n         ,[MARS]\n         ,[RIMS]\n         ,[EIMS]\n         ,[ARIES]\n         ,[OASYS]\n         ,[MMS]\n         ,[MMSI]\n         ,[TOOLLOG]\n         ,[VFMARS]\n         ,[VFARIES]\n         ,[CSRPATH]\n         ,[MMSPATH]\n         ,[UNDERDEV]\n         ,[CSRV]\n         ,[MMSV]\n", output='configsets.csv', reader_cls=SqliteReader, inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'CSRPATH', 'MMSPATH', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
 
 def step_0016_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
@@ -1177,40 +1117,40 @@ def step_0042_fs_copy(ctx) -> None:
     ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst=str(Path('.\\') / Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv').name))
 
 def step_0043_sqlite_query(ctx) -> None:
-    ctx.run_query(sql='\nSELECT /*L0*/ \n          a0.[site] AS [site]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\nFROM \n[Product_Lookup] a0\n', output='CSR_Server_OIS_Product_List.csv', source_type='sqlite', inputs=['Product_Lookup.csv'], header=['site', 'prodgroup3', 'upper_y_limit', 'lower_y_limit', 'upper_x_limit', 'lower_x_limit'])
+    ctx.run_query(sql='\nSELECT /*L0*/ \n          a0.[site] AS [site]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\nFROM \n[Product_Lookup] a0\n', output='CSR_Server_OIS_Product_List.csv', reader_cls=SqliteReader, inputs=['Product_Lookup.csv'], header=['site', 'prodgroup3', 'upper_y_limit', 'lower_y_limit', 'upper_x_limit', 'lower_x_limit'])
 
 def step_0044_sql_query(ctx) -> None:
-    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT  DISTINCT \n          c0.ww AS site_work_week\n         ,f0.lot AS lot\n         ,f0.operation AS operation\n         ,To_Char(f0.load_date,'yyyy-mm-dd hh24:mi:ss') AS out_date\n         ,f0.route AS route\n         ,f0.owner AS owner\n         ,f0.oldqty1 AS oldqty1\n         ,f0.newqty1 AS newqty1\n         ,f4.entity AS entity\n         ,p.prodgroup3 AS prodgroup3\n         ,f0.facility AS facility\nFROM \n@[]@.F_LotHist f0\nINNER JOIN @[]@.F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility\nLEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version\nINNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot\nLEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'\n AND      f4.entity Like 'DIA%' \nLEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource\nLEFT JOIN @[]@.F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility\nWHERE\nNVL(f0.history_deleted_flag,'N') = 'N'\nAND      f0.owner <> 'EMPTYFOUP'\n AND      p.prodgroup3 In \n" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + " \n AND      f0.operation In ('2090'\n,'1960') \n AND      f0.load_date >= (SYSDATE - 8/24) \n AND      f0.movedout_txn In ('MVOU') \n-- Tail A\n/*END SQL*/\n\n", output='CSR_Server_OIS_subplane_lotlist.csv', source_type='MARS', header=['site_work_week', 'lot', 'operation', 'out_date', 'route', 'owner', 'oldqty1', 'newqty1', 'entity', 'prodgroup3', 'facility'])
+    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT  DISTINCT \n          c0.ww AS site_work_week\n         ,f0.lot AS lot\n         ,f0.operation AS operation\n         ,To_Char(f0.load_date,'yyyy-mm-dd hh24:mi:ss') AS out_date\n         ,f0.route AS route\n         ,f0.owner AS owner\n         ,f0.oldqty1 AS oldqty1\n         ,f0.newqty1 AS newqty1\n         ,f4.entity AS entity\n         ,p.prodgroup3 AS prodgroup3\n         ,f0.facility AS facility\nFROM \n@[]@.F_LotHist f0\nINNER JOIN @[]@.F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility\nLEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version\nINNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot\nLEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'\n AND      f4.entity Like 'DIA%' \nLEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource\nLEFT JOIN @[]@.F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility\nWHERE\nNVL(f0.history_deleted_flag,'N') = 'N'\nAND      f0.owner <> 'EMPTYFOUP'\n AND      p.prodgroup3 In \n" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + " \n AND      f0.operation In ('2090'\n,'1960') \n AND      f0.load_date >= (SYSDATE - 8/24) \n AND      f0.movedout_txn In ('MVOU') \n-- Tail A\n/*END SQL*/\n\n", output='CSR_Server_OIS_subplane_lotlist.csv', reader_cls=MarsReader, header=['site_work_week', 'lot', 'operation', 'out_date', 'route', 'owner', 'oldqty1', 'newqty1', 'entity', 'prodgroup3', 'facility'])
 
 def step_0045_rows_in_file(ctx) -> None:
     ctx.macro.set_named('LOTS', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_lotlist.csv')))
 
 def step_0047_sql_query(ctx) -> None:
-    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,To_Char(Max(test_end_date),'yyyy-mm-dd hh24:mi:ss') AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,Max(Sub_plane) AS Sub_plane\nFROM\n(\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,test_end_date AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,TO_CHAR(  carrier_y   ||   carrier_x   ) AS Socket\n         ,Sub_plane AS Sub_plane\nFROM\n(\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,test_end_date AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,Sub_plane AS Sub_plane\nFROM\n(\nSELECT  \n          ats.facility AS facility\n         ,ats.lot AS lot\n         ,ats.operation AS operation\n         ,ats.test_end_date_time AS test_end_date\n         ,ats.tester_id AS tester_id\n         ,ats.program_name AS program_name\n         ,mp.prodgroup3 AS prodgroup3\n         ,di.visual_id AS visual_id\n         ,dt.testing_session_tray_id AS tray_or_carrier_id\n         ,t.test_name AS test_name\n         ,dt.ws_loss_code AS ws_loss_code\n         ,dt.carrier_x AS carrier_x\n         ,dt.carrier_y AS carrier_y\n         ,dt.lane_number AS lane_number\n         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS Sub_plane\nFROM \nA_Testing_Session ats\nLEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot\nLEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility\nINNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)\nINNER JOIN A_Test t ON t.t_id = ctr.t_id\nINNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id\nAND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id\nLEFT JOIN A_Device_Item di ON di.di_id = dt.di_id\nWHERE ats.data_domain='METROLOGY'\n AND      (ats.lot In \n" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + ') \n AND      (ats.operation In \n' + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + ") \n AND      (ats.tester_id LIKE  'OIS%'\n) \n AND      t.test_name In ('SUBPLANEANGLEX'\n,'SUBPLANEANGLEY') \n AND      dt.ws_loss_code Is Null  \n)\n)\n)\nGROUP BY \n          facility\n         ,lot\n         ,operation\n         ,tester_id\n         ,program_name\n         ,prodgroup3\n         ,visual_id\n         ,tray_or_carrier_id\n         ,test_name\n         ,ws_loss_code\n         ,carrier_x\n         ,carrier_y\n         ,lane_number\n/*END SQL*/\n\n", output='yeuchuan_a0_15507.tab', source_type='ARIES', crosstab={'row_keys': ['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'carrier_x', 'carrier_y', 'lane_number'], 'header_key': 'test_name', 'value_key': 'Sub_plane'})
+    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,To_Char(Max(test_end_date),'yyyy-mm-dd hh24:mi:ss') AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,Max(Sub_plane) AS Sub_plane\nFROM\n(\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,test_end_date AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,TO_CHAR(  carrier_y   ||   carrier_x   ) AS Socket\n         ,Sub_plane AS Sub_plane\nFROM\n(\nSELECT \n          facility AS facility\n         ,lot AS lot\n         ,operation AS operation\n         ,test_end_date AS test_end_date\n         ,tester_id AS tester_id\n         ,program_name AS program_name\n         ,prodgroup3 AS prodgroup3\n         ,visual_id AS visual_id\n         ,tray_or_carrier_id AS tray_or_carrier_id\n         ,test_name AS test_name\n         ,ws_loss_code AS ws_loss_code\n         ,carrier_x AS carrier_x\n         ,carrier_y AS carrier_y\n         ,lane_number AS lane_number\n         ,Sub_plane AS Sub_plane\nFROM\n(\nSELECT  \n          ats.facility AS facility\n         ,ats.lot AS lot\n         ,ats.operation AS operation\n         ,ats.test_end_date_time AS test_end_date\n         ,ats.tester_id AS tester_id\n         ,ats.program_name AS program_name\n         ,mp.prodgroup3 AS prodgroup3\n         ,di.visual_id AS visual_id\n         ,dt.testing_session_tray_id AS tray_or_carrier_id\n         ,t.test_name AS test_name\n         ,dt.ws_loss_code AS ws_loss_code\n         ,dt.carrier_x AS carrier_x\n         ,dt.carrier_y AS carrier_y\n         ,dt.lane_number AS lane_number\n         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS Sub_plane\nFROM \nA_Testing_Session ats\nLEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot\nLEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility\nINNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)\nINNER JOIN A_Test t ON t.t_id = ctr.t_id\nINNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id\nAND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id\nLEFT JOIN A_Device_Item di ON di.di_id = dt.di_id\nWHERE ats.data_domain='METROLOGY'\n AND      (ats.lot In \n" + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + ') \n AND      (ats.operation In \n' + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + ") \n AND      (ats.tester_id LIKE  'OIS%'\n) \n AND      t.test_name In ('SUBPLANEANGLEX'\n,'SUBPLANEANGLEY') \n AND      dt.ws_loss_code Is Null  \n)\n)\n)\nGROUP BY \n          facility\n         ,lot\n         ,operation\n         ,tester_id\n         ,program_name\n         ,prodgroup3\n         ,visual_id\n         ,tray_or_carrier_id\n         ,test_name\n         ,ws_loss_code\n         ,carrier_x\n         ,carrier_y\n         ,lane_number\n/*END SQL*/\n\n", output='yeuchuan_a0_15507.tab', reader_cls=AriesReader, crosstab={'row_keys': ['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'carrier_x', 'carrier_y', 'lane_number'], 'header_key': 'test_name', 'value_key': 'Sub_plane'})
 
 def step_0048_sql_query(ctx) -> None:
-    ctx.run_query(sql='\n/*BEGIN SQL*/\nSELECT  DISTINCT \n          z0.primary_entity AS entity\n         ,z2.bonding_station AS bond_station\n         ,z0.lot AS lot_2\n         ,z8.visual_id AS visual_id_1\nFROM \nARIES_Views.AV_dia_session z0\nLEFT JOIN ARIES_Views.AV_dia_media_testing z2 ON z2.lao_start_ww = z0.lao_start_ww AND z2.obj_s_id = z0.obj_s_id\nINNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id\nWHERE\n              (z0.lot In \n' + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + ") \n AND      z0.tool_entity Like 'TGB%' \n AND      (z0.operation In \n" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + ') \n/*END SQL*/\n\n', output='yeuchuan_a2_15507.tab', source_type='ARIES', header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
+    ctx.run_query(sql='\n/*BEGIN SQL*/\nSELECT  DISTINCT \n          z0.primary_entity AS entity\n         ,z2.bonding_station AS bond_station\n         ,z0.lot AS lot_2\n         ,z8.visual_id AS visual_id_1\nFROM \nARIES_Views.AV_dia_session z0\nLEFT JOIN ARIES_Views.AV_dia_media_testing z2 ON z2.lao_start_ww = z0.lao_start_ww AND z2.obj_s_id = z0.obj_s_id\nINNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id\nWHERE\n              (z0.lot In \n' + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + ") \n AND      z0.tool_entity Like 'TGB%' \n AND      (z0.operation In \n" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + ') \n/*END SQL*/\n\n', output='yeuchuan_a2_15507.tab', reader_cls=AriesReader, header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
 
 def step_0049_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA2;\nCreate Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_15507] ([visual_id_1]);\n\nSELECT /*L0*/  DISTINCT \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[operation] AS [operation]\n         ,a0.[test_end_date] AS [test_end_date]\n         ,a0.[tester_id] AS [tester_id]\n         ,a0.[program_name] AS [program_name]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a0.[ws_loss_code] AS [ws_loss_code]\n         ,a2.[entity] AS [entity]\n         ,a2.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[lane_number] AS [lane_number]\n         ,CrossTab->[[a0,15507;:Y]]\n         ,[entity]  ||  '_' || [bond_station]  ||  '_' ||  [carrier_x]  ||   '_' || [carrier_y] AS [Entity_BS_X_Y]\nFROM \n           [yeuchuan_a0_15507] a0\n LEFT OUTER JOIN [yeuchuan_a2_15507] a2\n  ON a0.[visual_id] = a2.[visual_id_1]\n", output='CSR_Server_OIS_subplane.csv', source_type='sqlite', inputs=['yeuchuan_a0_15507.tab', 'yeuchuan_a2_15507.tab'])
+    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA2;\nCreate Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_15507] ([visual_id_1]);\n\nSELECT /*L0*/  DISTINCT \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[operation] AS [operation]\n         ,a0.[test_end_date] AS [test_end_date]\n         ,a0.[tester_id] AS [tester_id]\n         ,a0.[program_name] AS [program_name]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a0.[ws_loss_code] AS [ws_loss_code]\n         ,a2.[entity] AS [entity]\n         ,a2.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[lane_number] AS [lane_number]\n         ,CrossTab->[[a0,15507;:Y]]\n         ,[entity]  ||  '_' || [bond_station]  ||  '_' ||  [carrier_x]  ||   '_' || [carrier_y] AS [Entity_BS_X_Y]\nFROM \n           [yeuchuan_a0_15507] a0\n LEFT OUTER JOIN [yeuchuan_a2_15507] a2\n  ON a0.[visual_id] = a2.[visual_id_1]\n", output='CSR_Server_OIS_subplane.csv', reader_cls=SqliteReader, inputs=['yeuchuan_a0_15507.tab', 'yeuchuan_a2_15507.tab'])
 
 def step_0050_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA0;\nCreate Index IF NOT EXISTS IdxA0 ON [CSR_Server_OIS_Product_List] ([prodgroup3],[site]);\n\nSELECT /*L3*/  DISTINCT \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]\n         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]\n         ,[Flag] AS [Flag]\n         ,DENSE_RANK () OVER (PARTITION BY  [entity_bs_x_y]  ORDER BY    [visual_id]    ASC) AS [Dense_rank]\nFROM\n(\nSELECT /*L2*/ \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]\n         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]\n         ,CASE  WHEN   [Set_Limit_plane_Y]  = 'Y_flag' AND   [Set_Limit_plane_X]   <> 'X_flag' THEN 'Y_flag_only'  ELSE '' END AS [BeyondY_Flag]\n         ,CASE  WHEN  [Set_Limit_plane_Y]    = 'Y_flag' THEN 'flag'   ELSE '' END AS [Flag]\nFROM\n(\nSELECT /*L1*/ \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,CASE WHEN     [sub_plane_x]    Not Between    [lower_x_limit]  AND     [upper_x_limit]  THEN 'X_flag' ELSE '' END AS [Set_Limit_plane_X]\n         ,CASE WHEN     [sub_plane_y]    Not Between    [lower_y_limit]    AND      [upper_y_limit]  THEN 'Y_flag' ELSE '' END AS [Set_Limit_plane_Y]\nFROM\n(\nSELECT /*L0*/  \n          a1.[facility] AS [facility]\n         ,a1.[lot] AS [lot]\n         ,a1.[operation] AS [operation]\n         ,a1.[test_end_date] AS [test_end_date]\n         ,a1.[tester_id] AS [tester_id]\n         ,a1.[program_name] AS [program_name]\n         ,a1.[prodgroup3] AS [prodgroup3]\n         ,a1.[visual_id] AS [visual_id]\n         ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a1.[ws_loss_code] AS [ws_loss_code]\n         ,a1.[entity] AS [entity]\n         ,a1.[bond_station] AS [bond_station]\n         ,a1.[carrier_x] AS [carrier_x]\n         ,a1.[carrier_y] AS [carrier_y]\n         ,a1.[lane_number] AS [lane_number]\n         ,a1.[entity_bs_x_y] AS [entity_bs_x_y]\n         ,a0.[site] AS [site]\n         ,a0.[prodgroup3] AS [prodgroup3_1]\n         ,CASE WHEN a1.[subplaneanglex] = '' THEN NULL ELSE CAST (a1.[subplaneanglex] AS REAL) END AS [sub_plane_x]\n         ,CASE WHEN a1.[subplaneangley] = '' THEN NULL ELSE CAST (a1.[subplaneangley] AS REAL) END AS [sub_plane_y]\n         ,CASE WHEN a0.[lower_x_limit] = '' THEN NULL ELSE CAST (a0.[lower_x_limit] AS REAL) END AS [lower_x_limit]\n         ,CASE WHEN a0.[upper_x_limit] = '' THEN NULL ELSE CAST (a0.[upper_x_limit] AS REAL) END AS [upper_x_limit]\n         ,CASE WHEN a0.[lower_y_limit] = '' THEN NULL ELSE CAST (a0.[lower_y_limit] AS REAL) END AS [lower_y_limit]\n         ,CASE WHEN a0.[upper_y_limit] = '' THEN NULL ELSE CAST (a0.[upper_y_limit] AS REAL) END AS [upper_y_limit]\nFROM \n           [CSR_Server_OIS_subplane] a1\n LEFT OUTER JOIN [CSR_Server_OIS_Product_List] a0\n  ON a0.[prodgroup3] = a1.[prodgroup3] \n AND a0.[site] = a1.[facility] \n) t /*L0*/\n) t /*L1*/\n) t /*L2*/\nWHERE\n              [Flag] = 'flag'\n", output='CSR_Server_OIS_subplane_interim.csv', source_type='sqlite', inputs=['CSR_Server_OIS_subplane.csv', 'CSR_Server_OIS_Product_List.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'Set_Limit_plane_X', 'Set_Limit_plane_Y', 'Flag', 'Dense_rank'])
+    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA0;\nCreate Index IF NOT EXISTS IdxA0 ON [CSR_Server_OIS_Product_List] ([prodgroup3],[site]);\n\nSELECT /*L3*/  DISTINCT \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]\n         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]\n         ,[Flag] AS [Flag]\n         ,DENSE_RANK () OVER (PARTITION BY  [entity_bs_x_y]  ORDER BY    [visual_id]    ASC) AS [Dense_rank]\nFROM\n(\nSELECT /*L2*/ \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]\n         ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]\n         ,CASE  WHEN   [Set_Limit_plane_Y]  = 'Y_flag' AND   [Set_Limit_plane_X]   <> 'X_flag' THEN 'Y_flag_only'  ELSE '' END AS [BeyondY_Flag]\n         ,CASE  WHEN  [Set_Limit_plane_Y]    = 'Y_flag' THEN 'flag'   ELSE '' END AS [Flag]\nFROM\n(\nSELECT /*L1*/ \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[operation] AS [operation]\n         ,[test_end_date] AS [test_end_date]\n         ,[tester_id] AS [tester_id]\n         ,[program_name] AS [program_name]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[visual_id] AS [visual_id]\n         ,[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[lane_number] AS [lane_number]\n         ,[entity_bs_x_y] AS [entity_bs_x_y]\n         ,[site] AS [site]\n         ,[prodgroup3_1] AS [prodgroup3_1]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\n         ,CASE WHEN     [sub_plane_x]    Not Between    [lower_x_limit]  AND     [upper_x_limit]  THEN 'X_flag' ELSE '' END AS [Set_Limit_plane_X]\n         ,CASE WHEN     [sub_plane_y]    Not Between    [lower_y_limit]    AND      [upper_y_limit]  THEN 'Y_flag' ELSE '' END AS [Set_Limit_plane_Y]\nFROM\n(\nSELECT /*L0*/  \n          a1.[facility] AS [facility]\n         ,a1.[lot] AS [lot]\n         ,a1.[operation] AS [operation]\n         ,a1.[test_end_date] AS [test_end_date]\n         ,a1.[tester_id] AS [tester_id]\n         ,a1.[program_name] AS [program_name]\n         ,a1.[prodgroup3] AS [prodgroup3]\n         ,a1.[visual_id] AS [visual_id]\n         ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a1.[ws_loss_code] AS [ws_loss_code]\n         ,a1.[entity] AS [entity]\n         ,a1.[bond_station] AS [bond_station]\n         ,a1.[carrier_x] AS [carrier_x]\n         ,a1.[carrier_y] AS [carrier_y]\n         ,a1.[lane_number] AS [lane_number]\n         ,a1.[entity_bs_x_y] AS [entity_bs_x_y]\n         ,a0.[site] AS [site]\n         ,a0.[prodgroup3] AS [prodgroup3_1]\n         ,CASE WHEN a1.[subplaneanglex] = '' THEN NULL ELSE CAST (a1.[subplaneanglex] AS REAL) END AS [sub_plane_x]\n         ,CASE WHEN a1.[subplaneangley] = '' THEN NULL ELSE CAST (a1.[subplaneangley] AS REAL) END AS [sub_plane_y]\n         ,CASE WHEN a0.[lower_x_limit] = '' THEN NULL ELSE CAST (a0.[lower_x_limit] AS REAL) END AS [lower_x_limit]\n         ,CASE WHEN a0.[upper_x_limit] = '' THEN NULL ELSE CAST (a0.[upper_x_limit] AS REAL) END AS [upper_x_limit]\n         ,CASE WHEN a0.[lower_y_limit] = '' THEN NULL ELSE CAST (a0.[lower_y_limit] AS REAL) END AS [lower_y_limit]\n         ,CASE WHEN a0.[upper_y_limit] = '' THEN NULL ELSE CAST (a0.[upper_y_limit] AS REAL) END AS [upper_y_limit]\nFROM \n           [CSR_Server_OIS_subplane] a1\n LEFT OUTER JOIN [CSR_Server_OIS_Product_List] a0\n  ON a0.[prodgroup3] = a1.[prodgroup3] \n AND a0.[site] = a1.[facility] \n) t /*L0*/\n) t /*L1*/\n) t /*L2*/\nWHERE\n              [Flag] = 'flag'\n", output='CSR_Server_OIS_subplane_interim.csv', reader_cls=SqliteReader, inputs=['CSR_Server_OIS_subplane.csv', 'CSR_Server_OIS_Product_List.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'Set_Limit_plane_X', 'Set_Limit_plane_Y', 'Flag', 'Dense_rank'])
 
 def step_0051_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="\nSELECT /*L0*/ \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[operation] AS [operation]\n         ,a0.[test_end_date] AS [test_end_date]\n         ,a0.[tester_id] AS [tester_id]\n         ,a0.[program_name] AS [program_name]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a0.[ws_loss_code] AS [ws_loss_code]\n         ,a0.[entity] AS [entity]\n         ,a0.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[lane_number] AS [lane_number]\n         ,a0.[entity_bs_x_y] AS [entity_bs_x_y]\n         ,a0.[site] AS [site]\n         ,a0.[prodgroup3_1] AS [prodgroup3_1]\n         ,a0.[sub_plane_x] AS [sub_plane_x]\n         ,a0.[sub_plane_y] AS [sub_plane_y]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\n         ,a0.[set_limit_plane_x] AS [set_limit_plane_x]\n         ,a0.[set_limit_plane_y] AS [set_limit_plane_y]\n         ,a0.[flag] AS [flag]\n         ,a0.[dense_rank] AS [dense_rank]\n         ,'CSR_HOLD' AS [CSR_trigger]\nFROM \n[CSR_Server_OIS_subplane_interim] a0\nWHERE\n              a0.[dense_rank] Not In ('1'\n,'2')\n", output='CSR_Server_OIS_subplane_output.csv', source_type='sqlite', inputs=['CSR_Server_OIS_subplane_interim.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'set_limit_plane_x', 'set_limit_plane_y', 'flag', 'dense_rank', 'CSR_trigger'])
+    ctx.run_query(sql="\nSELECT /*L0*/ \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[operation] AS [operation]\n         ,a0.[test_end_date] AS [test_end_date]\n         ,a0.[tester_id] AS [tester_id]\n         ,a0.[program_name] AS [program_name]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]\n         ,a0.[ws_loss_code] AS [ws_loss_code]\n         ,a0.[entity] AS [entity]\n         ,a0.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[lane_number] AS [lane_number]\n         ,a0.[entity_bs_x_y] AS [entity_bs_x_y]\n         ,a0.[site] AS [site]\n         ,a0.[prodgroup3_1] AS [prodgroup3_1]\n         ,a0.[sub_plane_x] AS [sub_plane_x]\n         ,a0.[sub_plane_y] AS [sub_plane_y]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\n         ,a0.[set_limit_plane_x] AS [set_limit_plane_x]\n         ,a0.[set_limit_plane_y] AS [set_limit_plane_y]\n         ,a0.[flag] AS [flag]\n         ,a0.[dense_rank] AS [dense_rank]\n         ,'CSR_HOLD' AS [CSR_trigger]\nFROM \n[CSR_Server_OIS_subplane_interim] a0\nWHERE\n              a0.[dense_rank] Not In ('1'\n,'2')\n", output='CSR_Server_OIS_subplane_output.csv', reader_cls=SqliteReader, inputs=['CSR_Server_OIS_subplane_interim.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'set_limit_plane_x', 'set_limit_plane_y', 'flag', 'dense_rank', 'CSR_trigger'])
 
 def step_0052_rows_in_file(ctx) -> None:
     ctx.macro.set_named('FLAG', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_output.csv')))
 
 def step_0054_sqlite_query(ctx) -> None:
-    ctx.run_query(sql='\nSELECT /*L0*/ \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[operation] AS [DLA_operation]\n         ,a0.[entity] AS [entity]\n         ,a0.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[sub_plane_x] AS [sub_plane_x]\n         ,a0.[sub_plane_y] AS [sub_plane_y]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\nFROM \n[CSR_Server_OIS_subplane_output] a0\nWHERE\n NOT          (a0.[lot] In \n' + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + ')\n', output='yeuchuan_SQL_15507.tab', source_type='sqlite', inputs=['CSR_Server_OIS_subplane_output.csv'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
+    ctx.run_query(sql='\nSELECT /*L0*/ \n          a0.[facility] AS [facility]\n         ,a0.[lot] AS [lot]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[operation] AS [DLA_operation]\n         ,a0.[entity] AS [entity]\n         ,a0.[bond_station] AS [bond_station]\n         ,a0.[carrier_x] AS [carrier_x]\n         ,a0.[carrier_y] AS [carrier_y]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[sub_plane_x] AS [sub_plane_x]\n         ,a0.[sub_plane_y] AS [sub_plane_y]\n         ,a0.[lower_x_limit] AS [lower_x_limit]\n         ,a0.[upper_x_limit] AS [upper_x_limit]\n         ,a0.[lower_y_limit] AS [lower_y_limit]\n         ,a0.[upper_y_limit] AS [upper_y_limit]\nFROM \n[CSR_Server_OIS_subplane_output] a0\nWHERE\n NOT          (a0.[lot] In \n' + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + ')\n', output='yeuchuan_SQL_15507.tab', reader_cls=SqliteReader, inputs=['CSR_Server_OIS_subplane_output.csv'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
 def step_0055_sql_query(ctx) -> None:
-    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          f0.lot AS lot_1\n         ,f0.operation AS Current_operation\n         ,f0.movedin AS movedin\n         ,f0.onrework AS onrework\n         ,f0.onhold AS onhold\n         ,f0.route AS route\n         ,f0.qty1 AS quantity\nFROM \n@[]@.F_Lot f0\nWHERE f0.owner <> 'EMPTYFOUP'\n AND      f0.terminated = 'N' \n AND      f0.qty1 > 0 \n AND      f0.src_erase_date Is Null  \n AND      (f0.lot In \n" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + ') \n/*END SQL*/\n\n', output='yeuchuan_a1_15507.tab', source_type='MARS', header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])
+    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          f0.lot AS lot_1\n         ,f0.operation AS Current_operation\n         ,f0.movedin AS movedin\n         ,f0.onrework AS onrework\n         ,f0.onhold AS onhold\n         ,f0.route AS route\n         ,f0.qty1 AS quantity\nFROM \n@[]@.F_Lot f0\nWHERE f0.owner <> 'EMPTYFOUP'\n AND      f0.terminated = 'N' \n AND      f0.qty1 > 0 \n AND      f0.src_erase_date Is Null  \n AND      (f0.lot In \n" + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + ') \n/*END SQL*/\n\n', output='yeuchuan_a1_15507.tab', reader_cls=MarsReader, header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])
 
 def step_0056_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA1;\nCreate Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_15507] ([lot_1]);\n\nSELECT /*L1*/  DISTINCT \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[DLA_operation] AS [DLA_operation]\n         ,[lot_1] AS [lot_1]\n         ,[Current_operation] AS [Current_operation]\n         ,[movedin] AS [movedin]\n         ,[onrework] AS [onrework]\n         ,[onhold] AS [onhold]\n         ,[route] AS [route]\n         ,[quantity] AS [quantity]\n         ,[Lot_MVIN_CURE] AS [Lot_MVIN_CURE]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[visual_id] AS [visual_id]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\nFROM\n(\nSELECT /*L0*/  \n          sql.[facility] AS [facility]\n         ,sql.[lot] AS [lot]\n         ,sql.[prodgroup3] AS [prodgroup3]\n         ,sql.[DLA_operation] AS [DLA_operation]\n         ,a1.[lot_1] AS [lot_1]\n         ,a1.[Current_operation] AS [Current_operation]\n         ,a1.[movedin] AS [movedin]\n         ,a1.[onrework] AS [onrework]\n         ,a1.[onhold] AS [onhold]\n         ,a1.[route] AS [route]\n         ,a1.[quantity] AS [quantity]\n         ,CASE  WHEN [Current_operation]  IN ('1266') THEN 'N' WHEN [Current_operation]  IN ('1501') THEN 'N' WHEN [Current_operation]  IN ('1366') THEN 'N' WHEN [Current_operation]  IN ('1265') THEN 'N' WHEN [Current_operation]  IN ('1264') THEN 'N'  ELSE 'Y' END AS [Lot_MVIN_CURE]\n         ,sql.[entity] AS [entity]\n         ,sql.[bond_station] AS [bond_station]\n         ,sql.[carrier_x] AS [carrier_x]\n         ,sql.[carrier_y] AS [carrier_y]\n         ,sql.[visual_id] AS [visual_id]\n         ,sql.[sub_plane_x] AS [sub_plane_x]\n         ,sql.[sub_plane_y] AS [sub_plane_y]\n         ,sql.[lower_x_limit] AS [lower_x_limit]\n         ,sql.[upper_x_limit] AS [upper_x_limit]\n         ,sql.[lower_y_limit] AS [lower_y_limit]\n         ,sql.[upper_y_limit] AS [upper_y_limit]\nFROM \n           [yeuchuan_SQL_15507] sql\n LEFT OUTER JOIN [yeuchuan_a1_15507] a1\n  ON sql.[lot] = a1.[lot_1] \n) t /*L0*/\nWHERE\n              [Lot_MVIN_CURE] = 'Y'\n", output='Data.csv', source_type='sqlite', inputs=['yeuchuan_SQL_15507.tab', 'yeuchuan_a1_15507.tab'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity', 'Lot_MVIN_CURE', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
+    ctx.run_query(sql="\n\nDROP INDEX IF EXISTS IdxA1;\nCreate Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_15507] ([lot_1]);\n\nSELECT /*L1*/  DISTINCT \n          [facility] AS [facility]\n         ,[lot] AS [lot]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[DLA_operation] AS [DLA_operation]\n         ,[lot_1] AS [lot_1]\n         ,[Current_operation] AS [Current_operation]\n         ,[movedin] AS [movedin]\n         ,[onrework] AS [onrework]\n         ,[onhold] AS [onhold]\n         ,[route] AS [route]\n         ,[quantity] AS [quantity]\n         ,[Lot_MVIN_CURE] AS [Lot_MVIN_CURE]\n         ,[entity] AS [entity]\n         ,[bond_station] AS [bond_station]\n         ,[carrier_x] AS [carrier_x]\n         ,[carrier_y] AS [carrier_y]\n         ,[visual_id] AS [visual_id]\n         ,[sub_plane_x] AS [sub_plane_x]\n         ,[sub_plane_y] AS [sub_plane_y]\n         ,[lower_x_limit] AS [lower_x_limit]\n         ,[upper_x_limit] AS [upper_x_limit]\n         ,[lower_y_limit] AS [lower_y_limit]\n         ,[upper_y_limit] AS [upper_y_limit]\nFROM\n(\nSELECT /*L0*/  \n          sql.[facility] AS [facility]\n         ,sql.[lot] AS [lot]\n         ,sql.[prodgroup3] AS [prodgroup3]\n         ,sql.[DLA_operation] AS [DLA_operation]\n         ,a1.[lot_1] AS [lot_1]\n         ,a1.[Current_operation] AS [Current_operation]\n         ,a1.[movedin] AS [movedin]\n         ,a1.[onrework] AS [onrework]\n         ,a1.[onhold] AS [onhold]\n         ,a1.[route] AS [route]\n         ,a1.[quantity] AS [quantity]\n         ,CASE  WHEN [Current_operation]  IN ('1266') THEN 'N' WHEN [Current_operation]  IN ('1501') THEN 'N' WHEN [Current_operation]  IN ('1366') THEN 'N' WHEN [Current_operation]  IN ('1265') THEN 'N' WHEN [Current_operation]  IN ('1264') THEN 'N'  ELSE 'Y' END AS [Lot_MVIN_CURE]\n         ,sql.[entity] AS [entity]\n         ,sql.[bond_station] AS [bond_station]\n         ,sql.[carrier_x] AS [carrier_x]\n         ,sql.[carrier_y] AS [carrier_y]\n         ,sql.[visual_id] AS [visual_id]\n         ,sql.[sub_plane_x] AS [sub_plane_x]\n         ,sql.[sub_plane_y] AS [sub_plane_y]\n         ,sql.[lower_x_limit] AS [lower_x_limit]\n         ,sql.[upper_x_limit] AS [upper_x_limit]\n         ,sql.[lower_y_limit] AS [lower_y_limit]\n         ,sql.[upper_y_limit] AS [upper_y_limit]\nFROM \n           [yeuchuan_SQL_15507] sql\n LEFT OUTER JOIN [yeuchuan_a1_15507] a1\n  ON sql.[lot] = a1.[lot_1] \n) t /*L0*/\nWHERE\n              [Lot_MVIN_CURE] = 'Y'\n", output='Data.csv', reader_cls=SqliteReader, inputs=['yeuchuan_SQL_15507.tab', 'yeuchuan_a1_15507.tab'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity', 'Lot_MVIN_CURE', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
 def run() -> None:
     ctx = PipelineContext()

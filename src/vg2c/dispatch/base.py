@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from vg2c.dispatch.models import Dialect, DispatchConfig, ReaderTarget
+from vg2c.dispatch.models import DispatchConfig, ReaderTarget
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 from vg2c.resolver.models import ResolvedBlock
 
@@ -11,28 +11,27 @@ from vg2c.resolver.models import ResolvedBlock
 class DialectHandler(ABC):
     """Abstract base class for SQL dialect handlers."""
 
-    dialect: ClassVar[Dialect]
+    reader_cls: ClassVar[type[Any]]
     kind: ClassVar[Kind | None] = None
-    database_arg: ClassVar[str | None] = None
     schema_placeholder: ClassVar[str | None] = None
-    datasyncx_reader_name: ClassVar[str | None] = None
-    _handlers_by_dialect: ClassVar[dict[Dialect, type[DialectHandler]]] = {}
+    _handlers_by_reader_cls: ClassVar[dict[type[Any], type[DialectHandler]]] = {}
     _handlers_by_kind: ClassVar[dict[Kind, type[DialectHandler]]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
-        if "dialect" not in cls.__dict__:
+        reader_cls = getattr(cls, "reader_cls", None)
+        if reader_cls is None:
             return
+        if not isinstance(reader_cls, type):
+            raise ValueError(f"{cls.__name__}: reader_cls must be a class")
 
-        dialect = cls.__dict__["dialect"]
-        if not isinstance(dialect, str) or not dialect.strip():
-            raise ValueError(f"{cls.__name__}: dialect must be a non-empty string")
-
-        existing = DialectHandler._handlers_by_dialect.get(dialect)
+        existing = DialectHandler._handlers_by_reader_cls.get(reader_cls)
         if existing is not None and existing is not cls:
-            raise ValueError(f"Duplicate dialect handler registered for {dialect!r}")
-        DialectHandler._handlers_by_dialect[dialect] = cls
+            raise ValueError(
+                f"Duplicate dialect handler registered for reader class {reader_cls!r}"
+            )
+        DialectHandler._handlers_by_reader_cls[reader_cls] = cls
 
         kind = getattr(cls, "kind", None)
         if kind is not None and kind is not Kind.SQL_QUERY:
@@ -44,41 +43,43 @@ class DialectHandler(ABC):
             DialectHandler._handlers_by_kind[kind] = cls
 
     @classmethod
-    def for_dialect(cls, dialect: Dialect) -> type[DialectHandler] | None:
-        return cls._handlers_by_dialect.get(dialect)
+    def for_reader_cls(cls, reader_cls: type[Any]) -> type[DialectHandler] | None:
+        return cls._handlers_by_reader_cls.get(reader_cls)
 
     @classmethod
     def for_kind(cls, kind: Kind) -> type[DialectHandler] | None:
         return cls._handlers_by_kind.get(kind)
 
     @classmethod
-    def resolve_dialect(cls, kind: Kind) -> Dialect | None:
+    def resolve_reader_cls(cls, kind: Kind) -> type[Any] | None:
         handler = cls.for_kind(kind)
-        return None if handler is None else handler.dialect
+        return None if handler is None else handler.reader_cls
 
     @classmethod
     def derive_handler_from_signals(
         cls, node: str, engine: str, oledb: str
     ) -> type[DialectHandler] | None:
-        for handler in cls._handlers_by_dialect.values():
+        for handler in cls._handlers_by_reader_cls.values():
             if handler.matches_signals(node=node, engine=engine, oledb=oledb):
                 return handler
         return None
 
     @classmethod
-    def derive_from_signals(cls, node: str, engine: str, oledb: str) -> Dialect | None:
+    def derive_reader_cls_from_signals(
+        cls, node: str, engine: str, oledb: str
+    ) -> type[Any] | None:
         handler = cls.derive_handler_from_signals(
             node=node,
             engine=engine,
             oledb=oledb,
         )
-        return None if handler is None else handler.dialect
+        return None if handler is None else handler.reader_cls
 
     @classmethod
     def sql_bearing_kinds(cls) -> frozenset[Kind]:
         return frozenset(
             handler.kind
-            for handler in cls._handlers_by_dialect.values()
+            for handler in cls._handlers_by_reader_cls.values()
             if handler.kind is not None
         )
 
@@ -114,8 +115,6 @@ class DialectHandler(ABC):
         record_name, record_version = _parse_record(record_raw, block, diags)
 
         target = ReaderTarget(
-            dialect=cls.dialect,
-            database_arg=cls.database_arg,
             record_name=record_name,
             record_version=record_version,
             node=node,

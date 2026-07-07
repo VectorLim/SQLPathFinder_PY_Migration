@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
+from datasyncx import AriesReader
 from vg2c.dispatch.models import DispatchConfig
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 
@@ -8,10 +9,8 @@ from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 class AriesDialect(DialectHandler):
     """Handler for Oracle ARIES dialect."""
 
-    dialect = "oracle_aries"
+    reader_cls = AriesReader
     kind = Kind.SQL_QUERY
-    database_arg = "ARIES"
-    datasyncx_reader_name = "AriesReader"
 
     @classmethod
     def matches_signals(cls, node: str, engine: str, oledb: str) -> bool:

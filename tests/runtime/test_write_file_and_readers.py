@@ -53,11 +53,11 @@ def test_write_file_auto_mkdir(tmp_path):
 
 def test_pipeline_context_snippet_includes_datasyncx_reader_logic():
     assert "class PipelineContext" in PIPELINE_CONTEXT_SNIPPET
-    assert "DATASYNCX_READER_MAP" in PIPELINE_CONTEXT_SNIPPET
     assert "def _read_datasyncx" in PIPELINE_CONTEXT_SNIPPET
+    assert "reader_cls" in PIPELINE_CONTEXT_SNIPPET
 
 
-def test_run_query_reads_datasyncx_and_lowercases_columns(monkeypatch):
+def test_run_query_reads_datasyncx_and_lowercases_columns():
     calls: list[tuple[str, str]] = []
     captured: dict[str, object] = {}
 
@@ -82,9 +82,12 @@ def test_run_query_reads_datasyncx_and_lowercases_columns(monkeypatch):
     ctx = object.__new__(PipelineContext)
     ctx.macro = FakeMacro()
     ctx.csv_io = FakeCsvIo()
-    monkeypatch.setattr(PipelineContext, "DATASYNCX_READER_MAP", {"MARS": FakeReader})
-
-    ctx.run_query("select <<<X>>> as COL_A", "out.csv", "MARS", header=["col_a"])
+    ctx.run_query(
+        "select <<<X>>> as COL_A",
+        "out.csv",
+        FakeReader,
+        header=["col_a"],
+    )
 
     assert calls == [("KM", "select 42 as COL_A")]
     assert captured["output"] == "out.csv"
@@ -92,14 +95,16 @@ def test_run_query_reads_datasyncx_and_lowercases_columns(monkeypatch):
     assert captured["result"].columns == ["col_a", "col_b"]
 
 
-def test_run_query_rejects_unknown_datasyncx_source(monkeypatch):
+def test_run_query_requires_reader_behavior():
     class FakeMacro:
         def substitute_sql(self, sql: str) -> str:
             return sql
 
     ctx = object.__new__(PipelineContext)
     ctx.macro = FakeMacro()
-    monkeypatch.setattr(PipelineContext, "DATASYNCX_READER_MAP", {})
 
-    with pytest.raises(ValueError, match="Unsupported database type"):
-        ctx.run_query("select 1", "out.csv", "NOPE")
+    class NotAReader:
+        pass
+
+    with pytest.raises(AttributeError):
+        ctx.run_query("select 1", "out.csv", NotAReader)

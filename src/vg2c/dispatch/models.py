@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.frontend.models import Diagnostic
@@ -12,8 +12,6 @@ Dialect = Literal["oracle_mars", "oracle_oasys", "oracle_aries", "sqlite"]
 
 @dataclass(frozen=True, slots=True)
 class ReaderTarget:
-    dialect: Dialect
-    database_arg: str | None
     record_name: str | None
     record_version: str | None
     node: str
@@ -23,7 +21,7 @@ class ReaderTarget:
 @dataclass(frozen=True, slots=True)
 class DispatchedBlock:
     block_index: int
-    dialect: Dialect
+    reader_cls: type[Any]
     reader_target: ReaderTarget
     rewritten_sql: str
 

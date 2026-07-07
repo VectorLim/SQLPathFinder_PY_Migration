@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.base import DialectHandler
+from datasyncx import MarsReader
 from vg2c.dispatch.models import DispatchConfig
 from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
 
@@ -12,11 +13,9 @@ _MARS_MISSING_DOT_PATTERN = re.compile(r"@\[\]@(?=[A-Za-z_])")
 class MarsDialect(DialectHandler):
     """Handler for Oracle MARS dialect."""
 
-    dialect = "oracle_mars"
+    reader_cls = MarsReader
     kind = Kind.SQL_QUERY
-    database_arg = "MARS"
     schema_placeholder = "@[]@"
-    datasyncx_reader_name = "MarsReader"
 
     @classmethod
     def matches_signals(cls, node: str, engine: str, oledb: str) -> bool:

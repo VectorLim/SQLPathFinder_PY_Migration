@@ -20,17 +20,7 @@ __all__ = [
     "DispatchedProgram",
     "DialectHandler",
     "ReaderTarget",
-    "get_datasyncx_reader_name",
 ]
-
-
-def get_datasyncx_reader_name(source_type: str) -> str | None:
-    source_type_u = source_type.upper()
-    for dialect in ("oracle_mars", "oracle_oasys", "oracle_aries", "sqlite"):
-        handler = DialectHandler.for_dialect(dialect)
-        if handler is not None and handler.database_arg == source_type_u:
-            return handler.datasyncx_reader_name
-    return None
 
 
 def dispatch(
@@ -90,7 +80,7 @@ def dispatch(
         dispatched.append(
             DispatchedBlock(
                 block_index=block.parsed.index,
-                dialect=handler.dialect,
+                reader_cls=handler.reader_cls,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
             )

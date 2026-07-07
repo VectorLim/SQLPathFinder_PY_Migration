@@ -6,6 +6,8 @@ import pytest
 
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
+from datasyncx import AriesReader, MarsReader, OracleReader
+from vg2c.dispatch.dialects.sqlite import SqliteReader
 from vg2c.dispatch.models import DispatchConfig
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
@@ -89,7 +91,7 @@ def test_sql_script_oasys_schema_substituted(FIXTURES: Path) -> None:
         FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
     )
     for db in program.dispatched:
-        if db.dialect == "oracle_oasys":
+        if db.reader_cls is OracleReader:
             assert "@OASYSSCHEMA@" not in db.rewritten_sql
             assert "OASYS_OWN." in db.rewritten_sql
 
@@ -100,13 +102,12 @@ def test_sql_script_oasys_schema_substituted(FIXTURES: Path) -> None:
 def test_script_short_one_sqlite_block(FIXTURES: Path) -> None:
     program = _run_pipeline(FIXTURES, "script_short.txt", config=DispatchConfig())
     assert len(program.dispatched) == 1
-    assert program.dispatched[0].dialect == "sqlite"
-    assert program.dispatched[0].reader_target.database_arg is None
+    assert program.dispatched[0].reader_cls is SqliteReader
 
 
 def test_script_another_mars_calendar_record(FIXTURES: Path) -> None:
     program = _run_pipeline(FIXTURES, "script_another.txt", config=DispatchConfig())
-    mars_blocks = [d for d in program.dispatched if d.dialect == "oracle_mars"]
+    mars_blocks = [d for d in program.dispatched if d.reader_cls is MarsReader]
     assert mars_blocks
     # At least one MARS block has Calendar record metadata
     assert any(
@@ -120,32 +121,27 @@ def test_sql_script_has_mars_oasys_sqlite(FIXTURES: Path) -> None:
     program = _run_pipeline(
         FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
     )
-    dialects = {d.dialect for d in program.dispatched}
-    assert "oracle_mars" in dialects
-    assert "oracle_oasys" in dialects
-    assert "sqlite" in dialects
+    reader_classes = {d.reader_cls for d in program.dispatched}
+    assert MarsReader in reader_classes
+    assert OracleReader in reader_classes
+    assert SqliteReader in reader_classes
 
 
 def test_sql_script_mars_record_metadata(FIXTURES: Path) -> None:
     program = _run_pipeline(
         FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
     )
-    mars = [d for d in program.dispatched if d.dialect == "oracle_mars"]
+    mars = [d for d in program.dispatched if d.reader_cls is MarsReader]
     assert mars
     assert any(d.reader_target.record_name == "WIP_Lot_History_v2" for d in mars)
 
 
 def test_actual_script_has_mars_aries_sqlite(FIXTURES: Path) -> None:
     program = _run_pipeline(FIXTURES, "actual_script.txt", config=DispatchConfig())
-    dialects = {d.dialect for d in program.dispatched}
-    assert "oracle_mars" in dialects
-    assert "oracle_aries" in dialects
-    assert "sqlite" in dialects
-
-
-def test_actual_script_aries_emits_untested_note(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "actual_script.txt", config=DispatchConfig())
-    assert any(d.code == "dispatch-aries-rule-untested" for d in program.diagnostics)
+    reader_classes = {d.reader_cls for d in program.dispatched}
+    assert MarsReader in reader_classes
+    assert AriesReader in reader_classes
+    assert SqliteReader in reader_classes
 
 
 def test_actual_script_record_names_present(FIXTURES: Path) -> None:

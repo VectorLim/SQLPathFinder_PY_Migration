@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, ContextManager
 
-from datasyncx.readers import AriesReader, MarsReader, OracleReader
-
 from vg2c.emitter.utilities._base import UtilitySpec
 
 
@@ -13,11 +11,6 @@ class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
-    DATASYNCX_READER_MAP = {
-        "MARS": MarsReader,
-        "OASYS": OracleReader,
-        "ARIES": AriesReader,
-    }
 
     def __init__(self) -> None:
         registry = getattr(type(self), "_registry", None)
@@ -57,14 +50,8 @@ class PipelineContext(UtilitySpec):
     ) -> None:
         self.macro.write_file(path, template, vars=vars)
 
-    def _read_datasyncx(self, sql: str, source_type: str):
-        source_type_u = source_type.upper()
-        if source_type_u not in self.DATASYNCX_READER_MAP:
-            raise ValueError(f"Unsupported database type: {source_type!r}")
-        result = self.DATASYNCX_READER_MAP[source_type_u]().read(
-            site="KM",
-            query=sql,
-        )
+    def _read_datasyncx(self, sql: str, reader: Any):
+        result = reader.read(site="KM", query=sql)
         result.columns = [col.lower() for col in result.columns]
         return result
 
@@ -72,17 +59,18 @@ class PipelineContext(UtilitySpec):
         self,
         sql,
         output: str,
-        source_type: str,
+        reader_cls: type[Any],
         inputs: list[str] | None = None,
         header: list[str] | None = None,
         crosstab: dict | None = None,
     ):
         sql = self.macro.substitute_sql(sql)
+        reader = reader_cls()
 
-        if source_type.lower() == "sqlite":
-            result = self.sqlite_engine.execute(sql, inputs or [])
+        if hasattr(reader, "execute"):
+            result = reader.execute(sql, inputs or [])
         else:
-            result = self._read_datasyncx(sql, source_type)
+            result = self._read_datasyncx(sql, reader)
 
         if crosstab:
             result = self.crosstab.apply(

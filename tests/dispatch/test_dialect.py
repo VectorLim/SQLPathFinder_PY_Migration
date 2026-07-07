@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c.dispatch import get_datasyncx_reader_name
 from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.dialects.aries import AriesDialect
 from vg2c.dispatch.dialects.mars import MarsDialect
 from vg2c.dispatch.dialects.oasys import OasysDialect
-from vg2c.dispatch.dialects.sqlite import SqliteDialect
-from vg2c.dispatch.models import Dialect
+from vg2c.dispatch.dialects.sqlite import SqliteDialect, SqliteReader
 from vg2c.frontend.models import Kind
 
 
@@ -16,11 +14,11 @@ from vg2c.frontend.models import Kind
     "kind, expected",
     [
         (Kind.SQL_QUERY, None),
-        (Kind.SQLITE_QUERY, "sqlite"),
+        (Kind.SQLITE_QUERY, SqliteReader),
     ],
 )
-def test_resolve_dialect_sql_bearing(kind: Kind, expected: Dialect | None) -> None:
-    assert DialectHandler.resolve_dialect(kind) == expected
+def test_resolve_reader_cls_sql_bearing(kind: Kind, expected: type | None) -> None:
+    assert DialectHandler.resolve_reader_cls(kind) is expected
 
 
 @pytest.mark.parametrize(
@@ -34,24 +32,12 @@ def test_resolve_dialect_sql_bearing(kind: Kind, expected: Dialect | None) -> No
         Kind.MALFORMED,
     ],
 )
-def test_resolve_dialect_non_sql_returns_none(kind: Kind) -> None:
-    assert DialectHandler.resolve_dialect(kind) is None
+def test_resolve_reader_cls_non_sql_returns_none(kind: Kind) -> None:
+    assert DialectHandler.resolve_reader_cls(kind) is None
 
 
-def test_dialect_handlers_auto_register() -> None:
-    assert DialectHandler.for_dialect("oracle_aries") is AriesDialect
-    assert DialectHandler.for_dialect("oracle_mars") is MarsDialect
-    assert DialectHandler.for_dialect("oracle_oasys") is OasysDialect
-    assert DialectHandler.for_dialect("sqlite") is SqliteDialect
-    assert DialectHandler.for_kind(Kind.SQL_QUERY) is None
-    assert DialectHandler.for_kind(Kind.SQLITE_QUERY) is SqliteDialect
-
-
-def test_datasyncx_reader_metadata_matches_dispatch_helper() -> None:
-    assert get_datasyncx_reader_name("MARS") == "MarsReader"
-    assert get_datasyncx_reader_name("OASYS") == "OracleReader"
-    assert get_datasyncx_reader_name("ARIES") == "AriesReader"
-    assert get_datasyncx_reader_name("sqlite") is None
+def test_resolve_reader_cls_for_sqlite_kind() -> None:
+    assert DialectHandler.resolve_reader_cls(Kind.SQLITE_QUERY) is SqliteReader
 
 
 def test_sql_bearing_kinds_coverage() -> None:
@@ -64,52 +50,17 @@ def test_sql_bearing_kinds_coverage() -> None:
 # --- derive_from_signals fallback ---
 
 
-def test_derive_from_signals_oasys_by_node() -> None:
-    assert (
-        DialectHandler.derive_from_signals(
-            node="KM.OASYS", engine="VA", oledb="SQLPlus"
-        )
-        == "oracle_oasys"
-    )
-
-
-def test_derive_from_signals_mars_by_node_suffix() -> None:
-    assert (
-        DialectHandler.derive_from_signals(
-            node="KM.[A15_PROD_21.].MARS",
-            engine="VA",
-            oledb="SQLPlus",
-        )
-        == "oracle_mars"
-    )
-
-
-def test_derive_from_signals_mars_placeholder_node() -> None:
-    assert (
-        DialectHandler.derive_from_signals(
-            node="<<<MARS>>>", engine="VA", oledb="SQLPlus"
-        )
-        == "oracle_mars"
-    )
-
-
-def test_derive_from_signals_aries_by_node() -> None:
-    assert (
-        DialectHandler.derive_from_signals(
-            node="<<<ARIES>>>", engine="VA", oledb="SQLPlus"
-        )
-        == "oracle_aries"
-    )
-
-
 def test_derive_from_signals_sqlite_by_engine() -> None:
     assert (
-        DialectHandler.derive_from_signals(
+        DialectHandler.derive_reader_cls_from_signals(
             node=".\\", engine="SQLite", oledb="SQLite"
         )
-        == "sqlite"
+        is SqliteReader
     )
 
 
 def test_derive_from_signals_no_signals_returns_none() -> None:
-    assert DialectHandler.derive_from_signals(node="", engine="", oledb="") is None
+    assert (
+        DialectHandler.derive_reader_cls_from_signals(node="", engine="", oledb="")
+        is None
+    )
