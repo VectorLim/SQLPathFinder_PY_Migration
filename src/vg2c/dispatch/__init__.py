@@ -3,6 +3,7 @@ from __future__ import annotations
 from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dialects as _dialects  # noqa: F401
 from vg2c.dispatch.base import DialectHandler
+from vg2c.dispatch.filter_detector import detect_filters
 from vg2c.dispatch.models import (
     DispatchedBlock,
     DispatchedProgram,
@@ -63,6 +64,13 @@ def dispatch(
         # --- Step 6: reader target ---
         reader_target, target_diags = handler.build_reader_target(block)
         diagnostics.extend(target_diags)
+
+        # Detect SQL filters
+        sqlite = block.kind is Kind.SQLITE_QUERY
+        suffix = "sqlite_query" if sqlite else "sql_query"
+        step_name = f"step_{block.parsed.index:04d}_{suffix}"
+        sql_filters = detect_filters(rewritten_sql, step_name)
+
         dispatched.append(
             DispatchedBlock(
                 block_index=block.parsed.index,
@@ -70,6 +78,8 @@ def dispatch(
                 reader_kwargs=handler.reader_kwargs,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
+                step_name=step_name,
+                sql_filters=tuple(sql_filters),
             )
         )
 

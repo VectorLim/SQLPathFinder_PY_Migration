@@ -1,0 +1,334 @@
+<OPTIONS>
+/JSL=Y
+/OUTLOOK=N
+/PROMPT-TEXT=Step 3. Create a JMP Program
+/INSTANCE=10105
+</OPTIONS>
+/*------------------------------------------------------------------------------------
+|
+| Load file to a JMP Table table
+|
+ --------------------------------------------------------------------------------------*/
+If (IsEmpty(::Default_Dir),::Default_Dir ="$default$dir$");
+::MyInFile1= ::Default_Dir || "atrms.csv";
+Try(Close( Data Table ("atrms_csv") , NoSave);,Print("Warning Only: Table could not be found!"));
+
+::myspfcsv= Open(::MyInFile1,
+Import Settings(
+   End Of Line( CRLF, CR, LF ),
+   End Of Field( Comma ),
+   Strip Quotes( 1 ),
+   Use Apostrophe as Quotation Mark( 0 ),
+   Labels( 1 ),
+   Column Names Start( 1 ),
+   Data Starts( 2 ),
+   Lines To Read( All ),
+   Year Rule( "10-90" )
+   ));
+Wait(0.1);
+/*Set Columns Lowercase*/
+For(j = 1, j <= NCol(myspfcsv), j++,
+  col = Column(j); nm = lowercase(char(column name(j)));
+  col << Set Name(nm);
+);
+::myspfcsv << Set Name("atrms_csv");
+
+// Create the original data table
+dt=current data table ();
+dt<<select where (is missing (:link));
+dt<<delete rows;
+dt<<select where (is missing (:parameter_value));
+dt<<delete rows;
+
+:operation << Data Type( "Character" );
+dt<<new column ("pcg_op", character, formula (:pcg || "_" || :operation));
+
+dt2=dt<< Summary(Group( :pcg_op, :recipe_version, :site ),output table ("summary"));
+
+
+//SPLIT
+
+// Get unique sites for column headers
+site_values = Column(dt2, "site") << Get Values;
+site_list = {};
+For(i = 1, i <= N Items(site_values), i++,
+    If(Contains(site_list, site_values[i]) == 0,
+        Insert Into(site_list, site_values[i])
+    )
+);
+site_list = Sort List(site_list);
+
+// Get unique PCGs
+pcg_values = Column(dt2, "pcg_op") << Get Values;
+pcg_list = {};
+For(i = 1, i <= N Items(pcg_values), i++,
+    If(Contains(pcg_list, pcg_values[i]) == 0,
+        Insert Into(pcg_list, pcg_values[i])
+    )
+);
+pcg_list = Sort List(pcg_list);
+
+// Create new table with PCG column and site columns
+dt_result = New Table("Transformed Data",
+    Add Rows(N Items(pcg_list)),
+    New Column("pcg", Character, "Nominal", Set Values(pcg_list))
+);
+
+// Add columns for each site
+For(i = 1, i <= N Items(site_list), i++,
+    dt_result << New Column(site_list[i], Character, "Nominal")
+);
+
+// Get column references for original data
+pcg_col = Column(dt2, "pcg_op");
+recipe_col = Column(dt2, "recipe_version");
+site_col = Column(dt2, "site");
+
+// Fill in the data
+For(pcg_idx = 1, pcg_idx <= N Items(pcg_list), pcg_idx++,
+    current_pcg = pcg_list[pcg_idx];
+    
+    // For each site column
+    For(site_idx = 1, site_idx <= N Items(site_list), site_idx++,
+        current_site = site_list[site_idx];
+        
+        // Find all recipe_versions for this PCG and site combination
+        recipe_versions = {};
+        
+        For(row = 1, row <= N Rows(dt2), row++,
+            If(
+                pcg_col[row] == current_pcg & site_col[row] == current_site,
+                Insert Into(recipe_versions, recipe_col[row])
+            )
+        );
+        
+        // Remove duplicates and sort
+        If(N Items(recipe_versions) > 0,
+            unique_versions = {};
+            For(j = 1, j <= N Items(recipe_versions), j++,
+                If(Contains(unique_versions, recipe_versions[j]) == 0,
+                    Insert Into(unique_versions, recipe_versions[j])
+                )
+            );
+            unique_versions = Sort List(unique_versions);
+            
+            // Convert to comma-separated string
+            version_string = Char(unique_versions[1]);
+            For(j = 2, j <= N Items(unique_versions), j++,
+                version_string = version_string || "," || Char(unique_versions[j])
+            );
+            
+            // Set the value in the result table
+            result_col = Column(dt_result, current_site);
+            result_col[pcg_idx] = version_string;
+        );
+    );
+);
+
+// Show the result
+dt_result << Bring Window to Front;
+
+
+//NEW FLAG
+
+
+// Get reference to the current data table
+dt_result = Current Data Table();
+
+// Get all column names that start with "A"
+all_cols = dt_result << Get Column Names(string);
+a_cols = {};
+For(i = 1, i <= N Items(all_cols), i++,
+    If(Left(all_cols[i], 1) == "A",
+        Insert Into(a_cols, all_cols[i])
+    )
+);
+
+// Create the new column
+dt_result << New Column("New_Flag", Numeric, Continuous, Formula(
+
+Local({values = {}, non_missing_count = 0},
+        
+    // Collect all non-missing values from A% columns
+    For(i = 1, i <= N Items(a_cols), i++,
+        Local({col_name = a_cols[i]},
+            If(!Is Missing(Column(col_name)[Row()]),
+                Insert Into(values, Column(col_name)[Row()]);
+                non_missing_count++;
+            )
+        )
+    );
+        
+    // Check conditions
+    If(non_missing_count == 0, 0, // No values at all
+        If(non_missing_count == 1 & Contains(Char(values[1]), ","), 1, // Condition 1: Only 1 column has value and contains comma
+            If(non_missing_count > 1, // Condition 2: Multiple values - check if they are different
+                Local({first_value = values[1], all_same = 1},
+                    For(j = 2, j <= N Items(values), j++,
+                        If(values[j] != first_value,
+                            all_same = 0;
+                            Break()
+                        )
+                    );
+                    If(all_same == 0, 1, 0) // If values are different, flag = 1, else 0
+                ),
+                0 // Default case
+            )
+        )
+    )
+)
+));
+
+
+
+
+
+
+
+
+dt4=dt_result << Summary(Sum( :New_Flag ),Freq( "None" ),Weight( "None" ),output table ("dd"));
+Column(dt4, "N Rows") << Set Name("Total_PCG");
+Column(dt4, "Sum(New_Flag)") << Set Name("Total_Flag");
+dt4 << New Column("CE%", Numeric, Continuous, Format("Percent", 12, 2), Formula(1 - (:Total_Flag / :Total_PCG)));
+
+
+dt_result<<select where (:New_Flag==0);
+dt_result<<delete rows;
+dt_result<<new column ("operation", character, set each value (Right(:pcg, 4)));;
+dt_result<<new column ("PCG", character, set each value(Substitute(:pcg, "_1204", "")));
+dt_result<<delete columns ("pcg");
+dt_result << Move Selected Columns( {"operation", "PCG"}, To First );
+
+
+
+
+<---- New Query ---->
+
+
+<---- New Query ---->
+<OPTIONS>
+/INSTANCE=10105
+/ID=MYREPORT5
+/REPORT=HTML-DEFER
+/PROMPT-TEXT=Step 4. Create an HTML Report
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\atrms_percentage.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>total_pcg<\\>total_flag<\\>ce%<\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-HEADERS<\\><\\>Total Pcg<\\>Total Flag<\\>Ce%<\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/INSTANCE=10105
+/ID=MYREPORT2
+/REPORT=HTML-DEFER
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\atrms_summary.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+AT-TOP-OF-REPORT<\\><\\>ATRMS PCG GAPS<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>operation<\\>pcg<\\>a01<\\>a15<\\>a48<\\>a90<\\>new_flag<\\><\\><\\><\\><\\>
+COLUMN-HEADERS<\\><\\>Operation<\\>Pcg<\\>A01<\\>A15<\\>A48<\\>A90<\\>New Flag<\\><\\><\\><\\><\\>
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\><\\><\\><\\><\\>
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-RUN
+/INSTANCE=10105
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8
+TYPE<\\>CSS<\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\>
+FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>text-decoration:normal<\\>vertical-align:middle
+FORMAT<\\>Column-Data<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>Column-Alt-Row<\\>background-color:#f7f5dc<\\>color:#333<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>At-Top-of-Report<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:15<\\>font-style:normal<\\>font-weight:bold<\\>text-align:center<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col1<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col2<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col3<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>JQX-All-IChart-Text<\\>background-color:white<\\>color:black<\\>font-family:Verdana<\\>font-size:11<\\>font-style:normal<\\>font-weight:normal<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>border-style:solid<\\>border-width:1px<\\>border-spacing:4px<\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-LAYOUT
+/OUTLOOK=N
+/INSTANCE=10105
+/JSON-ONLY=N
+/CHART-INSTANCE=6403
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+:FILE:email:self
+:CSS:sqlpathfinder_style_1.css
+:CSSEMBED:N
+:RR:NO
+:B:N
+:EM-A:\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\atrms_raw.csv
+:EM-S:
+:SEC:Y
+:TITLE:ATRMS PCG GAPS
+<table class="tblout">
+<tr class="tblout">
+<td class="tblout">
+HTM:MYREPORT5
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+HTM:MYREPORT2
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+<p style="text-align: left" style="background-color: white"><i><font face="intelone display light" size="4" color="gray">Rev2-12012025<br>Exclude A04 & A06 data</font></i>
+</td>
+</tr>
+</table>
+</td><td class="tblout" valign="top">
+<table class="tblout">
+<tr class="tblout"><td class="tblout"></td></tr>
+</table>
+</td></tr></table>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-DELETE
+/INSTANCE=10105
+</OPTIONS>
+N/A

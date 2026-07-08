@@ -66,6 +66,10 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.pop_indent()
 
     source = script_writer.source()
+    
+    # Run filter post-processing comments
+    source = post_process_comments(source, dispatched, script_writer.step_lines)
+
     merged_diags = [*dispatched.diagnostics, *walker_diags]
 
     # Validate syntax
@@ -90,3 +94,41 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     return EmittedScript(
         source=source, imports=tuple(ctx.imports), diagnostics=tuple(merged_diags)
     )
+
+
+def post_process_comments(
+    source: str,
+    dispatched: DispatchedProgram,
+    step_lines: dict[str, int]
+) -> str:
+    # Find all steps that have filters
+    steps_with_filters = []
+    for db in dispatched.dispatched:
+        if db.sql_filters:
+            steps_with_filters.append(db)
+            
+    if not steps_with_filters:
+        return source
+        
+    # We will prepend comments.
+    # To keep line numbers in the comments accurate, we need to sort steps by their original line number
+    steps_with_filters.sort(key=lambda db: step_lines.get(db.step_name, 0))
+    
+    # Prepend comment block:
+    # 1 line for header
+    # len(steps_with_filters) lines for the details
+    # 1 line for blank line separator
+    num_comment_lines = len(steps_with_filters) + 2
+    
+    comment_lines = ["# SQL statements containing filters:"]
+    for db in steps_with_filters:
+        orig_line = step_lines.get(db.step_name, 1)
+        final_line = orig_line + num_comment_lines
+        
+        # Merge all attributes from all filters in this block
+        attrs = sorted(list(set(attr for f in db.sql_filters for attr in f.attributes)))
+        attrs_str = ", ".join(attrs)
+        comment_lines.append(f"# - {db.step_name} (Line {final_line}): filters on {attrs_str}")
+        
+    comments_block = "\n".join(comment_lines) + "\n\n"
+    return comments_block + source

@@ -16,12 +16,21 @@ class ReaderTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class SQLFilter:
+    step_name: str
+    attributes: tuple[str, ...]
+    sql_statement: str
+
+
+@dataclass(frozen=True, slots=True)
 class DispatchedBlock:
     block_index: int
     reader_cls: type[Any]
     reader_kwargs: dict[str, Any]
     reader_target: ReaderTarget
     rewritten_sql: str
+    step_name: str
+    sql_filters: tuple[SQLFilter, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -107,6 +107,7 @@ class IndentWriter:
         self.lines: list[str] = []
         self.indent_depth: int = 0
         self.indent_step = indent_step
+        self.step_lines: dict[str, int] = {}
 
     def push_indent(self) -> None:
         self.indent_depth += 1
@@ -123,6 +124,10 @@ class IndentWriter:
 
     def write_block(self, lines: str) -> None:
         """Write multiple lines."""
+        import re
+        match = re.match(r'^\s*def\s+(step_\w+)\b', lines)
+        if match:
+            self.step_lines[match.group(1)] = len(self.lines) + 1
         for line in lines.split("\n"):
             self.write(line)
 
