@@ -129,3 +129,25 @@ def test_html_report_delete_clears_state():
     assert not report.styles
     assert report.css_file is None
     assert not report.deferred_reports
+
+
+def test_html_report_layout_email_fallback(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    
+    report = HtmlReport()
+    report.instance = "9999"
+    
+    template = (
+        ":FILE:email:self\n"
+        "HTM:REPORT1\n"
+    )
+    
+    report.deferred_reports["REPORT1"] = {
+        "template": "OUTPUT-FILE<\\>my_output.htm\nINPUT-FILE<\\>nonexistent.csv\nCOLUMN-DATA<\\><\\>col1\n"
+    }
+    
+    ctx = MockCtx()
+    report.layout(ctx, template)
+    
+    output_file = tmp_path / "9999_my_output.htm"
+    assert output_file.exists()

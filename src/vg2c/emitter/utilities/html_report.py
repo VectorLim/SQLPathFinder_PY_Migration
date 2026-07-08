@@ -297,22 +297,24 @@ class HtmlReport(UtilitySpec):
             return s
 
         def resolve_csv_path(raw_path: str, ctx: Any) -> Path:
+            if not raw_path:
+                return Path("")
             if ctx and hasattr(ctx, "macro"):
                 resolved = ctx.macro.substitute_sql(raw_path)
             else:
                 resolved = raw_path
             p = Path(resolved)
-            if p.exists():
+            if p.is_file() and p.exists():
                 return p
             if p.is_absolute():
                 rel_p = Path(p.name)
-                if rel_p.exists():
+                if rel_p.is_file() and rel_p.exists():
                     return rel_p
             return p
 
         csv_path = resolve_csv_path(options.get("INPUT-FILE", ""), ctx)
         rows = []
-        if csv_path.exists():
+        if csv_path.is_file() and csv_path.exists():
             import csv
             with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
                 reader = csv.DictReader(fh)
@@ -466,11 +468,33 @@ class HtmlReport(UtilitySpec):
                 else:
                     html_content = f"{css_decl}\n{html_content}"
 
+        # Resolve output filename
+        out_filename = path
+        if out_filename.startswith("email:") or not out_filename:
+            fallback_name = "report.html"
+            for report_id, report in self.deferred_reports.items():
+                template = report.get("template") or ""
+                found = False
+                for line in template.splitlines():
+                    if line.upper().startswith("OUTPUT-FILE"):
+                        parts = [p.strip() for p in line.split("<\\>")]
+                        if len(parts) >= 2 and parts[1]:
+                            fallback_name = parts[1]
+                            found = True
+                            break
+                if found:
+                    break
+            instance_id = instance or self.instance
+            if instance_id:
+                out_filename = f"{instance_id}_{fallback_name.lower()}"
+            else:
+                out_filename = fallback_name.lower()
+
         # Write output file
         if ctx and hasattr(ctx, "macro"):
-            resolved_path = ctx.macro.substitute_sql(path)
+            resolved_path = ctx.macro.substitute_sql(out_filename)
             ctx.macro.write_file(resolved_path, html_content)
         else:
-            out_path = Path(path)
+            out_path = Path(out_filename)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(html_content, encoding="utf-8")
