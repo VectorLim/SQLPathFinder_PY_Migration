@@ -8,7 +8,6 @@ from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from datasyncx import AriesReader, MarsReader, OracleReader
 from vg2c.dispatch.dialects.sqlite import SqliteReader
-from vg2c.dispatch.models import DispatchConfig
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
 
@@ -25,13 +24,14 @@ from vg2c.frontend.models import Kind
 _SQL_BEARING = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
-def _run_pipeline(fixtures: Path, file_name: str, config=None):
+def _run_pipeline(fixtures: Path, file_name: str):
     text = (fixtures / file_name).read_text(encoding="utf-8", errors="replace")
     parsed, pdiag = parse(text, source=fixtures / file_name)
     classified, cdiag = classify(parsed)
     resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
     analyzed = analyze(resolved)
-    return dispatch(analyzed, config=config)
+    return dispatch(analyzed)
+
 
 
 # --- Smoke tests ---
@@ -50,16 +50,14 @@ def test_dispatched_count_equals_sql_bearing_blocks(
     FIXTURES: Path, fixture_name: str
 ) -> None:
     """dispatched tuple has exactly one entry per SQL-bearing block."""
-    program = _run_pipeline(
-        FIXTURES, fixture_name, config=DispatchConfig(oasys_schema="SCHEMA")
-    )
+    program = _run_pipeline(FIXTURES, fixture_name)
     sql_block_count = sum(
         1 for b in program.analyzed.resolved.blocks if b.kind in _SQL_BEARING
     )
     assert len(program.dispatched) == sql_block_count
 
 
-# --- No new error diagnostics on clean fixtures (with schema configured) ---
+# --- No new error diagnostics on clean fixtures ---
 
 
 @pytest.mark.parametrize(
@@ -69,44 +67,30 @@ def test_dispatched_count_equals_sql_bearing_blocks(
 def test_no_error_diagnostics_on_clean_fixtures(
     FIXTURES: Path, fixture_name: str
 ) -> None:
-    program = _run_pipeline(
-        FIXTURES, fixture_name, config=DispatchConfig(oasys_schema="SCHEMA")
-    )
+    program = _run_pipeline(FIXTURES, fixture_name)
     stage4_errors = [d for d in program.diagnostics if d.severity == "error"]
     assert not stage4_errors
 
 
-def test_sql_script_oasys_unset_emits_error(FIXTURES: Path) -> None:
-    """sql_script has @OASYSSCHEMA@; without config this should error."""
-    program = _run_pipeline(FIXTURES, "sql_script.txt", config=None)
-    assert any(
-        d.code == "dispatch-oasys-schema-unset" and d.severity == "error"
-        for d in program.diagnostics
-    )
-
-
 def test_sql_script_oasys_schema_substituted(FIXTURES: Path) -> None:
-    """With oasys_schema configured, @OASYSSCHEMA@ must not appear in any rewritten_sql."""
-    program = _run_pipeline(
-        FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
-    )
+    """Verify @OASYSSCHEMA@ is replaced with an empty string in rewritten_sql."""
+    program = _run_pipeline(FIXTURES, "sql_script.txt")
     for db in program.dispatched:
         if db.reader_cls is OracleReader:
             assert "@OASYSSCHEMA@" not in db.rewritten_sql
-            assert "OASYS_OWN." in db.rewritten_sql
 
 
 # --- Per-fixture spot checks ---
 
 
 def test_script_short_one_sqlite_block(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "script_short.txt", config=DispatchConfig())
+    program = _run_pipeline(FIXTURES, "script_short.txt")
     assert len(program.dispatched) == 1
     assert program.dispatched[0].reader_cls is SqliteReader
 
 
 def test_script_another_mars_calendar_record(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "script_another.txt", config=DispatchConfig())
+    program = _run_pipeline(FIXTURES, "script_another.txt")
     mars_blocks = [d for d in program.dispatched if d.reader_cls is MarsReader]
     assert mars_blocks
     # At least one MARS block has Calendar record metadata
@@ -118,9 +102,7 @@ def test_script_another_mars_calendar_record(FIXTURES: Path) -> None:
 
 
 def test_sql_script_has_mars_oasys_sqlite(FIXTURES: Path) -> None:
-    program = _run_pipeline(
-        FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
-    )
+    program = _run_pipeline(FIXTURES, "sql_script.txt")
     reader_classes = {d.reader_cls for d in program.dispatched}
     assert MarsReader in reader_classes
     assert OracleReader in reader_classes
@@ -128,16 +110,14 @@ def test_sql_script_has_mars_oasys_sqlite(FIXTURES: Path) -> None:
 
 
 def test_sql_script_mars_record_metadata(FIXTURES: Path) -> None:
-    program = _run_pipeline(
-        FIXTURES, "sql_script.txt", config=DispatchConfig(oasys_schema="OASYS_OWN")
-    )
+    program = _run_pipeline(FIXTURES, "sql_script.txt")
     mars = [d for d in program.dispatched if d.reader_cls is MarsReader]
     assert mars
     assert any(d.reader_target.record_name == "WIP_Lot_History_v2" for d in mars)
 
 
 def test_actual_script_has_mars_aries_sqlite(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "actual_script.txt", config=DispatchConfig())
+    program = _run_pipeline(FIXTURES, "actual_script.txt")
     reader_classes = {d.reader_cls for d in program.dispatched}
     assert MarsReader in reader_classes
     assert AriesReader in reader_classes
@@ -145,10 +125,11 @@ def test_actual_script_has_mars_aries_sqlite(FIXTURES: Path) -> None:
 
 
 def test_actual_script_record_names_present(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "actual_script.txt", config=DispatchConfig())
+    program = _run_pipeline(FIXTURES, "actual_script.txt")
     record_names = {
         d.reader_target.record_name
         for d in program.dispatched
         if d.reader_target.record_name
     }
     assert "WIP_Lot_History_v2" in record_names or "AT_Metrology" in record_names
+

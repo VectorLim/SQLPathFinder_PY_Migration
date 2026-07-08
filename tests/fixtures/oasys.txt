@@ -1,0 +1,60 @@
+<OPTIONS>
+/NODE=KM.OASYS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=Yes
+/CSV=spc.csv
+/HEADERS=spc_lot,spc_operation,spc_entity,monitor_set_name,measurement_set_name,spc_chart_subset,chart_type,raw_value,reading_id,spc_lot_txn_date
+/INSTANCE=31002
+/PROMPT-TEXT=Step 1.1-a0. Fetching OASys Data
+/RECORD=Spc_Chart_or_Raw@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          v1.lot AS spc_lot
+         ,v1.operation AS spc_operation
+         ,v4.equipment_name AS spc_entity
+         ,v3.monitor_set_name AS monitor_set_name
+         ,v5.reading_set_name AS measurement_set_name
+         ,v7.spc_chart_subset AS spc_chart_subset
+         ,v7.chart_type AS chart_type
+         ,v6.value AS raw_value
+         ,v6.reading_id AS reading_id
+         ,To_Char(v1.transaction_datetime,'yyyy-mm-dd hh24:mi:ss') AS spc_lot_txn_date
+FROM 
+     @OASYSSCHEMA@P_SPC_Batch_Lot v1
+    ,@OASYSSCHEMA@P_SPC_Batch v2
+    ,@OASYSSCHEMA@P_SPC_Session v3
+    ,@OASYSSCHEMA@P_SPC_Equipment v4
+    ,@OASYSSCHEMA@P_SPC_Reading_Set v5
+    ,@OASYSSCHEMA@P_SPC_Chart_Point v7
+    ,@OASYSSCHEMA@P_SPC_Reading v6
+WHERE 
+              v2.batch_id = v1.batch_id
+ AND      v2.facility = v1.facility
+ AND      v2.batch_id = v3.batch_id
+ AND      v2.facility = v3.facility
+ AND      v2.data_collection_ww = v3.data_collection_ww
+ AND      v3.facility = v4.facility
+ AND      v3.data_collection_ww = v4.data_collection_ww
+ AND      v3.spcs_id = v4.spcs_id
+ AND      v4.equipment_sequence = 1
+ AND      v3.facility = v5.facility
+ AND      v3.data_collection_ww = v5.data_collection_ww
+ AND      v3.spcs_id = v5.spcs_id
+ AND      v5.data_collection_ww = v6.data_collection_ww
+ AND      v5.spcs_id = v6.spcs_id
+ AND      v5.reading_set_name = v6.reading_set_name
+ AND      v7.data_Collection_ww = v3.data_collection_ww
+ AND      v7.spcs_id = v3.spcs_id
+ AND      v7.reading_set_name = v5.reading_set_name
+ AND      v3.latest_flag = 'Y' 
+ AND      v3.status <> 'I' 
+ AND      v1.transaction_datetime >= SYSDATE - 1 
+ AND      v1.operation = '2511' 
+/*END SQL*/

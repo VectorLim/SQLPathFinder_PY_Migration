@@ -8,9 +8,8 @@ from pathlib import Path
 import pandas as pd
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.dispatch.models import DispatchConfig
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import Kind
 
 
 class SqliteReader:
@@ -140,12 +139,6 @@ class SqliteDialect(DialectHandler):
         return engine.upper() == "SQLITE" or oledb.upper() == "SQLITE"
 
     @classmethod
-    def substitute(
-        cls,
-        body: str,
-        config: DispatchConfig | None,
-        span: SourceSpan | None,
-        block_index: int,
-    ) -> tuple[str, list[Diagnostic]]:
+    def substitute(cls, body: str) -> str:
         # No schema substitution for SQLite
-        return body, []
+        return body

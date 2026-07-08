@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
 from datasyncx import AriesReader
-from vg2c.dispatch.models import DispatchConfig
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import Kind
 
 
 class AriesDialect(DialectHandler):
@@ -20,12 +19,7 @@ class AriesDialect(DialectHandler):
         return (engine_u == "VA" or oledb_u == "SQLPLUS") and "ARIES" in node_u
 
     @classmethod
-    def substitute(
-        cls,
-        body: str,
-        config: DispatchConfig | None,
-        span: SourceSpan | None,
-        block_index: int,
-    ) -> tuple[str, list[Diagnostic]]:
+    def substitute(cls, body: str) -> str:
         # No schema substitution for ARIES
-        return body, []
+        return body
+

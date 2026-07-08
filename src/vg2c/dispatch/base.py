@@ -3,8 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from vg2c.dispatch.models import DispatchConfig, ReaderTarget
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.dispatch.models import ReaderTarget
+from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import ResolvedBlock
 
 
@@ -12,10 +12,11 @@ class DialectHandler(ABC):
     """Abstract base class for SQL dialect handlers."""
 
     reader_cls: ClassVar[type[Any]]
-    kind: ClassVar[Kind | None] = None
-    schema_placeholder: ClassVar[str | None] = None
+    kind: ClassVar[Kind] = Kind.SQL_QUERY
+
     _handlers_by_reader_cls: ClassVar[dict[type[Any], type[DialectHandler]]] = {}
     _handlers_by_kind: ClassVar[dict[Kind, type[DialectHandler]]] = {}
+
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -91,14 +92,8 @@ class DialectHandler(ABC):
 
     @classmethod
     @abstractmethod
-    def substitute(
-        cls,
-        body: str,
-        config: DispatchConfig | None,
-        span: SourceSpan | None,
-        block_index: int,
-    ) -> tuple[str, list[Diagnostic]]:
-        """Perform dialect-specific schema placeholder substitution."""
+    def substitute(cls, body: str) -> str:
+        """Perform dialect-specific SQL substitution."""
         raise NotImplementedError
 
     @classmethod
@@ -112,7 +107,7 @@ class DialectHandler(ABC):
         node = opts.get("NODE", "")
         instance = opts.get("INSTANCE")
         record_raw = opts.get("RECORD")
-        record_name, record_version = _parse_record(record_raw, block, diags)
+        record_name, record_version = cls._parse_record(record_raw, block, diags)
 
         target = ReaderTarget(
             record_name=record_name,
@@ -122,27 +117,27 @@ class DialectHandler(ABC):
         )
         return target, diags
 
+    @staticmethod
+    def _parse_record(
+        record_raw: str | None,
+        block: ResolvedBlock,
+        diags: list[Diagnostic],
+    ) -> tuple[str | None, str | None]:
+        """Parse /RECORD=Name@version. Returns (name, version) or (raw, None) with diagnostic."""
+        if record_raw is None:
+            return None, None
 
-def _parse_record(
-    record_raw: str | None,
-    block: ResolvedBlock,
-    diags: list[Diagnostic],
-) -> tuple[str | None, str | None]:
-    """Parse /RECORD=Name@version. Returns (name, version) or (raw, None) with diagnostic."""
-    if record_raw is None:
-        return None, None
+        parts = record_raw.split("@", 1)
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return parts[0], parts[1]
 
-    parts = record_raw.split("@", 1)
-    if len(parts) == 2 and parts[0] and parts[1]:
-        return parts[0], parts[1]
-
-    diags.append(
-        Diagnostic(
-            severity="info",
-            code="dispatch-record-malformed",
-            message=f"/RECORD={record_raw!r} is not in Name@version format; stored raw.",
-            block_index=block.parsed.index,
-            span=block.parsed.span,
+        diags.append(
+            Diagnostic(
+                severity="info",
+                code="dispatch-record-malformed",
+                message=f"/RECORD={record_raw!r} is not in Name@version format; stored raw.",
+                block_index=block.parsed.index,
+                span=block.parsed.span,
+            )
         )
-    )
-    return record_raw, None
+        return record_raw, None

@@ -10,7 +10,6 @@ from pathlib import Path
 
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
-from vg2c.dispatch.models import DispatchConfig
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
@@ -24,7 +23,7 @@ def _run_full_pipeline(fixture_name: str) -> str:
     c, cd = classify(p)
     r = resolve(c, diagnostics=[*pd, *cd])
     a = analyze(r)
-    d = dispatch(a, config=DispatchConfig(oasys_schema="SCHEMA"))
+    d = dispatch(a)
     e = emit(d)
     return e.source
 

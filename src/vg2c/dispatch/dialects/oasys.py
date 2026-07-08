@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.dispatch.models import DispatchConfig
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import Kind
 from datasyncx import OracleReader
-
-_OASYS_PLACEHOLDER = "@OASYSSCHEMA@"
+from functools import partial 
 
 
 class OasysDialect(DialectHandler):
     """Handler for Oracle OASYS dialect."""
 
-    reader_cls = OracleReader
+    reader_cls = partial(OracleReader, database="OASYS")
     kind = Kind.SQL_QUERY
-    schema_placeholder = _OASYS_PLACEHOLDER
+    
+    _OASYS_PLACEHOLDER = "@OASYSSCHEMA@"
 
     @classmethod
     def matches_signals(cls, node: str, engine: str, oledb: str) -> bool:
@@ -23,48 +22,6 @@ class OasysDialect(DialectHandler):
         return (engine_u == "VA" or oledb_u == "SQLPLUS") and "OASYS" in node_u
 
     @classmethod
-    def substitute(
-        cls,
-        body: str,
-        config: DispatchConfig | None,
-        span: SourceSpan | None,
-        block_index: int,
-    ) -> tuple[str, list[Diagnostic]]:
-        diags: list[Diagnostic] = []
+    def substitute(cls, body: str) -> str:
+        return body.replace(cls._OASYS_PLACEHOLDER, "")
 
-        if _OASYS_PLACEHOLDER not in body:
-            return body, diags
-
-        if config is None:
-            diags.append(
-                Diagnostic(
-                    severity="error",
-                    code="dispatch-oasys-schema-unset",
-                    message=(
-                        "@OASYSSCHEMA@ placeholder present but no DispatchConfig provided; "
-                        "placeholder left in place."
-                    ),
-                    block_index=block_index,
-                    span=span,
-                )
-            )
-            return body, diags
-
-        if config.oasys_schema == "":
-            diags.append(
-                Diagnostic(
-                    severity="warning",
-                    code="dispatch-oasys-schema-unset",
-                    message=(
-                        "@OASYSSCHEMA@ placeholder present but oasys_schema is empty; "
-                        "placeholder left in place."
-                    ),
-                    block_index=block_index,
-                    span=span,
-                )
-            )
-            return body, diags
-
-        # Replace all occurrences
-        new_body = body.replace(_OASYS_PLACEHOLDER, config.oasys_schema + ".")
-        return new_body, diags

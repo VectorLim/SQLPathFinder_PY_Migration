@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
-from vg2c.dispatch.models import DispatchConfig
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
@@ -22,7 +21,7 @@ def test_mars_placeholder_in_emitted_sql():
     c, cd = classify(p)
     r = resolve(c, diagnostics=[*pd, *cd])
     a = analyze(r)
-    d = dispatch(a, config=DispatchConfig(oasys_schema="SCHEMA"))
+    d = dispatch(a)
     e = emit(d)
 
     source = e.source

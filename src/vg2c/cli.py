@@ -1,7 +1,7 @@
 """vg2c CLI — translate VG2 scripts to Python.
 
 Usage:
-    vg2c translate <input> [-o output.py] [--oasys-schema SCHEMA] [--strict]
+    vg2c translate <input> [-o output.py] [--strict]
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ from pathlib import Path
 
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
-from vg2c.dispatch.models import DispatchConfig
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
 from vg2c.frontend.models import Diagnostic
 from vg2c.resolver import resolve
+
 
 
 def _format_diagnostic(diag: Diagnostic, source: Path | None) -> str:
@@ -39,8 +39,7 @@ def cmd_translate(args: argparse.Namespace) -> int:
     classified, cdiag = classify(parsed)
     resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
     analyzed = analyze(resolved)
-    config = DispatchConfig(oasys_schema=args.oasys_schema or "")
-    dispatched = dispatch(analyzed, config=config)
+    dispatched = dispatch(analyzed)
     emitted = emit(dispatched)
 
     # Print diagnostics to stderr, sorted by severity then block order
@@ -77,12 +76,6 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("input", help="Path to the VG2 source file.")
     tr.add_argument(
         "-o", "--output", metavar="FILE", help="Write output to FILE (default: stdout)."
-    )
-    tr.add_argument(
-        "--oasys-schema",
-        metavar="SCHEMA",
-        default="",
-        help="Schema prefix for @OASYSSCHEMA@ substitution.",
     )
     tr.add_argument(
         "--strict",

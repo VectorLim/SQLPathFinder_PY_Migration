@@ -4,8 +4,6 @@ from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dialects as _dialects  # noqa: F401
 from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.models import (
-    Dialect,
-    DispatchConfig,
     DispatchedBlock,
     DispatchedProgram,
     ReaderTarget,
@@ -14,8 +12,6 @@ from vg2c.frontend.models import Diagnostic, Kind
 
 __all__ = [
     "dispatch",
-    "Dialect",
-    "DispatchConfig",
     "DispatchedBlock",
     "DispatchedProgram",
     "DialectHandler",
@@ -25,15 +21,11 @@ __all__ = [
 
 def dispatch(
     analyzed: AnalyzedProgram,
-    config: DispatchConfig | None = None,
 ) -> DispatchedProgram:
     """Stage 4 entry point: resolve dialects, substitute schemas, build reader targets.
 
     Args:
         analyzed: Output from Stage 3 ``analyze()``.
-        config:   Optional dispatch configuration. When *None*, OASYS schema
-                  substitution will emit an error-severity diagnostic if any
-                  ``@OASYSSCHEMA@`` placeholder is present.
 
     Returns:
         A ``DispatchedProgram`` wrapping *analyzed* and adding per-SQL-block
@@ -66,13 +58,7 @@ def dispatch(
             continue  # Non-SQL block; no DispatchedBlock emitted
 
         # --- Step 4: schema substitution ---
-        rewritten_sql, schema_diags = handler.substitute(
-            body=block.resolved_body,
-            config=config,
-            span=block.parsed.span,
-            block_index=block.parsed.index,
-        )
-        diagnostics.extend(schema_diags)
+        rewritten_sql = handler.substitute(body=block.resolved_body)
 
         # --- Step 6: reader target ---
         reader_target, target_diags = handler.build_reader_target(block)
@@ -91,3 +77,4 @@ def dispatch(
         dispatched=tuple(dispatched),
         diagnostics=tuple(diagnostics),
     )
+

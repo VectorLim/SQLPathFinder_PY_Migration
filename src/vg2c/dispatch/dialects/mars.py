@@ -4,10 +4,9 @@ import re
 
 from vg2c.dispatch.base import DialectHandler
 from datasyncx import MarsReader
-from vg2c.dispatch.models import DispatchConfig
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import Kind
 
-_MARS_MISSING_DOT_PATTERN = re.compile(r"@\[\]@(?=[A-Za-z_])")
+
 
 
 class MarsDialect(DialectHandler):
@@ -15,7 +14,8 @@ class MarsDialect(DialectHandler):
 
     reader_cls = MarsReader
     kind = Kind.SQL_QUERY
-    schema_placeholder = "@[]@"
+
+    _MARS_MISSING_DOT_PATTERN = re.compile(r"@\[\]@(?=[A-Za-z_])")
 
     @classmethod
     def matches_signals(cls, node: str, engine: str, oledb: str) -> bool:
@@ -27,13 +27,7 @@ class MarsDialect(DialectHandler):
         )
 
     @classmethod
-    def substitute(
-        cls,
-        body: str,
-        config: DispatchConfig | None,
-        span: SourceSpan | None,
-        block_index: int,
-    ) -> tuple[str, list[Diagnostic]]:
+    def substitute(cls, body: str) -> str:
         # Normalize malformed @[]@F_* to @[]@.F_*
-        normalized = _MARS_MISSING_DOT_PATTERN.sub("@[]@.", body)
-        return normalized, []
+        return cls._MARS_MISSING_DOT_PATTERN.sub("@[]@.", body)
+
