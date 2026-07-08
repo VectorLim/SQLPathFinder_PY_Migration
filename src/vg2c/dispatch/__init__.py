@@ -67,6 +67,7 @@ def dispatch(
             DispatchedBlock(
                 block_index=block.parsed.index,
                 reader_cls=handler.reader_cls,
+                reader_kwargs=handler.reader_kwargs,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
             )
@@ -77,4 +78,3 @@ def dispatch(
         dispatched=tuple(dispatched),
         diagnostics=tuple(diagnostics),
     )
-

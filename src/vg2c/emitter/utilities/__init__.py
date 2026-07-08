@@ -18,6 +18,7 @@ from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities.external import ExternalProcess
 from vg2c.emitter.utilities.fs_ops import FileSystemOps
+from vg2c.emitter.utilities.html_report import HtmlReport
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
@@ -200,6 +201,7 @@ __all__ = [
     "CsvIO",
     "ExternalProcess",
     "FileSystemOps",
+    "HtmlReport",
     "MacroState",
     "MailService",
     "PipelineContext",

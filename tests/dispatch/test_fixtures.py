@@ -33,7 +33,6 @@ def _run_pipeline(fixtures: Path, file_name: str):
     return dispatch(analyzed)
 
 
-
 # --- Smoke tests ---
 
 
@@ -132,4 +131,3 @@ def test_actual_script_record_names_present(FIXTURES: Path) -> None:
         if d.reader_target.record_name
     }
     assert "WIP_Lot_History_v2" in record_names or "AT_Metrology" in record_names
-

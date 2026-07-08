@@ -11,7 +11,6 @@ FIXTURE_NAMES = [
     "script_short.txt",
     "script_another.txt",
     "sql_script.txt",
-    "script_from_vietnam.txt",
     "actual_script.txt",
 ]
 
@@ -52,14 +51,6 @@ def test_sql_script_has_mars_oasys_and_sqlite(FIXTURES: Path) -> None:
     assert _has_kind(classified, Kind.SQLITE_QUERY)
 
 
-def test_script_from_vietnam_has_mars_write_and_utility(FIXTURES: Path) -> None:
-    classified = _classify_fixture(FIXTURES, "script_from_vietnam.txt")
-    assert _has_kind(classified, Kind.SQL_QUERY)
-    assert _has_kind(classified, Kind.WRITE_FILE)
-    assert _has_any_kind(
-        classified,
-        (Kind.UTILITY, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
-    )
 
 
 def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:

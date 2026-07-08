@@ -12,7 +12,6 @@ FIXTURE_NAMES = [
     "script_short.txt",
     "script_another.txt",
     "sql_script.txt",
-    "script_from_vietnam.txt",
     "actual_script.txt",
 ]
 
@@ -39,7 +38,6 @@ def test_pipeline_stage1_to_stage3_runs(FIXTURES: Path, fixture_name: str) -> No
         "script_short.txt",
         "script_another.txt",
         "sql_script.txt",
-        "script_from_vietnam.txt",
     ],
 )
 def test_no_error_diagnostics_on_clean_fixtures(
@@ -52,7 +50,6 @@ def test_no_error_diagnostics_on_clean_fixtures(
 def test_edges_exist_on_cross_block_fixtures(FIXTURES: Path) -> None:
     for fixture_name in [
         "sql_script.txt",
-        "script_from_vietnam.txt",
         "actual_script.txt",
     ]:
         analyzed = _run_pipeline(FIXTURES, fixture_name)

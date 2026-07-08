@@ -39,4 +39,4 @@ def test_mars_placeholder_in_emitted_sql():
 
     assert "def _read_datasyncx" in source
     assert "DATASYNCX_READER_MAP" not in source
-    assert "reader_cls=MarsReader" in source
+    assert "reader=MarsReader" in source

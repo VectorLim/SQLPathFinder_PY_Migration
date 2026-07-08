@@ -95,6 +95,8 @@ class CsvIO(UtilitySpec):
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(content, pandas.DataFrame):
+            if header is not None:
+                content = content.reindex(columns=header)
             content.to_csv(path, index=False, encoding="utf-8")
             return
 
@@ -110,17 +112,24 @@ class CsvIO(UtilitySpec):
 
         rows = list(content) if content is not None else []
         if not rows:
-            path.write_text("", encoding="utf-8")
+            if header is not None:
+                with path.open("w", newline="", encoding="utf-8") as fh:
+                    writer = csv.writer(fh)
+                    writer.writerow(header)
+            else:
+                path.write_text("", encoding="utf-8")
             return
 
         with path.open("w", newline="", encoding="utf-8") as fh:
-            if rows and isinstance(rows[0], dict):
-                fieldnames = list(rows[0].keys())
-                writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            if isinstance(rows[0], dict):
+                fieldnames = header if header is not None else list(rows[0].keys())
+                writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
                 writer.writeheader()
                 writer.writerows(rows)
             else:
                 writer_plain = csv.writer(fh)
                 if header:
                     writer_plain.writerow(header)
+                    if rows[0] == header:
+                        rows = rows[1:]
                 writer_plain.writerows(rows)

@@ -80,20 +80,15 @@ class EmitContext:
             if emitted is not None:
                 return emitted
 
-        if block.kind is Kind.UTILITY:
-            return _emit_step_source(
-                _step_name(block, "utility"),
-                ["pass  # TODO: utility command not classified"],
-            )
-        if block.kind is Kind.HTML_REPORT:
-            return _emit_step_source(
-                _step_name(block, "html_report"),
-                ["pass  # HTML report not translated"],
-            )
-        return _emit_step_source(
-            _step_name(block, "unknown"),
-            [f"pass  # TODO: unhandled kind={block.kind}"],
+        kind_fallbacks = {
+            Kind.UTILITY: ("utility", "pass  # TODO: utility command not classified"),
+            Kind.HTML_REPORT: ("html_report", "pass  # HTML report not translated"),
+        }
+        suffix, default_stmt = kind_fallbacks.get(
+            block.kind,
+            ("unknown", f"pass  # TODO: unhandled kind={block.kind}"),
         )
+        return _emit_step_source(_step_name(block, suffix), [default_stmt])
 
 
 @dataclass(frozen=True, slots=True)

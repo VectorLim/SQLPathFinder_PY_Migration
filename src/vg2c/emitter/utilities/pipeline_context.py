@@ -59,13 +59,12 @@ class PipelineContext(UtilitySpec):
         self,
         sql,
         output: str,
-        reader_cls: type[Any],
+        reader: Any,
         inputs: list[str] | None = None,
         header: list[str] | None = None,
         crosstab: dict | None = None,
     ):
         sql = self.macro.substitute_sql(sql)
-        reader = reader_cls()
 
         if hasattr(reader, "execute"):
             result = reader.execute(sql, inputs or [])

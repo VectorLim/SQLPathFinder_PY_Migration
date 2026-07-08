@@ -22,4 +22,3 @@ class AriesDialect(DialectHandler):
     def substitute(cls, body: str) -> str:
         # No schema substitution for ARIES
         return body
-

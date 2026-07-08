@@ -12,11 +12,11 @@ class DialectHandler(ABC):
     """Abstract base class for SQL dialect handlers."""
 
     reader_cls: ClassVar[type[Any]]
+    reader_kwargs: ClassVar[dict[str, Any]] = {}
     kind: ClassVar[Kind] = Kind.SQL_QUERY
 
     _handlers_by_reader_cls: ClassVar[dict[type[Any], type[DialectHandler]]] = {}
     _handlers_by_kind: ClassVar[dict[Kind, type[DialectHandler]]] = {}
-
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

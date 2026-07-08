@@ -54,7 +54,7 @@ def test_write_file_auto_mkdir(tmp_path):
 def test_pipeline_context_snippet_includes_datasyncx_reader_logic():
     assert "class PipelineContext" in PIPELINE_CONTEXT_SNIPPET
     assert "def _read_datasyncx" in PIPELINE_CONTEXT_SNIPPET
-    assert "reader_cls" in PIPELINE_CONTEXT_SNIPPET
+    assert "reader" in PIPELINE_CONTEXT_SNIPPET
 
 
 def test_run_query_reads_datasyncx_and_lowercases_columns():
@@ -85,7 +85,7 @@ def test_run_query_reads_datasyncx_and_lowercases_columns():
     ctx.run_query(
         "select <<<X>>> as COL_A",
         "out.csv",
-        FakeReader,
+        FakeReader(),
         header=["col_a"],
     )
 
@@ -107,4 +107,4 @@ def test_run_query_requires_reader_behavior():
         pass
 
     with pytest.raises(AttributeError):
-        ctx.run_query("select 1", "out.csv", NotAReader)
+        ctx.run_query("select 1", "out.csv", NotAReader())

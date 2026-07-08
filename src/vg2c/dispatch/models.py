@@ -19,6 +19,7 @@ class ReaderTarget:
 class DispatchedBlock:
     block_index: int
     reader_cls: type[Any]
+    reader_kwargs: dict[str, Any]
     reader_target: ReaderTarget
     rewritten_sql: str
 

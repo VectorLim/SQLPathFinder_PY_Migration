@@ -7,8 +7,6 @@ from datasyncx import MarsReader
 from vg2c.frontend.models import Kind
 
 
-
-
 class MarsDialect(DialectHandler):
     """Handler for Oracle MARS dialect."""
 
@@ -30,4 +28,3 @@ class MarsDialect(DialectHandler):
     def substitute(cls, body: str) -> str:
         # Normalize malformed @[]@F_* to @[]@.F_*
         return cls._MARS_MISSING_DOT_PATTERN.sub("@[]@.", body)
-

@@ -12,6 +12,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _step_name,
     option_to_python_expr,
     resolve_output_path,
+    strip_quotes,
 )
 from vg2c.frontend.models import Kind
 
@@ -101,7 +102,7 @@ class FileSystemOps(UtilitySpec):
 
     @classmethod
     def _emit_spf_delete(cls, ctx, argv: list[str]) -> str:
-        raw = argv[1] if len(argv) > 1 else ""
+        raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
         paths_expr = RawExpr(
             "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
@@ -127,9 +128,7 @@ class FileSystemOps(UtilitySpec):
         for p in paths:
             path = Path(p)
             if path.is_dir():
-                # if recurse:
-                # shutil.rmtree(path, ignore_errors=True)
-                pass
+                if recurse:
+                    shutil.rmtree(path, ignore_errors=True)
             else:
-                # path.unlink(missing_ok=True)
-                pass
+                path.unlink(missing_ok=True)

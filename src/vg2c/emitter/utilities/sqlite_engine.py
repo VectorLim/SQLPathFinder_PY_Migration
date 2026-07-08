@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import partial
 
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
@@ -109,10 +110,13 @@ class SqliteEngine(UtilitySpec):
         crosstab = CrosstabUtility.extract_options(block)
         header = None if crosstab else cls._extract_header(block)
 
+        reader_kwargs_items = [f"{k}={repr(v)}" for k, v in dispatched.reader_kwargs.items()]
+        inst_expr = f"{reader_cls.__name__}({', '.join(reader_kwargs_items)})"
+
         kwargs: dict[str, object] = {
             "sql": sql,
             "output": output,
-            "reader_cls": RawExpr(reader_cls.__name__),
+            "reader": RawExpr(inst_expr),
         }
         if sqlite:
             kwargs["inputs"] = cls._extract_table_inputs(block)
