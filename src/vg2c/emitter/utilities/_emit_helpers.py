@@ -111,7 +111,12 @@ def _step_name(block: Any, suffix: str) -> str:
 def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
     lines = [f"def {name}(ctx) -> None:"]
     if body_lines:
-        lines.extend([f"    {line}" for line in body_lines])
+        for body_line in body_lines:
+            for line in body_line.split("\n"):
+                if line.strip():
+                    lines.append(f"    {line}")
+                else:
+                    lines.append("")
     else:
         lines.append("    pass")
     return "\n".join(lines), f"{name}(ctx)"

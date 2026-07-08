@@ -27,23 +27,28 @@ class SqliteEngine(UtilitySpec):
     _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
     @staticmethod
+    def _format_sql_literal(sql: str) -> str:
+        escaped = sql.replace('"""', '\\"\\"\\"')
+        return f'"""{escaped}"""'
+
+    @staticmethod
     def _extract_sql_text(block, dispatched) -> str | RawExpr:
         sql = (
             dispatched.rewritten_sql if dispatched is not None else block.resolved_body
         )
         if "@@SQLMACRO:" not in sql:
-            return sql
+            return RawExpr(SqliteEngine._format_sql_literal(sql))
 
         parts: list[str] = []
         cursor = 0
         for match in SqliteEngine._SQL_MACRO_TOKEN_RE.finditer(sql):
             literal = sql[cursor : match.start()]
             if literal:
-                parts.append(repr(literal))
+                parts.append(SqliteEngine._format_sql_literal(literal))
 
             call_index = int(match.group(1))
             if call_index < 0 or call_index >= len(block.sql_macro_calls):
-                parts.append(repr(match.group(0)))
+                parts.append(SqliteEngine._format_sql_literal(match.group(0)))
             else:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
@@ -57,10 +62,10 @@ class SqliteEngine(UtilitySpec):
 
         tail = sql[cursor:]
         if tail:
-            parts.append(repr(tail))
+            parts.append(SqliteEngine._format_sql_literal(tail))
 
         if not parts:
-            return sql
+            return RawExpr(SqliteEngine._format_sql_literal(sql))
         return RawExpr(" + ".join(parts))
 
     @staticmethod

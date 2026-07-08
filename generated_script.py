@@ -176,7 +176,12 @@ def _step_name(block: Any, suffix: str) -> str:
 def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
     lines = [f"def {name}(ctx) -> None:"]
     if body_lines:
-        lines.extend([f"    {line}" for line in body_lines])
+        for body_line in body_lines:
+            for line in body_line.split("\n"):
+                if line.strip():
+                    lines.append(f"    {line}")
+                else:
+                    lines.append("")
     else:
         lines.append("    pass")
     return "\n".join(lines), f"{name}(ctx)"
@@ -1041,23 +1046,28 @@ class SqliteEngine:
     _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
     @staticmethod
+    def _format_sql_literal(sql: str) -> str:
+        escaped = sql.replace('"""', '\\"\\"\\"')
+        return f'"""{escaped}"""'
+
+    @staticmethod
     def _extract_sql_text(block, dispatched) -> str | RawExpr:
         sql = (
             dispatched.rewritten_sql if dispatched is not None else block.resolved_body
         )
         if "@@SQLMACRO:" not in sql:
-            return sql
+            return RawExpr(SqliteEngine._format_sql_literal(sql))
 
         parts: list[str] = []
         cursor = 0
         for match in SqliteEngine._SQL_MACRO_TOKEN_RE.finditer(sql):
             literal = sql[cursor : match.start()]
             if literal:
-                parts.append(repr(literal))
+                parts.append(SqliteEngine._format_sql_literal(literal))
 
             call_index = int(match.group(1))
             if call_index < 0 or call_index >= len(block.sql_macro_calls):
-                parts.append(repr(match.group(0)))
+                parts.append(SqliteEngine._format_sql_literal(match.group(0)))
             else:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
@@ -1071,10 +1081,10 @@ class SqliteEngine:
 
         tail = sql[cursor:]
         if tail:
-            parts.append(repr(tail))
+            parts.append(SqliteEngine._format_sql_literal(tail))
 
         if not parts:
-            return sql
+            return RawExpr(SqliteEngine._format_sql_literal(sql))
         return RawExpr(" + ".join(parts))
 
     @staticmethod
@@ -1144,7 +1154,51 @@ class SqliteEngine:
         return _emit_step_source(_step_name(block, suffix), [stmt])
 
 def step_0000_sql_query(ctx) -> None:
-    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          v1.lot AS spc_lot\n         ,v1.operation AS spc_operation\n         ,v4.equipment_name AS spc_entity\n         ,v3.monitor_set_name AS monitor_set_name\n         ,v5.reading_set_name AS measurement_set_name\n         ,v7.spc_chart_subset AS spc_chart_subset\n         ,v7.chart_type AS chart_type\n         ,v6.value AS raw_value\n         ,v6.reading_id AS reading_id\n         ,To_Char(v1.transaction_datetime,'yyyy-mm-dd hh24:mi:ss') AS spc_lot_txn_date\nFROM \n     P_SPC_Batch_Lot v1\n    ,P_SPC_Batch v2\n    ,P_SPC_Session v3\n    ,P_SPC_Equipment v4\n    ,P_SPC_Reading_Set v5\n    ,P_SPC_Chart_Point v7\n    ,P_SPC_Reading v6\nWHERE \n              v2.batch_id = v1.batch_id\n AND      v2.facility = v1.facility\n AND      v2.batch_id = v3.batch_id\n AND      v2.facility = v3.facility\n AND      v2.data_collection_ww = v3.data_collection_ww\n AND      v3.facility = v4.facility\n AND      v3.data_collection_ww = v4.data_collection_ww\n AND      v3.spcs_id = v4.spcs_id\n AND      v4.equipment_sequence = 1\n AND      v3.facility = v5.facility\n AND      v3.data_collection_ww = v5.data_collection_ww\n AND      v3.spcs_id = v5.spcs_id\n AND      v5.data_collection_ww = v6.data_collection_ww\n AND      v5.spcs_id = v6.spcs_id\n AND      v5.reading_set_name = v6.reading_set_name\n AND      v7.data_Collection_ww = v3.data_collection_ww\n AND      v7.spcs_id = v3.spcs_id\n AND      v7.reading_set_name = v5.reading_set_name\n AND      v3.latest_flag = 'Y' \n AND      v3.status <> 'I' \n AND      v1.transaction_datetime >= SYSDATE - 1 \n AND      v1.operation = '2511' \n/*END SQL*/", output='spc.csv', reader=OracleReader(database='OASYS'), header=['spc_lot', 'spc_operation', 'spc_entity', 'monitor_set_name', 'measurement_set_name', 'spc_chart_subset', 'chart_type', 'raw_value', 'reading_id', 'spc_lot_txn_date'])
+    ctx.run_query(sql="""
+    /*BEGIN SQL*/
+    SELECT 
+              v1.lot AS spc_lot
+             ,v1.operation AS spc_operation
+             ,v4.equipment_name AS spc_entity
+             ,v3.monitor_set_name AS monitor_set_name
+             ,v5.reading_set_name AS measurement_set_name
+             ,v7.spc_chart_subset AS spc_chart_subset
+             ,v7.chart_type AS chart_type
+             ,v6.value AS raw_value
+             ,v6.reading_id AS reading_id
+             ,To_Char(v1.transaction_datetime,'yyyy-mm-dd hh24:mi:ss') AS spc_lot_txn_date
+    FROM 
+         P_SPC_Batch_Lot v1
+        ,P_SPC_Batch v2
+        ,P_SPC_Session v3
+        ,P_SPC_Equipment v4
+        ,P_SPC_Reading_Set v5
+        ,P_SPC_Chart_Point v7
+        ,P_SPC_Reading v6
+    WHERE 
+                  v2.batch_id = v1.batch_id
+     AND      v2.facility = v1.facility
+     AND      v2.batch_id = v3.batch_id
+     AND      v2.facility = v3.facility
+     AND      v2.data_collection_ww = v3.data_collection_ww
+     AND      v3.facility = v4.facility
+     AND      v3.data_collection_ww = v4.data_collection_ww
+     AND      v3.spcs_id = v4.spcs_id
+     AND      v4.equipment_sequence = 1
+     AND      v3.facility = v5.facility
+     AND      v3.data_collection_ww = v5.data_collection_ww
+     AND      v3.spcs_id = v5.spcs_id
+     AND      v5.data_collection_ww = v6.data_collection_ww
+     AND      v5.spcs_id = v6.spcs_id
+     AND      v5.reading_set_name = v6.reading_set_name
+     AND      v7.data_Collection_ww = v3.data_collection_ww
+     AND      v7.spcs_id = v3.spcs_id
+     AND      v7.reading_set_name = v5.reading_set_name
+     AND      v3.latest_flag = 'Y' 
+     AND      v3.status <> 'I' 
+     AND      v1.transaction_datetime >= SYSDATE - 1 
+     AND      v1.operation = '2511' 
+    /*END SQL*/""", output='spc.csv', reader=OracleReader(database='OASYS'), header=['spc_lot', 'spc_operation', 'spc_entity', 'monitor_set_name', 'measurement_set_name', 'spc_chart_subset', 'chart_type', 'raw_value', 'reading_id', 'spc_lot_txn_date'])
 
 def run() -> None:
     ctx = PipelineContext()
