@@ -8,7 +8,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._emit_types import strip_quotes
+from vg2c.emitter.utilities._emit_helpers import strip_quotes
 
 __all__ = [
     "CROSSTAB_RE",

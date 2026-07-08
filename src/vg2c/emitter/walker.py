@@ -6,9 +6,9 @@ from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import (
     NAMED_PLACEHOLDER_RE,
+    RawExpr,
     macro_token_to_python_expr,
 )
-from vg2c.emitter.utilities._emit_types import RawExpr
 from vg2c.frontend.models import Diagnostic, Kind
 from vg2c.resolver.models import (
     ResolvedBlock,

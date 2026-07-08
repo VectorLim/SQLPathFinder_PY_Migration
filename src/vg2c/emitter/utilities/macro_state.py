@@ -9,10 +9,11 @@ from typing import Iterator, Protocol
 
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
+    RawExpr,
     _emit_step_source,
     _step_name,
+    option_to_python_expr,
 )
-from vg2c.emitter.utilities._emit_types import RawExpr, option_to_python_expr
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import RowsInFile
 

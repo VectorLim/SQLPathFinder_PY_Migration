@@ -46,7 +46,7 @@ class EmitContext:
                 ``'fs_ops'``).  Pass ``'ctx'`` to address the context object itself.
             method_name: The method to invoke on that object.
             args: Positional argument values (raw Python values or
-                :class:`~vg2c.emitter.utilities._emit_types.RawExpr` instances).
+                :class:`~vg2c.emitter.utilities._emit_helpers.RawExpr` instances).
             kwargs: Keyword argument values (same accepted types as *args*).
 
         Returns:

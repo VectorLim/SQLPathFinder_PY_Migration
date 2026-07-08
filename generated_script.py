@@ -95,6 +95,10 @@ class UtilitySpec(ABC):
     ) -> tuple[str, str] | None:
         return None
 
+PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
+
+NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+
 class RawExpr:
     source: str
 
@@ -107,8 +111,6 @@ def strip_quotes(value: str) -> str:
 def option_to_python_expr(value: str | None) -> str:
     if value is None:
         return "None"
-    from vg2c.emitter.utilities._emit_helpers import placeholders_to_python_expr
-
     return placeholders_to_python_expr(strip_quotes(value))
 
 def resolve_output_path(block: Any) -> str:
@@ -124,10 +126,6 @@ def resolve_output_path(block: Any) -> str:
 
     suffix = "txt" if block.kind is Kind.WRITE_FILE else "csv"
     return f"step_{block.parsed.index:04d}.{suffix}"
-
-PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
-
-NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
 
 def _normalize_macro_name(raw: str) -> str:
     name = raw.strip()
@@ -173,21 +171,7 @@ def _render_value(value: Any) -> str:
         return value.source
     return repr(value)
 
-def render_method_call(
-    ctx: Any,
-    utility_name: str,
-    method_name: str,
-    *,
-    args: tuple[Any, ...] = (),
-    kwargs: dict[str, Any] | None = None,
-) -> str:
-    receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
-    parts: list[str] = [_render_value(arg) for arg in args]
-    for key, value in (kwargs or {}).items():
-        parts.append(f"{key}={_render_value(value)}")
-    return f"{receiver}.{method_name}({', '.join(parts)})"
-
-def _step_name(block, suffix: str) -> str:
+def _step_name(block: Any, suffix: str) -> str:
     return f"step_{block.parsed.index:04d}_{suffix}"
 
 def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
@@ -197,28 +181,6 @@ def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
     else:
         lines.append("    pass")
     return "\n".join(lines), f"{name}(ctx)"
-
-def emit_block(ctx: Any, block: Any, dispatched: Any) -> tuple[str, str]:
-    handler_cls = UtilitySpec._kind_handlers.get(block.kind)
-    if handler_cls is not None:
-        emitted = handler_cls.emit_block(ctx, block, dispatched)
-        if emitted is not None:
-            return emitted
-
-    if block.kind is Kind.UTILITY:
-        return _emit_step_source(
-            _step_name(block, "utility"),
-            ["pass  # TODO: utility command not classified"],
-        )
-    if block.kind is Kind.HTML_REPORT:
-        return _emit_step_source(
-            _step_name(block, "html_report"),
-            ["pass  # HTML report not translated"],
-        )
-    return _emit_step_source(
-        _step_name(block, "unknown"),
-        [f"pass  # TODO: unhandled kind={block.kind}"],
-    )
 
 class CrosstabUtility:
     utility_name = "crosstab"
@@ -554,8 +516,7 @@ class ExternalProcess:
     def _emit_run(cls, ctx, argv: list[str]) -> str:
         expr_items = [option_to_python_expr(token) for token in argv]
         argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             "external",
             "run",
             kwargs={"argv": argv_expr},
@@ -609,8 +570,7 @@ class FileSystemOps:
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(ctx, block)
 
-        stmt = render_method_call(
-            ctx,
+        stmt = ctx.render_method_call(
             "ctx",
             "write_file",
             kwargs={
@@ -662,8 +622,7 @@ class FileSystemOps:
         dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
         dst_expr = RawExpr(dest_dir)
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -676,8 +635,7 @@ class FileSystemOps:
         dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = RawExpr(src)
         dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -690,8 +648,7 @@ class FileSystemOps:
         paths_expr = RawExpr(
             "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
         )
-        return render_method_call(
-            ctx,
+        return ctx.render_method_call(
             cls.utility_name,
             "delete",
             kwargs={"paths": paths_expr},
@@ -742,14 +699,12 @@ class MacroState:
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = render_method_call(
-            ctx,
+        row_count_call = ctx.render_method_call(
             "csv_io",
             "row_count",
             args=(RawExpr(csv_path_expr),),
         )
-        stmt = render_method_call(
-            ctx,
+        stmt = ctx.render_method_call(
             "macro",
             "set_named",
             args=(set_name, RawExpr(f"str({row_count_call})")),
@@ -1043,7 +998,7 @@ class SqliteEngine:
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = render_method_call(ctx, "ctx", "run_query", kwargs=kwargs)
+        stmt = ctx.render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return _emit_step_source(_step_name(block, suffix), [stmt])
 
