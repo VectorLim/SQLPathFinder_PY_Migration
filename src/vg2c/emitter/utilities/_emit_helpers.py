@@ -53,7 +53,7 @@ def resolve_output_path(block: Any) -> str:
         if candidate.upper() not in {"Y", "N"}:
             return candidate
 
-    suffix = "txt" if block.kind is Kind.WRITE_FILE else "csv"
+    suffix = "txt" if block.kind in {Kind.WRITE_FILE, Kind.PYTHON_EMBED} else "csv"
     return f"step_{block.index:04d}.{suffix}"
 
 

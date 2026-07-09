@@ -22,6 +22,7 @@ from vg2c.emitter.utilities.html_report import HtmlReport
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
+from vg2c.emitter.utilities.python_embed import PythonEmbed
 from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
 
 
@@ -205,4 +206,5 @@ __all__ = [
     "MailService",
     "PipelineContext",
     "SqliteEngine",
+    "PythonEmbed",
 ]

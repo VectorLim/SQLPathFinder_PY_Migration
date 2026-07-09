@@ -8,6 +8,7 @@ from vg2c.resolver.models import ResolvedProgram
 
 ProducerKind = Literal[
     "write-file",
+    "python-embed",
     "db-read",
     "sqlite-query",
     "external-presumed",

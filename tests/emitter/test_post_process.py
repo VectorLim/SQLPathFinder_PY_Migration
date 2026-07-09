@@ -1,3 +1,4 @@
+from sqlalchemy.dialects.postgresql import Any
 from vg2c.frontend.models import ParsedBlock, ClassifiedBlock, BlockOptions, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock

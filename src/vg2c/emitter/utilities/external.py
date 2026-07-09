@@ -39,6 +39,13 @@ class ExternalProcess(UtilitySpec):
                 ["pass  # TODO: empty external utility command"],
             )
 
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower()
+        if "run_python_script" in basename:
+            return _emit_step_source(
+                _step_name(block, "external"),
+                ["pass  # Python script embedded directly, external run omitted"],
+            )
+
         stmt = ExternalProcess._emit_run(argv)
         return _emit_step_source(_step_name(block, "external"), [stmt])
 

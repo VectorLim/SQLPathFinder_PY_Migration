@@ -39,7 +39,7 @@ def test_script_short_has_sqlite_query(FIXTURES: Path) -> None:
 def test_script_another_has_mars_write_and_utility(FIXTURES: Path) -> None:
     classified = _classify_fixture(FIXTURES, "script_another.txt")
     assert _has_kind(classified, Kind.SQL_QUERY)
-    assert _has_kind(classified, Kind.WRITE_FILE)
+    assert _has_kind(classified, Kind.PYTHON_EMBED)
     assert _has_any_kind(
         classified,
         (Kind.UTILITY, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
@@ -74,8 +74,15 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
     assert any(v.endswith(".bat") for v in lowered)
     assert any(v.endswith(".csv") for v in lowered)
     assert any(v.endswith(".htm") for v in lowered)
-    if any(v.endswith(".py") for v in lowered):
-        assert any(v.endswith(".py") for v in lowered)
+
+    py_embed_csv_values = [
+        item.options.lookup.get("CSV", "")
+        for item in classified
+        if item.kind is Kind.PYTHON_EMBED and "CSV" in item.options.lookup
+    ]
+    py_lowered = [v.lower() for v in py_embed_csv_values]
+    if py_lowered:
+        assert any(v.endswith(".py") for v in py_lowered)
 
     macro_values = [
         item.options.lookup.get("UTILITIES", "")

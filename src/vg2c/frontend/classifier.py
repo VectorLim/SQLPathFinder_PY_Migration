@@ -61,6 +61,9 @@ def _rule_html_report(options: BlockOptions, body: str) -> tuple[Kind, str] | No
 
 def _rule_write_file(options: BlockOptions, body: str) -> tuple[Kind, str] | None:
     if options.lookup.get("WRITE-FILE", "").upper() == "Y":
+        csv_value = options.lookup.get("CSV", "")
+        if csv_value.lower().endswith(".py"):
+            return Kind.PYTHON_EMBED, "/WRITE-FILE=Y targeting .py script"
         return Kind.WRITE_FILE, "/WRITE-FILE=Y"
     return None
 
