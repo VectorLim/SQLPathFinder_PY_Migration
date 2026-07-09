@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Protocol
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
     _emit_step_source,
@@ -27,14 +27,22 @@ class MacroLookup(Protocol):
     def positional(self) -> str: ...
 
 
-class MacroState(UtilitySpec):
+class MacroState(CheckedUtilitySpec):
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
     handles = (Kind.MACRO_CONTROL,)
+    check_order = 40
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        utilities = options.lookup.get("UTILITIES")
+        if utilities and utilities.lstrip().startswith("{"):
+            return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
+        return None
 
     @classmethod
     def normalize_macro_name(cls, raw: str) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from functools import partial
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
@@ -19,13 +19,43 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class SqliteEngine(UtilitySpec):
+class SqliteEngine(CheckedUtilitySpec):
     """Emit query calls for external and SQLite readers."""
 
     utility_name = "sqlite_engine"
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
+    check_order = 70
 
     _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("OLEDB", "").upper() == "SQLITE":
+            return Kind.SQLITE_QUERY, "/OLEDB=SQLite"
+        if options.lookup.get("ENGINE", "").upper() == "SQLITE":
+            return Kind.SQLITE_QUERY, "/ENGINE=SQLite"
+
+        node = options.lookup.get("NODE", "")
+        engine = options.lookup.get("ENGINE", "")
+        oledb = options.lookup.get("OLEDB", "")
+        if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
+            return None
+
+        if any(SqliteEngine._node_matches(node, token) for token in ("MARS", "OASYS", "ARIES")):
+            return (
+                Kind.SQL_QUERY,
+                "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
+            )
+        return None
+
+    @staticmethod
+    def _node_matches(node_value: str, token: str) -> bool:
+        node = node_value.upper().strip()
+        return (
+            node.endswith(token)
+            or node.endswith(f".{token}")
+            or f"<<<{token}>>>" in node
+        )
 
     @staticmethod
     def _format_sql_literal(sql: str) -> str:

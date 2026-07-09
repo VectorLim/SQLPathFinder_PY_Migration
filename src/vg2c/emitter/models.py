@@ -52,14 +52,13 @@ class EmitContext:
         if reader_cls is not None:
             self.add_import(reader_cls.__module__, reader_cls.__name__)
 
-        handler_cls = UtilitySpec._kind_handlers.get(block.kind)
+        handler_cls = UtilitySpec._emit_handlers.get(block.kind)
         if handler_cls is not None:
             emitted = handler_cls.emit_block(block)
             if emitted is not None:
                 return emitted
 
         kind_fallbacks = {
-            Kind.UTILITY: ("utility", "pass  # TODO: utility command not classified"),
             Kind.HTML_REPORT: ("html_report", "pass  # HTML report not translated"),
         }
         suffix, default_stmt = kind_fallbacks.get(

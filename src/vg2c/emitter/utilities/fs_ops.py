@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
     _emit_step_source,
@@ -18,10 +18,29 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class FileSystemOps(UtilitySpec):
+class FileSystemOps(CheckedUtilitySpec):
 
     utility_name = "fs_ops"
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
+    check_order = 30
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("WRITE-FILE", "").upper() == "Y":
+            return Kind.WRITE_FILE, "/WRITE-FILE=Y"
+
+        utilities = options.lookup.get("UTILITIES")
+        if not utilities:
+            return None
+
+        first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
+        basename = first_token.split("/")[-1].split("\\")[-1].lower()
+
+        if "robocopy" in basename or "spfcopy" in basename:
+            return Kind.FS_COPY, "/UTILITIES command maps to FS copy"
+        if "spfdelete" in basename:
+            return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
+        return None
 
     @staticmethod
     def emit_block(block) -> tuple[str, str] | None:

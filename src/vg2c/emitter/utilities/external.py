@@ -6,7 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
     _emit_step_source,
@@ -17,11 +17,24 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class ExternalProcess(UtilitySpec):
+class ExternalProcess(CheckedUtilitySpec):
     """Thin wrapper around subprocess.run."""
 
     utility_name = "external"
     handles = (Kind.EXTERNAL_RUN,)
+    check_order = 50
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        utilities = options.lookup.get("UTILITIES")
+        if not utilities:
+            return None
+
+        first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
+        basename = first_token.split("/")[-1].split("\\")[-1].lower()
+        if "run_python_script" in basename or basename.endswith((".bat", ".exe")):
+            return Kind.EXTERNAL_RUN, "/UTILITIES command maps to external run"
+        return None
 
     @staticmethod
     def _utility_argv(block) -> list[str]:

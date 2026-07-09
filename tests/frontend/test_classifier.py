@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from vg2c.emitter.utilities import CheckedUtilitySpec
 from vg2c.frontend import classify
 from vg2c.kind import Kind
 from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
@@ -113,3 +114,15 @@ def test_unknown_rule_emits_diagnostic() -> None:
     assert classified[0].kind is Kind.UNKNOWN
     assert len(diagnostics) == 1
     assert diagnostics[0].code == "unknown-kind"
+
+
+def test_checked_utility_registry_order_matches_classifier_sequence() -> None:
+    assert [cls.__name__ for cls in CheckedUtilitySpec.iter_checks()] == [
+        "HtmlReport",
+        "PythonEmbed",
+        "FileSystemOps",
+        "MacroState",
+        "ExternalProcess",
+        "GenericUtility",
+        "SqliteEngine",
+    ]

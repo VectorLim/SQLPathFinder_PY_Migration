@@ -12,12 +12,13 @@ import inspect
 import sys
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec, UtilitySpec
 from vg2c.emitter.utilities._topo_sort import topological_sort
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities.external import ExternalProcess
 from vg2c.emitter.utilities.fs_ops import FileSystemOps
+from vg2c.emitter.utilities.generic import GenericUtility
 from vg2c.emitter.utilities.html_report import HtmlReport
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.mail import MailService
@@ -197,10 +198,12 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
 
 __all__ = [
     "assemble_all_utilities",
+    "CheckedUtilitySpec",
     "CrosstabUtility",
     "CsvIO",
     "ExternalProcess",
     "FileSystemOps",
+    "GenericUtility",
     "HtmlReport",
     "MacroState",
     "MailService",

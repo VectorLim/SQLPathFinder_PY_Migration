@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
     _emit_step_source,
@@ -17,11 +17,19 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class HtmlReport(UtilitySpec):
+class HtmlReport(CheckedUtilitySpec):
     """Utility for generating HTML report files."""
 
     utility_name = "html_report"
     handles = (Kind.HTML_REPORT,)
+    check_order = 10
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        report = options.lookup.get("REPORT")
+        if report and report.upper().startswith("HTML-"):
+            return Kind.HTML_REPORT, "/REPORT starts with HTML-"
+        return None
 
     def __init__(self) -> None:
         self.styles: dict[str, list[str]] = {}
