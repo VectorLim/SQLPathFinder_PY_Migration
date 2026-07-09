@@ -53,10 +53,12 @@ class SqliteEngine(UtilitySpec):
             else:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
-                col_ref = repr(call.column_ref)
-                lead_in = repr(call.lead_in)
                 parts.append(
-                    f"ctx.sql_macros.sql_get_csv_list({csv_path_expr}, {col_ref}, {lead_in})"
+                    render_method_call(
+                        "csv_io",
+                        "sql_get_csv_list",
+                        args=(RawExpr(csv_path_expr), call.column_ref, call.lead_in),
+                    )
                 )
 
             cursor = match.end()

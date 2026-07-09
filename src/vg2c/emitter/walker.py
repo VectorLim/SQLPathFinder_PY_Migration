@@ -163,7 +163,7 @@ def _walk_scope(
                 writer.write(f"with {scope_call}:")
                 writer.push_indent()
             else:
-                writer.write("with ctx.macro_scope():")
+                writer.write("with ctx.macro.scope():")
                 writer.push_indent()
             for child in node.children:
                 _walk_scope(

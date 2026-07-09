@@ -50,9 +50,6 @@ class PipelineContext(UtilitySpec):
             )
         return method
 
-    def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
-        return self.macro.scope(row=row)
-
     def write_file(
         self,
         path: str,

@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1636): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1764): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 1805): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 1971): filters on Flag
-# - step_0055_sql_query (Line 2172): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2195): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1626): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1754): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1795): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 1961): filters on Flag
+# - step_0055_sql_query (Line 2162): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2185): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -339,9 +339,59 @@ class CsvIO:
             reader = csv.DictReader(fh)
             yield from reader
 
-    def read(self, name: str) -> Path:
-        """Return the resolved Path (used when a downstream step needs a file reference)."""
-        return Path(name).resolve()
+    @staticmethod
+    def _read_column(path: str, column_ref: int | str) -> list[str]:
+        rows: list[str] = []
+        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, [])
+            header_str = [str(h) for h in header]
+
+            if isinstance(column_ref, int):
+                idx = column_ref - 1
+            else:
+                col_lower = [h.lower() for h in header]
+                try:
+                    idx = col_lower.index(column_ref.lower())
+                except ValueError:
+                    return []
+
+            seen: dict[str, None] = {}
+            for row in reader:
+                if [str(v) for v in row] == header_str:
+                    continue
+                if idx < len(row):
+                    val = row[idx]
+                    if val not in seen:
+                        seen[val] = None
+                        rows.append(val)
+
+        return rows
+
+    @staticmethod
+    def _single_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
+        """Return chunked IN-list clause for Oracle-style SQL.
+
+        Oracle hard-limits IN lists to 1000 values. When there are more, the
+        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
+        """
+        values = self._read_column(path, column_ref)
+        if not values:
+            return "('__NO_VALUES__')"
+
+        chunk_size = 1000
+        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
+        parts: list[str] = []
+        for i, chunk in enumerate(chunks):
+            quoted = ", ".join(self._single_quote(v) for v in chunk)
+            parts.append(f"({quoted})")
+            if i < len(chunks) - 1:
+                parts.append(f"\nOR {lead_in} ")
+
+        return "".join(parts)
 
     def row_count(self, name: str) -> int:
         """Count data rows (excludes header); 0 if file missing."""
@@ -488,9 +538,6 @@ class PipelineContext:
                 f"Method '{method_func.__name__}' not found in utility '{utility_cls.utility_name}'."
             )
         return method
-
-    def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
-        return self.macro.scope(row=row)
 
     def write_file(
         self,
@@ -1433,65 +1480,6 @@ class MailService:
         with smtplib.SMTP(host, port) as smtp:
             smtp.send_message(msg)
 
-class SqlMacros:
-    """SQL macro expansion helpers used by emitted scripts."""
-
-    utility_name = "sql_macros"
-
-    @staticmethod
-    def _read_column(path: str, column_ref: int | str) -> list[str]:
-        rows: list[str] = []
-        with Path(path).open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
-            header = next(reader, [])
-            header_str = [str(h) for h in header]
-
-            if isinstance(column_ref, int):
-                idx = column_ref - 1
-            else:
-                col_lower = [h.lower() for h in header]
-                try:
-                    idx = col_lower.index(column_ref.lower())
-                except ValueError:
-                    return []
-
-            seen: dict[str, None] = {}
-            for row in reader:
-                if [str(v) for v in row] == header_str:
-                    continue
-                if idx < len(row):
-                    val = row[idx]
-                    if val not in seen:
-                        seen[val] = None
-                        rows.append(val)
-
-        return rows
-
-    @staticmethod
-    def _single_quote(value: str) -> str:
-        return "'" + value.replace("'", "''") + "'"
-
-    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
-        """Return chunked IN-list clause for Oracle-style SQL.
-
-        Oracle hard-limits IN lists to 1000 values. When there are more, the
-        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
-        """
-        values = self._read_column(path, column_ref)
-        if not values:
-            return "('__NO_VALUES__')"
-
-        chunk_size = 1000
-        chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
-        parts: list[str] = []
-        for i, chunk in enumerate(chunks):
-            quoted = ", ".join(self._single_quote(v) for v in chunk)
-            parts.append(f"({quoted})")
-            if i < len(chunks) - 1:
-                parts.append(f"\nOR {lead_in} ")
-
-        return "".join(parts)
-
 class SqliteEngine:
     """Emit query calls for external and SQLite readers."""
 
@@ -1525,10 +1513,12 @@ class SqliteEngine:
             else:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
-                col_ref = repr(call.column_ref)
-                lead_in = repr(call.lead_in)
                 parts.append(
-                    f"ctx.sql_macros.sql_get_csv_list({csv_path_expr}, {col_ref}, {lead_in})"
+                    render_method_call(
+                        "csv_io",
+                        "sql_get_csv_list",
+                        args=(RawExpr(csv_path_expr), call.column_ref, call.lead_in),
+                    )
                 )
 
             cursor = match.end()
@@ -1789,7 +1779,7 @@ def step_0044_sql_query(ctx) -> None:
     NVL(f0.history_deleted_flag,'N') = 'N'
     AND      f0.owner <> 'EMPTYFOUP'
      AND      p.prodgroup3 In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + """ 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + """ 
      AND      f0.operation In ('2090'
     ,'1960') 
      AND      f0.load_date >= (SYSDATE - 8/24) 
@@ -1887,9 +1877,9 @@ def step_0047_sql_query(ctx) -> None:
     LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
     WHERE ats.data_domain='METROLOGY'
      AND      (ats.lot In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """) 
      AND      (ats.operation In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """) 
      AND      (ats.tester_id LIKE  'OIS%'
     ) 
      AND      t.test_name In ('SUBPLANEANGLEX'
@@ -1930,10 +1920,10 @@ def step_0048_sql_query(ctx) -> None:
     INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
     WHERE
                   (z0.lot In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """) 
      AND      z0.tool_entity Like 'TGB%' 
      AND      (z0.operation In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """) 
     /*END SQL*/
 
     """, output='yeuchuan_a2_15507.tab', reader=AriesReader(), header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
@@ -2166,7 +2156,7 @@ def step_0054_sqlite_query(ctx) -> None:
     [CSR_Server_OIS_subplane_output] a0
     WHERE
      NOT          (a0.[lot] In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)
+    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)
     """, output='yeuchuan_SQL_15507.tab', reader=SqliteReader(), inputs=['CSR_Server_OIS_subplane_output.csv'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
 def step_0055_sql_query(ctx) -> None:
@@ -2187,7 +2177,7 @@ def step_0055_sql_query(ctx) -> None:
      AND      f0.qty1 > 0 
      AND      f0.src_erase_date Is Null  
      AND      (f0.lot In 
-    """ + ctx.sql_macros.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """) 
     /*END SQL*/
 
     """, output='yeuchuan_a1_15507.tab', reader=MarsReader(), header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])

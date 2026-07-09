@@ -22,7 +22,6 @@ from vg2c.emitter.utilities.html_report import HtmlReport
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
-from vg2c.emitter.utilities.sql_macros import SqlMacros
 from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
 
 
@@ -205,6 +204,5 @@ __all__ = [
     "MacroState",
     "MailService",
     "PipelineContext",
-    "SqlMacros",
     "SqliteEngine",
 ]
