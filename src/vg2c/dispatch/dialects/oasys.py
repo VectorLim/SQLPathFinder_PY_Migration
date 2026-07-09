@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 from datasyncx import OracleReader
 from functools import partial
 

@@ -7,11 +7,11 @@ from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
     Diagnostic,
-    Kind,
     ParsedBlock,
     SourceSpan,
     copy_dataclass_fields,
 )
+from vg2c.kind import Kind
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,7 +9,8 @@ from vg2c.dispatch.models import (
     DispatchedProgram,
     ReaderTarget,
 )
-from vg2c.frontend.models import Diagnostic, Kind
+from vg2c.frontend.models import Diagnostic
+from vg2c.kind import Kind
 
 __all__ = [
     "dispatch",

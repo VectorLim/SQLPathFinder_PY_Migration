@@ -5,7 +5,7 @@ import inspect
 import re
 from typing import Any, ClassVar
 
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 __all__ = ["UtilitySpec"]
 

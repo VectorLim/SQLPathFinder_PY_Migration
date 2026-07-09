@@ -7,7 +7,7 @@ from vg2c.dispatch.dialects.aries import AriesDialect
 from vg2c.dispatch.dialects.mars import MarsDialect
 from vg2c.dispatch.dialects.oasys import OasysDialect
 from vg2c.dispatch.dialects.sqlite import SqliteDialect, SqliteReader
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from vg2c.frontend.models import ClassifiedBlock, Diagnostic, Kind
+from vg2c.frontend.models import ClassifiedBlock, Diagnostic
+from vg2c.kind import Kind
 from vg2c.resolver.models import (
     Else,
     EndIf,

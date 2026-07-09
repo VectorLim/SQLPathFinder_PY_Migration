@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from vg2c.frontend.models import Diagnostic, Kind
+from vg2c.frontend.models import Diagnostic
+from vg2c.kind import Kind
 
 __all__ = ["EmitContext", "EmittedScript", "IndentWriter"]
 

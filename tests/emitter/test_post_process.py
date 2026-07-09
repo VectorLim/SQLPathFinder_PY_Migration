@@ -1,4 +1,5 @@
-from vg2c.frontend.models import ParsedBlock, ClassifiedBlock, BlockOptions, SourceSpan, Kind
+from vg2c.frontend.models import ParsedBlock, ClassifiedBlock, BlockOptions, SourceSpan
+from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
 from vg2c.dispatch.models import DispatchedProgram, DispatchedBlock, SQLFilter, ReaderTarget
 from vg2c.emitter import post_process_comments

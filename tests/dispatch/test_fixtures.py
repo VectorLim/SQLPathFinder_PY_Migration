@@ -19,7 +19,7 @@ FIXTURE_NAMES = [
 ]
 
 # SQL-bearing Kind values for counting dispatched blocks
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 _SQL_BEARING = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 

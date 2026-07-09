@@ -4,7 +4,7 @@ import re
 
 from vg2c.dispatch.base import DialectHandler
 from datasyncx import MarsReader
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 
 class MarsDialect(DialectHandler):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from vg2c.frontend import Kind, classify
+from vg2c.frontend import classify
+from vg2c.kind import Kind
 from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
 
 

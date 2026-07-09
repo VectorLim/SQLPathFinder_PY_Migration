@@ -3,10 +3,10 @@ from __future__ import annotations
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
-    Kind,
     ParsedBlock,
     SourceSpan,
 )
+from vg2c.kind import Kind
 from vg2c.resolver.scope_builder import build_scope_tree
 
 

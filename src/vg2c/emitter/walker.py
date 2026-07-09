@@ -9,7 +9,8 @@ from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
     macro_token_to_python_expr,
 )
-from vg2c.frontend.models import Diagnostic, Kind
+from vg2c.frontend.models import Diagnostic
+from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
     RunLoop,

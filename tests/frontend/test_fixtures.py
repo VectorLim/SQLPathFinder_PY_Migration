@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.frontend import Kind, classify, parse
+from vg2c.frontend import classify, parse
+from vg2c.kind import Kind
 
 FIXTURE_NAMES = [
     "script_short.txt",

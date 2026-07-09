@@ -15,7 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     resolve_output_path,
     strip_quotes,
 )
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 
 class FileSystemOps(UtilitySpec):

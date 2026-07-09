@@ -1,30 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Iterable, Literal, Mapping
+
+from vg2c.kind import Kind
 
 
 def copy_dataclass_fields(source: object, target: object, base: type) -> None:
     for field in fields(base):
         object.__setattr__(target, field.name, getattr(source, field.name))
 
-
-
-class Kind(str, Enum):
-    SQL_QUERY = "SQL_QUERY"
-    SQLITE_QUERY = "SQLITE_QUERY"
-    WRITE_FILE = "WRITE_FILE"
-    FS_COPY = "FS_COPY"
-    FS_DELETE = "FS_DELETE"
-    EXTERNAL_RUN = "EXTERNAL_RUN"
-    HTML_REPORT = "HTML_REPORT"
-    UTILITY = "UTILITY"
-    MACRO_CONTROL = "MACRO_CONTROL"
-    UNKNOWN = "UNKNOWN"
-    MALFORMED = "MALFORMED"
 
 
 @dataclass(frozen=True, slots=True)

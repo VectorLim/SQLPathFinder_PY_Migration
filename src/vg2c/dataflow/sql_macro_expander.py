@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 from vg2c.dataflow.sql_macros import HANDLERS, MacroParseError
-from vg2c.frontend.models import Diagnostic, Kind, SourceSpan
+from vg2c.frontend.models import Diagnostic, SourceSpan
+from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
 
 _SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")

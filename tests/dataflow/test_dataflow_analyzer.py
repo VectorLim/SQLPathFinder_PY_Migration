@@ -4,10 +4,10 @@ from vg2c.dataflow import analyze
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
-    Kind,
     ParsedBlock,
     SourceSpan,
 )
+from vg2c.kind import Kind
 from vg2c.resolver import resolve
 
 

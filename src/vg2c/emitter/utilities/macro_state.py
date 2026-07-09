@@ -15,7 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     option_to_python_expr,
     render_method_call,
 )
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 from vg2c.resolver.models import RowsInFile
 
 

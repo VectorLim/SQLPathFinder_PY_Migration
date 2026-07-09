@@ -6,9 +6,9 @@ from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
     Diagnostic,
-    Kind,
     ParsedBlock,
 )
+from vg2c.kind import Kind
 
 RuleFn = Callable[[BlockOptions, str], tuple[Kind, str] | None]
 

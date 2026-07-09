@@ -6,7 +6,7 @@ import pytest
 
 from vg2c.dataflow import analyze
 from vg2c.frontend import classify, parse
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 from vg2c.resolver import resolve
 
 FIXTURE_NAMES = [

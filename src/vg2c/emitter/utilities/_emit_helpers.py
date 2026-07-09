@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import re
 from typing import Any
 
-from vg2c.frontend.models import Kind
+from vg2c.kind import Kind
 
 __all__ = [
     "NAMED_PLACEHOLDER_RE",

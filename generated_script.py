@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1626): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1754): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 1795): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 1961): filters on Flag
-# - step_0055_sql_query (Line 2162): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2185): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1654): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1782): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1823): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 1989): filters on Flag
+# - step_0055_sql_query (Line 2190): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2213): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -328,6 +328,42 @@ class CsvIO:
 
     utility_name = "csv_io"
 
+    @staticmethod
+    def emit_block(block: Any) -> tuple[str, str] | None:
+        utilities = block.resolved_options.lookup.get("UTILITIES", "")
+        if not utilities:
+            return None
+
+        stripped = utilities.strip()
+        if not stripped.startswith("{ROWS-IN-FILE}"):
+            return None
+
+        args = re.findall(r'"([^"]*)"', stripped)
+        csv_path = args[0] if args else ""
+        var_name = args[1] if len(args) > 1 else ""
+
+        from vg2c.emitter.utilities._emit_helpers import (
+            RawExpr,
+            _emit_step_source,
+            _step_name,
+            option_to_python_expr,
+            render_method_call,
+        )
+
+        csv_path_expr = option_to_python_expr(csv_path)
+        set_name = var_name.upper()
+        row_count_call = render_method_call(
+            "csv_io",
+            "row_count",
+            args=(RawExpr(csv_path_expr),),
+        )
+        stmt = render_method_call(
+            "macro",
+            "set_named",
+            args=(set_name, RawExpr(f"str({row_count_call})")),
+        )
+        return _emit_step_source(_step_name(block, "rows_in_file"), [stmt])
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
@@ -580,6 +616,9 @@ class PipelineContext:
 
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)
+
+    def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
+        return self.macro.scope(row)
 
 class ExternalProcess:
     """Thin wrapper around subprocess.run."""
@@ -1320,23 +1359,12 @@ class MacroState:
 
     @staticmethod
     def emit_block(block) -> tuple[str, str] | None:
-        payload = block.control_payload
-        if not isinstance(payload, RowsInFile):
-            return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
+        from vg2c.emitter.utilities.csv_io import CsvIO
+        emitted = CsvIO.emit_block(block)
+        if emitted is not None:
+            return emitted
 
-        csv_path_expr = option_to_python_expr(payload.csv_path)
-        set_name = payload.var_name.upper()
-        row_count_call = render_method_call(
-            "csv_io",
-            "row_count",
-            args=(RawExpr(csv_path_expr),),
-        )
-        stmt = render_method_call(
-            "macro",
-            "set_named",
-            args=(set_name, RawExpr(f"str({row_count_call})")),
-        )
-        return _emit_step_source(_step_name(block, "rows_in_file"), [stmt])
+        return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]

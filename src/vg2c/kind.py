@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class Kind(str, Enum):
+    SQL_QUERY = "SQL_QUERY"
+    SQLITE_QUERY = "SQLITE_QUERY"
+    WRITE_FILE = "WRITE_FILE"
+    FS_COPY = "FS_COPY"
+    FS_DELETE = "FS_DELETE"
+    EXTERNAL_RUN = "EXTERNAL_RUN"
+    HTML_REPORT = "HTML_REPORT"
+    UTILITY = "UTILITY"
+    MACRO_CONTROL = "MACRO_CONTROL"
+    UNKNOWN = "UNKNOWN"
+    MALFORMED = "MALFORMED"

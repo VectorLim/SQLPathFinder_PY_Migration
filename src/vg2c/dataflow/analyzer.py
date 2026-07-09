@@ -15,7 +15,8 @@ from vg2c.dataflow.models import (
     ScopeRelation,
 )
 from vg2c.dataflow.sql_macro_expander import expand_sql_macros
-from vg2c.frontend.models import Diagnostic, Kind
+from vg2c.frontend.models import Diagnostic
+from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
