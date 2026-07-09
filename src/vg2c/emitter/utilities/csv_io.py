@@ -123,7 +123,9 @@ class CsvIO(UtilitySpec):
         with path.open("w", newline="", encoding="utf-8") as fh:
             if isinstance(rows[0], dict):
                 fieldnames = header if header is not None else list(rows[0].keys())
-                writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+                writer = csv.DictWriter(
+                    fh, fieldnames=fieldnames, extrasaction="ignore"
+                )
                 writer.writeheader()
                 writer.writerows(rows)
             else:

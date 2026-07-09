@@ -15,6 +15,7 @@ __all__ = [
     "macro_token_to_python_expr",
     "option_to_python_expr",
     "placeholders_to_python_expr",
+    "render_method_call",
     "resolve_output_path",
     "strip_quotes",
 ]
@@ -102,6 +103,21 @@ def _render_value(value: Any) -> str:
     if isinstance(value, RawExpr):
         return value.source
     return repr(value)
+
+
+def render_method_call(
+    utility_name: str,
+    method_name: str,
+    *,
+    args: tuple[Any, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+) -> str:
+    """Render a Python method-call expression for the generated script."""
+    receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
+    parts: list[str] = [_render_value(arg) for arg in args]
+    for key, value in (kwargs or {}).items():
+        parts.append(f"{key}={_render_value(value)}")
+    return f"{receiver}.{method_name}({', '.join(parts)})"
 
 
 def _step_name(block: Any, suffix: str) -> str:

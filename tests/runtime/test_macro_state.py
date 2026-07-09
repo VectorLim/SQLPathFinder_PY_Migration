@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from vg2c.emitter.utilities.crosstab import substitute_crosstab
@@ -92,3 +94,25 @@ def test_substitute_sql_named_placeholder_only():
     sql = "SELECT * FROM tab WHERE facility = '<<<SITE>>>'"
     out = m.substitute_sql(sql)
     assert out == "SELECT * FROM tab WHERE facility = 'KM'"
+
+
+def test_resolve_file_path_substitutes_named_placeholder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "rows.csv").write_text("c1\nvalue\n", encoding="utf-8")
+
+    m = MacroState()
+    m.set_named("CSV_NAME", "rows.csv")
+
+    resolved = m.resolve_file_path("<<<CSV_NAME>>>")
+    assert resolved == Path("rows.csv")
+
+
+def test_resolve_file_path_absolute_fallback_to_local_basename(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "rows.csv").write_text("c1\nvalue\n", encoding="utf-8")
+
+    m = MacroState()
+    unresolved_abs = str(tmp_path / "missing" / "rows.csv")
+
+    resolved = m.resolve_file_path(unresolved_abs)
+    assert resolved == Path("rows.csv")

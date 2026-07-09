@@ -54,10 +54,19 @@ class ParsedBlock:
 
 
 @dataclass(frozen=True, slots=True)
-class ClassifiedBlock:
-    parsed: ParsedBlock
+class ClassifiedBlock(ParsedBlock):
     kind: Kind
     reason: str
+
+    def __init__(self, parsed: ParsedBlock, kind: Kind, reason: str) -> None:
+        object.__setattr__(self, "index", parsed.index)
+        object.__setattr__(self, "options", parsed.options)
+        object.__setattr__(self, "body", parsed.body)
+        object.__setattr__(self, "raw", parsed.raw)
+        object.__setattr__(self, "span", parsed.span)
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "reason", reason)
+
 
 
 @dataclass(frozen=True, slots=True)

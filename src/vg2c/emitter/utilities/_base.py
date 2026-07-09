@@ -74,8 +74,8 @@ class UtilitySpec(ABC):
         source = inspect.getsource(cls)
         return _strip_embed_artifacts(source, cls.__name__)
 
-    @classmethod
+    @staticmethod
     def emit_block(
-        cls, ctx: Any, block: Any, dispatched: Any
+        block: Any, dispatched: Any
     ) -> tuple[str, str] | None:
         return None

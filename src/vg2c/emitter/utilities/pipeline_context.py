@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from typing import Any, ContextManager
 
 from vg2c.emitter.utilities._base import UtilitySpec
@@ -33,11 +35,20 @@ class PipelineContext(UtilitySpec):
             except TypeError:
                 continue
 
-    def __getattr__(self, name: str):
-        def _missing(*args: Any, **kwargs: Any) -> None:
-            print("not implemented yet")
+    def get_method(self, utility_cls: type[UtilitySpec], method_func: Callable) -> Any:
+        """Get a method from a utility class."""
+        if not hasattr(self, utility_cls.utility_name):
+            raise AttributeError(
+                f"Utility '{utility_cls.utility_name}' not found in PipelineContext."
+            )
 
-        return _missing
+        utility_instance = getattr(self, utility_cls.utility_name)
+        method = getattr(utility_instance, method_func.__name__, None)
+        if method is None:
+            raise AttributeError(
+                f"Method '{method_func.__name__}' not found in utility '{utility_cls.utility_name}'."
+            )
+        return method
 
     def macro_scope(self, row: dict[str, str] | None = None) -> ContextManager[None]:
         return self.macro.scope(row=row)

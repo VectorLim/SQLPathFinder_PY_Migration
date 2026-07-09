@@ -2,25 +2,58 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any
-import pytest
+import re
 
+from vg2c.dataflow import analyze
+from vg2c.dispatch import dispatch
+from vg2c.emitter import emit
 from vg2c.emitter.utilities.html_report import HtmlReport
+from vg2c.frontend import classify, parse
+from vg2c.resolver import resolve
 
 
 class MockCtx:
     def __init__(self):
         self.macro = MockMacro()
+        self.write_calls: list[tuple[str, str]] = []
+
+    def write_file(self, path: str, content: str) -> None:
+        self.write_calls.append((path, content))
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
 
 
 class MockMacro:
+    def __init__(self) -> None:
+        self.write_calls: list[tuple[str, str]] = []
+
     def substitute_sql(self, val: str) -> str:
         return val
 
     def write_file(self, path: str, content: str) -> None:
+        self.write_calls.append((path, content))
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
+
+
+class SpyCsvIO:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def iter(self, name: str):
+        self.calls.append(name)
+        with Path(name).open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                yield row
+
+
+class CtxWithCsvIO(MockCtx):
+    def __init__(self) -> None:
+        super().__init__()
+        self.csv_io = SpyCsvIO()
 
 
 def test_html_report_css_synthesis():
@@ -156,3 +189,97 @@ def test_html_report_layout_email_fallback(tmp_path, monkeypatch):
 
     output_file = tmp_path / "9999_my_output.htm"
     assert output_file.exists()
+
+
+def test_html_report_fallback_output_uses_cached_parsed_payload(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    report = HtmlReport()
+    report.instance = "1001"
+    report.defer(
+        id="R1",
+        template="OUTPUT-FILE<\\>CaseSensitive.HTM\nINPUT-FILE<\\>missing.csv\nCOLUMN-DATA<\\><\\>col1\n",
+    )
+
+    # If layout re-parses template text directly, fallback would become report.html.
+    report.deferred_reports["R1"]["template"] = ""
+
+    ctx = MockCtx()
+    report.layout(ctx, ":FILE:email:self\nHTM:R1\n")
+
+    assert (tmp_path / "1001_casesensitive.htm").exists()
+
+
+def test_html_report_render_uses_ctx_csv_io_iter(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    csv_file = tmp_path / "rows.csv"
+    with csv_file.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["col1", "col2"])
+        writer.writerow(["A", "B"])
+
+    report = HtmlReport()
+    report.defer(
+        id="RCSV",
+        template=(
+            f"INPUT-FILE<\\>{csv_file}\n"
+            "COLUMN-DATA<\\><\\>col1<\\>col2\n"
+            "COLUMN-HEADERS<\\><\\>C1<\\>C2\n"
+        ),
+    )
+
+    ctx = CtxWithCsvIO()
+    rendered = report._render_report("RCSV", ctx)
+
+    assert ctx.csv_io.calls == [str(csv_file)]
+    assert "<th>C1</th>" in rendered
+    assert "<th>C2</th>" in rendered
+    assert "A" in rendered
+    assert "B" in rendered
+
+
+def test_html_report_layout_prefers_ctx_write_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    report = HtmlReport()
+    report.deferred_reports["REPORT1"] = {
+        "template": "INPUT-FILE<\\>missing.csv\nCOLUMN-DATA<\\><\\>col1\n"
+    }
+
+    ctx = MockCtx()
+    report.layout(ctx, ":FILE:out.html\nHTM:REPORT1\n")
+
+    assert ctx.write_calls
+    assert not ctx.macro.write_calls
+    assert (tmp_path / "out.html").exists()
+
+
+def test_html_report_layout_ignores_unknown_directives(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    report = HtmlReport()
+    ctx = MockCtx()
+    report.layout(
+        ctx,
+        ":FILE:unknown.html\n:TITLE:Hello\n:FUTURE-FLAG:keep\n<div>Body</div>\n",
+    )
+
+    html = (tmp_path / "unknown.html").read_text(encoding="utf-8")
+    assert "<title>Hello</title>" in html
+    assert "<div>Body</div>" in html
+
+
+def test_html_report_fixture_flow_parity_order():
+    fixture = Path(__file__).parent.parent / "fixtures" / "html_test.txt"
+    text = fixture.read_text(encoding="utf-8", errors="replace")
+    parsed, parse_diag = parse(text, source=fixture)
+    classified, classify_diag = classify(parsed)
+    resolved = resolve(classified, diagnostics=[*parse_diag, *classify_diag])
+    analyzed = analyze(resolved)
+    dispatched = dispatch(analyzed)
+    source = emit(dispatched).source
+
+    methods = re.findall(r"ctx\.html_report\.(defer|run|layout|delete)\(", source)
+    assert methods == ["defer", "defer", "run", "layout", "delete"]
+    assert "ctx.html_report.layout(ctx," in source

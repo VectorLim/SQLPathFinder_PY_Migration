@@ -31,52 +31,32 @@ class EmitContext:
         else:
             self.imports.add(f"import {module}")
 
+    @staticmethod
     def render_method_call(
-        self,
         utility_name: str,
         method_name: str,
         *,
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> str:
-        """Render a Python method-call expression for the generated script.
+        from vg2c.emitter.utilities._emit_helpers import render_method_call
 
-        Args:
-            utility_name: The utility sub-object to call on (e.g. ``'csv_io'``,
-                ``'fs_ops'``).  Pass ``'ctx'`` to address the context object itself.
-            method_name: The method to invoke on that object.
-            args: Positional argument values (raw Python values or
-                :class:`~vg2c.emitter.utilities._emit_helpers.RawExpr` instances).
-            kwargs: Keyword argument values (same accepted types as *args*).
-
-        Returns:
-            A string such as ``"ctx.csv_io.iter('file.csv')"``.
-        """
-        from vg2c.emitter.utilities._emit_helpers import _render_value
-
-        receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
-        parts: list[str] = [_render_value(arg) for arg in args]
-        for key, value in (kwargs or {}).items():
-            parts.append(f"{key}={_render_value(value)}")
-        return f"{receiver}.{method_name}({', '.join(parts)})"
+        return render_method_call(utility_name, method_name, args=args, kwargs=kwargs)
 
     def emit_block(self, block: Any, dispatched: Any) -> tuple[str, str]:
-        """Dispatch a resolved block to its registered handler.
-
-        Tries the registered :class:`~vg2c.emitter.utilities._base.UtilitySpec`
-        handler for the block kind first.  Falls back to a ``pass``-stub for
-        unclassified utility commands, HTML reports, and any other unhandled kind.
-
-        Returns:
-            A ``(func_source, call_site)`` pair suitable for appending to the
-            emitted function list and the run-body respectively.
-        """
         from vg2c.emitter.utilities._base import UtilitySpec
         from vg2c.emitter.utilities._emit_helpers import _emit_step_source, _step_name
 
+        if (
+            dispatched is not None
+            and getattr(dispatched, "reader_cls", None) is not None
+        ):
+            rc = dispatched.reader_cls
+            self.add_import(rc.__module__, rc.__name__)
+
         handler_cls = UtilitySpec._kind_handlers.get(block.kind)
         if handler_cls is not None:
-            emitted = handler_cls.emit_block(self, block, dispatched)
+            emitted = handler_cls.emit_block(block, dispatched)
             if emitted is not None:
                 return emitted
 
@@ -125,7 +105,8 @@ class IndentWriter:
     def write_block(self, lines: str) -> None:
         """Write multiple lines."""
         import re
-        match = re.match(r'^\s*def\s+(step_\w+)\b', lines)
+
+        match = re.match(r"^\s*def\s+(step_\w+)\b", lines)
         if match:
             self.step_lines[match.group(1)] = len(self.lines) + 1
         for line in lines.split("\n"):

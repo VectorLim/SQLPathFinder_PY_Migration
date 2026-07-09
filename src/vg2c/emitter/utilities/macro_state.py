@@ -13,6 +13,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     option_to_python_expr,
+    render_method_call,
 )
 from vg2c.frontend.models import Kind
 from vg2c.resolver.models import RowsInFile
@@ -42,20 +43,20 @@ class MacroState(UtilitySpec):
             name = name[3:-3]
         return name.strip().upper()
 
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+    @staticmethod
+    def emit_block(block, dispatched) -> tuple[str, str] | None:
         payload = block.control_payload
         if not isinstance(payload, RowsInFile):
             return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = ctx.render_method_call(
+        row_count_call = render_method_call(
             "csv_io",
             "row_count",
             args=(RawExpr(csv_path_expr),),
         )
-        stmt = ctx.render_method_call(
+        stmt = render_method_call(
             "macro",
             "set_named",
             args=(set_name, RawExpr(f"str({row_count_call})")),
@@ -91,6 +92,23 @@ class MacroState(UtilitySpec):
                 sql,
             )
         return sql
+
+    def resolve_file_path(self, raw_path: str) -> Path:
+        """Resolve a possibly-macro path with local basename fallback for abs paths."""
+        if not raw_path:
+            return Path("")
+
+        resolved = self.substitute_sql(raw_path)
+        path = Path(resolved)
+        if path.exists() and path.is_file():
+            return path
+
+        if path.is_absolute():
+            rel_path = Path(path.name)
+            if rel_path.exists() and rel_path.is_file():
+                return rel_path
+
+        return path
 
     def write_file(
         self,

@@ -12,6 +12,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     option_to_python_expr,
+    render_method_call,
 )
 from vg2c.frontend.models import Kind
 
@@ -30,80 +31,173 @@ class HtmlReport(UtilitySpec):
         self.prompt_text: str | None = None
         self.app_server_default: str | None = None
 
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+    @staticmethod
+    def emit_block(block, dispatched) -> tuple[str, str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         if report_type == "HTML-RUN":
-            return cls._emit_html_run(ctx, block)
+            return HtmlReport._emit_html_run(block)
         elif report_type == "HTML-LAYOUT":
-            return cls._emit_html_layout(ctx, block)
+            return HtmlReport._emit_html_layout(block)
         elif report_type == "HTML-DELETE":
-            return cls._emit_html_delete(ctx, block)
+            return HtmlReport._emit_html_delete(block)
         elif report_type == "HTML-DEFER":
-            return cls._emit_html_defer(ctx, block)
+            return HtmlReport._emit_html_defer(block)
         return None
 
-    @classmethod
-    def _emit_html_defer(cls, ctx, block) -> tuple[str, str]:
+    @staticmethod
+    def _emit_method(
+        block,
+        method: str,
+        option_keys: list[str],
+        *,
+        args: tuple[RawExpr, ...] = (),
+        include_template: bool = False,
+    ) -> tuple[str, str]:
         kwargs = {}
-        for key in ["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"]:
+        for key in option_keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
                 kwargs[key.lower().replace("-", "_")] = RawExpr(
                     option_to_python_expr(val)
                 )
-        kwargs["template"] = block.resolved_body
-        stmt = ctx.render_method_call("html_report", "defer", kwargs=kwargs)
+        if include_template:
+            kwargs["template"] = block.resolved_body
+        stmt = render_method_call("html_report", method, args=args, kwargs=kwargs)
         return _emit_step_source(_step_name(block, "html_report"), [stmt])
 
-    @classmethod
-    def _emit_html_run(cls, ctx, block) -> tuple[str, str]:
-        kwargs = {}
-        for key in ["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"]:
-            val = block.resolved_options.lookup.get(key)
-            if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(
-                    option_to_python_expr(val)
-                )
-        kwargs["template"] = block.resolved_body
-        stmt = ctx.render_method_call("html_report", "run", kwargs=kwargs)
-        return _emit_step_source(_step_name(block, "html_report"), [stmt])
-
-    @classmethod
-    def _emit_html_layout(cls, ctx, block) -> tuple[str, str]:
-        kwargs = {}
-        for key in [
-            "OUTLOOK",
-            "INSTANCE",
-            "JSON-ONLY",
-            "CHART-INSTANCE",
-            "APP_SERVER_DEFAULT",
-        ]:
-            val = block.resolved_options.lookup.get(key)
-            if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(
-                    option_to_python_expr(val)
-                )
-        kwargs["template"] = block.resolved_body
-        stmt = ctx.render_method_call(
-            "html_report",
-            "layout",
-            args=(RawExpr("ctx"),),
-            kwargs=kwargs,
+    @staticmethod
+    def _emit_html_defer(block) -> tuple[str, str]:
+        return HtmlReport._emit_method(
+            block,
+            "defer",
+            ["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"],
+            include_template=True,
         )
-        return _emit_step_source(_step_name(block, "html_report"), [stmt])
 
-    @classmethod
-    def _emit_html_delete(cls, ctx, block) -> tuple[str, str]:
-        kwargs = {}
-        for key in ["INSTANCE"]:
-            val = block.resolved_options.lookup.get(key)
-            if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(
-                    option_to_python_expr(val)
-                )
-        stmt = ctx.render_method_call("html_report", "delete", kwargs=kwargs)
-        return _emit_step_source(_step_name(block, "html_report"), [stmt])
+    @staticmethod
+    def _emit_html_run(block) -> tuple[str, str]:
+        return HtmlReport._emit_method(
+            block,
+            "run",
+            ["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"],
+            include_template=True,
+        )
+
+    @staticmethod
+    def _emit_html_layout(block) -> tuple[str, str]:
+        return HtmlReport._emit_method(
+            block,
+            "layout",
+            [
+                "OUTLOOK",
+                "INSTANCE",
+                "JSON-ONLY",
+                "CHART-INSTANCE",
+                "APP_SERVER_DEFAULT",
+            ],
+            args=(RawExpr("ctx"),),
+            include_template=True,
+        )
+
+    @staticmethod
+    def _emit_html_delete(block) -> tuple[str, str]:
+        return HtmlReport._emit_method(block, "delete", ["INSTANCE"])
+
+    @staticmethod
+    def _parse_template_rows(template: str | None) -> list[list[str]]:
+        rows: list[list[str]] = []
+        for line in (template or "").splitlines():
+            if not line.strip():
+                continue
+            rows.append([part.strip() for part in line.split("<\\>")])
+        return rows
+
+    @staticmethod
+    def _extract_options(rows: list[list[str]]) -> dict[str, Any]:
+        options: dict[str, Any] = {}
+        for parts in rows:
+            if len(parts) < 2:
+                continue
+            key = parts[0].upper()
+            if parts[1] == "":
+                val_list = [part for part in parts[2:] if part != ""]
+            else:
+                val_list = [part for part in parts[1:] if part != ""]
+
+            if len(val_list) == 0:
+                options[key] = ""
+            elif len(val_list) == 1:
+                options[key] = val_list[0]
+            else:
+                options[key] = val_list
+        return options
+
+    @staticmethod
+    def _as_list(val: Any) -> list[str]:
+        if val is None:
+            return []
+        if isinstance(val, list):
+            return val
+        return [str(val)]
+
+    def _ensure_parsed_payload(
+        self, report: dict[str, Any]
+    ) -> tuple[list[list[str]], dict[str, Any]]:
+        rows = report.get("parsed_rows")
+        if not isinstance(rows, list):
+            rows = self._parse_template_rows(report.get("template"))
+            report["parsed_rows"] = rows
+
+        options = report.get("options")
+        if not isinstance(options, dict):
+            options = self._extract_options(rows)
+            report["options"] = options
+        return rows, options
+
+    @staticmethod
+    def _parse_layout_template(template: str) -> tuple[dict[str, str], str]:
+        directives: dict[str, str] = {}
+        html_lines: list[str] = []
+        for line in template.splitlines():
+            if line.startswith(":"):
+                parts = line[1:].split(":", 1)
+                if len(parts) == 2:
+                    directives[parts[0].strip().upper()] = parts[1].strip()
+                    continue
+            html_lines.append(line)
+        return directives, "\n".join(html_lines)
+
+    @staticmethod
+    def _resolve_csv_path(raw_path: str, ctx: Any) -> Path:
+        if not raw_path:
+            return Path("")
+        if ctx and hasattr(ctx, "macro"):
+            macro = ctx.macro
+            if hasattr(macro, "resolve_file_path"):
+                return macro.resolve_file_path(raw_path)
+            resolved = macro.substitute_sql(raw_path)
+        else:
+            resolved = raw_path
+        path = Path(resolved)
+        if path.is_file() and path.exists():
+            return path
+        if path.is_absolute():
+            rel_path = Path(path.name)
+            if rel_path.is_file() and rel_path.exists():
+                return rel_path
+        return path
+
+    @staticmethod
+    def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        if not csv_path.is_file() or not csv_path.exists():
+            return rows
+
+        if ctx and hasattr(ctx, "csv_io") and hasattr(ctx.csv_io, "iter"):
+            for row in ctx.csv_io.iter(str(csv_path)):
+                normalized_row = {k.lower(): v for k, v in row.items() if k}
+                rows.append(normalized_row)
+            return rows
 
     def run(
         self,
@@ -117,16 +211,14 @@ class HtmlReport(UtilitySpec):
         self.app_server_default = app_server_default
 
         if template:
-            for line in template.splitlines():
-                if not line.strip():
+            for parts in self._parse_template_rows(template):
+                if len(parts) < 2:
                     continue
-                parts = [p.strip() for p in line.split("<\\>")]
-                if len(parts) >= 2:
-                    key = parts[0].upper()
-                    if key == "CSS":
-                        self.css_file = parts[1]
-                    elif key == "FORMAT" and len(parts) >= 3:
-                        self.styles[parts[1]] = parts[2:]
+                key = parts[0].upper()
+                if key == "CSS":
+                    self.css_file = parts[1]
+                elif key == "FORMAT" and len(parts) >= 3:
+                    self.styles[parts[1]] = parts[2:]
 
     def defer(
         self,
@@ -136,11 +228,14 @@ class HtmlReport(UtilitySpec):
         app_server_default: str | None = None,
         template: str | None = None,
     ) -> None:
+        parsed_rows = self._parse_template_rows(template)
         self.deferred_reports[id] = {
             "instance": instance,
             "prompt_text": prompt_text,
             "app_server_default": app_server_default,
             "template": template,
+            "parsed_rows": parsed_rows,
+            "options": self._extract_options(parsed_rows),
         }
 
     def delete(self, instance: str | None = None) -> None:
@@ -169,74 +264,71 @@ class HtmlReport(UtilitySpec):
                     decls.append(f"     {d};")
             return decls
 
-        # COLUMN-BORDER
-        border_decls = get_decls("COLUMN-BORDER")
-        if border_decls:
-            css_blocks.append(
-                "table.tblin, td.tblin, th, td.alt \n{\n"
-                + "\n".join(border_decls)
-                + "\n}"
-            )
-            css_blocks.append("td.tblin,th,td.alt\n{\n      padding:5px;\n}")
-            css_blocks.append("  table.tblin \n{\n     caption-side:top;\n}")
+        css_rules: list[dict[str, Any]] = [
+            {
+                "name": "COLUMN-BORDER",
+                "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
+                "extras": [
+                    "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
+                    "  table.tblin \n{\n     caption-side:top;\n}",
+                ],
+                "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
+            },
+            {
+                "name": "Column-Headers",
+                "template": "th, #colhdr\n{{\n{decls}\n}}",
+                "defaults": [
+                    ("padding-top", "     padding-top:5px;"),
+                    ("padding-bottom", "     padding-bottom:4px;"),
+                ],
+            },
+            {
+                "name": "Column-Data",
+                "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
+                "extras": ["  caption {padding-top:5px;}"],
+            },
+            {
+                "name": "Column-Alt-Row",
+                "template": "td.alt\n{{\n{decls}\n}}",
+            },
+            {
+                "name": "At-Top-of-Report",
+                "template": "p.at-top-of-report\n{{\n{decls}\n}}",
+            },
+            {
+                "name": "JQX-All-IChart-Text",
+                "template": ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {{\n{decls}\n}}",
+                "defaults": [("fill", "     fill:black;")],
+            },
+        ]
 
-        # Column-Headers
-        header_decls = get_decls("Column-Headers")
-        if header_decls:
-            extra = []
-            if not any("padding-top" in d for d in header_decls):
-                extra.append("     padding-top:5px;")
-            if not any("padding-bottom" in d for d in header_decls):
-                extra.append("     padding-bottom:4px;")
-            css_blocks.append(
-                "th, #colhdr\n{\n" + "\n".join(header_decls + extra) + "\n}"
-            )
+        for rule in css_rules:
+            decls = get_decls(rule["name"])
+            if not decls:
+                continue
 
-        # Column-Data
-        data_decls = get_decls("Column-Data")
-        if data_decls:
-            css_blocks.append(
-                "td.tblin, caption, table.tblin \n{\n" + "\n".join(data_decls) + "\n}"
-            )
-            css_blocks.append("  caption {padding-top:5px;}")
+            extra_decls = list(decls)
+            for token, default_decl in rule.get("defaults", []):
+                if not any(token in decl for decl in extra_decls):
+                    extra_decls.append(default_decl)
 
-        # Column-Alt-Row
-        alt_decls = get_decls("Column-Alt-Row")
-        if alt_decls:
-            css_blocks.append("td.alt\n{\n" + "\n".join(alt_decls) + "\n}")
+            css_blocks.append(rule["template"].format(decls="\n".join(extra_decls)))
+            for extra_block in rule.get("extras", []):
+                css_blocks.append(extra_block)
 
-        # At-Top-of-Report
-        top_decls = get_decls("At-Top-of-Report")
-        if top_decls:
-            css_blocks.append("p.at-top-of-report\n{\n" + "\n".join(top_decls) + "\n}")
+            tail_template = rule.get("tail_template")
+            if tail_template:
+                css_blocks.append(tail_template.format(decls="\n".join(decls)))
 
-        # JQX-All-IChart-Text
-        chart_decls = get_decls("JQX-All-IChart-Text")
-        if chart_decls:
-            extra = []
-            if not any("fill" in d for d in chart_decls):
-                extra.append("     fill:black;")
-            css_blocks.append(
-                ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {\n"
-                + "\n".join(chart_decls + extra)
-                + "\n}"
-            )
-
-        # tr.at-bot-of-report
-        if border_decls:
-            css_blocks.append(
-                "tr.at-bot-of-report, td.at-bot-of-report {\n"
-                + "\n".join(border_decls)
-                + "\n\n}"
-            )
-
-        # At-Top-of-Col1, 2, 3
-        for idx in (1, 2, 3):
-            col_decls = get_decls(f"At-Top-of-Col{idx}")
-            if col_decls:
-                css_blocks.append(
-                    f"p.at-top-of-col{idx} {{\n" + "\n".join(col_decls) + "\n}"
-                )
+        col_rules = {
+            "At-Top-of-Col1": "p.at-top-of-col1 {{\n{decls}\n}}",
+            "At-Top-of-Col2": "p.at-top-of-col2 {{\n{decls}\n}}",
+            "At-Top-of-Col3": "p.at-top-of-col3 {{\n{decls}\n}}",
+        }
+        for format_name, selector in col_rules.items():
+            decls = get_decls(format_name)
+            if decls:
+                css_blocks.append(selector.format(decls="\n".join(decls)))
 
         return "\n\n".join(css_blocks)
 
@@ -245,37 +337,11 @@ class HtmlReport(UtilitySpec):
             return ""
 
         report = self.deferred_reports[report_id]
-        template = report["template"] or ""
+        _, options = self._ensure_parsed_payload(report)
 
-        options = {}
-        for line in template.splitlines():
-            if not line.strip():
-                continue
-            parts = [p.strip() for p in line.split("<\\>")]
-            if len(parts) >= 2:
-                key = parts[0].upper()
-                if parts[1] == "":
-                    val_list = [p for p in parts[2:] if p != ""]
-                else:
-                    val_list = [p for p in parts[1:] if p != ""]
-
-                if len(val_list) == 0:
-                    options[key] = ""
-                elif len(val_list) == 1:
-                    options[key] = val_list[0]
-                else:
-                    options[key] = val_list
-
-        def as_list(val: Any) -> list[str]:
-            if val is None:
-                return []
-            if isinstance(val, list):
-                return val
-            return [str(val)]
-
-        cols = as_list(options.get("COLUMN-DATA"))
-        headers = as_list(options.get("COLUMN-HEADERS"))
-        alignments = as_list(options.get("COLUMN-ALIGNMENT"))
+        cols = self._as_list(options.get("COLUMN-DATA"))
+        headers = self._as_list(options.get("COLUMN-HEADERS"))
+        alignments = self._as_list(options.get("COLUMN-ALIGNMENT"))
         alignments = alignments + ["middle-left"] * (len(cols) - len(alignments))
 
         def parse_alignment(align: str) -> tuple[str, str]:
@@ -306,32 +372,8 @@ class HtmlReport(UtilitySpec):
                     pass
             return s
 
-        def resolve_csv_path(raw_path: str, ctx: Any) -> Path:
-            if not raw_path:
-                return Path("")
-            if ctx and hasattr(ctx, "macro"):
-                resolved = ctx.macro.substitute_sql(raw_path)
-            else:
-                resolved = raw_path
-            p = Path(resolved)
-            if p.is_file() and p.exists():
-                return p
-            if p.is_absolute():
-                rel_p = Path(p.name)
-                if rel_p.is_file() and rel_p.exists():
-                    return rel_p
-            return p
-
-        csv_path = resolve_csv_path(options.get("INPUT-FILE", ""), ctx)
-        rows = []
-        if csv_path.is_file() and csv_path.exists():
-            import csv
-
-            with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
-                reader = csv.DictReader(fh)
-                for r in reader:
-                    normalized_row = {k.lower(): v for k, v in r.items() if k}
-                    rows.append(normalized_row)
+        csv_path = self._resolve_csv_path(options.get("INPUT-FILE", ""), ctx)
+        rows = self._iter_csv_rows(csv_path, ctx)
 
         table_html = []
         table_html.append('<table class="tblin">')
@@ -385,30 +427,11 @@ class HtmlReport(UtilitySpec):
         chart_instance: str | None = None,
         app_server_default: str | None = None,
     ) -> None:
-        path = "report.html"
-        css_file = None
-        css_embed = False
-        title = "SQLPathFinder Report"
-        html_lines = []
-
-        for line in template.splitlines():
-            if line.startswith(":"):
-                parts = line[1:].split(":", 1)
-                if len(parts) == 2:
-                    key = parts[0].strip().upper()
-                    val = parts[1].strip()
-                    if key == "FILE":
-                        path = val
-                    elif key == "CSS":
-                        css_file = val
-                    elif key == "CSSEMBED":
-                        css_embed = val.upper() in ("Y", "YES", "TRUE")
-                    elif key == "TITLE":
-                        title = val
-            else:
-                html_lines.append(line)
-
-        html_content = "\n".join(html_lines)
+        directives, html_content = self._parse_layout_template(template)
+        path = directives.get("FILE", "report.html")
+        css_file = directives.get("CSS")
+        css_embed = directives.get("CSSEMBED", "").upper() in ("Y", "YES", "TRUE")
+        title = directives.get("TITLE", "SQLPathFinder Report")
 
         # Replace HTM placeholders
         def replace_report(match: re.Match) -> str:
@@ -487,16 +510,20 @@ class HtmlReport(UtilitySpec):
         out_filename = path
         if out_filename.startswith("email:") or not out_filename:
             fallback_name = "report.html"
-            for report_id, report in self.deferred_reports.items():
-                template = report.get("template") or ""
+            for report in self.deferred_reports.values():
+                rows, _ = self._ensure_parsed_payload(report)
                 found = False
-                for line in template.splitlines():
-                    if line.upper().startswith("OUTPUT-FILE"):
-                        parts = [p.strip() for p in line.split("<\\>")]
-                        if len(parts) >= 2 and parts[1]:
-                            fallback_name = parts[1]
-                            found = True
-                            break
+                for parts in rows:
+                    if not parts:
+                        continue
+                    if (
+                        parts[0].upper() == "OUTPUT-FILE"
+                        and len(parts) >= 2
+                        and parts[1]
+                    ):
+                        fallback_name = parts[1]
+                        found = True
+                        break
                 if found:
                     break
             instance_id = instance or self.instance
@@ -506,7 +533,12 @@ class HtmlReport(UtilitySpec):
                 out_filename = fallback_name.lower()
 
         # Write output file
-        if ctx and hasattr(ctx, "macro"):
+        if ctx and hasattr(ctx, "write_file"):
+            resolved_path = out_filename
+            if hasattr(ctx, "macro"):
+                resolved_path = ctx.macro.substitute_sql(out_filename)
+            ctx.write_file(resolved_path, html_content)
+        elif ctx and hasattr(ctx, "macro"):
             resolved_path = ctx.macro.substitute_sql(out_filename)
             ctx.macro.write_file(resolved_path, html_content)
         else:

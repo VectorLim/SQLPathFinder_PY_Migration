@@ -12,6 +12,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     option_to_python_expr,
+    render_method_call,
     resolve_output_path,
     strip_quotes,
 )
@@ -91,15 +92,13 @@ class SqliteEngine(UtilitySpec):
         parts = [p.strip() for p in stripped.split(",")]
         return [p for p in parts if p]
 
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
+    @staticmethod
+    def emit_block(block, dispatched) -> tuple[str, str] | None:
         sqlite = block.kind is Kind.SQLITE_QUERY
-        return cls._emit_sql(ctx, block, dispatched, sqlite=sqlite)
+        return SqliteEngine._emit_sql(block, dispatched, sqlite=sqlite)
 
-    @classmethod
+    @staticmethod
     def _emit_sql(
-        cls,
-        ctx,
         block,
         dispatched,
         *,
@@ -108,12 +107,11 @@ class SqliteEngine(UtilitySpec):
         if dispatched is None:
             raise ValueError("SQL emission requires dispatch metadata")
 
-        sql = cls._extract_sql_text(block, dispatched)
+        sql = SqliteEngine._extract_sql_text(block, dispatched)
         output = resolve_output_path(block)
         reader_cls = dispatched.reader_cls
-        ctx.add_import(reader_cls.__module__, reader_cls.__name__)
         crosstab = CrosstabUtility.extract_options(block)
-        header = None if crosstab else cls._extract_header(block)
+        header = None if crosstab else SqliteEngine._extract_header(block)
 
         reader_kwargs_items = [f"{k}={repr(v)}" for k, v in dispatched.reader_kwargs.items()]
         inst_expr = f"{reader_cls.__name__}({', '.join(reader_kwargs_items)})"
@@ -124,12 +122,12 @@ class SqliteEngine(UtilitySpec):
             "reader": RawExpr(inst_expr),
         }
         if sqlite:
-            kwargs["inputs"] = cls._extract_table_inputs(block)
+            kwargs["inputs"] = SqliteEngine._extract_table_inputs(block)
         if header:
             kwargs["header"] = header
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = ctx.render_method_call("ctx", "run_query", kwargs=kwargs)
+        stmt = render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return _emit_step_source(_step_name(block, suffix), [stmt])

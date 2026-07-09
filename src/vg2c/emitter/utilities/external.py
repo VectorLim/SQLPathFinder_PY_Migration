@@ -12,6 +12,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _emit_step_source,
     _step_name,
     option_to_python_expr,
+    render_method_call,
 )
 from vg2c.frontend.models import Kind
 
@@ -29,23 +30,23 @@ class ExternalProcess(UtilitySpec):
             return []
         return text.split()
 
-    @classmethod
-    def emit_block(cls, ctx, block, dispatched) -> tuple[str, str] | None:
-        argv = cls._utility_argv(block)
+    @staticmethod
+    def emit_block(block, dispatched) -> tuple[str, str] | None:
+        argv = ExternalProcess._utility_argv(block)
         if not argv:
             return _emit_step_source(
                 _step_name(block, "external"),
                 ["pass  # TODO: empty external utility command"],
             )
 
-        stmt = cls._emit_run(ctx, argv)
+        stmt = ExternalProcess._emit_run(argv)
         return _emit_step_source(_step_name(block, "external"), [stmt])
 
-    @classmethod
-    def _emit_run(cls, ctx, argv: list[str]) -> str:
+    @staticmethod
+    def _emit_run(argv: list[str]) -> str:
         expr_items = [option_to_python_expr(token) for token in argv]
         argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return ctx.render_method_call(
+        return render_method_call(
             "external",
             "run",
             kwargs={"argv": argv_expr},
