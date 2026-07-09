@@ -43,7 +43,7 @@ def build_scope_tree(
         diagnostics=diagnostics,
     )
 
-    root_end = blocks[-1].parsed.index if blocks else -1
+    root_end = blocks[-1].index if blocks else -1
     root = ScopeNode(
         scope_id=0,
         kind="program",
@@ -78,11 +78,11 @@ def _parse_children(
                     severity="warning",
                     code="malformed-block-skipped",
                     message="Resolver skipped a malformed block.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
-            children.append(_leaf_node(state, block.parsed.index))
+            children.append(_leaf_node(state, block.index))
             i += 1
             continue
 
@@ -110,12 +110,12 @@ def _parse_children(
                     severity="error",
                     code="orphan-end-macro",
                     message="Found {END-MACRO} without a matching opener.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
             children.append(
-                _leaf_node(state, block.parsed.index, control_payload=EndMacro())
+                _leaf_node(state, block.index, control_payload=EndMacro())
             )
             i += 1
             continue
@@ -126,12 +126,12 @@ def _parse_children(
                     severity="error",
                     code="orphan-end-loop",
                     message="Found {END-LOOP} without a matching {RUN-LOOP}.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
             children.append(
-                _leaf_node(state, block.parsed.index, control_payload=EndLoop())
+                _leaf_node(state, block.index, control_payload=EndLoop())
             )
             i += 1
             continue
@@ -142,12 +142,12 @@ def _parse_children(
                     severity="error",
                     code="orphan-end-if",
                     message="Found {END-IF} without a matching opener.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
             children.append(
-                _leaf_node(state, block.parsed.index, control_payload=EndIf())
+                _leaf_node(state, block.index, control_payload=EndIf())
             )
             i += 1
             continue
@@ -158,12 +158,12 @@ def _parse_children(
                     severity="error",
                     code="orphan-else",
                     message="Found {ELSE} without a matching {IF-THEN}.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
             children.append(
-                _leaf_node(state, block.parsed.index, control_payload=Else())
+                _leaf_node(state, block.index, control_payload=Else())
             )
             i += 1
             continue
@@ -171,7 +171,7 @@ def _parse_children(
         if token == "ROWS-IN-FILE":
             payload = _parse_rows_in_file_payload(block)
             children.append(
-                _leaf_node(state, block.parsed.index, control_payload=payload)
+                _leaf_node(state, block.index, control_payload=payload)
             )
             i += 1
             continue
@@ -182,15 +182,15 @@ def _parse_children(
                     severity="warning",
                     code="unknown-macro-control",
                     message=f"Unknown macro control token {{{token}}}; treated as leaf.",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    block_index=block.index,
+                    span=block.span,
                 )
             )
-            children.append(_leaf_node(state, block.parsed.index))
+            children.append(_leaf_node(state, block.index))
             i += 1
             continue
 
-        children.append(_leaf_node(state, block.parsed.index))
+        children.append(_leaf_node(state, block.index))
         i += 1
 
     return children, i, None
@@ -218,16 +218,16 @@ def _parse_macro(
                 severity="error",
                 code="unclosed-macro",
                 message="Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF.",
-                block_index=start_block.parsed.index,
-                span=start_block.parsed.span,
+                block_index=start_block.index,
+                span=start_block.span,
             )
         )
-        end_index = blocks[-1].parsed.index if blocks else start_block.parsed.index
+        end_index = blocks[-1].index if blocks else start_block.index
         return (
             ScopeNode(
                 scope_id=state.new_scope_id(),
                 kind="macro",
-                start_index=start_block.parsed.index,
+                start_index=start_block.index,
                 end_index=end_index,
                 children=tuple(children),
                 block_index=None,
@@ -236,12 +236,12 @@ def _parse_macro(
             i,
         )
 
-    end_index = blocks[i].parsed.index
+    end_index = blocks[i].index
     return (
         ScopeNode(
             scope_id=state.new_scope_id(),
             kind="macro",
-            start_index=start_block.parsed.index,
+            start_index=start_block.index,
             end_index=end_index,
             children=tuple(children),
             block_index=None,
@@ -273,16 +273,16 @@ def _parse_loop(
                 severity="error",
                 code="unclosed-loop",
                 message="Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF.",
-                block_index=start_block.parsed.index,
-                span=start_block.parsed.span,
+                block_index=start_block.index,
+                span=start_block.span,
             )
         )
-        end_index = blocks[-1].parsed.index if blocks else start_block.parsed.index
+        end_index = blocks[-1].index if blocks else start_block.index
         return (
             ScopeNode(
                 scope_id=state.new_scope_id(),
                 kind="loop",
-                start_index=start_block.parsed.index,
+                start_index=start_block.index,
                 end_index=end_index,
                 children=tuple(children),
                 block_index=None,
@@ -291,12 +291,12 @@ def _parse_loop(
             i,
         )
 
-    end_index = blocks[i].parsed.index
+    end_index = blocks[i].index
     return (
         ScopeNode(
             scope_id=state.new_scope_id(),
             kind="loop",
-            start_index=start_block.parsed.index,
+            start_index=start_block.index,
             end_index=end_index,
             children=tuple(children),
             block_index=None,
@@ -327,9 +327,9 @@ def _parse_if(
         ScopeNode(
             scope_id=state.new_scope_id(),
             kind="if-branch",
-            start_index=start_block.parsed.index,
+            start_index=start_block.index,
             end_index=(
-                if_children[-1].end_index if if_children else start_block.parsed.index
+                if_children[-1].end_index if if_children else start_block.index
             ),
             children=tuple(if_children),
             block_index=None,
@@ -337,7 +337,7 @@ def _parse_if(
         )
     ]
 
-    end_index = blocks[-1].parsed.index if blocks else start_block.parsed.index
+    end_index = blocks[-1].index if blocks else start_block.index
     next_i = i
 
     if token == "ELSE":
@@ -352,11 +352,11 @@ def _parse_if(
             ScopeNode(
                 scope_id=state.new_scope_id(),
                 kind="else-branch",
-                start_index=blocks[i].parsed.index,
+                start_index=blocks[i].index,
                 end_index=(
                     else_children[-1].end_index
                     if else_children
-                    else blocks[i].parsed.index
+                    else blocks[i].index
                 ),
                 children=tuple(else_children),
                 block_index=None,
@@ -364,7 +364,7 @@ def _parse_if(
             )
         )
         if else_stop == "END-IF":
-            end_index = blocks[j].parsed.index
+            end_index = blocks[j].index
             next_i = j + 1
         else:
             diagnostics.append(
@@ -372,13 +372,13 @@ def _parse_if(
                     severity="error",
                     code="unclosed-if",
                     message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
-                    block_index=start_block.parsed.index,
-                    span=start_block.parsed.span,
+                    block_index=start_block.index,
+                    span=start_block.span,
                 )
             )
             next_i = j
     elif token == "END-IF":
-        end_index = blocks[i].parsed.index
+        end_index = blocks[i].index
         next_i = i + 1
     else:
         diagnostics.append(
@@ -386,8 +386,8 @@ def _parse_if(
                 severity="error",
                 code="unclosed-if",
                 message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
-                block_index=start_block.parsed.index,
-                span=start_block.parsed.span,
+                block_index=start_block.index,
+                span=start_block.span,
             )
         )
 
@@ -395,7 +395,7 @@ def _parse_if(
         ScopeNode(
             scope_id=state.new_scope_id(),
             kind="if",
-            start_index=start_block.parsed.index,
+            start_index=start_block.index,
             end_index=end_index,
             children=tuple(branch_nodes),
             block_index=None,
@@ -408,7 +408,7 @@ def _parse_if(
 def _control_token(block: ClassifiedBlock) -> str | None:
     if block.kind is not Kind.MACRO_CONTROL:
         return None
-    utilities = block.parsed.options.lookup.get("UTILITIES", "")
+    utilities = block.options.lookup.get("UTILITIES", "")
     match = TOKEN_RE.match(utilities)
     return match.group(1) if match else None
 
@@ -418,14 +418,14 @@ def _quoted_args(value: str) -> list[str]:
 
 
 def _parse_start_macro_payload(block: ClassifiedBlock) -> StartMacro:
-    args = _quoted_args(block.parsed.options.lookup.get("UTILITIES", ""))
+    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
     csv_path = args[0] if args else ""
     prompt_flag = args[1] if len(args) > 1 else "N"
     return StartMacro(csv_path=csv_path, prompt_off=prompt_flag.upper() == "Y")
 
 
 def _parse_if_then_payload(block: ClassifiedBlock) -> IfThen:
-    args = _quoted_args(block.parsed.options.lookup.get("UTILITIES", ""))
+    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
     padded = (args + ["", "", "", "", "", "", ""])[:7]
     conj = padded[3] or None
     lhs2 = padded[4] or None
@@ -443,7 +443,7 @@ def _parse_if_then_payload(block: ClassifiedBlock) -> IfThen:
 
 
 def _parse_rows_in_file_payload(block: ClassifiedBlock) -> RowsInFile:
-    args = _quoted_args(block.parsed.options.lookup.get("UTILITIES", ""))
+    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
     csv_path = args[0] if args else ""
     var_name = args[1] if len(args) > 1 else ""
     prompt_flag = args[2] if len(args) > 2 else "N"
@@ -455,7 +455,7 @@ def _parse_rows_in_file_payload(block: ClassifiedBlock) -> RowsInFile:
 
 
 def _parse_run_loop_payload(block: ClassifiedBlock) -> RunLoop:
-    args = _quoted_args(block.parsed.options.lookup.get("UTILITIES", ""))
+    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
     input_csv = args[0] if args else ""
     chunk_csv = args[1] if len(args) > 1 else ""
     chunk_size_raw = args[2] if len(args) > 2 else "0"

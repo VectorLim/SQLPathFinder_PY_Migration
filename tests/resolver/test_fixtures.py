@@ -80,7 +80,7 @@ def test_macro_control_blocks_have_scope_representation(FIXTURES: Path) -> None:
     classified, cdiag = classify(parsed)
     program = resolve(classified, diagnostics=[*pdiag, *cdiag])
 
-    macro_indices = [b.parsed.index for b in classified if b.kind is Kind.MACRO_CONTROL]
+    macro_indices = [b.index for b in classified if b.kind is Kind.MACRO_CONTROL]
     for idx in macro_indices:
         assert _index_covered_by_scope(program.scope_tree, idx)
 

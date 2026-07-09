@@ -136,8 +136,8 @@ class DialectHandler(ABC):
                 severity="info",
                 code="dispatch-record-malformed",
                 message=f"/RECORD={record_raw!r} is not in Name@version format; stored raw.",
-                block_index=block.parsed.index,
-                span=block.parsed.span,
+                block_index=block.index,
+                span=block.span,
             )
         )
         return record_raw, None

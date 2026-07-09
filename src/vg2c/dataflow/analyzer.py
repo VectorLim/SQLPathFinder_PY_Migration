@@ -38,7 +38,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
     diagnostics: list[Diagnostic] = list(expanded_resolved.diagnostics)
     blocks = list(expanded_resolved.blocks)
-    block_by_index = {block.parsed.index: block for block in blocks}
+    block_by_index = {block.index: block for block in blocks}
     scope_rel = _ScopeRelations(expanded_resolved.scope_tree)
 
     explicit_producers = _collect_explicit_producers(blocks, scope_rel)
@@ -67,7 +67,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                             f"Consumer path {consumer.csv_path} likely produced by a preceding utility block."
                         ),
                         block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].parsed.span,
+                        span=block_by_index[consumer.block_index].span,
                     )
                 )
 
@@ -95,7 +95,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                             f"for {consumer.csv_path}."
                         ),
                         block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].parsed.span,
+                        span=block_by_index[consumer.block_index].span,
                     )
                 )
 
@@ -110,7 +110,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                             f"Consumer {consumer.csv_path} is outside producer conditional branch scope."
                         ),
                         block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].parsed.span,
+                        span=block_by_index[consumer.block_index].span,
                     )
                 )
             elif producer.is_in_loop and not scope_rel.is_ancestor(
@@ -124,7 +124,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                             f"Consumer {consumer.csv_path} is outside producer macro-loop scope."
                         ),
                         block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].parsed.span,
+                        span=block_by_index[consumer.block_index].span,
                     )
                 )
 
@@ -140,7 +140,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                 code="dataflow-unused-output",
                 message=f"Produced CSV {producer.csv_path} has no structural consumer.",
                 block_index=producer.block_index,
-                span=block_by_index[producer.block_index].parsed.span,
+                span=block_by_index[producer.block_index].span,
             )
         )
 
@@ -167,7 +167,7 @@ def _collect_explicit_producers(
             csv_path = _normalize_csv_path(csv_value)
             producers.append(
                 ProducerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=csv_path,
                     scope_id=block.scope_id,
                     producer_kind=_producer_kind_for_block(block.kind),
@@ -214,7 +214,7 @@ def _collect_external_utility_candidates(
         for token in _CSV_TOKEN_RE.findall(utilities):
             candidates.append(
                 ProducerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=_normalize_csv_path(token),
                     scope_id=block.scope_id,
                     producer_kind="external-presumed",
@@ -240,7 +240,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
                 for table_item in table_items:
                     consumers.append(
                         ConsumerRecord(
-                            block_index=block.parsed.index,
+                            block_index=block.index,
                             csv_path=_normalize_csv_path(table_item),
                             scope_id=block.scope_id,
                             consumer_kind="table",
@@ -251,7 +251,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
         if isinstance(payload, StartMacro) and payload.csv_path:
             consumers.append(
                 ConsumerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=_normalize_csv_path(payload.csv_path),
                     scope_id=block.scope_id,
                     consumer_kind="start-macro",
@@ -260,7 +260,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
         elif isinstance(payload, RowsInFile) and payload.csv_path:
             consumers.append(
                 ConsumerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=_normalize_csv_path(payload.csv_path),
                     scope_id=block.scope_id,
                     consumer_kind="rows-in-file",
@@ -269,7 +269,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
         elif isinstance(payload, RunLoop) and payload.input_csv_path:
             consumers.append(
                 ConsumerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=_normalize_csv_path(payload.input_csv_path),
                     scope_id=block.scope_id,
                     consumer_kind="run-loop",
@@ -280,7 +280,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
             for csv_path in call.consumed_csv_paths():
                 consumers.append(
                     ConsumerRecord(
-                        block_index=block.parsed.index,
+                        block_index=block.index,
                         csv_path=_normalize_csv_path(csv_path),
                         scope_id=block.scope_id,
                         consumer_kind="sql-macro",
@@ -380,7 +380,7 @@ def _emit_multi_producer_diagnostics(
                             code="dataflow-branch-exclusive-producers",
                             message=f"CSV {path} has branch-exclusive producers.",
                             block_index=right.block_index,
-                            span=block_by_index[right.block_index].parsed.span,
+                            span=block_by_index[right.block_index].span,
                         )
                     )
                 else:
@@ -390,7 +390,7 @@ def _emit_multi_producer_diagnostics(
                             code="dataflow-overwrite-same-scope",
                             message=f"CSV {path} is produced multiple times in overlapping scopes.",
                             block_index=right.block_index,
-                            span=block_by_index[right.block_index].parsed.span,
+                            span=block_by_index[right.block_index].span,
                         )
                     )
 

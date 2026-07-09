@@ -44,7 +44,7 @@ class MacroState(UtilitySpec):
         return name.strip().upper()
 
     @staticmethod
-    def emit_block(block, dispatched) -> tuple[str, str] | None:
+    def emit_block(block) -> tuple[str, str] | None:
         payload = block.control_payload
         if not isinstance(payload, RowsInFile):
             return _emit_step_source(_step_name(block, "macro_control"), ["pass"])

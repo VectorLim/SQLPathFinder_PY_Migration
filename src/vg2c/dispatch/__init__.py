@@ -68,12 +68,12 @@ def dispatch(
         # Detect SQL filters
         sqlite = block.kind is Kind.SQLITE_QUERY
         suffix = "sqlite_query" if sqlite else "sql_query"
-        step_name = f"step_{block.parsed.index:04d}_{suffix}"
+        step_name = f"step_{block.index:04d}_{suffix}"
         sql_filters = detect_filters(rewritten_sql, step_name)
 
         dispatched.append(
             DispatchedBlock(
-                block_index=block.parsed.index,
+                resolved=block,
                 reader_cls=handler.reader_cls,
                 reader_kwargs=handler.reader_kwargs,
                 reader_target=reader_target,

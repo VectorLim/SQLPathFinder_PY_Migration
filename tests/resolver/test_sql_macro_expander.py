@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.frontend.models import BlockOptions, Kind, ParsedBlock, SourceSpan
+from vg2c.frontend.models import BlockOptions, ClassifiedBlock, Kind, ParsedBlock, SourceSpan
 from vg2c.dataflow.sql_macro_expander import expand_sql_macros
 from vg2c.resolver.models import ResolvedBlock
 
@@ -13,9 +13,9 @@ def _resolved_sql_block(body: str, index: int = 0) -> ResolvedBlock:
         raw=body,
         span=SourceSpan(file=None, start_line=1, end_line=10),
     )
+    classified = ClassifiedBlock(parsed=parsed, kind=Kind.SQLITE_QUERY, reason="test")
     return ResolvedBlock(
-        parsed=parsed,
-        kind=Kind.SQLITE_QUERY,
+        classified=classified,
         resolved_options=parsed.options,
         resolved_body=body,
         sql_macro_calls=(),

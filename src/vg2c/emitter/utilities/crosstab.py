@@ -94,9 +94,7 @@ class CrosstabUtility(UtilitySpec):
                 body = ",".join(dynamic_cols)
                 return f"{prefix}{body}{suffix}"
 
-            body = "\n         ,".join(
-                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
-            )
+            body = "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
             return f"{prefix}{body}{suffix}"
 
         return cls.TOKEN_RE.sub(_replace, sql)
@@ -131,30 +129,3 @@ class CrosstabUtility(UtilitySpec):
         )
         result.columns = [str(col).lower() for col in result.columns]
         return result
-
-
-CROSSTAB_RE = CrosstabUtility.TOKEN_RE
-
-
-def apply_crosstab(
-    rows: pd.DataFrame,
-    row_keys: list[str],
-    header_key: str,
-    value_key: str,
-) -> Any:
-    return CrosstabUtility().apply(
-        rows,
-        row_keys=row_keys,
-        header_key=header_key,
-        value_key=value_key,
-    )
-
-
-def substitute_crosstab(
-    sql: str,
-    alias_columns_lookup: Callable[[str], list[str]] | None = None,
-) -> str:
-    return CrosstabUtility.substitute_sql(
-        sql,
-        alias_columns_lookup=alias_columns_lookup,
-    )

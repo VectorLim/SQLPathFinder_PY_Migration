@@ -24,7 +24,7 @@ def test_fixture_parse_and_classify_basics(FIXTURES: Path, fixture_name: str) ->
     diagnostics = [*parse_diagnostics, *classify_diagnostics]
 
     assert len(classified) >= 1
-    assert [b.parsed.index for b in classified] == list(range(len(classified)))
+    assert [b.index for b in classified] == list(range(len(classified)))
 
     if fixture_name != "actual_script.txt":
         assert not [d for d in diagnostics if d.severity == "error"]
@@ -65,9 +65,9 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
     assert _has_kind(classified, Kind.SQLITE_QUERY)
 
     write_csv_values = [
-        item.parsed.options.lookup.get("CSV", "")
+        item.options.lookup.get("CSV", "")
         for item in classified
-        if item.kind is Kind.WRITE_FILE and "CSV" in item.parsed.options.lookup
+        if item.kind is Kind.WRITE_FILE and "CSV" in item.options.lookup
     ]
     lowered = [v.lower() for v in write_csv_values]
     assert any(v.endswith(".bat") for v in lowered)
@@ -77,7 +77,7 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         assert any(v.endswith(".py") for v in lowered)
 
     macro_values = [
-        item.parsed.options.lookup.get("UTILITIES", "")
+        item.options.lookup.get("UTILITIES", "")
         for item in classified
         if item.kind is Kind.MACRO_CONTROL
     ]
@@ -95,17 +95,17 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         ), f"Missing macro token {token}"
 
     utility_values = [
-        item.parsed.options.lookup.get("UTILITIES", "")
+        item.options.lookup.get("UTILITIES", "")
         for item in classified
         if item.kind is Kind.UTILITY
     ]
     external_values = [
-        item.parsed.options.lookup.get("UTILITIES", "")
+        item.options.lookup.get("UTILITIES", "")
         for item in classified
         if item.kind is Kind.EXTERNAL_RUN
     ]
     fs_copy_values = [
-        item.parsed.options.lookup.get("UTILITIES", "")
+        item.options.lookup.get("UTILITIES", "")
         for item in classified
         if item.kind is Kind.FS_COPY
     ]
@@ -123,7 +123,7 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
 
     step_prompts: list[tuple[int, ...]] = []
     for item in classified:
-        prompt = item.parsed.options.lookup.get("PROMPT-TEXT", "")
+        prompt = item.options.lookup.get("PROMPT-TEXT", "")
         if prompt.startswith("Step "):
             nums = tuple(int(v) for v in re.findall(r"\d+", prompt))
             if nums:
@@ -151,6 +151,6 @@ def _has_any_kind(classified, kinds: tuple[Kind, ...]) -> bool:
 def _unknown_failure_message(unknown_blocks) -> str:
     snippets: list[str] = []
     for item in unknown_blocks:
-        prompt = item.parsed.options.lookup.get("PROMPT-TEXT", "<missing PROMPT-TEXT>")
-        snippets.append(f"prompt={prompt!r} raw={item.parsed.raw[:200]!r}")
+        prompt = item.options.lookup.get("PROMPT-TEXT", "<missing PROMPT-TEXT>")
+        snippets.append(f"prompt={prompt!r} raw={item.raw[:200]!r}")
     return "Unexpected UNKNOWN blocks: " + " | ".join(snippets)

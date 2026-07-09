@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.utilities.crosstab import substitute_crosstab
+from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 
 
@@ -66,7 +66,7 @@ def test_frame_variables_uppercased_on_push():
 
 def test_substitute_sql_expands_crosstab_projection():
     sql = "SELECT a0.[facility], CrossTab->[[a0,15507;:Y]] FROM [t] a0"
-    out = substitute_crosstab(
+    out = CrosstabUtility.substitute_sql(
         sql,
         alias_columns_lookup=lambda alias: [
             "facility",
@@ -79,9 +79,9 @@ def test_substitute_sql_expands_crosstab_projection():
     assert "a0.[SUBPLANEANGLEY] AS [SUBPLANEANGLEY]" in out
 
 
-def test_substitute_crosstab_header_mode_n():
+def test_CrosstabUtility_substitute_sql_header_mode_n():
     sql = "CrossTab->[[a0,15507;:N]]"
-    out = substitute_crosstab(
+    out = CrosstabUtility.substitute_sql(
         sql,
         alias_columns_lookup=lambda alias: ["SUBPLANEANGLEX", "SUBPLANEANGLEY"],
     )

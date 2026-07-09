@@ -76,6 +76,6 @@ class UtilitySpec(ABC):
 
     @staticmethod
     def emit_block(
-        block: Any, dispatched: Any
+        block: Any
     ) -> tuple[str, str] | None:
         return None

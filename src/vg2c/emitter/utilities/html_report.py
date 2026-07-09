@@ -32,7 +32,7 @@ class HtmlReport(UtilitySpec):
         self.app_server_default: str | None = None
 
     @staticmethod
-    def emit_block(block, dispatched) -> tuple[str, str] | None:
+    def emit_block(block) -> tuple[str, str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         if report_type == "HTML-RUN":
             return HtmlReport._emit_html_run(block)
@@ -198,6 +198,14 @@ class HtmlReport(UtilitySpec):
                 normalized_row = {k.lower(): v for k, v in row.items() if k}
                 rows.append(normalized_row)
             return rows
+
+        import csv
+        with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                normalized_row = {k.lower(): v for k, v in row.items() if k}
+                rows.append(normalized_row)
+        return rows
 
     def run(
         self,

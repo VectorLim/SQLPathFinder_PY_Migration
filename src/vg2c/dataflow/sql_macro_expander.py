@@ -23,14 +23,13 @@ def expand_sql_macros(
 
         rewritten_body, calls, local_diags = _expand_body(
             body=block.resolved_body,
-            span=block.parsed.span,
-            block_index=block.parsed.index,
+            span=block.span,
+            block_index=block.index,
         )
         diagnostics.extend(local_diags)
         updated_blocks.append(
             ResolvedBlock(
-                parsed=block.parsed,
-                kind=block.kind,
+                classified=block,
                 resolved_options=block.resolved_options,
                 resolved_body=rewritten_body,
                 sql_macro_calls=tuple(calls),

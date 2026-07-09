@@ -100,7 +100,7 @@ def walk_and_emit(
         the emitted helper function definitions and run_body_source is the main
         run() body.
     """
-    block_by_index = {b.parsed.index: b for b in dispatched.analyzed.resolved.blocks}
+    block_by_index = {b.index: b for b in dispatched.analyzed.resolved.blocks}
 
     functions: list[str] = []
     diagnostics: list[Diagnostic] = []
@@ -270,15 +270,13 @@ def _walk_scope(
         if block_index is None:
             return
 
-        block = block_by_index.get(block_index)
+        block = ctx.dispatch_map.get(block_index) or block_by_index.get(block_index)
         if block is None:
             return
 
-        dispatched_block = ctx.dispatch_map.get(block_index)
-
         # Emit the function
         try:
-            func_code, call_site = ctx.emit_block(block, dispatched_block)
+            func_code, call_site = ctx.emit_block(block)
             functions.append(func_code)
             writer.write(call_site)
         except Exception as exc:
@@ -286,8 +284,8 @@ def _walk_scope(
                 Diagnostic(
                     severity="error",
                     code="emit-handler-failed",
-                    message=f"Handler failed for block {block.parsed.index}: {exc}",
-                    block_index=block.parsed.index,
-                    span=block.parsed.span,
+                    message=f"Handler failed for block {block.index}: {exc}",
+                    block_index=block.index,
+                    span=block.span,
                 )
             )

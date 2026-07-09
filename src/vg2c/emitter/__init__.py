@@ -17,7 +17,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         An EmittedScript containing the generated Python source and merged diagnostics.
     """
     ctx = EmitContext()
-    ctx.dispatch_map = {db.block_index: db for db in dispatched.dispatched}
+    ctx.dispatch_map = {db.index: db for db in dispatched.dispatched}
 
     # Walk the scope tree and emit code
     functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)

@@ -33,10 +33,10 @@ class SqliteEngine(UtilitySpec):
         return f'"""{escaped}"""'
 
     @staticmethod
-    def _extract_sql_text(block, dispatched) -> str | RawExpr:
-        sql = (
-            dispatched.rewritten_sql if dispatched is not None else block.resolved_body
-        )
+    def _extract_sql_text(block) -> str | RawExpr:
+        sql = getattr(block, "rewritten_sql", None)
+        if sql is None:
+            sql = block.resolved_body
         if "@@SQLMACRO:" not in sql:
             return RawExpr(SqliteEngine._format_sql_literal(sql))
 
@@ -93,27 +93,26 @@ class SqliteEngine(UtilitySpec):
         return [p for p in parts if p]
 
     @staticmethod
-    def emit_block(block, dispatched) -> tuple[str, str] | None:
+    def emit_block(block) -> tuple[str, str] | None:
         sqlite = block.kind is Kind.SQLITE_QUERY
-        return SqliteEngine._emit_sql(block, dispatched, sqlite=sqlite)
+        return SqliteEngine._emit_sql(block, sqlite=sqlite)
 
     @staticmethod
     def _emit_sql(
         block,
-        dispatched,
         *,
         sqlite: bool,
     ) -> tuple[str, str]:
-        if dispatched is None:
-            raise ValueError("SQL emission requires dispatch metadata")
-
-        sql = SqliteEngine._extract_sql_text(block, dispatched)
+        sql = SqliteEngine._extract_sql_text(block)
         output = resolve_output_path(block)
-        reader_cls = dispatched.reader_cls
+        reader_cls = getattr(block, "reader_cls", None)
+        if reader_cls is None:
+            raise ValueError("SQL emission requires dispatch metadata")
         crosstab = CrosstabUtility.extract_options(block)
         header = None if crosstab else SqliteEngine._extract_header(block)
 
-        reader_kwargs_items = [f"{k}={repr(v)}" for k, v in dispatched.reader_kwargs.items()]
+        reader_kwargs = getattr(block, "reader_kwargs", {})
+        reader_kwargs_items = [f"{k}={repr(v)}" for k, v in reader_kwargs.items()]
         inst_expr = f"{reader_cls.__name__}({', '.join(reader_kwargs_items)})"
 
         kwargs: dict[str, object] = {

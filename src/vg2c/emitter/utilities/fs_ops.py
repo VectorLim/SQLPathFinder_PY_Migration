@@ -24,7 +24,7 @@ class FileSystemOps(UtilitySpec):
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
 
     @staticmethod
-    def emit_block(block, dispatched) -> tuple[str, str] | None:
+    def emit_block(block) -> tuple[str, str] | None:
         if block.kind is Kind.FS_COPY:
             return FileSystemOps._emit_copy_block(block)
         if block.kind is Kind.FS_DELETE:

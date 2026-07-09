@@ -43,20 +43,17 @@ class EmitContext:
 
         return render_method_call(utility_name, method_name, args=args, kwargs=kwargs)
 
-    def emit_block(self, block: Any, dispatched: Any) -> tuple[str, str]:
+    def emit_block(self, block: Any) -> tuple[str, str]:
         from vg2c.emitter.utilities._base import UtilitySpec
         from vg2c.emitter.utilities._emit_helpers import _emit_step_source, _step_name
 
-        if (
-            dispatched is not None
-            and getattr(dispatched, "reader_cls", None) is not None
-        ):
-            rc = dispatched.reader_cls
-            self.add_import(rc.__module__, rc.__name__)
+        reader_cls = getattr(block, "reader_cls", None)
+        if reader_cls is not None:
+            self.add_import(reader_cls.__module__, reader_cls.__name__)
 
         handler_cls = UtilitySpec._kind_handlers.get(block.kind)
         if handler_cls is not None:
-            emitted = handler_cls.emit_block(block, dispatched)
+            emitted = handler_cls.emit_block(block)
             if emitted is not None:
                 return emitted
 

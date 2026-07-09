@@ -54,7 +54,7 @@ def resolve_output_path(block: Any) -> str:
             return candidate
 
     suffix = "txt" if block.kind is Kind.WRITE_FILE else "csv"
-    return f"step_{block.parsed.index:04d}.{suffix}"
+    return f"step_{block.index:04d}.{suffix}"
 
 
 def _normalize_macro_name(raw: str) -> str:
@@ -121,7 +121,7 @@ def render_method_call(
 
 
 def _step_name(block: Any, suffix: str) -> str:
-    return f"step_{block.parsed.index:04d}_{suffix}"
+    return f"step_{block.index:04d}_{suffix}"
 
 
 def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:

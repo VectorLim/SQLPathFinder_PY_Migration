@@ -31,7 +31,7 @@ class ExternalProcess(UtilitySpec):
         return text.split()
 
     @staticmethod
-    def emit_block(block, dispatched) -> tuple[str, str] | None:
+    def emit_block(block) -> tuple[str, str] | None:
         argv = ExternalProcess._utility_argv(block)
         if not argv:
             return _emit_step_source(

@@ -1,15 +1,26 @@
-from __future__ import annotations
-from typing import Any
+from vg2c.frontend.models import ParsedBlock, ClassifiedBlock, BlockOptions, SourceSpan, Kind
+from vg2c.resolver.models import ResolvedBlock
 from vg2c.dispatch.models import DispatchedProgram, DispatchedBlock, SQLFilter, ReaderTarget
 from vg2c.emitter import post_process_comments
 
 class DummyClass:
     pass
 
+def _dummy_resolved_block(index: int) -> ResolvedBlock:
+    parsed = ParsedBlock(
+        index=index,
+        options=BlockOptions.from_pairs(()),
+        body="",
+        raw="",
+        span=SourceSpan(None, 1, 1),
+    )
+    classified = ClassifiedBlock(parsed, Kind.SQL_QUERY, "")
+    return ResolvedBlock(classified, BlockOptions.from_pairs(()), "", (), None, 0)
+
 def test_post_process_comments():
     target = ReaderTarget(None, None, "node", None)
     block1 = DispatchedBlock(
-        block_index=1,
+        resolved=_dummy_resolved_block(1),
         reader_cls=DummyClass,
         reader_kwargs={},
         reader_target=target,
@@ -24,7 +35,7 @@ def test_post_process_comments():
         )
     )
     block2 = DispatchedBlock(
-        block_index=2,
+        resolved=_dummy_resolved_block(2),
         reader_cls=DummyClass,
         reader_kwargs={},
         reader_target=target,

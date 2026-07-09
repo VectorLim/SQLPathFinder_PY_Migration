@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Iterable, Literal, Mapping
+
+
+def copy_dataclass_fields(source: object, target: object, base: type) -> None:
+    for field in fields(base):
+        object.__setattr__(target, field.name, getattr(source, field.name))
+
 
 
 class Kind(str, Enum):
@@ -59,11 +65,7 @@ class ClassifiedBlock(ParsedBlock):
     reason: str
 
     def __init__(self, parsed: ParsedBlock, kind: Kind, reason: str) -> None:
-        object.__setattr__(self, "index", parsed.index)
-        object.__setattr__(self, "options", parsed.options)
-        object.__setattr__(self, "body", parsed.body)
-        object.__setattr__(self, "raw", parsed.raw)
-        object.__setattr__(self, "span", parsed.span)
+        copy_dataclass_fields(parsed, self, ParsedBlock)
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "reason", reason)
 

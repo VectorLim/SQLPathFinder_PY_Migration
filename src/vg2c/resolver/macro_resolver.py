@@ -32,26 +32,25 @@ def resolve_macros(
     diagnostics: list[Diagnostic] = []
 
     scope_for_block = _build_scope_lookup(
-        scope_tree, {block.parsed.index for block in blocks}
+        scope_tree, {block.index for block in blocks}
     )
     payload_by_index = {
-        block.parsed.index: _parse_control_payload(block, diagnostics)
+        block.index: _parse_control_payload(block, diagnostics)
         for block in blocks
         if block.kind is Kind.MACRO_CONTROL
     }
 
     resolved: list[ResolvedBlock] = []
     for block in blocks:
-        payload = payload_by_index.get(block.parsed.index)
+        payload = payload_by_index.get(block.index)
         resolved.append(
             ResolvedBlock(
-                parsed=block.parsed,
-                kind=block.kind,
-                resolved_options=block.parsed.options,
-                resolved_body=block.parsed.body,
+                classified=block,
+                resolved_options=block.options,
+                resolved_body=block.body,
                 sql_macro_calls=(),
                 control_payload=payload,
-                scope_id=scope_for_block.get(block.parsed.index, 0),
+                scope_id=scope_for_block.get(block.index, 0),
             )
         )
 
@@ -93,7 +92,7 @@ def _parse_control_payload(
     if block.kind is not Kind.MACRO_CONTROL:
         return None
 
-    utilities = block.parsed.options.lookup.get("UTILITIES", "")
+    utilities = block.options.lookup.get("UTILITIES", "")
     token_match = TOKEN_RE.match(utilities)
     if not token_match:
         diagnostics.append(
@@ -101,8 +100,8 @@ def _parse_control_payload(
                 severity="warning",
                 code="unknown-macro-control",
                 message="Macro control block has no recognized token.",
-                block_index=block.parsed.index,
-                span=block.parsed.span,
+                block_index=block.index,
+                span=block.span,
             )
         )
         return None
@@ -160,8 +159,8 @@ def _parse_control_payload(
             severity="warning",
             code="unknown-macro-control",
             message=f"Unknown macro control token {{{token}}}.",
-            block_index=block.parsed.index,
-            span=block.parsed.span,
+            block_index=block.index,
+            span=block.span,
         )
     )
     return None

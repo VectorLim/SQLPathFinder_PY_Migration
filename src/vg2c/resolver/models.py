@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
-from vg2c.frontend.models import BlockOptions, Diagnostic, Kind, ParsedBlock, SourceSpan
+from vg2c.frontend.models import (
+    BlockOptions,
+    ClassifiedBlock,
+    Diagnostic,
+    Kind,
+    ParsedBlock,
+    SourceSpan,
+    copy_dataclass_fields,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,14 +113,30 @@ SqlMacroCall = SqlGetCsvListCall
 
 
 @dataclass(frozen=True, slots=True)
-class ResolvedBlock:
-    parsed: ParsedBlock
-    kind: Kind
+class ResolvedBlock(ClassifiedBlock):
     resolved_options: BlockOptions
     resolved_body: str
     sql_macro_calls: tuple[SqlMacroCall, ...]
     control_payload: MacroControlPayload | None
     scope_id: int
+
+    def __init__(
+        self,
+        classified: ClassifiedBlock,
+        resolved_options: BlockOptions,
+        resolved_body: str,
+        sql_macro_calls: tuple[SqlMacroCall, ...],
+        control_payload: MacroControlPayload | None,
+        scope_id: int,
+    ) -> None:
+        copy_dataclass_fields(classified, self, ClassifiedBlock)
+
+        object.__setattr__(self, "resolved_options", resolved_options)
+        object.__setattr__(self, "resolved_body", resolved_body)
+        object.__setattr__(self, "sql_macro_calls", sql_macro_calls)
+        object.__setattr__(self, "control_payload", control_payload)
+        object.__setattr__(self, "scope_id", scope_id)
+
 
 
 @dataclass(frozen=True, slots=True)
