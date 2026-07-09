@@ -58,6 +58,14 @@ class EmitContext:
             if emitted is not None:
                 return emitted
 
+        if block.kind is Kind.UTILITY:
+            for utility_cls in UtilitySpec._registry.values():
+                if getattr(utility_cls, "handles", ()):
+                    continue
+                emitted = utility_cls.emit_block(block)
+                if emitted is not None:
+                    return emitted
+
         kind_fallbacks = {
             Kind.HTML_REPORT: ("html_report", "pass  # HTML report not translated"),
         }

@@ -13,6 +13,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     option_to_python_expr,
     render_method_call,
     resolve_output_path,
+    split_utility_command,
     strip_quotes,
 )
 from vg2c.kind import Kind
@@ -64,9 +65,7 @@ class FileSystemOps(CheckedUtilitySpec):
     @staticmethod
     def _utility_argv(block) -> list[str]:
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
+        return split_utility_command(text)
 
     @staticmethod
     def _emit_copy_block(block) -> tuple[str, str]:

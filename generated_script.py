@@ -1,21 +1,27 @@
 # SQL statements containing filters:
-# - step_0001_sql_query (Line 1613): filters on c0.facility, c0.start_date
+# - step_0015_sqlite_query (Line 1856): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1984): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 2025): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2191): filters on Flag
+# - step_0055_sql_query (Line 2392): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2415): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
 
 
 from __future__ import annotations
-from abc import ABC
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datasyncx.readers.aries_reader import AriesReader
 from datasyncx.readers.mars_reader import MarsReader
 from email.message import EmailMessage
 from functools import partial
 from pathlib import Path
 from typing import Any
 from typing import Any, Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TYPE_CHECKING
 from typing import Any, ContextManager
 from typing import Any, Iterator
 from typing import Callable
@@ -27,6 +33,7 @@ import os
 import pandas
 import pandas as pd
 import re
+import shlex
 import shutil
 import smtplib
 import subprocess
@@ -43,6 +50,7 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
         return ""
 
     lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
+    lines[0] = lines[0].replace("(CheckedUtilitySpec):", ":")
     lines[0] = lines[0].replace("(UtilitySpec):", ":")
     lines[0] = lines[0].replace(f"({class_name}, UtilitySpec):", f"({class_name}):")
 
@@ -56,7 +64,7 @@ class UtilitySpec(ABC):
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
-    _kind_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
+    _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -76,13 +84,13 @@ class UtilitySpec(ABC):
         UtilitySpec._registry[name] = cls
 
         for handled_kind in tuple(getattr(cls, "handles", ())):
-            owner = UtilitySpec._kind_handlers.get(handled_kind)
+            owner = UtilitySpec._emit_handlers.get(handled_kind)
             if owner is not None and owner is not cls:
                 raise ValueError(
                     "duplicate handler for "
                     f"{handled_kind}: {owner.__name__} and {cls.__name__}"
                 )
-            UtilitySpec._kind_handlers[handled_kind] = cls
+            UtilitySpec._emit_handlers[handled_kind] = cls
 
     @classmethod
     def get_source(cls) -> str:
@@ -94,10 +102,30 @@ class UtilitySpec(ABC):
         return _strip_embed_artifacts(source, cls.__name__)
 
     @staticmethod
-    def emit_block(
-        block: Any
-    ) -> tuple[str, str] | None:
+    def emit_block(block: Any) -> tuple[str, str] | None:
         return None
+
+class CheckedUtilitySpec(UtilitySpec):
+    """Utility that participates in Stage 1 classification."""
+
+    _check_handlers: ClassVar[list[type[CheckedUtilitySpec]]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        if inspect.isabstract(cls):
+            return
+
+        CheckedUtilitySpec._check_handlers.append(cls)
+
+    @staticmethod
+    @abstractmethod
+    def check(options: BlockOptions) -> tuple[Kind, str] | None:
+        raise NotImplementedError
+
+    @classmethod
+    def iter_checks(cls) -> tuple[type[CheckedUtilitySpec], ...]:
+        return tuple(cls._check_handlers)
 
 PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 
@@ -111,6 +139,16 @@ def strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
+def split_utility_command(text: str) -> list[str]:
+    text = text.strip()
+    if not text:
+        return []
+
+    lexer = shlex.shlex(text, posix=False)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return list(lexer)
 
 def option_to_python_expr(value: str | None) -> str:
     if value is None:
@@ -581,11 +619,21 @@ class ExternalProcess:
     utility_name = "external"
 
     @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        utilities = options.lookup.get("UTILITIES")
+        if not utilities:
+            return None
+
+        first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
+        basename = first_token.split("/")[-1].split("\\")[-1].lower()
+        if "run_python_script" in basename or basename.endswith((".bat", ".exe")):
+            return Kind.EXTERNAL_RUN, "/UTILITIES command maps to external run"
+        return None
+
+    @staticmethod
     def _utility_argv(block) -> list[str]:
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
+        return split_utility_command(text)
 
     @staticmethod
     def emit_block(block) -> tuple[str, str] | None:
@@ -658,6 +706,27 @@ class FileSystemOps:
     utility_name = "fs_ops"
 
     @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("WRITE-FILE", "").upper() == "Y":
+            csv_value = options.lookup.get("CSV", "")
+            if csv_value.lower().endswith(".py"):
+                return None
+            return Kind.WRITE_FILE, "/WRITE-FILE=Y"
+
+        utilities = options.lookup.get("UTILITIES")
+        if not utilities:
+            return None
+
+        first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
+        basename = first_token.split("/")[-1].split("\\")[-1].lower()
+
+        if "robocopy" in basename or "spfcopy" in basename:
+            return Kind.FS_COPY, "/UTILITIES command maps to FS copy"
+        if "spfdelete" in basename:
+            return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
+        return None
+
+    @staticmethod
     def emit_block(block) -> tuple[str, str] | None:
         if block.kind is Kind.FS_COPY:
             return FileSystemOps._emit_copy_block(block)
@@ -677,9 +746,7 @@ class FileSystemOps:
     @staticmethod
     def _utility_argv(block) -> list[str]:
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
+        return split_utility_command(text)
 
     @staticmethod
     def _emit_copy_block(block) -> tuple[str, str]:
@@ -772,6 +839,13 @@ class HtmlReport:
     """Utility for generating HTML report files."""
 
     utility_name = "html_report"
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        report = options.lookup.get("REPORT")
+        if report and report.upper().startswith("HTML-"):
+            return Kind.HTML_REPORT, "/REPORT starts with HTML-"
+        return None
 
     def __init__(self) -> None:
         self.styles: dict[str, list[str]] = {}
@@ -950,6 +1024,7 @@ class HtmlReport:
             return rows
 
         import csv
+
         with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
             for row in reader:
@@ -1312,6 +1387,13 @@ class MacroState:
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
 
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        utilities = options.lookup.get("UTILITIES")
+        if utilities and utilities.lstrip().startswith("{"):
+            return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
+        return None
+
     @classmethod
     def normalize_macro_name(cls, raw: str) -> str:
         name = raw.strip()
@@ -1441,8 +1523,77 @@ class MailService:
 
     utility_name = "mail"
 
+    @staticmethod
+    def emit_block(block: Any) -> tuple[str, str] | None:
+        argv = MailService._utility_argv(block)
+        if not MailService._is_mail_utility(argv):
+            return None
+
+        stmt = MailService._emit_send(argv, block.resolved_body)
+        if stmt is None:
+            return _emit_step_source(
+                _step_name(block, "email"),
+                ["pass  # TODO: unsupported email utility command"],
+            )
+        return _emit_step_source(_step_name(block, "email"), [stmt])
+
+    @staticmethod
+    def _utility_argv(block: Any) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "")
+        return split_utility_command(text)
+
+    @staticmethod
+    def _is_mail_utility(argv: list[str]) -> bool:
+        if not argv:
+            return False
+        basename = strip_quotes(argv[0]).split("/")[-1].split("\\")[-1].lower()
+        return "sqlpathfinder_email" in basename
+
+    @staticmethod
+    def _csv_items(value: str) -> list[str]:
+        return [part.strip() for part in strip_quotes(value).split(",") if part.strip()]
+
+    @staticmethod
+    def _list_expr(values: list[str]) -> RawExpr:
+        return RawExpr("[" + ", ".join(option_to_python_expr(v) for v in values) + "]")
+
     @classmethod
-    def _emit_email(cls, ctx, argv: list[str]) -> None:
+    def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
+        payload = argv[1:]
+        if len(payload) >= 5:
+            attachments = cls._csv_items(payload[0])
+            from_addr = strip_quotes(payload[1])
+            subject = payload[2]
+            body = (
+                payload[3]
+                if strip_quotes(payload[3])
+                else (body_fallback or payload[2])
+            )
+            to = payload[4]
+
+            kwargs: dict[str, RawExpr] = {
+                "to": RawExpr(option_to_python_expr(to)),
+                "subject": RawExpr(option_to_python_expr(subject)),
+                "body": RawExpr(option_to_python_expr(body)),
+            }
+            if attachments:
+                kwargs["attachments"] = cls._list_expr(attachments)
+            if from_addr and from_addr.lower() != "self":
+                kwargs["from_addr"] = RawExpr(option_to_python_expr(from_addr))
+
+            return render_method_call("mail", "send", kwargs=kwargs)
+
+        if len(payload) >= 3:
+            return render_method_call(
+                "mail",
+                "send",
+                kwargs={
+                    "to": RawExpr(option_to_python_expr(payload[0])),
+                    "subject": RawExpr(option_to_python_expr(payload[1])),
+                    "body": RawExpr(option_to_python_expr(payload[2])),
+                },
+            )
+
         return None
 
     def send(
@@ -1466,7 +1617,7 @@ class MailService:
         msg["Subject"] = subject
         msg["From"] = sender
         msg["To"] = to
-        msg.set_content(body)
+        msg.set_content(self._resolve_body(body))
 
         for att_path in attachments or []:
             p = Path(att_path)
@@ -1481,10 +1632,27 @@ class MailService:
         with smtplib.SMTP(host, port) as smtp:
             smtp.send_message(msg)
 
+    @staticmethod
+    def _resolve_body(body: str) -> str:
+        path = Path(body)
+        if body and path.exists() and path.is_file():
+            return path.read_text(encoding="utf-8", errors="replace")
+        return body
+
 class PythonEmbed:
     """Utility class for directly embedding Python script blocks."""
 
     utility_name = "py_embed"
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("WRITE-FILE", "").upper() != "Y":
+            return None
+
+        csv_value = options.lookup.get("CSV", "")
+        if csv_value.lower().endswith(".py"):
+            return Kind.PYTHON_EMBED, "/WRITE-FILE=Y targeting .py script"
+        return None
 
     @staticmethod
     def emit_block(block: Any) -> tuple[str, str] | None:
@@ -1500,6 +1668,38 @@ class SqliteEngine:
     utility_name = "sqlite_engine"
 
     _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("OLEDB", "").upper() == "SQLITE":
+            return Kind.SQLITE_QUERY, "/OLEDB=SQLite"
+        if options.lookup.get("ENGINE", "").upper() == "SQLITE":
+            return Kind.SQLITE_QUERY, "/ENGINE=SQLite"
+
+        node = options.lookup.get("NODE", "")
+        engine = options.lookup.get("ENGINE", "")
+        oledb = options.lookup.get("OLEDB", "")
+        if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
+            return None
+
+        if any(
+            SqliteEngine._node_matches(node, token)
+            for token in ("MARS", "OASYS", "ARIES")
+        ):
+            return (
+                Kind.SQL_QUERY,
+                "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
+            )
+        return None
+
+    @staticmethod
+    def _node_matches(node_value: str, token: str) -> bool:
+        node = node_value.upper().strip()
+        return (
+            node.endswith(token)
+            or node.endswith(f".{token}")
+            or f"<<<{token}>>>" in node
+        )
 
     @staticmethod
     def _format_sql_literal(sql: str) -> str:
@@ -1607,352 +1807,731 @@ class SqliteEngine:
         suffix = "sqlite_query" if sqlite else "sql_query"
         return _emit_step_source(_step_name(block, suffix), [stmt])
 
-def step_0000_write_file(ctx) -> None:
-    ctx.write_file(path='path.csv', template='\ncategory,path\nQY_raw_data,\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\QY_Data\nDashboard_data,\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\Data Dashboard\nreference_file,\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard')
+class UnknownUtility:
+    """Emit handler for unrecognised /UTILITIES commands."""
 
-def step_0001_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT /*+  index(c0) */ DISTINCT 
-              c0.qtr AS qtr
-             ,c0.month AS month
-             ,c0.ww AS ww
-             ,To_Char((SELECT min(c000.start_date) FROM @[]@.F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_start_date_raw
-             ,To_Char((SELECT max(c000.end_date) FROM @[]@.F_Calendar c000 where c000.ww=c0.ww),'yyyy-mm-dd hh24:mi:ss') AS ww_end_date_raw
-             ,To_Char(c0.start_date,'yyyy-mm-dd hh24:mi:ss') AS start_date_raw
-             ,To_Char(c0.end_date,'yyyy-mm-dd hh24:mi:ss') AS end_date_raw
-    FROM 
-         @[]@.F_Calendar c0
-    WHERE 
-                  1=1
-     AND      c0.facility = 'A90' 
-     AND      c0.start_date >= TRUNC(SYSDATE) - 365 
-     AND      c0.start_date <= TRUNC(SYSDATE) + 1 
-    ORDER BY
-               6 Asc
-    /*END SQL*/
+    utility_name = "unknown"
 
-    """, output='calendar_ref.csv', reader=MarsReader(), header=['qtr', 'month', 'ww', 'ww_start_date_raw', 'ww_end_date_raw', 'start_date_raw', 'end_date_raw'])
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        return None
 
-def step_0002_python_embed(ctx) -> None:
-
-    import pandas as pd
-    import numpy as np
-
-    data = pd.read_csv(r'calendar_ref.csv')
-
-    data['WW_START_DATE'] = pd.to_datetime(data['WW_START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
-    data['WW_END_DATE'] = pd.to_datetime(data['WW_END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
-    data['START_DATE'] = pd.to_datetime(data['START_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
-    data['END_DATE'] = pd.to_datetime(data['END_DATE_RAW'], errors='coerce') + pd.to_timedelta(0.5, unit='d')
-    ww = (data.groupby('WW', as_index=False)
-              .agg(
-                  START_DATE=('START_DATE', 'min'),
-                  END_DATE=('END_DATE', 'max')
-              )
-          )
-    calendar = pd.merge(ww,data[['WW','MONTH','QTR']],how='left',on=['WW'])
-    calendar = calendar[['QTR','MONTH','WW','START_DATE','END_DATE']]
-    calendar .columns = calendar .columns.str.lower()
-    calendar.to_csv(r'calendar_ref.csv',index=False)
-
-
-def step_0003_external(ctx) -> None:
-    pass  # Python script embedded directly, external run omitted
-
-def step_0004_python_embed(ctx) -> None:
-
-    import pandas as pd
-    from pathlib import Path
-    import shutil
-    import os
-    import numpy as np
-
-    path = pd.read_csv(r'path.csv')
-    raw_data_path = (path.loc[path['category'].str.strip() == 'QY_raw_data', 'path'].iloc[0])
-    dashboard_data_path = (path.loc[path['category'].str.strip() == 'Dashboard_data', 'path'].iloc[0])
-    calendar = pd.read_excel(os.path.join((path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0]),"Reference.xlsx"), sheet_name="calendar")
-    module_goal = pd.read_excel(os.path.join((path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0]),"Reference.xlsx"), sheet_name="module_goal")
-    module_goal.to_csv(r'module_goal.csv',index=False)
-
-    raw_data_path = Path(raw_data_path)
-    dashboard_data_path = Path(dashboard_data_path)
-    yield_folder = Path(raw_data_path) / "Yield"
-    pareto_folder = Path(raw_data_path) / "Pareto"
-    dashboard_data_path.mkdir(parents=True, exist_ok=True)
-    pareto_folder.mkdir(parents=True, exist_ok=True)
-    yield_folder.mkdir(parents=True, exist_ok=True)
-
-    #groupping files to respective folder
-    for file_name in os.listdir(raw_data_path):
-        src = Path(raw_data_path) / file_name
-        dest_yield = yield_folder / file_name
-        dest_pareto = pareto_folder / file_name
-        if not src.is_file():
-            continue
-        if file_name.endswith("_yield.csv"):
-            if dest_yield.exists():
-                dest_yield.unlink()
-            shutil.move(str(src), str(dest_yield))
-        elif file_name.endswith("_pareto.csv"):
-            if dest_pareto.exists():
-                dest_pareto.unlink()
-            shutil.move(str(src), str(dest_pareto))
-
-    #yield
-    yield_data = pd.DataFrame()
-    for file_name in yield_folder.glob("*.csv"):
-        data = pd.read_csv(file_name)
-        data['module'] = file_name.name.split("\\")[-1].split("_")[0]
-        data = data.rename(columns={'diecodename':'prodgroup3'})
-        yield_data = pd.concat([yield_data, data], ignore_index=True)
-    yield_data = pd.merge(yield_data,calendar[['ww','month','qtr']],how='left',on='ww')
-    yield_data = yield_data[['facility','prodgroup3','module','owner','qtr','month','ww','lot','volume','losses']]
-    yield_data = yield_data.drop_duplicates()
-
-    def yield_analyze (data,time_frame,goal):
-        data = (data.groupby(['facility','prodgroup3','module',time_frame,'owner'],as_index=False)
-            .agg(
-                volume = ('volume','sum'),
-                losses = ('losses','sum')
-            )
+    @staticmethod
+    def emit_block(block) -> tuple[str, str] | None:
+        return _emit_step_source(
+            _step_name(block, "utility"),
+            ["pass  # TODO: utility command not classified"],
         )
-        data['yield'] = (1 - data['losses']/data['volume'])
-        data = pd.merge(data,goal[['host_facility','module','area','prodgroup3','forum','owner']],how='left',on=['module','prodgroup3','owner'])
-        data['host_site'] = np.where(
-            data['facility'] == data['host_facility'],
-            'host_site',
-            data['facility']
-        )
-        yield_pivot = data.pivot_table(
-            index=['host_facility',time_frame, 'prodgroup3','module','owner'],
-            columns='host_site',
-            values='yield',
-            aggfunc='first',
-        ).reset_index().fillna(0) 
-        yield_pivot = pd.merge(yield_pivot,goal[['module','prodgroup3','goal','limit','vf_tolerance','forum','area']],how='left',on=['module','prodgroup3'])
 
-        cols = yield_pivot.columns.tolist()
-        #re-order columns
-        after_host = cols[cols.index('host_site') + 1:]   
-        base = [c for c in cols if c not in after_host]   
-        i = base.index('module') + 1                      
-        new_cols = base[:i] + after_host + base[i:]
-        yield_pivot = yield_pivot[new_cols]
+def step_0000_html_report(ctx) -> None:
+    ctx.html_report.run(instance='15507', prompt_text='Step 1-1. Create an HTML Report', app_server_default='atd_atm.hadoop', template='\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8\nTYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nFORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle\nFORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>')
 
-        yield_pivot['host_site_tolerance'] = yield_pivot['host_site'] + yield_pivot['vf_tolerance']
-        cols = yield_pivot.columns.tolist()
-        yield_pivot['site_bic'] =  yield_pivot[cols[cols.index('owner') + 1:cols.index('host_site_tolerance')]].idxmax(axis=1)
-        yield_pivot['yield_bic'] =  yield_pivot[cols[cols.index('owner') + 1:cols.index('host_site_tolerance')]].max(axis=1)
-        yield_pivot['status'] = np.where(
-            yield_pivot['site_bic'] == 'host_site',
-            'BIC',
-            np.where(
-                yield_pivot['host_site_tolerance'] >= yield_pivot['yield_bic'],
-                'Comparable',
-                'Incomparable'
-            )
-        )
-        yield_pivot['yield_goal'] = 1 - yield_pivot['goal']
-        yield_pivot['yield_limit'] = 1 - yield_pivot['limit']
-        yield_pivot['status_goal'] = np.where(
-            yield_pivot['host_site'] >= yield_pivot['yield_goal'],
-            'Meet Goal',
-            np.where(
-                yield_pivot['host_site'] >= yield_pivot['yield_limit'],
-                'Within Limit',
-                'Fail Goal'
-            )
-        )
-        yield_pivot['color'] = None
-        yield_pivot['color_code'] = None
-        yield_pivot['comment'] = None
-        for i in range(len(yield_pivot)):
-            if (yield_pivot.loc[i,'status'] == 'BIC') or (yield_pivot.loc[i,'status'] == 'Comparable') :
-                if (yield_pivot.loc[i,'status_goal'] == 'Meet Goal') or (yield_pivot.loc[i,'status_goal'] == 'Within Limit'):
-                    yield_pivot.loc[i,'color'] = 'Green' #BIC/Comparable and meet goal
-                    yield_pivot.loc[i,'color_code'] = 1
-                    yield_pivot.loc[i,'comment'] = 'Meet VF & Meet Goal'
-                else:
-                    yield_pivot.loc[i,'color'] = 'Yellow' #BIC/Comparable but fail goal
-                    yield_pivot.loc[i,'color_code'] = 2
-                    yield_pivot.loc[i,'comment'] = 'Meet VF & Fail Goal'
-            else:
-                yield_pivot.loc[i,'color'] = 'Red' #Incomparable
-                yield_pivot.loc[i,'color_code'] = 3
-                yield_pivot.loc[i,'comment'] = 'Not Meet VF'
+def step_0001_html_report(ctx) -> None:
+    ctx.html_report.layout(ctx, outlook='N', instance='15507', json_only='N', chart_instance='3450', app_server_default='atd_atm.hadoop', template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:revision.htm\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:Y\n:RR:NO\n:B:Y\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:revision\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><i><font face="arial" size="2.66666666666667" color="silver">ICMPCS_Server_Subplane_CSR_DLA_REV7</font></i>\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>')
 
-        yield_pivot['facility'] = yield_pivot['host_facility']
-        final = pd.merge(data,yield_pivot[['facility','prodgroup3','module',time_frame,'color','color_code','comment','yield_goal','yield_limit']],how='left',on=['facility','prodgroup3','module',time_frame,])    
-        final = final[['facility',time_frame,'prodgroup3','forum','module','area','owner','losses','volume','yield','yield_goal','yield_limit','color','color_code','comment']]
-        final.to_csv(dashboard_data_path / f"{time_frame}_yield.csv", index=False)
+def step_0002_html_report(ctx) -> None:
+    ctx.html_report.delete(instance='15507')
 
-    ww_yield = yield_analyze (yield_data,'ww',module_goal)
-    month_yield = yield_analyze (yield_data,'month',module_goal)
-    qtr_yield = yield_analyze (yield_data,'qtr',module_goal)
+def step_0003_write_file(ctx) -> None:
+    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_SUBPLANE_CSR_DLA,Y,Y,Y')
 
-    #pareto
-    pareto_data = pd.DataFrame()
-    for file_name in pareto_folder.glob("*.csv"):
-        data = pd.read_csv(file_name)
-        data['module'] = file_name.name.split("\\")[-1].split("_")[0]
-        data = data.rename(columns={'diecodename':'prodgroup3'})
-        pareto_data = pd.concat([pareto_data, data], ignore_index=True)
-    pareto_data = pd.merge(pareto_data,calendar[['ww','month','qtr']],how='left',on='ww')
-    pareto_data = pd.merge(pareto_data,module_goal[['module','area','prodgroup3','forum','owner']],how='left',on=['module','prodgroup3','owner'])
-    pareto_data = pareto_data[['facility','prodgroup3','ww','month','qtr','area','module','forum','owner','location','lot','qty','binname','date_STR']]
-    pareto_data = pareto_data.drop_duplicates()
-    pareto_data.to_csv(dashboard_data_path / "pareto.csv", index=False)
-
-
+def step_0004_write_file(ctx) -> None:
+    ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
 
 def step_0005_external(ctx) -> None:
-    pass  # Python script embedded directly, external run omitted
+    ctx.external.run(argv=['getcsrsu.bat'])
 
-def step_0006_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src='\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\QY.csv', dst=str(Path('.\\') / Path('\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\QY.csv').name))
+def step_0007_external(ctx) -> None:
+    ctx.external.run(argv=['setsiteparam.exe', 'KM', ctx.macro.named("SFOLDER"), ctx.macro.named("UNDERDEV"), ctx.macro.named("USECSR"), ctx.macro.named("USEMMS")])
 
-def step_0007_sqlite_query(ctx) -> None:
+def step_0009_fs_delete(ctx) -> None:
+    ctx.fs_ops.delete(paths=['macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt'])
+
+def step_0011_rows_in_file(ctx) -> None:
+    ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
+
+def step_0013_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
+
+def step_0015_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[report_name] AS [REPORT_NAME]
-             ,a0.[eats_reports] AS [EATS_REPORTS]
+    SELECT /*L10*/  DISTINCT 
+              [icmpcs] AS [icmpcs]
+             ,[parameter] AS [parameter]
+             ,Max([value]) AS [value]
+             ,[STARTTS] AS [STARTTS]
+             ,[UTC] AS [UTC]
+             ,[SFOLDER] AS [SFOLDER]
+             ,[FAC] AS [FAC]
+             ,[MARS] AS [MARS]
+             ,[RIMS] AS [RIMS]
+             ,[EIMS] AS [EIMS]
+             ,[ARIES] AS [ARIES]
+             ,[OASYS] AS [OASYS]
+             ,[MMS] AS [MMS]
+             ,[MMSI] AS [MMSI]
+             ,[TOOLLOG] AS [TOOLLOG]
+             ,[VFMARS] AS [VFMARS]
+             ,[VFARIES] AS [VFARIES]
+             ,[CSRPATH] AS [CSRPATH]
+             ,[MMSPATH] AS [MMSPATH]
+             ,[UNDERDEV] AS [UNDERDEV]
+             ,[CSRV] AS [CSRV]
+             ,[MMSV] AS [MMSV]
+    FROM
+    (
+    SELECT /*L0*/  
+              a0.[icmpcs] AS [icmpcs]
+             ,a0.[parameter] AS [parameter]
+             ,a0.[value] AS [value]
+             ,'<<<STARTTS>>>' AS [STARTTS]
+             ,'<<<UTC>>>' AS [UTC]
+             ,'<<<SFOLDER>>>' AS [SFOLDER]
+             ,'<<<FAC>>>' AS [FAC]
+             ,'<<<MARS>>>' AS [MARS]
+             ,'<<<RIMS>>>' AS [RIMS]
+             ,'<<<EIMS>>>' AS [EIMS]
+             ,'<<<ARIES>>>' AS [ARIES]
+             ,'<<<OASYS>>>' AS [OASYS]
+             ,'<<<MMS>>>' AS [MMS]
+             ,'<<<MMSI>>>' AS [MMSI]
+             ,'<<<TOOLLOG>>>' AS [TOOLLOG]
+             ,'<<<VFMARS>>>' AS [VFMARS]
+             ,'<<<VFARIES>>>' AS [VFARIES]
+             ,'<<<CSRPATH>>>' AS [CSRPATH]
+             ,'<<<MMSPATH>>>' AS [MMSPATH]
+             ,'<<<UNDERDEV>>>' AS [UNDERDEV]
+             ,'<<<CSRV>>>' AS [CSRV]
+             ,'<<<MMSV>>>' AS [MMSV]
     FROM 
-    [QY] a0
-    """, output='\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\QY.csv', reader=SqliteReader(), inputs=['QY.csv'], header=['REPORT_NAME', 'EATS_REPORTS'])
+    [ICMPCS_config] a0
+    WHERE
+                  a0.[icmpcs] = 'ICMPCS' 
+    ) t /*L0*/
+    GROUP BY 
+              [icmpcs]
+             ,[parameter]
+             ,[STARTTS]
+             ,[UTC]
+             ,[SFOLDER]
+             ,[FAC]
+             ,[MARS]
+             ,[RIMS]
+             ,[EIMS]
+             ,[ARIES]
+             ,[OASYS]
+             ,[MMS]
+             ,[MMSI]
+             ,[TOOLLOG]
+             ,[VFMARS]
+             ,[VFARIES]
+             ,[CSRPATH]
+             ,[MMSPATH]
+             ,[UNDERDEV]
+             ,[CSRV]
+             ,[MMSV]
+    """, output='configsets.csv', reader=SqliteReader(), inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'SFOLDER', 'FAC', 'MARS', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'CSRPATH', 'MMSPATH', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
 
-def step_0008_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src='"\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\Data', dst=str(Path('Dashboard\\ww_yield.csv"') / Path('"\\\\vnatshfs.intel.com\\VNATAnalysis$\\MAOATM\\VN\\Applications\\AE1Stop\\EPOXY\\Luc\\Yield\\Yield_DashBoard\\Data').name))
+def step_0016_rows_in_file(ctx) -> None:
+    ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
 
-def step_0009_sqlite_query(ctx) -> None:
+def step_0018_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
+
+def step_0022_write_file(ctx) -> None:
+    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
+
+def step_0023_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
+
+def step_0026_write_file(ctx) -> None:
+    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
+
+def step_0027_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
+
+def step_0029_fs_copy(ctx) -> None:
+    ctx.fs_ops.copy(src=str(Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named("SFOLDER") + '\\KM\\HIST') / 'HIST.txt'), dst='.')
+
+def step_0030_rows_in_file(ctx) -> None:
+    ctx.macro.set_named('HIST', str(ctx.csv_io.row_count('HIST.txt')))
+
+def step_0032_write_file(ctx) -> None:
+    ctx.write_file(path='HIST.csv', template='\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00')
+
+def step_0033_write_file(ctx) -> None:
+    ctx.write_file(path='HISTERROR.txt', template='\nERROR\nERROR\nERROR')
+
+def step_0035_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
+
+def step_0042_fs_copy(ctx) -> None:
+    ctx.fs_ops.copy(src='\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv', dst=str(Path('.\\') / Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\ICMPCS_SUBPLANE_CSR_DLA\\Product_Lookup.csv').name))
+
+def step_0043_sqlite_query(ctx) -> None:
+    ctx.run_query(sql="""
+    SELECT /*L0*/ 
+              a0.[site] AS [site]
+             ,a0.[prodgroup3] AS [prodgroup3]
+             ,a0.[upper_y_limit] AS [upper_y_limit]
+             ,a0.[lower_y_limit] AS [lower_y_limit]
+             ,a0.[upper_x_limit] AS [upper_x_limit]
+             ,a0.[lower_x_limit] AS [lower_x_limit]
+    FROM 
+    [Product_Lookup] a0
+    """, output='CSR_Server_OIS_Product_List.csv', reader=SqliteReader(), inputs=['Product_Lookup.csv'], header=['site', 'prodgroup3', 'upper_y_limit', 'lower_y_limit', 'upper_x_limit', 'lower_x_limit'])
+
+def step_0044_sql_query(ctx) -> None:
+    ctx.run_query(sql="""
+    /*BEGIN SQL*/
+    SELECT  DISTINCT 
+              c0.ww AS site_work_week
+             ,f0.lot AS lot
+             ,f0.operation AS operation
+             ,To_Char(f0.load_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+             ,f0.route AS route
+             ,f0.owner AS owner
+             ,f0.oldqty1 AS oldqty1
+             ,f0.newqty1 AS newqty1
+             ,f4.entity AS entity
+             ,p.prodgroup3 AS prodgroup3
+             ,f0.facility AS facility
+    FROM 
+    @[]@.F_LotHist f0
+    INNER JOIN @[]@.F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
+    LEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+    INNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot
+    LEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
+     AND      f4.entity Like 'DIA%' 
+    LEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
+    LEFT JOIN @[]@.F_Entity en ON f4.entity = en.entity AND f4.facility = en.facility
+    WHERE
+    NVL(f0.history_deleted_flag,'N') = 'N'
+    AND      f0.owner <> 'EMPTYFOUP'
+     AND      p.prodgroup3 In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_Product_List.csv', 2, 'p.prodgroup3 In') + """ 
+     AND      f0.operation In ('2090'
+    ,'1960') 
+     AND      f0.load_date >= (SYSDATE - 8/24) 
+     AND      f0.movedout_txn In ('MVOU') 
+    -- Tail A
+    /*END SQL*/
+
+    """, output='CSR_Server_OIS_subplane_lotlist.csv', reader=MarsReader(), header=['site_work_week', 'lot', 'operation', 'out_date', 'route', 'owner', 'oldqty1', 'newqty1', 'entity', 'prodgroup3', 'facility'])
+
+def step_0045_rows_in_file(ctx) -> None:
+    ctx.macro.set_named('LOTS', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_lotlist.csv')))
+
+def step_0047_sql_query(ctx) -> None:
+    ctx.run_query(sql="""
+    /*BEGIN SQL*/
+    SELECT 
+              facility AS facility
+             ,lot AS lot
+             ,operation AS operation
+             ,To_Char(Max(test_end_date),'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+             ,tester_id AS tester_id
+             ,program_name AS program_name
+             ,prodgroup3 AS prodgroup3
+             ,visual_id AS visual_id
+             ,tray_or_carrier_id AS tray_or_carrier_id
+             ,test_name AS test_name
+             ,ws_loss_code AS ws_loss_code
+             ,carrier_x AS carrier_x
+             ,carrier_y AS carrier_y
+             ,lane_number AS lane_number
+             ,Max(Sub_plane) AS Sub_plane
+    FROM
+    (
+    SELECT 
+              facility AS facility
+             ,lot AS lot
+             ,operation AS operation
+             ,test_end_date AS test_end_date
+             ,tester_id AS tester_id
+             ,program_name AS program_name
+             ,prodgroup3 AS prodgroup3
+             ,visual_id AS visual_id
+             ,tray_or_carrier_id AS tray_or_carrier_id
+             ,test_name AS test_name
+             ,ws_loss_code AS ws_loss_code
+             ,carrier_x AS carrier_x
+             ,carrier_y AS carrier_y
+             ,lane_number AS lane_number
+             ,TO_CHAR(  carrier_y   ||   carrier_x   ) AS Socket
+             ,Sub_plane AS Sub_plane
+    FROM
+    (
+    SELECT 
+              facility AS facility
+             ,lot AS lot
+             ,operation AS operation
+             ,test_end_date AS test_end_date
+             ,tester_id AS tester_id
+             ,program_name AS program_name
+             ,prodgroup3 AS prodgroup3
+             ,visual_id AS visual_id
+             ,tray_or_carrier_id AS tray_or_carrier_id
+             ,test_name AS test_name
+             ,ws_loss_code AS ws_loss_code
+             ,carrier_x AS carrier_x
+             ,carrier_y AS carrier_y
+             ,lane_number AS lane_number
+             ,Sub_plane AS Sub_plane
+    FROM
+    (
+    SELECT  
+              ats.facility AS facility
+             ,ats.lot AS lot
+             ,ats.operation AS operation
+             ,ats.test_end_date_time AS test_end_date
+             ,ats.tester_id AS tester_id
+             ,ats.program_name AS program_name
+             ,mp.prodgroup3 AS prodgroup3
+             ,di.visual_id AS visual_id
+             ,dt.testing_session_tray_id AS tray_or_carrier_id
+             ,t.test_name AS test_name
+             ,dt.ws_loss_code AS ws_loss_code
+             ,dt.carrier_x AS carrier_x
+             ,dt.carrier_y AS carrier_y
+             ,dt.lane_number AS lane_number
+             ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS Sub_plane
+    FROM 
+    A_Testing_Session ats
+    LEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot
+    LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility
+    INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+    INNER JOIN A_Test t ON t.t_id = ctr.t_id
+    INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+    AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+    LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+    WHERE ats.data_domain='METROLOGY'
+     AND      (ats.lot In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """) 
+     AND      (ats.operation In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """) 
+     AND      (ats.tester_id LIKE  'OIS%'
+    ) 
+     AND      t.test_name In ('SUBPLANEANGLEX'
+    ,'SUBPLANEANGLEY') 
+     AND      dt.ws_loss_code Is Null  
+    )
+    )
+    )
+    GROUP BY 
+              facility
+             ,lot
+             ,operation
+             ,tester_id
+             ,program_name
+             ,prodgroup3
+             ,visual_id
+             ,tray_or_carrier_id
+             ,test_name
+             ,ws_loss_code
+             ,carrier_x
+             ,carrier_y
+             ,lane_number
+    /*END SQL*/
+
+    """, output='yeuchuan_a0_15507.tab', reader=AriesReader(), crosstab={'row_keys': ['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'carrier_x', 'carrier_y', 'lane_number'], 'header_key': 'test_name', 'value_key': 'Sub_plane'})
+
+def step_0048_sql_query(ctx) -> None:
+    ctx.run_query(sql="""
+    /*BEGIN SQL*/
+    SELECT  DISTINCT 
+              z0.primary_entity AS entity
+             ,z2.bonding_station AS bond_station
+             ,z0.lot AS lot_2
+             ,z8.visual_id AS visual_id_1
+    FROM 
+    ARIES_Views.AV_dia_session z0
+    LEFT JOIN ARIES_Views.AV_dia_media_testing z2 ON z2.lao_start_ww = z0.lao_start_ww AND z2.obj_s_id = z0.obj_s_id
+    INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
+    WHERE
+                  (z0.lot In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """) 
+     AND      z0.tool_entity Like 'TGB%' 
+     AND      (z0.operation In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """) 
+    /*END SQL*/
+
+    """, output='yeuchuan_a2_15507.tab', reader=AriesReader(), header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
+
+def step_0049_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
 
-    DROP INDEX IF EXISTS IdxA1;
-    Create Index IF NOT EXISTS IdxA1 ON [module_goal] ([host_facility]);
+    DROP INDEX IF EXISTS IdxA2;
+    Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_15507] ([visual_id_1]);
 
     SELECT /*L0*/  DISTINCT 
               a0.[facility] AS [facility]
-             ,CASE  WHEN  a0.[facility] =  a1.[host_facility]  THEN 'Yes'  ELSE 'No' END AS [host_site]
+             ,a0.[lot] AS [lot]
+             ,a0.[operation] AS [operation]
+             ,a0.[test_end_date] AS [test_end_date]
+             ,a0.[tester_id] AS [tester_id]
+             ,a0.[program_name] AS [program_name]
+             ,a0.[prodgroup3] AS [prodgroup3]
+             ,a0.[visual_id] AS [visual_id]
+             ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,a0.[ws_loss_code] AS [ws_loss_code]
+             ,a2.[entity] AS [entity]
+             ,a2.[bond_station] AS [bond_station]
+             ,a0.[carrier_x] AS [carrier_x]
+             ,a0.[carrier_y] AS [carrier_y]
+             ,a0.[lane_number] AS [lane_number]
+             ,CrossTab->[[a0,15507;:Y]]
+             ,[entity]  ||  '_' || [bond_station]  ||  '_' ||  [carrier_x]  ||   '_' || [carrier_y] AS [Entity_BS_X_Y]
     FROM 
-               [ww_yield] a0
-     LEFT OUTER JOIN [module_goal] a1
-      ON a0.[facility] = a1.[host_facility]
-    """, output='facility.csv', reader=SqliteReader(), inputs=['ww_yield.csv', 'module_goal.csv'], header=['facility', 'host_site'])
+               [yeuchuan_a0_15507] a0
+     LEFT OUTER JOIN [yeuchuan_a2_15507] a2
+      ON a0.[visual_id] = a2.[visual_id_1]
+    """, output='CSR_Server_OIS_subplane.csv', reader=SqliteReader(), inputs=['yeuchuan_a0_15507.tab', 'yeuchuan_a2_15507.tab'])
 
-def step_0010_sqlite_query(ctx) -> None:
+def step_0050_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[prodgroup3] AS [prodgroup3]
-    FROM 
-    [ww_yield] a0
-    """, output='prodgroup3.csv', reader=SqliteReader(), inputs=['ww_yield.csv'], header=['prodgroup3'])
 
-def step_0011_sqlite_query(ctx) -> None:
+    DROP INDEX IF EXISTS IdxA0;
+    Create Index IF NOT EXISTS IdxA0 ON [CSR_Server_OIS_Product_List] ([prodgroup3],[site]);
+
+    SELECT /*L3*/  DISTINCT 
+              [facility] AS [facility]
+             ,[lot] AS [lot]
+             ,[operation] AS [operation]
+             ,[test_end_date] AS [test_end_date]
+             ,[tester_id] AS [tester_id]
+             ,[program_name] AS [program_name]
+             ,[prodgroup3] AS [prodgroup3]
+             ,[visual_id] AS [visual_id]
+             ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,[ws_loss_code] AS [ws_loss_code]
+             ,[entity] AS [entity]
+             ,[bond_station] AS [bond_station]
+             ,[carrier_x] AS [carrier_x]
+             ,[carrier_y] AS [carrier_y]
+             ,[lane_number] AS [lane_number]
+             ,[entity_bs_x_y] AS [entity_bs_x_y]
+             ,[site] AS [site]
+             ,[prodgroup3_1] AS [prodgroup3_1]
+             ,[sub_plane_x] AS [sub_plane_x]
+             ,[sub_plane_y] AS [sub_plane_y]
+             ,[lower_x_limit] AS [lower_x_limit]
+             ,[upper_x_limit] AS [upper_x_limit]
+             ,[lower_y_limit] AS [lower_y_limit]
+             ,[upper_y_limit] AS [upper_y_limit]
+             ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]
+             ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]
+             ,[Flag] AS [Flag]
+             ,DENSE_RANK () OVER (PARTITION BY  [entity_bs_x_y]  ORDER BY    [visual_id]    ASC) AS [Dense_rank]
+    FROM
+    (
+    SELECT /*L2*/ 
+              [facility] AS [facility]
+             ,[lot] AS [lot]
+             ,[operation] AS [operation]
+             ,[test_end_date] AS [test_end_date]
+             ,[tester_id] AS [tester_id]
+             ,[program_name] AS [program_name]
+             ,[prodgroup3] AS [prodgroup3]
+             ,[visual_id] AS [visual_id]
+             ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,[ws_loss_code] AS [ws_loss_code]
+             ,[entity] AS [entity]
+             ,[bond_station] AS [bond_station]
+             ,[carrier_x] AS [carrier_x]
+             ,[carrier_y] AS [carrier_y]
+             ,[lane_number] AS [lane_number]
+             ,[entity_bs_x_y] AS [entity_bs_x_y]
+             ,[site] AS [site]
+             ,[prodgroup3_1] AS [prodgroup3_1]
+             ,[sub_plane_x] AS [sub_plane_x]
+             ,[sub_plane_y] AS [sub_plane_y]
+             ,[lower_x_limit] AS [lower_x_limit]
+             ,[upper_x_limit] AS [upper_x_limit]
+             ,[lower_y_limit] AS [lower_y_limit]
+             ,[upper_y_limit] AS [upper_y_limit]
+             ,[Set_Limit_plane_X] AS [Set_Limit_plane_X]
+             ,[Set_Limit_plane_Y] AS [Set_Limit_plane_Y]
+             ,CASE  WHEN   [Set_Limit_plane_Y]  = 'Y_flag' AND   [Set_Limit_plane_X]   <> 'X_flag' THEN 'Y_flag_only'  ELSE '' END AS [BeyondY_Flag]
+             ,CASE  WHEN  [Set_Limit_plane_Y]    = 'Y_flag' THEN 'flag'   ELSE '' END AS [Flag]
+    FROM
+    (
+    SELECT /*L1*/ 
+              [facility] AS [facility]
+             ,[lot] AS [lot]
+             ,[operation] AS [operation]
+             ,[test_end_date] AS [test_end_date]
+             ,[tester_id] AS [tester_id]
+             ,[program_name] AS [program_name]
+             ,[prodgroup3] AS [prodgroup3]
+             ,[visual_id] AS [visual_id]
+             ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,[ws_loss_code] AS [ws_loss_code]
+             ,[entity] AS [entity]
+             ,[bond_station] AS [bond_station]
+             ,[carrier_x] AS [carrier_x]
+             ,[carrier_y] AS [carrier_y]
+             ,[lane_number] AS [lane_number]
+             ,[entity_bs_x_y] AS [entity_bs_x_y]
+             ,[site] AS [site]
+             ,[prodgroup3_1] AS [prodgroup3_1]
+             ,[sub_plane_x] AS [sub_plane_x]
+             ,[sub_plane_y] AS [sub_plane_y]
+             ,[lower_x_limit] AS [lower_x_limit]
+             ,[upper_x_limit] AS [upper_x_limit]
+             ,[lower_y_limit] AS [lower_y_limit]
+             ,[upper_y_limit] AS [upper_y_limit]
+             ,CASE WHEN     [sub_plane_x]    Not Between    [lower_x_limit]  AND     [upper_x_limit]  THEN 'X_flag' ELSE '' END AS [Set_Limit_plane_X]
+             ,CASE WHEN     [sub_plane_y]    Not Between    [lower_y_limit]    AND      [upper_y_limit]  THEN 'Y_flag' ELSE '' END AS [Set_Limit_plane_Y]
+    FROM
+    (
+    SELECT /*L0*/  
+              a1.[facility] AS [facility]
+             ,a1.[lot] AS [lot]
+             ,a1.[operation] AS [operation]
+             ,a1.[test_end_date] AS [test_end_date]
+             ,a1.[tester_id] AS [tester_id]
+             ,a1.[program_name] AS [program_name]
+             ,a1.[prodgroup3] AS [prodgroup3]
+             ,a1.[visual_id] AS [visual_id]
+             ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,a1.[ws_loss_code] AS [ws_loss_code]
+             ,a1.[entity] AS [entity]
+             ,a1.[bond_station] AS [bond_station]
+             ,a1.[carrier_x] AS [carrier_x]
+             ,a1.[carrier_y] AS [carrier_y]
+             ,a1.[lane_number] AS [lane_number]
+             ,a1.[entity_bs_x_y] AS [entity_bs_x_y]
+             ,a0.[site] AS [site]
+             ,a0.[prodgroup3] AS [prodgroup3_1]
+             ,CASE WHEN a1.[subplaneanglex] = '' THEN NULL ELSE CAST (a1.[subplaneanglex] AS REAL) END AS [sub_plane_x]
+             ,CASE WHEN a1.[subplaneangley] = '' THEN NULL ELSE CAST (a1.[subplaneangley] AS REAL) END AS [sub_plane_y]
+             ,CASE WHEN a0.[lower_x_limit] = '' THEN NULL ELSE CAST (a0.[lower_x_limit] AS REAL) END AS [lower_x_limit]
+             ,CASE WHEN a0.[upper_x_limit] = '' THEN NULL ELSE CAST (a0.[upper_x_limit] AS REAL) END AS [upper_x_limit]
+             ,CASE WHEN a0.[lower_y_limit] = '' THEN NULL ELSE CAST (a0.[lower_y_limit] AS REAL) END AS [lower_y_limit]
+             ,CASE WHEN a0.[upper_y_limit] = '' THEN NULL ELSE CAST (a0.[upper_y_limit] AS REAL) END AS [upper_y_limit]
+    FROM 
+               [CSR_Server_OIS_subplane] a1
+     LEFT OUTER JOIN [CSR_Server_OIS_Product_List] a0
+      ON a0.[prodgroup3] = a1.[prodgroup3] 
+     AND a0.[site] = a1.[facility] 
+    ) t /*L0*/
+    ) t /*L1*/
+    ) t /*L2*/
+    WHERE
+                  [Flag] = 'flag'
+    """, output='CSR_Server_OIS_subplane_interim.csv', reader=SqliteReader(), inputs=['CSR_Server_OIS_subplane.csv', 'CSR_Server_OIS_Product_List.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'Set_Limit_plane_X', 'Set_Limit_plane_Y', 'Flag', 'Dense_rank'])
+
+def step_0051_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[module] AS [module]
+    SELECT /*L0*/ 
+              a0.[facility] AS [facility]
+             ,a0.[lot] AS [lot]
+             ,a0.[operation] AS [operation]
+             ,a0.[test_end_date] AS [test_end_date]
+             ,a0.[tester_id] AS [tester_id]
+             ,a0.[program_name] AS [program_name]
+             ,a0.[prodgroup3] AS [prodgroup3]
+             ,a0.[visual_id] AS [visual_id]
+             ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
+             ,a0.[ws_loss_code] AS [ws_loss_code]
+             ,a0.[entity] AS [entity]
+             ,a0.[bond_station] AS [bond_station]
+             ,a0.[carrier_x] AS [carrier_x]
+             ,a0.[carrier_y] AS [carrier_y]
+             ,a0.[lane_number] AS [lane_number]
+             ,a0.[entity_bs_x_y] AS [entity_bs_x_y]
+             ,a0.[site] AS [site]
+             ,a0.[prodgroup3_1] AS [prodgroup3_1]
+             ,a0.[sub_plane_x] AS [sub_plane_x]
+             ,a0.[sub_plane_y] AS [sub_plane_y]
+             ,a0.[lower_x_limit] AS [lower_x_limit]
+             ,a0.[upper_x_limit] AS [upper_x_limit]
+             ,a0.[lower_y_limit] AS [lower_y_limit]
+             ,a0.[upper_y_limit] AS [upper_y_limit]
+             ,a0.[set_limit_plane_x] AS [set_limit_plane_x]
+             ,a0.[set_limit_plane_y] AS [set_limit_plane_y]
+             ,a0.[flag] AS [flag]
+             ,a0.[dense_rank] AS [dense_rank]
+             ,'CSR_HOLD' AS [CSR_trigger]
     FROM 
-    [ww_yield] a0
-    """, output='module.csv', reader=SqliteReader(), inputs=['ww_yield.csv'], header=['module'])
+    [CSR_Server_OIS_subplane_interim] a0
+    WHERE
+                  a0.[dense_rank] Not In ('1'
+    ,'2')
+    """, output='CSR_Server_OIS_subplane_output.csv', reader=SqliteReader(), inputs=['CSR_Server_OIS_subplane_interim.csv'], header=['facility', 'lot', 'operation', 'test_end_date', 'tester_id', 'program_name', 'prodgroup3', 'visual_id', 'tray_or_carrier_id', 'ws_loss_code', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'lane_number', 'entity_bs_x_y', 'site', 'prodgroup3_1', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit', 'set_limit_plane_x', 'set_limit_plane_y', 'flag', 'dense_rank', 'CSR_trigger'])
 
-def step_0012_sqlite_query(ctx) -> None:
+def step_0052_rows_in_file(ctx) -> None:
+    ctx.macro.set_named('FLAG', str(ctx.csv_io.row_count('CSR_Server_OIS_subplane_output.csv')))
+
+def step_0054_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[area] AS [area]
+    SELECT /*L0*/ 
+              a0.[facility] AS [facility]
+             ,a0.[lot] AS [lot]
+             ,a0.[prodgroup3] AS [prodgroup3]
+             ,a0.[operation] AS [DLA_operation]
+             ,a0.[entity] AS [entity]
+             ,a0.[bond_station] AS [bond_station]
+             ,a0.[carrier_x] AS [carrier_x]
+             ,a0.[carrier_y] AS [carrier_y]
+             ,a0.[visual_id] AS [visual_id]
+             ,a0.[sub_plane_x] AS [sub_plane_x]
+             ,a0.[sub_plane_y] AS [sub_plane_y]
+             ,a0.[lower_x_limit] AS [lower_x_limit]
+             ,a0.[upper_x_limit] AS [upper_x_limit]
+             ,a0.[lower_y_limit] AS [lower_y_limit]
+             ,a0.[upper_y_limit] AS [upper_y_limit]
     FROM 
-    [ww_yield] a0
-    """, output='area.csv', reader=SqliteReader(), inputs=['ww_yield.csv'], header=['area'])
+    [CSR_Server_OIS_subplane_output] a0
+    WHERE
+     NOT          (a0.[lot] In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)
+    """, output='yeuchuan_SQL_15507.tab', reader=SqliteReader(), inputs=['CSR_Server_OIS_subplane_output.csv'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
-def step_0013_sqlite_query(ctx) -> None:
+def step_0055_sql_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[forum] AS [forum]
+    /*BEGIN SQL*/
+    SELECT 
+              f0.lot AS lot_1
+             ,f0.operation AS Current_operation
+             ,f0.movedin AS movedin
+             ,f0.onrework AS onrework
+             ,f0.onhold AS onhold
+             ,f0.route AS route
+             ,f0.qty1 AS quantity
     FROM 
-    [ww_yield] a0
-    """, output='forum.csv', reader=SqliteReader(), inputs=['ww_yield.csv'], header=['forum'])
+    @[]@.F_Lot f0
+    WHERE f0.owner <> 'EMPTYFOUP'
+     AND      f0.terminated = 'N' 
+     AND      f0.qty1 > 0 
+     AND      f0.src_erase_date Is Null  
+     AND      (f0.lot In 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """) 
+    /*END SQL*/
 
-def step_0014_sqlite_query(ctx) -> None:
+    """, output='yeuchuan_a1_15507.tab', reader=MarsReader(), header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])
+
+def step_0056_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[owner] AS [owner]
+
+    DROP INDEX IF EXISTS IdxA1;
+    Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_15507] ([lot_1]);
+
+    SELECT /*L1*/  DISTINCT 
+              [facility] AS [facility]
+             ,[lot] AS [lot]
+             ,[prodgroup3] AS [prodgroup3]
+             ,[DLA_operation] AS [DLA_operation]
+             ,[lot_1] AS [lot_1]
+             ,[Current_operation] AS [Current_operation]
+             ,[movedin] AS [movedin]
+             ,[onrework] AS [onrework]
+             ,[onhold] AS [onhold]
+             ,[route] AS [route]
+             ,[quantity] AS [quantity]
+             ,[Lot_MVIN_CURE] AS [Lot_MVIN_CURE]
+             ,[entity] AS [entity]
+             ,[bond_station] AS [bond_station]
+             ,[carrier_x] AS [carrier_x]
+             ,[carrier_y] AS [carrier_y]
+             ,[visual_id] AS [visual_id]
+             ,[sub_plane_x] AS [sub_plane_x]
+             ,[sub_plane_y] AS [sub_plane_y]
+             ,[lower_x_limit] AS [lower_x_limit]
+             ,[upper_x_limit] AS [upper_x_limit]
+             ,[lower_y_limit] AS [lower_y_limit]
+             ,[upper_y_limit] AS [upper_y_limit]
+    FROM
+    (
+    SELECT /*L0*/  
+              sql.[facility] AS [facility]
+             ,sql.[lot] AS [lot]
+             ,sql.[prodgroup3] AS [prodgroup3]
+             ,sql.[DLA_operation] AS [DLA_operation]
+             ,a1.[lot_1] AS [lot_1]
+             ,a1.[Current_operation] AS [Current_operation]
+             ,a1.[movedin] AS [movedin]
+             ,a1.[onrework] AS [onrework]
+             ,a1.[onhold] AS [onhold]
+             ,a1.[route] AS [route]
+             ,a1.[quantity] AS [quantity]
+             ,CASE  WHEN [Current_operation]  IN ('1266') THEN 'N' WHEN [Current_operation]  IN ('1501') THEN 'N' WHEN [Current_operation]  IN ('1366') THEN 'N' WHEN [Current_operation]  IN ('1265') THEN 'N' WHEN [Current_operation]  IN ('1264') THEN 'N'  ELSE 'Y' END AS [Lot_MVIN_CURE]
+             ,sql.[entity] AS [entity]
+             ,sql.[bond_station] AS [bond_station]
+             ,sql.[carrier_x] AS [carrier_x]
+             ,sql.[carrier_y] AS [carrier_y]
+             ,sql.[visual_id] AS [visual_id]
+             ,sql.[sub_plane_x] AS [sub_plane_x]
+             ,sql.[sub_plane_y] AS [sub_plane_y]
+             ,sql.[lower_x_limit] AS [lower_x_limit]
+             ,sql.[upper_x_limit] AS [upper_x_limit]
+             ,sql.[lower_y_limit] AS [lower_y_limit]
+             ,sql.[upper_y_limit] AS [upper_y_limit]
     FROM 
-    [ww_yield] a0
-    """, output='owner.csv', reader=SqliteReader(), inputs=['ww_yield.csv'], header=['owner'])
-
-def step_0015_python_embed(ctx) -> None:
-
-    import pandas as pd
-    import os
-
-    # path
-    path = pd.read_csv(r'path.csv')
-    ref = os.path.join(
-        path.loc[path['category'].str.strip().str.lower() == 'reference_file', 'path'].iloc[0],
-        "Reference.xlsx"
-    )
-
-    calendar = pd.read_csv(r"calendar_ref.csv")
-    ww = calendar[['ww']].dropna().drop_duplicates()
-    month = calendar[['month']].dropna().drop_duplicates()
-    qtr = calendar[['qtr']].dropna().drop_duplicates()
-
-    facility = pd.read_csv(r"facility.csv").dropna()
-    prodgroup3 = pd.read_csv(r"prodgroup3.csv").dropna()
-    module = pd.read_csv(r"module.csv").dropna()
-    area = pd.read_csv(r"area.csv").dropna()
-    forum = pd.read_csv(r"forum.csv").dropna()
-    owner = pd.read_csv(r"owner.csv").dropna()
-
-    refresh = pd.DataFrame({'refresh': [pd.Timestamp.now()]})
-
-    mode = "a" if os.path.exists(ref) else "w"
-
-    with pd.ExcelWriter(
-        ref,
-        engine="openpyxl",
-        mode=mode,
-        if_sheet_exists="replace"
-    ) as writer:
-
-        # calendar group
-        ww.to_excel(writer, sheet_name="ww", index=False)
-        month.to_excel(writer, sheet_name="month", index=False)
-        qtr.to_excel(writer, sheet_name="qtr", index=False)
-        calendar.to_excel(writer, sheet_name="calendar", index=False)
-
-        # master tables
-        facility.to_excel(writer, sheet_name="facility", index=False)
-        prodgroup3.to_excel(writer, sheet_name="prodgroup3", index=False)
-        module.to_excel(writer, sheet_name="module", index=False)
-        area.to_excel(writer, sheet_name="area", index=False)
-        forum.to_excel(writer, sheet_name="forum", index=False)
-        owner.to_excel(writer, sheet_name="owner", index=False)
-
-        # refresh
-        refresh.to_excel(writer, sheet_name="refresh", index=False)
-
-def step_0016_external(ctx) -> None:
-    pass  # Python script embedded directly, external run omitted
+               [yeuchuan_SQL_15507] sql
+     LEFT OUTER JOIN [yeuchuan_a1_15507] a1
+      ON sql.[lot] = a1.[lot_1] 
+    ) t /*L0*/
+    WHERE
+                  [Lot_MVIN_CURE] = 'Y'
+    """, output='Data.csv', reader=SqliteReader(), inputs=['yeuchuan_SQL_15507.tab', 'yeuchuan_a1_15507.tab'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity', 'Lot_MVIN_CURE', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
 def run() -> None:
     ctx = PipelineContext()
-    step_0000_write_file(ctx)
-    step_0001_sql_query(ctx)
-    step_0002_python_embed(ctx)
-    step_0003_external(ctx)
-    step_0004_python_embed(ctx)
+    step_0000_html_report(ctx)
+    step_0001_html_report(ctx)
+    step_0002_html_report(ctx)
+    step_0003_write_file(ctx)
+    step_0004_write_file(ctx)
     step_0005_external(ctx)
-    step_0006_fs_copy(ctx)
-    step_0007_sqlite_query(ctx)
-    step_0008_fs_copy(ctx)
-    step_0009_sqlite_query(ctx)
-    step_0010_sqlite_query(ctx)
-    step_0011_sqlite_query(ctx)
-    step_0012_sqlite_query(ctx)
-    step_0013_sqlite_query(ctx)
-    step_0014_sqlite_query(ctx)
-    step_0015_python_embed(ctx)
-    step_0016_external(ctx)
+    for __row in ctx.csv_io.iter('macrotmp.csv'):
+        with ctx.macro.scope(__row):
+            step_0007_external(ctx)
+    step_0009_fs_delete(ctx)
+    for __row in ctx.csv_io.iter('ctime.csv'):
+        with ctx.macro.scope(__row):
+            step_0011_rows_in_file(ctx)
+            if int(ctx.macro.named("CONFIG")) <= int('0'):
+                step_0013_utility(ctx)
+            else:
+                step_0015_sqlite_query(ctx)
+                step_0016_rows_in_file(ctx)
+                if int(ctx.macro.named("CONFIGSETS")) != int('1'):
+                    step_0018_utility(ctx)
+                else:
+                    for __row in ctx.csv_io.iter('configsets.csv'):
+                        with ctx.macro.scope(__row):
+                            if ctx.macro.named("CSRV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
+                                step_0022_write_file(ctx)
+                                step_0023_utility(ctx)
+                            if ctx.macro.named("MMSV") == 'FAIL' and ctx.macro.named("UNDERDEV") == 'N':
+                                step_0026_write_file(ctx)
+                                step_0027_utility(ctx)
+                            step_0029_fs_copy(ctx)
+                            step_0030_rows_in_file(ctx)
+                            if int(ctx.macro.named("HIST")) <= int('0'):
+                                step_0032_write_file(ctx)
+                                step_0033_write_file(ctx)
+                            else:
+                                step_0035_utility(ctx)
+    for __row in ctx.csv_io.iter('configsets.csv'):
+        with ctx.macro.scope(__row):
+            step_0042_fs_copy(ctx)
+            step_0043_sqlite_query(ctx)
+            step_0044_sql_query(ctx)
+            step_0045_rows_in_file(ctx)
+            if int(ctx.macro.named("LOTS")) > int('0'):
+                step_0047_sql_query(ctx)
+                step_0048_sql_query(ctx)
+                step_0049_sqlite_query(ctx)
+                step_0050_sqlite_query(ctx)
+                step_0051_sqlite_query(ctx)
+                step_0052_rows_in_file(ctx)
+                if int(ctx.macro.named("FLAG")) > int('0'):
+                    step_0054_sqlite_query(ctx)
+                    step_0055_sql_query(ctx)
+                    step_0056_sqlite_query(ctx)
 
 if __name__ == "__main__":
     run()

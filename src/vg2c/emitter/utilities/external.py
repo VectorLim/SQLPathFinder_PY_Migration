@@ -13,6 +13,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _step_name,
     option_to_python_expr,
     render_method_call,
+    split_utility_command,
 )
 from vg2c.kind import Kind
 
@@ -38,9 +39,7 @@ class ExternalProcess(CheckedUtilitySpec):
     @staticmethod
     def _utility_argv(block) -> list[str]:
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
-        if not text:
-            return []
-        return text.split()
+        return split_utility_command(text)
 
     @staticmethod
     def emit_block(block) -> tuple[str, str] | None:

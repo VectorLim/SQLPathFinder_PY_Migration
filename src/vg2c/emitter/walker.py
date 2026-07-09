@@ -156,7 +156,7 @@ def _walk_scope(
                 )
                 scope_call = ctx.render_method_call(
                     "ctx",
-                    "macro_scope",
+                    "macro.scope",
                     args=(RawExpr("__row"),),
                 )
                 writer.write(f"for __row in {iter_call}:")

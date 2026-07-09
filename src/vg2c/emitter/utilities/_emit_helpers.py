@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import shlex
 from typing import Any
 
 from vg2c.kind import Kind
@@ -17,6 +18,7 @@ __all__ = [
     "placeholders_to_python_expr",
     "render_method_call",
     "resolve_output_path",
+    "split_utility_command",
     "strip_quotes",
 ]
 
@@ -34,6 +36,17 @@ def strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
+
+def split_utility_command(text: str) -> list[str]:
+    text = text.strip()
+    if not text:
+        return []
+
+    lexer = shlex.shlex(text, posix=False)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return list(lexer)
 
 
 def option_to_python_expr(value: str | None) -> str:
