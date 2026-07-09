@@ -17,7 +17,6 @@ class PythonEmbed(CheckedUtilitySpec):
 
     utility_name = "py_embed"
     handles = (Kind.PYTHON_EMBED,)
-    check_order = 20
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:

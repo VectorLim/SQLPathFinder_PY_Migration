@@ -22,7 +22,6 @@ class ExternalProcess(CheckedUtilitySpec):
 
     utility_name = "external"
     handles = (Kind.EXTERNAL_RUN,)
-    check_order = 50
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:

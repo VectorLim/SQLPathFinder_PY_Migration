@@ -46,4 +46,6 @@ def _classify_one(options: BlockOptions) -> tuple[Kind, str] | None:
         outcome = utility_cls.check(options)
         if outcome is not None:
             return outcome
+    if "UTILITIES" in options.lookup:
+        return Kind.UTILITY, "/UTILITIES present"
     return None

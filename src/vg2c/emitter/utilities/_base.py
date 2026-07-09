@@ -87,7 +87,6 @@ class UtilitySpec(ABC):
 class CheckedUtilitySpec(UtilitySpec):
     """Utility that participates in Stage 1 classification."""
 
-    check_order: ClassVar[int] = 100
     _check_handlers: ClassVar[list[type[CheckedUtilitySpec]]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -105,4 +104,4 @@ class CheckedUtilitySpec(UtilitySpec):
 
     @classmethod
     def iter_checks(cls) -> tuple[type[CheckedUtilitySpec], ...]:
-        return tuple(sorted(cls._check_handlers, key=lambda item: item.check_order))
+        return tuple(cls._check_handlers)

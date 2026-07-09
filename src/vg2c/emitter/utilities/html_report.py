@@ -22,7 +22,6 @@ class HtmlReport(CheckedUtilitySpec):
 
     utility_name = "html_report"
     handles = (Kind.HTML_REPORT,)
-    check_order = 10
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:

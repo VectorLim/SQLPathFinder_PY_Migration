@@ -117,12 +117,10 @@ def test_unknown_rule_emits_diagnostic() -> None:
 
 
 def test_checked_utility_registry_order_matches_classifier_sequence() -> None:
-    assert [cls.__name__ for cls in CheckedUtilitySpec.iter_checks()] == [
-        "HtmlReport",
-        "PythonEmbed",
-        "FileSystemOps",
-        "MacroState",
-        "ExternalProcess",
-        "GenericUtility",
-        "SqliteEngine",
-    ]
+    names = [cls.__name__ for cls in CheckedUtilitySpec.iter_checks()]
+    # PythonEmbed must precede FileSystemOps (both match WRITE-FILE=Y)
+    assert names.index("PythonEmbed") < names.index("FileSystemOps")
+    # MacroState must precede ExternalProcess (both match UTILITIES)
+    assert names.index("MacroState") < names.index("ExternalProcess")
+    # UnknownUtility is in the check registry but always returns None
+    assert "UnknownUtility" in names

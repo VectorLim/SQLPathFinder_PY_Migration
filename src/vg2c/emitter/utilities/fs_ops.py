@@ -22,11 +22,13 @@ class FileSystemOps(CheckedUtilitySpec):
 
     utility_name = "fs_ops"
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
-    check_order = 30
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         if options.lookup.get("WRITE-FILE", "").upper() == "Y":
+            csv_value = options.lookup.get("CSV", "")
+            if csv_value.lower().endswith(".py"):
+                return None
             return Kind.WRITE_FILE, "/WRITE-FILE=Y"
 
         utilities = options.lookup.get("UTILITIES")

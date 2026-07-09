@@ -32,7 +32,6 @@ class MacroState(CheckedUtilitySpec):
 
     utility_name = "macro"
     handles = (Kind.MACRO_CONTROL,)
-    check_order = 40
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")

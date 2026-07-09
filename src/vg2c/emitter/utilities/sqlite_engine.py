@@ -24,7 +24,6 @@ class SqliteEngine(CheckedUtilitySpec):
 
     utility_name = "sqlite_engine"
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
-    check_order = 70
 
     _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 

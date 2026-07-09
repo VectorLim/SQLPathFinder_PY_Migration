@@ -1,4 +1,4 @@
-"""Generic utility fallback for unsupported /UTILITIES commands."""
+"""UnknownUtility - emit handler for unrecognised /UTILITIES commands."""
 
 from __future__ import annotations
 
@@ -7,17 +7,14 @@ from vg2c.emitter.utilities._emit_helpers import _emit_step_source, _step_name
 from vg2c.kind import Kind
 
 
-class GenericUtility(CheckedUtilitySpec):
-    """Fallback owner for utility blocks without a more specific handler."""
+class UnknownUtility(CheckedUtilitySpec):
+    """Emit handler for unrecognised /UTILITIES commands."""
 
-    utility_name = "utility"
+    utility_name = "unknown"
     handles = (Kind.UTILITY,)
-    check_order = 60
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
-        if "UTILITIES" in options.lookup:
-            return Kind.UTILITY, "/UTILITIES present"
         return None
 
     @staticmethod
