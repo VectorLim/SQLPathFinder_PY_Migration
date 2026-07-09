@@ -49,7 +49,9 @@ class HtmlReport(UtilitySpec):
         for key in ["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"]:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(option_to_python_expr(val))
+                kwargs[key.lower().replace("-", "_")] = RawExpr(
+                    option_to_python_expr(val)
+                )
         kwargs["template"] = block.resolved_body
         stmt = ctx.render_method_call("html_report", "defer", kwargs=kwargs)
         return _emit_step_source(_step_name(block, "html_report"), [stmt])
@@ -60,7 +62,9 @@ class HtmlReport(UtilitySpec):
         for key in ["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"]:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(option_to_python_expr(val))
+                kwargs[key.lower().replace("-", "_")] = RawExpr(
+                    option_to_python_expr(val)
+                )
         kwargs["template"] = block.resolved_body
         stmt = ctx.render_method_call("html_report", "run", kwargs=kwargs)
         return _emit_step_source(_step_name(block, "html_report"), [stmt])
@@ -68,10 +72,18 @@ class HtmlReport(UtilitySpec):
     @classmethod
     def _emit_html_layout(cls, ctx, block) -> tuple[str, str]:
         kwargs = {}
-        for key in ["OUTLOOK", "INSTANCE", "JSON-ONLY", "CHART-INSTANCE", "APP_SERVER_DEFAULT"]:
+        for key in [
+            "OUTLOOK",
+            "INSTANCE",
+            "JSON-ONLY",
+            "CHART-INSTANCE",
+            "APP_SERVER_DEFAULT",
+        ]:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(option_to_python_expr(val))
+                kwargs[key.lower().replace("-", "_")] = RawExpr(
+                    option_to_python_expr(val)
+                )
         kwargs["template"] = block.resolved_body
         stmt = ctx.render_method_call(
             "html_report",
@@ -87,7 +99,9 @@ class HtmlReport(UtilitySpec):
         for key in ["INSTANCE"]:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(option_to_python_expr(val))
+                kwargs[key.lower().replace("-", "_")] = RawExpr(
+                    option_to_python_expr(val)
+                )
         stmt = ctx.render_method_call("html_report", "delete", kwargs=kwargs)
         return _emit_step_source(_step_name(block, "html_report"), [stmt])
 
@@ -136,7 +150,7 @@ class HtmlReport(UtilitySpec):
 
     def _build_css(self) -> str:
         css_blocks = []
-        
+
         def get_decls(name: str) -> list[str]:
             raw_decls = self.styles.get(name, [])
             decls = []
@@ -159,14 +173,12 @@ class HtmlReport(UtilitySpec):
         border_decls = get_decls("COLUMN-BORDER")
         if border_decls:
             css_blocks.append(
-                "table.tblin, td.tblin, th, td.alt \n{\n" + "\n".join(border_decls) + "\n}"
+                "table.tblin, td.tblin, th, td.alt \n{\n"
+                + "\n".join(border_decls)
+                + "\n}"
             )
-            css_blocks.append(
-                "td.tblin,th,td.alt\n{\n      padding:5px;\n}"
-            )
-            css_blocks.append(
-                "  table.tblin \n{\n     caption-side:top;\n}"
-            )
+            css_blocks.append("td.tblin,th,td.alt\n{\n      padding:5px;\n}")
+            css_blocks.append("  table.tblin \n{\n     caption-side:top;\n}")
 
         # Column-Headers
         header_decls = get_decls("Column-Headers")
@@ -186,23 +198,17 @@ class HtmlReport(UtilitySpec):
             css_blocks.append(
                 "td.tblin, caption, table.tblin \n{\n" + "\n".join(data_decls) + "\n}"
             )
-            css_blocks.append(
-                "  caption {padding-top:5px;}"
-            )
+            css_blocks.append("  caption {padding-top:5px;}")
 
         # Column-Alt-Row
         alt_decls = get_decls("Column-Alt-Row")
         if alt_decls:
-            css_blocks.append(
-                "td.alt\n{\n" + "\n".join(alt_decls) + "\n}"
-            )
+            css_blocks.append("td.alt\n{\n" + "\n".join(alt_decls) + "\n}")
 
         # At-Top-of-Report
         top_decls = get_decls("At-Top-of-Report")
         if top_decls:
-            css_blocks.append(
-                "p.at-top-of-report\n{\n" + "\n".join(top_decls) + "\n}"
-            )
+            css_blocks.append("p.at-top-of-report\n{\n" + "\n".join(top_decls) + "\n}")
 
         # JQX-All-IChart-Text
         chart_decls = get_decls("JQX-All-IChart-Text")
@@ -211,13 +217,17 @@ class HtmlReport(UtilitySpec):
             if not any("fill" in d for d in chart_decls):
                 extra.append("     fill:black;")
             css_blocks.append(
-                ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {\n" + "\n".join(chart_decls + extra) + "\n}"
+                ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {\n"
+                + "\n".join(chart_decls + extra)
+                + "\n}"
             )
 
         # tr.at-bot-of-report
         if border_decls:
             css_blocks.append(
-                "tr.at-bot-of-report, td.at-bot-of-report {\n" + "\n".join(border_decls) + "\n\n}"
+                "tr.at-bot-of-report, td.at-bot-of-report {\n"
+                + "\n".join(border_decls)
+                + "\n\n}"
             )
 
         # At-Top-of-Col1, 2, 3
@@ -233,10 +243,10 @@ class HtmlReport(UtilitySpec):
     def _render_report(self, report_id: str, ctx: Any) -> str:
         if report_id not in self.deferred_reports:
             return ""
-        
+
         report = self.deferred_reports[report_id]
         template = report["template"] or ""
-        
+
         options = {}
         for line in template.splitlines():
             if not line.strip():
@@ -248,7 +258,7 @@ class HtmlReport(UtilitySpec):
                     val_list = [p for p in parts[2:] if p != ""]
                 else:
                     val_list = [p for p in parts[1:] if p != ""]
-                
+
                 if len(val_list) == 0:
                     options[key] = ""
                 elif len(val_list) == 1:
@@ -316,6 +326,7 @@ class HtmlReport(UtilitySpec):
         rows = []
         if csv_path.is_file() and csv_path.exists():
             import csv
+
             with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
                 reader = csv.DictReader(fh)
                 for r in reader:
@@ -324,22 +335,22 @@ class HtmlReport(UtilitySpec):
 
         table_html = []
         table_html.append('<table class="tblin">')
-        table_html.append('')
-        table_html.append('')
+        table_html.append("")
+        table_html.append("")
         for _ in cols:
-            table_html.append('<COL>')
-        table_html.append('')
-        
-        table_html.append('<thead>')
+            table_html.append("<COL>")
+        table_html.append("")
+
+        table_html.append("<thead>")
         table_html.append("<tr id='colhdr'>")
         for h in headers:
-            table_html.append(f'<th>{h}</th>')
-        table_html.append('</tr>')
-        table_html.append('</thead>')
-        
+            table_html.append(f"<th>{h}</th>")
+        table_html.append("</tr>")
+        table_html.append("</thead>")
+
         for idx, row in enumerate(rows):
             cell_class = "tblin" if idx % 2 == 0 else "alt"
-            table_html.append('<tr>')
+            table_html.append("<tr>")
             for col_idx, col in enumerate(cols):
                 val = row.get(col.lower(), "")
                 val_str = format_value(col, val)
@@ -347,18 +358,20 @@ class HtmlReport(UtilitySpec):
                 table_html.append(
                     f'<td class="{cell_class}" style="vertical-align:{valign};text-align:{halign};">{val_str}</td>'
                 )
-            table_html.append('</tr>')
-            
-        table_html.append('')
-        table_html.append('<tfoot>')
-        table_html.append('</tfoot>')
-        table_html.append('</table>')
-        
+            table_html.append("</tr>")
+
+        table_html.append("")
+        table_html.append("<tfoot>")
+        table_html.append("</tfoot>")
+        table_html.append("</table>")
+
         table_content = "\n".join(table_html)
 
         top_report = options.get("AT-TOP-OF-REPORT")
         if top_report:
-            table_content = f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
+            table_content = (
+                f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
+            )
 
         return table_content
 
@@ -404,7 +417,7 @@ class HtmlReport(UtilitySpec):
                 return self._render_report(report_id, ctx)
             return match.group(0)
 
-        html_content = re.sub(r'HTM:([A-Za-z0-9_]+)', replace_report, html_content)
+        html_content = re.sub(r"HTM:([A-Za-z0-9_]+)", replace_report, html_content)
 
         # Resolve CSS content
         resolved_css_file = css_file if css_file else self.css_file
@@ -464,7 +477,9 @@ class HtmlReport(UtilitySpec):
         else:
             if css_decl:
                 if "</head>" in html_content:
-                    html_content = html_content.replace("</head>", f"{css_decl}\n</head>", 1)
+                    html_content = html_content.replace(
+                        "</head>", f"{css_decl}\n</head>", 1
+                    )
                 else:
                     html_content = f"{css_decl}\n{html_content}"
 

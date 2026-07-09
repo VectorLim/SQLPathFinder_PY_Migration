@@ -12,9 +12,11 @@ class MockCtx:
     def __init__(self):
         self.macro = MockMacro()
 
+
 class MockMacro:
     def substitute_sql(self, val: str) -> str:
         return val
+
     def write_file(self, path: str, content: str) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -31,10 +33,10 @@ def test_html_report_css_synthesis():
         "FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-width:1px\n"
     )
     report.run(template=template)
-    
+
     assert report.css_file == "test_style.css"
     css_content = report._build_css()
-    
+
     assert "background-color:#dbd9c0;" in css_content
     assert "font-size:12px;" in css_content  # auto-appends px
     assert "font-weight:bold;" in css_content
@@ -46,14 +48,14 @@ def test_html_report_css_synthesis():
 
 def test_html_report_defer_and_render(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    
+
     csv_file = tmp_path / "data.csv"
     with csv_file.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["col1", "ce%", "other"])
         writer.writerow(["Val1", "0.852", "Val2"])
         writer.writerow(["Val3", "0.91", ""])
-        
+
     report = HtmlReport()
     report.defer(
         id="REPORT1",
@@ -64,12 +66,12 @@ def test_html_report_defer_and_render(tmp_path, monkeypatch):
             "COLUMN-HEADERS<\\><\\>Col 1<\\>CE Ratio<\\>Other Col\n"
             "COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left\n"
             "AT-TOP-OF-REPORT<\\><\\>Test Top Header\n"
-        )
+        ),
     )
-    
+
     ctx = MockCtx()
     rendered = report._render_report("REPORT1", ctx)
-    
+
     assert "Test Top Header" in rendered
     assert '<table class="tblin">' in rendered
     assert "<th>Col 1</th>" in rendered
@@ -79,18 +81,24 @@ def test_html_report_defer_and_render(tmp_path, monkeypatch):
     assert "85.20%" in rendered  # formats as percentage
     assert "91.00%" in rendered
     assert "&nbsp;" in rendered  # formats empty string
-    
+
     # Check alternating row classes
-    assert '<td class="tblin" style="vertical-align:middle;text-align:left;">Val1</td>' in rendered
-    assert '<td class="alt" style="vertical-align:middle;text-align:left;">Val3</td>' in rendered
+    assert (
+        '<td class="tblin" style="vertical-align:middle;text-align:left;">Val1</td>'
+        in rendered
+    )
+    assert (
+        '<td class="alt" style="vertical-align:middle;text-align:left;">Val3</td>'
+        in rendered
+    )
 
 
 def test_html_report_layout_link(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    
+
     report = HtmlReport()
     report.css_file = "style.css"
-    
+
     template = (
         ":FILE:out.html\n"
         ":CSS:style.css\n"
@@ -99,18 +107,18 @@ def test_html_report_layout_link(tmp_path, monkeypatch):
         "<h1>Hello World</h1>\n"
         "HTM:REPORT1\n"
     )
-    
+
     # Defer an empty report for replacement
     report.deferred_reports["REPORT1"] = {
         "template": "INPUT-FILE<\\>nonexistent.csv\nCOLUMN-DATA<\\><\\>col1\n"
     }
-    
+
     ctx = MockCtx()
     report.layout(ctx, template)
-    
+
     output_file = tmp_path / "out.html"
     assert output_file.exists()
-    
+
     html_content = output_file.read_text(encoding="utf-8")
     assert "<title>Layout Title</title>" in html_content
     assert '<link rel="stylesheet" type="text/css" href="style.css" />' in html_content
@@ -123,9 +131,9 @@ def test_html_report_delete_clears_state():
     report.styles["some-format"] = ["style1"]
     report.css_file = "test.css"
     report.deferred_reports["r1"] = {}
-    
+
     report.delete()
-    
+
     assert not report.styles
     assert report.css_file is None
     assert not report.deferred_reports
@@ -133,21 +141,18 @@ def test_html_report_delete_clears_state():
 
 def test_html_report_layout_email_fallback(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    
+
     report = HtmlReport()
     report.instance = "9999"
-    
-    template = (
-        ":FILE:email:self\n"
-        "HTM:REPORT1\n"
-    )
-    
+
+    template = ":FILE:email:self\n" "HTM:REPORT1\n"
+
     report.deferred_reports["REPORT1"] = {
         "template": "OUTPUT-FILE<\\>my_output.htm\nINPUT-FILE<\\>nonexistent.csv\nCOLUMN-DATA<\\><\\>col1\n"
     }
-    
+
     ctx = MockCtx()
     report.layout(ctx, template)
-    
+
     output_file = tmp_path / "9999_my_output.htm"
     assert output_file.exists()
