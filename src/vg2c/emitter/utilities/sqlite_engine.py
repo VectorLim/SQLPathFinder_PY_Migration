@@ -41,7 +41,10 @@ class SqliteEngine(CheckedUtilitySpec):
         if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
             return None
 
-        if any(SqliteEngine._node_matches(node, token) for token in ("MARS", "OASYS", "ARIES")):
+        if any(
+            SqliteEngine._node_matches(node, token)
+            for token in ("MARS", "OASYS", "ARIES")
+        ):
             return (
                 Kind.SQL_QUERY,
                 "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",

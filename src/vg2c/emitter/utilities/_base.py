@@ -80,9 +80,7 @@ class UtilitySpec(ABC):
         return _strip_embed_artifacts(source, cls.__name__)
 
     @staticmethod
-    def emit_block(
-        block: Any
-    ) -> tuple[str, str] | None:
+    def emit_block(block: Any) -> tuple[str, str] | None:
         return None
 
 

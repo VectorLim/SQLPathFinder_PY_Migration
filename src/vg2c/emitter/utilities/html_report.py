@@ -208,6 +208,7 @@ class HtmlReport(CheckedUtilitySpec):
             return rows
 
         import csv
+
         with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
             for row in reader:
