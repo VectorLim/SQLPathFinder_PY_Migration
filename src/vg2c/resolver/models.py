@@ -138,7 +138,6 @@ class ResolvedBlock(ClassifiedBlock):
         object.__setattr__(self, "scope_id", scope_id)
 
 
-
 @dataclass(frozen=True, slots=True)
 class ResolvedProgram:
     blocks: tuple[ResolvedBlock, ...]

@@ -39,7 +39,7 @@ class FileSystemOps(CheckedUtilitySpec):
         first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
         basename = first_token.split("/")[-1].split("\\")[-1].lower()
 
-        if "robocopy" in basename or "spfcopy" in basename:
+        if "robocopy" in basename or "spfcopy" in basename or "spfrename" in basename:
             return Kind.FS_COPY, "/UTILITIES command maps to FS copy"
         if "spfdelete" in basename:
             return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
@@ -75,6 +75,8 @@ class FileSystemOps(CheckedUtilitySpec):
             stmt = FileSystemOps._emit_robocopy(argv)
         elif "spfcopy" in basename:
             stmt = FileSystemOps._emit_spf_copy(argv)
+        elif "spfrename" in basename:
+            stmt = FileSystemOps._emit_spf_rename(argv)
         else:
             return _emit_step_source(
                 _step_name(block, "fs_copy"),
@@ -119,6 +121,17 @@ class FileSystemOps(CheckedUtilitySpec):
             "fs_ops",
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
+        )
+
+    @staticmethod
+    def _emit_spf_rename(argv: list[str]) -> str:
+        # SPFRename.va arg layout: <source_path> <dest_path>
+        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
+        return render_method_call(
+            "fs_ops",
+            "rename",
+            kwargs={"src": RawExpr(src), "dst": RawExpr(dst)},
         )
 
     @staticmethod

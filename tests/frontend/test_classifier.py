@@ -63,6 +63,7 @@ def test_fs_copy_utility_rule() -> None:
     values = (
         '@EXEDIR@\\RoboCopy.va "a.txt" "src" "dst" "N"',
         '@EXEDIR@\\SPFCopy.bat "a.txt" "dst"',
+        '@EXEDIR@\\SPFRename.va "old.txt" "new.txt"',
     )
     for value in values:
         classified, diagnostics = classify([_block({"UTILITIES": value})])

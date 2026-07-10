@@ -185,7 +185,7 @@ def _collect_explicit_producers(
         if isinstance(payload, RunLoop) and payload.chunk_csv_path:
             producers.append(
                 ProducerRecord(
-                    block_index=block.parsed.index,
+                    block_index=block.index,
                     csv_path=_normalize_csv_path(payload.chunk_csv_path),
                     scope_id=block.scope_id,
                     producer_kind="run-loop-chunk",
