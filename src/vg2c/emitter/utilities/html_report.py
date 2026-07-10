@@ -13,6 +13,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     _step_name,
     option_to_python_expr,
     render_method_call,
+    resolve_path,
 )
 from vg2c.kind import Kind
 
@@ -185,14 +186,7 @@ class HtmlReport(CheckedUtilitySpec):
             resolved = macro.substitute_sql(raw_path)
         else:
             resolved = raw_path
-        path = Path(resolved)
-        if path.is_file() and path.exists():
-            return path
-        if path.is_absolute():
-            rel_path = Path(path.name)
-            if rel_path.is_file() and rel_path.exists():
-                return rel_path
-        return path
+        return resolve_path(resolved)
 
     @staticmethod
     def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import re
 import shlex
 from typing import Any
@@ -9,15 +10,17 @@ from vg2c.kind import Kind
 
 __all__ = [
     "NAMED_PLACEHOLDER_RE",
+    "PLACEHOLDER_RE",
     "RawExpr",
     "_emit_step_source",
     "_render_value",
     "_step_name",
-    "macro_token_to_python_expr",
+    "normalize_macro_name",
     "option_to_python_expr",
     "placeholders_to_python_expr",
     "render_method_call",
     "resolve_output_path",
+    "resolve_path",
     "split_utility_command",
     "strip_quotes",
 ]
@@ -70,15 +73,40 @@ def resolve_output_path(block: Any) -> str:
     return f"step_{block.index:04d}.{suffix}"
 
 
-def _normalize_macro_name(raw: str) -> str:
+def resolve_path(name: str | Path, *, for_write: bool = False) -> Path:
+    path = Path(name)
+    script_file = globals().get("__file__")
+    if script_file and Path(script_file).name != "_emit_helpers.py":
+        base_dir = Path(script_file).resolve().parent
+    else:
+        base_dir = Path.cwd()
+
+    if path.is_absolute():
+        if for_write:
+            return path
+        if path.exists():
+            return path
+        local_fallback = Path(path.name)
+        if local_fallback.exists():
+            return local_fallback
+        return path
+
+    base_path = base_dir / path
+    if for_write:
+        return base_path
+
+    if path.exists():
+        return path
+    if base_path.exists():
+        return base_path
+    return base_path
+
+
+def normalize_macro_name(raw: str) -> str:
     name = raw.strip()
     if name.startswith("<<<") and name.endswith(">>>"):
         name = name[3:-3]
     return name.strip().upper()
-
-
-def macro_token_to_python_expr(raw: str) -> str:
-    return f'ctx.macro.named("{_normalize_macro_name(raw)}")'
 
 
 def placeholders_to_python_expr(text: str) -> str:
@@ -95,7 +123,7 @@ def placeholders_to_python_expr(text: str) -> str:
 
         named = match.group(1)
         if named is not None:
-            parts.append(macro_token_to_python_expr(named))
+            parts.append(render_method_call("macro", "named", args=(normalize_macro_name(named),)))
         else:
             parts.append("ctx.macro.positional()")
 

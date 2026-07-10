@@ -7,7 +7,8 @@ from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import (
     NAMED_PLACEHOLDER_RE,
     RawExpr,
-    macro_token_to_python_expr,
+    normalize_macro_name,
+    render_method_call,
 )
 from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
@@ -46,15 +47,15 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         return _int_expr("0") if numeric else repr("")
 
     if value.startswith("VAR(") and value.endswith(")"):
-        base = macro_token_to_python_expr(value[4:-1].strip())
+        base = render_method_call("macro", "named", args=(normalize_macro_name(value[4:-1].strip()),))
         return _int_expr(base) if numeric else base
 
     if NAMED_PLACEHOLDER_RE.fullmatch(value):
-        base = macro_token_to_python_expr(value)
+        base = render_method_call("macro", "named", args=(normalize_macro_name(value),))
         return _int_expr(base) if numeric else base
 
     if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = macro_token_to_python_expr(value)
+        base = render_method_call("macro", "named", args=(normalize_macro_name(value),))
         return _int_expr(base) if numeric else base
 
     if numeric:

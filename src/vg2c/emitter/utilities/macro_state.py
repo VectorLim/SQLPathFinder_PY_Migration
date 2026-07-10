@@ -14,6 +14,10 @@ from vg2c.emitter.utilities._emit_helpers import (
     _step_name,
     option_to_python_expr,
     render_method_call,
+    normalize_macro_name,
+    resolve_path,
+    PLACEHOLDER_RE,
+    NAMED_PLACEHOLDER_RE,
 )
 from vg2c.kind import Kind
 from vg2c.resolver.models import RowsInFile
@@ -33,8 +37,8 @@ class MacroState(CheckedUtilitySpec):
     utility_name = "macro"
     handles = (Kind.MACRO_CONTROL,)
 
-    PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
-    NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+    PLACEHOLDER_RE = PLACEHOLDER_RE
+    NAMED_PLACEHOLDER_RE = NAMED_PLACEHOLDER_RE
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -42,13 +46,6 @@ class MacroState(CheckedUtilitySpec):
         if utilities and utilities.lstrip().startswith("{"):
             return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
         return None
-
-    @classmethod
-    def normalize_macro_name(cls, raw: str) -> str:
-        name = raw.strip()
-        if name.startswith("<<<") and name.endswith(">>>"):
-            name = name[3:-3]
-        return name.strip().upper()
 
     @staticmethod
     def emit_block(block) -> tuple[str, str] | None:
@@ -95,7 +92,7 @@ class MacroState(CheckedUtilitySpec):
     def substitute_sql(self, sql: str) -> str:
         if "<<<" in sql:
             sql = self.NAMED_PLACEHOLDER_RE.sub(
-                lambda m: self.named(self.normalize_macro_name(m.group(1))),
+                lambda m: self.named(normalize_macro_name(m.group(1))),
                 sql,
             )
         return sql
@@ -104,18 +101,8 @@ class MacroState(CheckedUtilitySpec):
         """Resolve a possibly-macro path with local basename fallback for abs paths."""
         if not raw_path:
             return Path("")
-
         resolved = self.substitute_sql(raw_path)
-        path = Path(resolved)
-        if path.exists() and path.is_file():
-            return path
-
-        if path.is_absolute():
-            rel_path = Path(path.name)
-            if rel_path.exists() and rel_path.is_file():
-                return rel_path
-
-        return path
+        return resolve_path(resolved)
 
     def write_file(
         self,
@@ -124,7 +111,7 @@ class MacroState(CheckedUtilitySpec):
         vars: dict[str, str] | None = None,
     ) -> None:
         def _lookup(name: str) -> str:
-            key = self.normalize_macro_name(name)
+            key = normalize_macro_name(name)
             if vars is not None:
                 return vars.get(key, "")
             return self.named(key)

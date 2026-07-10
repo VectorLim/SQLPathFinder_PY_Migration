@@ -9,6 +9,7 @@ from typing import Any, Iterator
 import pandas
 
 from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._emit_helpers import resolve_path
 
 
 class CsvIO(UtilitySpec):
@@ -16,35 +17,13 @@ class CsvIO(UtilitySpec):
 
     utility_name = "csv_io"
 
-    def __init__(self) -> None:
-        script_file = globals().get("__file__")
-        if script_file:
-            self._base_dir = Path(script_file).resolve().parent
-        else:
-            self._base_dir = Path.cwd()
-
-    def _resolve_path(self, name: str | Path, *, for_write: bool = False) -> Path:
-        path = Path(name)
-        if path.is_absolute():
-            return path
-
-        base_path = self._base_dir / path
-        if for_write:
-            return base_path
-
-        if base_path.exists():
-            return base_path
-        if path.exists():
-            return path
-        return base_path
-
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
 
     def iter(self, name: str) -> Iterator[dict[str, str]]:
         """Yield each data row as a dict keyed by header names."""
-        path = self._resolve_path(name)
+        path = resolve_path(name)
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
             yield from reader
@@ -52,7 +31,7 @@ class CsvIO(UtilitySpec):
     def _read_column(self, path: str, column_ref: int | str) -> list[str]:
         """Read a column from a CSV file."""
         rows: list[str] = []
-        resolved_path = self._resolve_path(path)
+        resolved_path = resolve_path(path)
 
         with resolved_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.reader(fh)
@@ -107,7 +86,7 @@ class CsvIO(UtilitySpec):
 
     def row_count(self, name: str) -> int:
         """Count data rows (excludes header); 0 if file missing."""
-        path = self._resolve_path(name)
+        path = resolve_path(name)
         if not path.exists():
             return 0
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
@@ -125,8 +104,8 @@ class CsvIO(UtilitySpec):
         """
         if chunk_size <= 0:
             chunk_size = 1
-        in_path = self._resolve_path(input_name)
-        out_path = self._resolve_path(chunk_name, for_write=True)
+        in_path = resolve_path(input_name)
+        out_path = resolve_path(chunk_name, for_write=True)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.reader(fh)
@@ -165,7 +144,7 @@ class CsvIO(UtilitySpec):
         - a string         -> written as raw text (no CSV encoding)
         - a Path           -> copied verbatim
         """
-        path = self._resolve_path(name, for_write=True)
+        path = resolve_path(name, for_write=True)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(content, pandas.DataFrame):
