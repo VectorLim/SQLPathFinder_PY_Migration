@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1817): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1945): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 1986): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2152): filters on Flag
-# - step_0055_sql_query (Line 2353): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2376): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1826): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1954): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1995): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2161): filters on Flag
+# - step_0055_sql_query (Line 2362): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2385): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -131,10 +131,6 @@ class CheckedUtilitySpec(UtilitySpec):
     def iter_checks(cls) -> tuple[type[CheckedUtilitySpec], ...]:
         return tuple(cls._check_handlers)
 
-PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
-
-NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
-
 def strip_quotes(value: str) -> str:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
@@ -150,11 +146,6 @@ def split_utility_command(text: str) -> list[str]:
     lexer.whitespace_split = True
     lexer.commenters = ""
     return list(lexer)
-
-def option_to_python_expr(value: str | None) -> str:
-    if value is None:
-        return "None"
-    return placeholders_to_python_expr(strip_quotes(value))
 
 def resolve_output_path(block: Any) -> str:
     csv_value = block.resolved_options.lookup.get("CSV")
@@ -203,36 +194,6 @@ def normalize_macro_name(raw: str) -> str:
     if name.startswith("<<<") and name.endswith(">>>"):
         name = name[3:-3]
     return name.strip().upper()
-
-def placeholders_to_python_expr(text: str) -> str:
-    if not text:
-        return repr("")
-
-    parts: list[str] = []
-    cursor = 0
-
-    for match in PLACEHOLDER_RE.finditer(text):
-        literal = text[cursor : match.start()]
-        if literal:
-            parts.append(repr(literal))
-
-        named = match.group(1)
-        if named is not None:
-            parts.append(f"ctx.macro.named({repr(normalize_macro_name(named))})")
-        else:
-            parts.append("ctx.macro.positional()")
-
-        cursor = match.end()
-
-    tail = text[cursor:]
-    if tail:
-        parts.append(repr(tail))
-
-    if not parts:
-        return repr(text)
-    if len(parts) == 1:
-        return parts[0]
-    return " + ".join(parts)
 
 class CrosstabUtility:
     utility_name = "crosstab"
@@ -606,6 +567,176 @@ class PipelineContext:
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)
 
+class MacroState:
+    """Stack of variable frames; lookups walk top-to-bottom."""
+
+    utility_name = "macro"
+
+    PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
+    NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        utilities = options.lookup.get("UTILITIES")
+        if utilities and utilities.lstrip().startswith("{"):
+            return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
+        return None
+
+    @classmethod
+    def to_py_expr(cls, value: str | None) -> str:
+        if value is None:
+            return "None"
+        return cls.placeholders_to_python_expr(strip_quotes(value))
+
+    @classmethod
+    def placeholders_to_python_expr(cls, text: str) -> str:
+        if not text:
+            return repr("")
+
+        parts: list[str] = []
+        cursor = 0
+
+        for match in cls.PLACEHOLDER_RE.finditer(text):
+            literal = text[cursor : match.start()]
+            if literal:
+                parts.append(repr(literal))
+
+            named = match.group(1)
+            if named is not None:
+                parts.append(
+                    EmitContext.render_method_call(
+                        cls.utility_name,
+                        "named",
+                        args=(repr(normalize_macro_name(named)),),
+                    )
+                )
+            else:
+                parts.append(
+                    EmitContext.render_method_call(
+                        cls.utility_name,
+                        "positional",
+                    )
+                )
+
+            cursor = match.end()
+
+        tail = text[cursor:]
+        if tail:
+            parts.append(repr(tail))
+
+        if not parts:
+            return repr(text)
+        if len(parts) == 1:
+            return parts[0]
+        return " + ".join(parts)
+
+    @classmethod
+    def emit_block(cls, block) -> tuple[str, list[str]] | None:
+        payload = block.control_payload
+        if not isinstance(payload, RowsInFile):
+            return "macro_control", ["pass"]
+
+        csv_path_expr = cls.to_py_expr(payload.csv_path)
+        set_name = payload.var_name.upper()
+        row_count_call = EmitContext.render_method_call(
+            "csv_io",
+            "row_count",
+            args=(csv_path_expr,),
+        )
+        stmt = EmitContext.render_method_call(
+            "macro",
+            "set_named",
+            args=(repr(set_name), f"str({row_count_call})"),
+        )
+        return "rows_in_file", [stmt]
+
+    def __init__(self) -> None:
+        self._stack: list[dict[str, str]] = [{}]
+
+    def named(self, name: str) -> str:
+        key = name.upper()
+        for frame in reversed(self._stack):
+            if key in frame:
+                return frame[key]
+        return ""
+
+    def set_named(self, name: str, value: str) -> None:
+        self._stack[-1][name.upper()] = value
+
+    def positional(self) -> str:
+        frame = self._stack[-1]
+        cursor = frame.get("__cursor__", 0)
+        pos_list: list[str] = frame.get("__positional__", [])  # type: ignore[assignment]
+        if isinstance(pos_list, list) and cursor < len(pos_list):
+            frame["__cursor__"] = cursor + 1
+            return pos_list[cursor]
+        return ""
+
+    def substitute_sql(self, sql: str) -> str:
+        if "<<<" in sql:
+            sql = self.NAMED_PLACEHOLDER_RE.sub(
+                lambda m: self.named(normalize_macro_name(m.group(1))),
+                sql,
+            )
+        return sql
+
+    def resolve_file_path(self, raw_path: str) -> Path:
+        """Resolve a possibly-macro path with local basename fallback for abs paths."""
+        if not raw_path:
+            return Path("")
+        resolved = self.substitute_sql(raw_path)
+        return resolve_path(resolved)
+
+    def write_file(
+        self,
+        path: str,
+        template: str,
+        vars: dict[str, str] | None = None,
+    ) -> None:
+        def _lookup(name: str) -> str:
+            key = normalize_macro_name(name)
+            if vars is not None:
+                return vars.get(key, "")
+            return self.named(key)
+
+        def _replace(match: re.Match[str]) -> str:
+            named = match.group(1)
+            if named is not None:
+                return _lookup(named)
+            return self.positional()
+
+        content = self.PLACEHOLDER_RE.sub(_replace, template)
+        content = content.lstrip("\n")
+
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content, encoding="utf-8")
+
+    def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
+        lhs_val = self.named(lhs) if lhs.startswith("VAR(") else lhs
+        rhs_val = self.named(rhs) if rhs.startswith("VAR(") else rhs
+        return lhs_val == rhs_val
+
+    def push_frame(self, named: dict[str, str] | None = None) -> None:
+        frame: dict[str, str] = {}
+        for k, v in (named or {}).items():
+            if k is None:
+                continue
+            frame[k.upper()] = str(v)
+        self._stack.append(frame)
+
+    def pop_frame(self) -> None:
+        if len(self._stack) > 1:
+            self._stack.pop()
+
+    @contextmanager
+    def scope(self, row: dict[str, str] | None = None) -> Iterator[None]:
+        self.push_frame(named=row)
+        try:
+            yield
+        finally:
+            self.pop_frame()
+
 class MailService:
     """Send email. Reads connection config from environment variables."""
 
@@ -640,7 +771,7 @@ class MailService:
 
     @staticmethod
     def _list_expr(values: list[str]) -> str:
-        return "[" + ", ".join(option_to_python_expr(v) for v in values) + "]"
+        return "[" + ", ".join(MacroState.to_py_expr(v) for v in values) + "]"
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -657,14 +788,14 @@ class MailService:
             to = payload[4]
 
             kwargs: dict[str, str] = {
-                "to": option_to_python_expr(to),
-                "subject": option_to_python_expr(subject),
-                "body": option_to_python_expr(body),
+                "to": MacroState.to_py_expr(to),
+                "subject": MacroState.to_py_expr(subject),
+                "body": MacroState.to_py_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = option_to_python_expr(from_addr)
+                kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
 
             return EmitContext.render_method_call("email", "send", kwargs=kwargs)
 
@@ -673,9 +804,9 @@ class MailService:
                 "email",
                 "send",
                 kwargs={
-                    "to": option_to_python_expr(payload[0]),
-                    "subject": option_to_python_expr(payload[1]),
-                    "body": option_to_python_expr(payload[2]),
+                    "to": MacroState.to_py_expr(payload[0]),
+                    "subject": MacroState.to_py_expr(payload[1]),
+                    "body": MacroState.to_py_expr(payload[2]),
                 },
             )
 
@@ -762,7 +893,7 @@ class ExternalProcess:
 
     @staticmethod
     def _emit_run(argv: list[str]) -> str:
-        expr_items = [option_to_python_expr(token) for token in argv]
+        expr_items = [MacroState.to_py_expr(token) for token in argv]
         argv_expr = "[" + ", ".join(expr_items) + "]"
         return EmitContext.render_method_call(
             "external",
@@ -880,9 +1011,9 @@ class FileSystemOps:
     @staticmethod
     def _emit_robocopy(argv: list[str]) -> str:
         # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
-        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
+        file_name = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        source_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
+        dest_dir = MacroState.to_py_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = f"str(Path({source_dir}) / {file_name})"
         dst_expr = dest_dir
         return EmitContext.render_method_call(
@@ -894,8 +1025,8 @@ class FileSystemOps:
     @staticmethod
     def _emit_spf_copy(argv: list[str]) -> str:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
-        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = src
         dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
         return EmitContext.render_method_call(
@@ -907,8 +1038,8 @@ class FileSystemOps:
     @staticmethod
     def _emit_spf_rename(argv: list[str]) -> str:
         # SPFRename.va arg layout: <source_path> <dest_path>
-        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
+        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr("")
         return EmitContext.render_method_call(
             "fs_ops",
             "rename",
@@ -919,7 +1050,7 @@ class FileSystemOps:
     def _emit_spf_delete(argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        paths_expr = "[" + ", ".join(MacroState.to_py_expr(p) for p in items) + "]"
         return EmitContext.render_method_call(
             "fs_ops",
             "delete",
@@ -992,7 +1123,7 @@ class HtmlReport:
         for key in option_keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = option_to_python_expr(val)
+                kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
         if include_template:
             kwargs["template"] = repr(block.resolved_body)
         stmt = EmitContext.render_method_call(
@@ -1483,128 +1614,6 @@ class HtmlReport:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(html_content, encoding="utf-8")
 
-class MacroState:
-    """Stack of variable frames; lookups walk top-to-bottom."""
-
-    utility_name = "macro"
-
-    PLACEHOLDER_RE = PLACEHOLDER_RE
-    NAMED_PLACEHOLDER_RE = NAMED_PLACEHOLDER_RE
-
-    @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
-        utilities = options.lookup.get("UTILITIES")
-        if utilities and utilities.lstrip().startswith("{"):
-            return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
-        return None
-
-    @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]] | None:
-        payload = block.control_payload
-        if not isinstance(payload, RowsInFile):
-            return "macro_control", ["pass"]
-
-        csv_path_expr = option_to_python_expr(payload.csv_path)
-        set_name = payload.var_name.upper()
-        row_count_call = EmitContext.render_method_call(
-            "csv_io",
-            "row_count",
-            args=(csv_path_expr,),
-        )
-        stmt = EmitContext.render_method_call(
-            "macro",
-            "set_named",
-            args=(repr(set_name), f"str({row_count_call})"),
-        )
-        return "rows_in_file", [stmt]
-
-    def __init__(self) -> None:
-        self._stack: list[dict[str, str]] = [{}]
-
-    def named(self, name: str) -> str:
-        key = name.upper()
-        for frame in reversed(self._stack):
-            if key in frame:
-                return frame[key]
-        return ""
-
-    def set_named(self, name: str, value: str) -> None:
-        self._stack[-1][name.upper()] = value
-
-    def positional(self) -> str:
-        frame = self._stack[-1]
-        cursor = frame.get("__cursor__", 0)
-        pos_list: list[str] = frame.get("__positional__", [])  # type: ignore[assignment]
-        if isinstance(pos_list, list) and cursor < len(pos_list):
-            frame["__cursor__"] = cursor + 1
-            return pos_list[cursor]
-        return ""
-
-    def substitute_sql(self, sql: str) -> str:
-        if "<<<" in sql:
-            sql = self.NAMED_PLACEHOLDER_RE.sub(
-                lambda m: self.named(normalize_macro_name(m.group(1))),
-                sql,
-            )
-        return sql
-
-    def resolve_file_path(self, raw_path: str) -> Path:
-        """Resolve a possibly-macro path with local basename fallback for abs paths."""
-        if not raw_path:
-            return Path("")
-        resolved = self.substitute_sql(raw_path)
-        return resolve_path(resolved)
-
-    def write_file(
-        self,
-        path: str,
-        template: str,
-        vars: dict[str, str] | None = None,
-    ) -> None:
-        def _lookup(name: str) -> str:
-            key = normalize_macro_name(name)
-            if vars is not None:
-                return vars.get(key, "")
-            return self.named(key)
-
-        def _replace(match: re.Match[str]) -> str:
-            named = match.group(1)
-            if named is not None:
-                return _lookup(named)
-            return self.positional()
-
-        content = self.PLACEHOLDER_RE.sub(_replace, template)
-        content = content.lstrip("\n")
-
-        out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(content, encoding="utf-8")
-
-    def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
-        lhs_val = self.named(lhs) if lhs.startswith("VAR(") else lhs
-        rhs_val = self.named(rhs) if rhs.startswith("VAR(") else rhs
-        return lhs_val == rhs_val
-
-    def push_frame(self, named: dict[str, str] | None = None) -> None:
-        frame: dict[str, str] = {}
-        for k, v in (named or {}).items():
-            if k is None:
-                continue
-            frame[k.upper()] = str(v)
-        self._stack.append(frame)
-
-    def pop_frame(self) -> None:
-        if len(self._stack) > 1:
-            self._stack.pop()
-
-    @contextmanager
-    def scope(self, row: dict[str, str] | None = None) -> Iterator[None]:
-        self.push_frame(named=row)
-        try:
-            yield
-        finally:
-            self.pop_frame()
-
 class PythonEmbed:
     """Utility class for directly embedding Python script blocks."""
 
@@ -1689,7 +1698,7 @@ class SqliteEngine:
                 parts.append(SqliteEngine._format_sql_literal(match.group(0)))
             else:
                 call = block.sql_macro_calls[call_index]
-                csv_path_expr = option_to_python_expr(call.csv_path)
+                csv_path_expr = MacroState.to_py_expr(call.csv_path)
                 parts.append(
                     EmitContext.render_method_call(
                         "csv_io",

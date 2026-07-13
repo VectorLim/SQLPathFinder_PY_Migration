@@ -8,19 +8,14 @@ from typing import Any
 from vg2c.kind import Kind
 
 __all__ = [
-    "NAMED_PLACEHOLDER_RE",
-    "PLACEHOLDER_RE",
     "normalize_macro_name",
-    "option_to_python_expr",
-    "placeholders_to_python_expr",
     "resolve_output_path",
     "resolve_path",
     "split_utility_command",
     "strip_quotes",
 ]
 
-PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
-NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+
 
 
 def strip_quotes(value: str) -> str:
@@ -40,11 +35,6 @@ def split_utility_command(text: str) -> list[str]:
     lexer.commenters = ""
     return list(lexer)
 
-
-def option_to_python_expr(value: str | None) -> str:
-    if value is None:
-        return "None"
-    return placeholders_to_python_expr(strip_quotes(value))
 
 
 def resolve_output_path(block: Any) -> str:
@@ -97,33 +87,3 @@ def normalize_macro_name(raw: str) -> str:
         name = name[3:-3]
     return name.strip().upper()
 
-
-def placeholders_to_python_expr(text: str) -> str:
-    if not text:
-        return repr("")
-
-    parts: list[str] = []
-    cursor = 0
-
-    for match in PLACEHOLDER_RE.finditer(text):
-        literal = text[cursor : match.start()]
-        if literal:
-            parts.append(repr(literal))
-
-        named = match.group(1)
-        if named is not None:
-            parts.append(f"ctx.macro.named({repr(normalize_macro_name(named))})")
-        else:
-            parts.append("ctx.macro.positional()")
-
-        cursor = match.end()
-
-    tail = text[cursor:]
-    if tail:
-        parts.append(repr(tail))
-
-    if not parts:
-        return repr(text)
-    if len(parts) == 1:
-        return parts[0]
-    return " + ".join(parts)

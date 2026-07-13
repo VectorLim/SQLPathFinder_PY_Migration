@@ -11,8 +11,8 @@ from typing import Any
 
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     split_utility_command,
     strip_quotes,
 )
@@ -53,7 +53,7 @@ class MailService(UtilitySpec):
 
     @staticmethod
     def _list_expr(values: list[str]) -> str:
-        return "[" + ", ".join(option_to_python_expr(v) for v in values) + "]"
+        return "[" + ", ".join(MacroState.to_py_expr(v) for v in values) + "]"
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -70,14 +70,14 @@ class MailService(UtilitySpec):
             to = payload[4]
 
             kwargs: dict[str, str] = {
-                "to": option_to_python_expr(to),
-                "subject": option_to_python_expr(subject),
-                "body": option_to_python_expr(body),
+                "to": MacroState.to_py_expr(to),
+                "subject": MacroState.to_py_expr(subject),
+                "body": MacroState.to_py_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = option_to_python_expr(from_addr)
+                kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
 
             return EmitContext.render_method_call("email", "send", kwargs=kwargs)
 
@@ -86,9 +86,9 @@ class MailService(UtilitySpec):
                 "email",
                 "send",
                 kwargs={
-                    "to": option_to_python_expr(payload[0]),
-                    "subject": option_to_python_expr(payload[1]),
-                    "body": option_to_python_expr(payload[2]),
+                    "to": MacroState.to_py_expr(payload[0]),
+                    "subject": MacroState.to_py_expr(payload[1]),
+                    "body": MacroState.to_py_expr(payload[2]),
                 },
             )
 

@@ -8,8 +8,8 @@ from functools import partial
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     resolve_output_path,
     strip_quotes,
 )
@@ -81,7 +81,7 @@ class SqliteEngine(CheckedUtilitySpec):
                 parts.append(SqliteEngine._format_sql_literal(match.group(0)))
             else:
                 call = block.sql_macro_calls[call_index]
-                csv_path_expr = option_to_python_expr(call.csv_path)
+                csv_path_expr = MacroState.to_py_expr(call.csv_path)
                 parts.append(
                     EmitContext.render_method_call(
                         "csv_io",

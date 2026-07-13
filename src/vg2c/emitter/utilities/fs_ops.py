@@ -7,8 +7,8 @@ from pathlib import Path
 
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     resolve_output_path,
     split_utility_command,
     strip_quotes,
@@ -91,9 +91,9 @@ class FileSystemOps(CheckedUtilitySpec):
     @staticmethod
     def _emit_robocopy(argv: list[str]) -> str:
         # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
-        file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
+        file_name = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        source_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
+        dest_dir = MacroState.to_py_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = f"str(Path({source_dir}) / {file_name})"
         dst_expr = dest_dir
         return EmitContext.render_method_call(
@@ -105,8 +105,8 @@ class FileSystemOps(CheckedUtilitySpec):
     @staticmethod
     def _emit_spf_copy(argv: list[str]) -> str:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
-        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
+        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = src
         dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
         return EmitContext.render_method_call(
@@ -118,8 +118,8 @@ class FileSystemOps(CheckedUtilitySpec):
     @staticmethod
     def _emit_spf_rename(argv: list[str]) -> str:
         # SPFRename.va arg layout: <source_path> <dest_path>
-        src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
+        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
+        dst = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr("")
         return EmitContext.render_method_call(
             "fs_ops",
             "rename",
@@ -130,7 +130,7 @@ class FileSystemOps(CheckedUtilitySpec):
     def _emit_spf_delete(argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        paths_expr = "[" + ", ".join(MacroState.to_py_expr(p) for p in items) + "]"
         return EmitContext.render_method_call(
             "fs_ops",
             "delete",

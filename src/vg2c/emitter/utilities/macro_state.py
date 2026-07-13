@@ -10,11 +10,9 @@ from typing import Iterator, Protocol
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     normalize_macro_name,
     resolve_path,
-    PLACEHOLDER_RE,
-    NAMED_PLACEHOLDER_RE,
+    strip_quotes,
 )
 from vg2c.kind import Kind
 from vg2c.resolver.models import RowsInFile
@@ -34,8 +32,8 @@ class MacroState(CheckedUtilitySpec):
     utility_name = "macro"
     handles = (Kind.MACRO_CONTROL,)
 
-    PLACEHOLDER_RE = PLACEHOLDER_RE
-    NAMED_PLACEHOLDER_RE = NAMED_PLACEHOLDER_RE
+    PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
+    NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -45,13 +43,61 @@ class MacroState(CheckedUtilitySpec):
         return None
 
     @classmethod
+    def to_py_expr(cls, value: str | None) -> str:
+        if value is None:
+            return "None"
+        return cls.placeholders_to_python_expr(strip_quotes(value))
+
+    @classmethod
+    def placeholders_to_python_expr(cls, text: str) -> str:
+        if not text:
+            return repr("")
+
+        parts: list[str] = []
+        cursor = 0
+
+        for match in cls.PLACEHOLDER_RE.finditer(text):
+            literal = text[cursor : match.start()]
+            if literal:
+                parts.append(repr(literal))
+
+            named = match.group(1)
+            if named is not None:
+                parts.append(
+                    EmitContext.render_method_call(
+                        cls.utility_name,
+                        "named",
+                        args=(repr(normalize_macro_name(named)),),
+                    )
+                )
+            else:
+                parts.append(
+                    EmitContext.render_method_call(
+                        cls.utility_name,
+                        "positional",
+                    )
+                )
+
+            cursor = match.end()
+
+        tail = text[cursor:]
+        if tail:
+            parts.append(repr(tail))
+
+        if not parts:
+            return repr(text)
+        if len(parts) == 1:
+            return parts[0]
+        return " + ".join(parts)
+
+    @classmethod
     @EmitContext.step_emitter
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
         payload = block.control_payload
         if not isinstance(payload, RowsInFile):
             return "macro_control", ["pass"]
 
-        csv_path_expr = option_to_python_expr(payload.csv_path)
+        csv_path_expr = cls.to_py_expr(payload.csv_path)
         set_name = payload.var_name.upper()
         row_count_call = EmitContext.render_method_call(
             "csv_io",

@@ -8,8 +8,8 @@ from pathlib import Path
 
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     split_utility_command,
 )
 from vg2c.kind import Kind
@@ -55,7 +55,7 @@ class ExternalProcess(CheckedUtilitySpec):
 
     @staticmethod
     def _emit_run(argv: list[str]) -> str:
-        expr_items = [option_to_python_expr(token) for token in argv]
+        expr_items = [MacroState.to_py_expr(token) for token in argv]
         argv_expr = "[" + ", ".join(expr_items) + "]"
         return EmitContext.render_method_call(
             "external",

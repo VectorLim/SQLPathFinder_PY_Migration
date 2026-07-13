@@ -5,9 +5,9 @@ import re
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import (
-    NAMED_PLACEHOLDER_RE,
     normalize_macro_name,
 )
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
@@ -50,7 +50,7 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         )
         return _int_expr(base) if numeric else base
 
-    if NAMED_PLACEHOLDER_RE.fullmatch(value):
+    if MacroState.NAMED_PLACEHOLDER_RE.fullmatch(value):
         base = EmitContext.render_method_call(
             "macro", "named", args=(repr(normalize_macro_name(value)),)
         )

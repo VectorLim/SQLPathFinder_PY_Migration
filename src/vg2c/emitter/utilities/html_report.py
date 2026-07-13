@@ -8,8 +8,8 @@ from typing import Any
 
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
-    option_to_python_expr,
     resolve_path,
 )
 from vg2c.kind import Kind
@@ -63,7 +63,7 @@ class HtmlReport(CheckedUtilitySpec):
         for key in option_keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = option_to_python_expr(val)
+                kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
         if include_template:
             kwargs["template"] = repr(block.resolved_body)
         stmt = EmitContext.render_method_call(
