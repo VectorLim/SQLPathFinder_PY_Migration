@@ -9,6 +9,7 @@ from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
+    resolve_path,
     resolve_output_path,
     split_utility_command,
     strip_quotes,
@@ -142,6 +143,6 @@ class FileSystemOps(CheckedUtilitySpec):
 
     @emittable
     def write_file(self, path: str | Path, content: str) -> None:
-        out = Path(path)
+        out = resolve_path(path, True)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(content, encoding="utf-8")

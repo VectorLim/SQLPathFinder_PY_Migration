@@ -36,27 +36,6 @@ class EmitContext:
             self.imports.add(f"import {module}")
 
     @staticmethod
-    def render_method_call(
-        utility_name: str,
-        method_name: str,
-        *,
-        args: tuple[Any, ...] = (),
-        kwargs: dict[str, Any] | None = None,
-    ) -> str:
-        """Render a Python method-call expression for the generated script."""
-
-        def _render_value(value: Any) -> str:
-            if isinstance(value, str):
-                return value
-            return repr(value)
-
-        receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
-        parts: list[str] = [_render_value(arg) for arg in args]
-        for key, value in (kwargs or {}).items():
-            parts.append(f"{key}={_render_value(value)}")
-        return f"{receiver}.{method_name}({', '.join(parts)})"
-
-    @staticmethod
     def _step_name(block: Any, suffix: str) -> str:
         return f"step_{block.index:04d}_{suffix}"
 
@@ -196,6 +175,27 @@ class emittable(Generic[P, R]):
             return EmittableMethod(self.func, owner)
         return BoundEmittableMethod(self.func, instance, owner)
 
+    @staticmethod
+    def render_method_call(
+        utility_name: str,
+        method_name: str,
+        *,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> str:
+        """Render a Python method-call expression for the generated script."""
+
+        def _render_value(value: Any) -> str:
+            if isinstance(value, str):
+                return value
+            return repr(value)
+
+        receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
+        parts: list[str] = [_render_value(arg) for arg in args]
+        for key, value in (kwargs or {}).items():
+            parts.append(f"{key}={_render_value(value)}")
+        return f"{receiver}.{method_name}({', '.join(parts)})"
+
 
 class EmittableMethod(Generic[P, R]):
     """Unbound emittable method descriptor wrapper (accessed via Class)."""
@@ -211,7 +211,7 @@ class EmittableMethod(Generic[P, R]):
     def render(self, *args: Any, **kwargs: Any) -> str:
         """Render the Python method call statement string for emission."""
         utility_name = getattr(self.owner, "utility_name", self.owner.__name__.lower())
-        return EmitContext.render_method_call(
+        return self.owner.render_method_call(
             utility_name=utility_name,
             method_name=self.func.__name__,
             args=args,
@@ -234,7 +234,7 @@ class BoundEmittableMethod(Generic[P, R]):
     def render(self, *args: Any, **kwargs: Any) -> str:
         """Render the Python method call statement string for emission."""
         utility_name = getattr(self.owner, "utility_name", self.owner.__name__.lower())
-        return EmitContext.render_method_call(
+        return self.owner.render_method_call(
             utility_name=utility_name,
             method_name=self.func.__name__,
             args=args,

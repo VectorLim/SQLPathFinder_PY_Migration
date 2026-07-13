@@ -11,44 +11,46 @@ from vg2c.emitter.utilities.pipeline_context import PipelineContext
 
 PIPELINE_CONTEXT_SNIPPET = PipelineContext.get_source()
 
-# --- MacroState.write_file ---
+# --- MacroState.substitute and FileSystemOps/PipelineContext write_file ---
 
 
-def test_write_file_plain(tmp_path):
-    out = str(tmp_path / "out.txt")
+def test_substitute_plain():
     m = MacroState()
-    m.write_file(out, "hello world", vars=None)
-    assert Path(out).read_text(encoding="utf-8") == "hello world"
+    assert m.substitute("hello world", vars=None) == "hello world"
 
 
-def test_write_file_substitutes_from_vars(tmp_path):
-    out = str(tmp_path / "out.txt")
+def test_substitute_substitutes_from_vars():
     m = MacroState()
-    m.write_file(out, "hi <<<NAME>>>", vars={"NAME": "Alice"})
-    assert "Alice" in Path(out).read_text(encoding="utf-8")
+    assert m.substitute("hi <<<NAME>>>", vars={"NAME": "Alice"}) == "hi Alice"
 
 
-def test_write_file_substitutes_from_macro_state(tmp_path):
+def test_substitute_substitutes_from_macro_state():
     m = MacroState()
     m.set_named("GREETING", "Hello")
-    out = str(tmp_path / "out.txt")
-    m.write_file(out, "<<<GREETING>>> world", vars=None)
-    assert Path(out).read_text(encoding="utf-8") == "Hello world"
+    assert m.substitute("<<<GREETING>>> world", vars=None) == "Hello world"
 
 
-def test_write_file_vars_take_priority_over_macro(tmp_path):
+def test_substitute_vars_take_priority_over_macro():
     m = MacroState()
     m.set_named("X", "from_macro")
-    out = str(tmp_path / "out.txt")
-    m.write_file(out, "<<<X>>>", vars={"X": "from_vars"})
-    assert Path(out).read_text(encoding="utf-8") == "from_vars"
+    assert m.substitute("<<<X>>>", vars={"X": "from_vars"}) == "from_vars"
 
 
-def test_write_file_auto_mkdir(tmp_path):
+def test_fs_ops_write_file_auto_mkdir(tmp_path):
+    from vg2c.emitter.utilities.fs_ops import FileSystemOps
     out = str(tmp_path / "a" / "b" / "c.txt")
-    m = MacroState()
-    m.write_file(out, "x", vars=None)
+    fs = FileSystemOps()
+    fs.write_file(out, "x")
     assert Path(out).exists()
+    assert Path(out).read_text(encoding="utf-8") == "x"
+
+
+def test_pipeline_context_write_file(tmp_path):
+    ctx = PipelineContext()
+    out = str(tmp_path / "ctx_out.txt")
+    ctx.macro.set_named("USER", "Bob")
+    ctx.write_file(out, "hello <<<USER>>>")
+    assert Path(out).read_text(encoding="utf-8") == "hello Bob"
 
 
 def test_pipeline_context_snippet_includes_datasyncx_reader_logic():
@@ -70,7 +72,7 @@ def test_run_query_reads_datasyncx_and_lowercases_columns():
             return FakeResult()
 
     class FakeMacro:
-        def substitute_sql(self, sql: str) -> str:
+        def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
             return sql.replace("<<<X>>>", "42")
 
     class FakeCsvIo:
@@ -97,7 +99,7 @@ def test_run_query_reads_datasyncx_and_lowercases_columns():
 
 def test_run_query_requires_reader_behavior():
     class FakeMacro:
-        def substitute_sql(self, sql: str) -> str:
+        def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
             return sql
 
     ctx = object.__new__(PipelineContext)

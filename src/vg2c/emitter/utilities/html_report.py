@@ -176,13 +176,8 @@ class HtmlReport(CheckedUtilitySpec):
         if not raw_path:
             return Path("")
         if ctx and hasattr(ctx, "macro"):
-            macro = ctx.macro
-            if hasattr(macro, "resolve_file_path"):
-                return macro.resolve_file_path(raw_path)
-            resolved = macro.substitute_sql(raw_path)
-        else:
-            resolved = raw_path
-        return resolve_path(resolved)
+            return ctx.macro.resolve_file_path(raw_path)
+        return resolve_path(raw_path)
 
     @staticmethod
     def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:
@@ -546,12 +541,12 @@ class HtmlReport(CheckedUtilitySpec):
         if ctx and hasattr(ctx, "write_file"):
             resolved_path = out_filename
             if hasattr(ctx, "macro"):
-                resolved_path = ctx.macro.substitute_sql(out_filename)
+                resolved_path = ctx.macro.substitute(out_filename)
             ctx.write_file(resolved_path, html_content)
-        elif ctx and hasattr(ctx, "macro"):
-            resolved_path = ctx.macro.substitute_sql(out_filename)
-            ctx.macro.write_file(resolved_path, html_content)
         else:
-            out_path = Path(out_filename)
+            resolved_path = out_filename
+            if ctx and hasattr(ctx, "macro"):
+                resolved_path = ctx.macro.substitute(out_filename)
+            out_path = Path(resolved_path)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(html_content, encoding="utf-8")

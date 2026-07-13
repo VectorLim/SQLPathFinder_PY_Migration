@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1804): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1932): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 1973): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2139): filters on Flag
-# - step_0055_sql_query (Line 2340): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2363): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1791): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1919): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1960): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2126): filters on Flag
+# - step_0055_sql_query (Line 2327): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2350): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -108,13 +108,13 @@ class UtilitySpec(ABC):
                 func = raw_emit_block
                 is_class_method = False
 
-            def wrapped_emit_block(c: type[UtilitySpec], block: Any, *args: Any, **kwargs: Any) -> Any:
+            def wrapped_emit_block(cls: type[UtilitySpec], block: Any, *args: Any, **kwargs: Any) -> Any:
                 if is_class_method:
-                    result = func(c, block, *args, **kwargs)
+                    result = func(cls, block, *args, **kwargs)
                 else:
                     result = func(block, *args, **kwargs)
                 from vg2c.emitter.models import EmitContext
-                return EmitContext._wrap_in_step(c, block, result)
+                return EmitContext._wrap_in_step(cls, block, result)
 
             cls.emit_block = classmethod(wrapped_emit_block)
 
@@ -553,7 +553,8 @@ class PipelineContext:
         template: str,
         vars: dict[str, str] | None = None,
     ) -> None:
-        self.macro.write_file(path, template, vars=vars)
+        content = self.macro.substitute(template, vars=vars)
+        self.fs_ops.write_file(path, content)
 
     def _read_datasyncx(self, sql: str, reader: Any):
         result = reader.read(site="KM", query=sql)
@@ -569,7 +570,7 @@ class PipelineContext:
         header: list[str] | None = None,
         crosstab: dict | None = None,
     ):
-        sql = self.macro.substitute_sql(sql)
+        sql = self.macro.substitute(sql)
 
         if hasattr(reader, "execute"):
             result = reader.execute(sql, inputs or [])
@@ -681,27 +682,10 @@ class MacroState:
             return pos_list[cursor]
         return ""
 
-    def substitute_sql(self, sql: str) -> str:
-        if "<<<" in sql:
-            sql = self.NAMED_PLACEHOLDER_RE.sub(
-                lambda m: self.named(normalize_macro_name(m.group(1))),
-                sql,
-            )
-        return sql
+    def substitute(self, text: str, vars: dict[str, str] | None = None) -> str:
+        if not text:
+            return ""
 
-    def resolve_file_path(self, raw_path: str) -> Path:
-        """Resolve a possibly-macro path with local basename fallback for abs paths."""
-        if not raw_path:
-            return Path("")
-        resolved = self.substitute_sql(raw_path)
-        return resolve_path(resolved)
-
-    def write_file(
-        self,
-        path: str,
-        template: str,
-        vars: dict[str, str] | None = None,
-    ) -> None:
         def _lookup(name: str) -> str:
             key = normalize_macro_name(name)
             if vars is not None:
@@ -714,12 +698,15 @@ class MacroState:
                 return _lookup(named)
             return self.positional()
 
-        content = self.PLACEHOLDER_RE.sub(_replace, template)
-        content = content.lstrip("\n")
+        content = self.PLACEHOLDER_RE.sub(_replace, text)
+        return content.lstrip("\n")
 
-        out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(content, encoding="utf-8")
+    def resolve_file_path(self, raw_path: str) -> Path:
+        """Resolve a possibly-macro path with local basename fallback for abs paths."""
+        if not raw_path:
+            return Path("")
+        resolved = self.substitute(raw_path)
+        return resolve_path(resolved)
 
     def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
         lhs_val = self.named(lhs) if lhs.startswith("VAR(") else lhs
@@ -889,9 +876,9 @@ class ExternalProcess:
         if not argv:
             return ["pass  # TODO: empty external utility command"]
 
-        basename = argv[0].split("/")[-1].split("\\")[-1].lower()
-        if "run_python_script" in basename:
-            return ["pass  # Python script embedded directly, external run omitted"]
+        # basename = argv[0].split("/")[-1].split("\\")[-1].lower()
+        # if "run_python_script" in basename:
+        #     return ["pass  # Python script embedded directly, external run omitted"]
 
         stmt = cls._emit_run(argv)
         return [stmt]
@@ -1059,6 +1046,11 @@ class FileSystemOps:
             else:
                 path.unlink(missing_ok=True)
 
+    def write_file(self, path: str | Path, content: str) -> None:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content, encoding="utf-8")
+
 class HtmlReport:
     """Utility for generating HTML report files."""
 
@@ -1219,13 +1211,8 @@ class HtmlReport:
         if not raw_path:
             return Path("")
         if ctx and hasattr(ctx, "macro"):
-            macro = ctx.macro
-            if hasattr(macro, "resolve_file_path"):
-                return macro.resolve_file_path(raw_path)
-            resolved = macro.substitute_sql(raw_path)
-        else:
-            resolved = raw_path
-        return resolve_path(resolved)
+            return ctx.macro.resolve_file_path(raw_path)
+        return resolve_path(raw_path)
 
     @staticmethod
     def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:
@@ -1585,13 +1572,13 @@ class HtmlReport:
         if ctx and hasattr(ctx, "write_file"):
             resolved_path = out_filename
             if hasattr(ctx, "macro"):
-                resolved_path = ctx.macro.substitute_sql(out_filename)
+                resolved_path = ctx.macro.substitute(out_filename)
             ctx.write_file(resolved_path, html_content)
-        elif ctx and hasattr(ctx, "macro"):
-            resolved_path = ctx.macro.substitute_sql(out_filename)
-            ctx.macro.write_file(resolved_path, html_content)
         else:
-            out_path = Path(out_filename)
+            resolved_path = out_filename
+            if ctx and hasattr(ctx, "macro"):
+                resolved_path = ctx.macro.substitute(out_filename)
+            out_path = Path(resolved_path)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(html_content, encoding="utf-8")
 

@@ -28,14 +28,12 @@ class MockMacro:
     def __init__(self) -> None:
         self.write_calls: list[tuple[str, str]] = []
 
-    def substitute_sql(self, val: str) -> str:
+    def substitute(self, val: str) -> str:
         return val
 
-    def write_file(self, path: str, content: str) -> None:
-        self.write_calls.append((path, content))
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
+    def resolve_file_path(self, raw_path: str) -> Path:
+        from vg2c.emitter.utilities._emit_helpers import resolve_path
+        return resolve_path(self.substitute(raw_path))
 
 
 class SpyCsvIO:

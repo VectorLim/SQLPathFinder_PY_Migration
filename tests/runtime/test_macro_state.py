@@ -88,11 +88,11 @@ def test_CrosstabUtility_substitute_sql_header_mode_n():
     assert out == "SUBPLANEANGLEX,SUBPLANEANGLEY"
 
 
-def test_substitute_sql_named_placeholder_only():
+def test_substitute_named_placeholder_only():
     m = MacroState()
     m.set_named("SITE", "KM")
     sql = "SELECT * FROM tab WHERE facility = '<<<SITE>>>'"
-    out = m.substitute_sql(sql)
+    out = m.substitute(sql)
     assert out == "SELECT * FROM tab WHERE facility = 'KM'"
 
 
