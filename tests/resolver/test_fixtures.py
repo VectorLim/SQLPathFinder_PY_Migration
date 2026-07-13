@@ -12,6 +12,7 @@ from tests.resolver._fixture_flow import (
     resolve_fixture,
 )
 
+
 def test_script_short_exact_single_leaf_contract(FIXTURES: Path) -> None:
     program = resolve_fixture(FIXTURES, "script_short.txt")
 
@@ -34,7 +35,9 @@ def test_script_short_exact_single_leaf_contract(FIXTURES: Path) -> None:
         "unclosed-loop",
         "unclosed-if",
     }
-    assert not [diag for diag in program.diagnostics if diag.code in resolver_error_codes]
+    assert not [
+        diag for diag in program.diagnostics if diag.code in resolver_error_codes
+    ]
 
 
 def test_script_another_no_macro_scope_and_no_control_payloads(FIXTURES: Path) -> None:
@@ -46,7 +49,9 @@ def test_script_another_no_macro_scope_and_no_control_payloads(FIXTURES: Path) -
     assert not diagnostics_by_code(program.diagnostics, "unknown-macro-control")
 
 
-def test_sql_script_preserves_sql_and_has_no_resolver_sql_expansion(FIXTURES: Path) -> None:
+def test_sql_script_preserves_sql_and_has_no_resolver_sql_expansion(
+    FIXTURES: Path,
+) -> None:
     program = resolve_fixture(FIXTURES, "sql_script.txt")
 
     sql_blocks = [

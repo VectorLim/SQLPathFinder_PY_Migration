@@ -12,7 +12,16 @@ from vg2c.frontend.models import (
 )
 from vg2c.kind import Kind
 from vg2c.resolver.macro_resolver import resolve_macros
-from vg2c.resolver.models import Else, EndIf, EndLoop, EndMacro, IfThen, RowsInFile, RunLoop, StartMacro
+from vg2c.resolver.models import (
+    Else,
+    EndIf,
+    EndLoop,
+    EndMacro,
+    IfThen,
+    RowsInFile,
+    RunLoop,
+    StartMacro,
+)
 from vg2c.resolver.scope_builder import build_scope_tree
 
 from tests.resolver._fixture_flow import (
@@ -191,7 +200,9 @@ def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -
     assert if_then.rhs == "0"
 
 
-def test_scope_id_assigned_and_control_blocks_map_to_containing_scope(FIXTURES: Path) -> None:
+def test_scope_id_assigned_and_control_blocks_map_to_containing_scope(
+    FIXTURES: Path,
+) -> None:
     classified, _ = parse_classify_fixture(FIXTURES, "actual_script.txt")
     tree, _ = build_scope_tree(classified)
     resolved, _ = resolve_macros(classified, tree)

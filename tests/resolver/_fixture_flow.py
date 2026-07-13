@@ -56,5 +56,7 @@ def token_from_block(block: ResolvedBlock | ClassifiedBlock) -> str | None:
     return match.group(1) if match else None
 
 
-def blocks_for_token(blocks: Iterable[ResolvedBlock], token: str) -> list[ResolvedBlock]:
+def blocks_for_token(
+    blocks: Iterable[ResolvedBlock], token: str
+) -> list[ResolvedBlock]:
     return [block for block in blocks if token_from_block(block) == token]
