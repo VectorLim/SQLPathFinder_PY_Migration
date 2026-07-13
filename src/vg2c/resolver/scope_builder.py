@@ -19,6 +19,22 @@ from vg2c.resolver.models import (
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 
+# Tokens that own a child scope — delegate to payload.build_scope.
+_SCOPE_TOKENS: dict[str, type] = {
+    "START-MACRO": StartMacro,
+    "RUN-LOOP": RunLoop,
+    "IF-THEN": IfThen,
+}
+
+# Orphan closer tokens: valid as stop-tokens inside a scope, but an error at
+# the top level.  Maps token string → (diagnostic code, message, payload type).
+_ORPHAN_TOKENS: dict[str, tuple[str, str, type]] = {
+    "END-MACRO": ("orphan-end-macro", "Found {END-MACRO} without a matching opener.", EndMacro),
+    "END-LOOP": ("orphan-end-loop", "Found {END-LOOP} without a matching {RUN-LOOP}.", EndLoop),
+    "END-IF": ("orphan-end-if", "Found {END-IF} without a matching opener.", EndIf),
+    "ELSE": ("orphan-else", "Found {ELSE} without a matching {IF-THEN}.", Else),
+}
+
 
 @dataclass
 class _ScopeBuilderState:
@@ -87,93 +103,34 @@ def _parse_children(
             i += 1
             continue
 
-        if token == "START-MACRO":
-            subtree, next_i = _parse_macro(blocks, i, state, diagnostics)
+        if token in _SCOPE_TOKENS:
+            payload = _SCOPE_TOKENS[token].from_block(block)
+            subtree, next_i = payload.build_scope(
+                blocks, i, state, diagnostics, _parse_children
+            )
             children.append(subtree)
             i = next_i
-            continue
-
-        if token == "RUN-LOOP":
-            subtree, next_i = _parse_loop(blocks, i, state, diagnostics)
-            children.append(subtree)
-            i = next_i
-            continue
-
-        if token == "IF-THEN":
-            subtree, next_i = _parse_if(blocks, i, state, diagnostics)
-            children.append(subtree)
-            i = next_i
-            continue
-
-        if token == "END-MACRO":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="orphan-end-macro",
-                    message="Found {END-MACRO} without a matching opener.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            children.append(
-                _leaf_node(state, block.index, control_payload=EndMacro())
-            )
-            i += 1
-            continue
-
-        if token == "END-LOOP":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="orphan-end-loop",
-                    message="Found {END-LOOP} without a matching {RUN-LOOP}.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            children.append(
-                _leaf_node(state, block.index, control_payload=EndLoop())
-            )
-            i += 1
-            continue
-
-        if token == "END-IF":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="orphan-end-if",
-                    message="Found {END-IF} without a matching opener.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            children.append(
-                _leaf_node(state, block.index, control_payload=EndIf())
-            )
-            i += 1
-            continue
-
-        if token == "ELSE":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="orphan-else",
-                    message="Found {ELSE} without a matching {IF-THEN}.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            children.append(
-                _leaf_node(state, block.index, control_payload=Else())
-            )
-            i += 1
             continue
 
         if token == "ROWS-IN-FILE":
-            payload = _parse_rows_in_file_payload(block)
             children.append(
-                _leaf_node(state, block.index, control_payload=payload)
+                _leaf_node(state, block.index, RowsInFile.from_block(block))
             )
+            i += 1
+            continue
+
+        if token in _ORPHAN_TOKENS:
+            code, message, payload_cls = _ORPHAN_TOKENS[token]
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code=code,
+                    message=message,
+                    block_index=block.index,
+                    span=block.span,
+                )
+            )
+            children.append(_leaf_node(state, block.index, payload_cls()))
             i += 1
             continue
 
@@ -197,280 +154,12 @@ def _parse_children(
     return children, i, None
 
 
-def _parse_macro(
-    blocks: list[ClassifiedBlock],
-    start_i: int,
-    state: _ScopeBuilderState,
-    diagnostics: list[Diagnostic],
-) -> tuple[ScopeNode, int]:
-    start_block = blocks[start_i]
-    payload = _parse_start_macro_payload(start_block)
-    children, i, end_token = _parse_children(
-        blocks=blocks,
-        start=start_i + 1,
-        stop_tokens={"END-MACRO"},
-        state=state,
-        diagnostics=diagnostics,
-    )
-
-    if end_token != "END-MACRO":
-        diagnostics.append(
-            Diagnostic(
-                severity="error",
-                code="unclosed-macro",
-                message="Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF.",
-                block_index=start_block.index,
-                span=start_block.span,
-            )
-        )
-        end_index = blocks[-1].index if blocks else start_block.index
-        return (
-            ScopeNode(
-                scope_id=state.new_scope_id(),
-                kind="macro",
-                start_index=start_block.index,
-                end_index=end_index,
-                children=tuple(children),
-                block_index=None,
-                control_payload=payload,
-            ),
-            i,
-        )
-
-    end_index = blocks[i].index
-    return (
-        ScopeNode(
-            scope_id=state.new_scope_id(),
-            kind="macro",
-            start_index=start_block.index,
-            end_index=end_index,
-            children=tuple(children),
-            block_index=None,
-            control_payload=payload,
-        ),
-        i + 1,
-    )
-
-
-def _parse_loop(
-    blocks: list[ClassifiedBlock],
-    start_i: int,
-    state: _ScopeBuilderState,
-    diagnostics: list[Diagnostic],
-) -> tuple[ScopeNode, int]:
-    start_block = blocks[start_i]
-    payload = _parse_run_loop_payload(start_block)
-    children, i, end_token = _parse_children(
-        blocks=blocks,
-        start=start_i + 1,
-        stop_tokens={"END-LOOP"},
-        state=state,
-        diagnostics=diagnostics,
-    )
-
-    if end_token != "END-LOOP":
-        diagnostics.append(
-            Diagnostic(
-                severity="error",
-                code="unclosed-loop",
-                message="Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF.",
-                block_index=start_block.index,
-                span=start_block.span,
-            )
-        )
-        end_index = blocks[-1].index if blocks else start_block.index
-        return (
-            ScopeNode(
-                scope_id=state.new_scope_id(),
-                kind="loop",
-                start_index=start_block.index,
-                end_index=end_index,
-                children=tuple(children),
-                block_index=None,
-                control_payload=payload,
-            ),
-            i,
-        )
-
-    end_index = blocks[i].index
-    return (
-        ScopeNode(
-            scope_id=state.new_scope_id(),
-            kind="loop",
-            start_index=start_block.index,
-            end_index=end_index,
-            children=tuple(children),
-            block_index=None,
-            control_payload=payload,
-        ),
-        i + 1,
-    )
-
-
-def _parse_if(
-    blocks: list[ClassifiedBlock],
-    start_i: int,
-    state: _ScopeBuilderState,
-    diagnostics: list[Diagnostic],
-) -> tuple[ScopeNode, int]:
-    start_block = blocks[start_i]
-    payload = _parse_if_then_payload(start_block)
-
-    if_children, i, token = _parse_children(
-        blocks=blocks,
-        start=start_i + 1,
-        stop_tokens={"ELSE", "END-IF"},
-        state=state,
-        diagnostics=diagnostics,
-    )
-
-    branch_nodes: list[ScopeNode] = [
-        ScopeNode(
-            scope_id=state.new_scope_id(),
-            kind="if-branch",
-            start_index=start_block.index,
-            end_index=(
-                if_children[-1].end_index if if_children else start_block.index
-            ),
-            children=tuple(if_children),
-            block_index=None,
-            control_payload=None,
-        )
-    ]
-
-    end_index = blocks[-1].index if blocks else start_block.index
-    next_i = i
-
-    if token == "ELSE":
-        else_children, j, else_stop = _parse_children(
-            blocks=blocks,
-            start=i + 1,
-            stop_tokens={"END-IF"},
-            state=state,
-            diagnostics=diagnostics,
-        )
-        branch_nodes.append(
-            ScopeNode(
-                scope_id=state.new_scope_id(),
-                kind="else-branch",
-                start_index=blocks[i].index,
-                end_index=(
-                    else_children[-1].end_index
-                    if else_children
-                    else blocks[i].index
-                ),
-                children=tuple(else_children),
-                block_index=None,
-                control_payload=Else(),
-            )
-        )
-        if else_stop == "END-IF":
-            end_index = blocks[j].index
-            next_i = j + 1
-        else:
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="unclosed-if",
-                    message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
-                    block_index=start_block.index,
-                    span=start_block.span,
-                )
-            )
-            next_i = j
-    elif token == "END-IF":
-        end_index = blocks[i].index
-        next_i = i + 1
-    else:
-        diagnostics.append(
-            Diagnostic(
-                severity="error",
-                code="unclosed-if",
-                message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
-                block_index=start_block.index,
-                span=start_block.span,
-            )
-        )
-
-    return (
-        ScopeNode(
-            scope_id=state.new_scope_id(),
-            kind="if",
-            start_index=start_block.index,
-            end_index=end_index,
-            children=tuple(branch_nodes),
-            block_index=None,
-            control_payload=payload,
-        ),
-        next_i,
-    )
-
-
 def _control_token(block: ClassifiedBlock) -> str | None:
     if block.kind is not Kind.MACRO_CONTROL:
         return None
     utilities = block.options.lookup.get("UTILITIES", "")
     match = TOKEN_RE.match(utilities)
     return match.group(1) if match else None
-
-
-def _quoted_args(value: str) -> list[str]:
-    return re.findall(r'"([^"]*)"', value)
-
-
-def _parse_start_macro_payload(block: ClassifiedBlock) -> StartMacro:
-    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
-    csv_path = args[0] if args else ""
-    prompt_flag = args[1] if len(args) > 1 else "N"
-    return StartMacro(csv_path=csv_path, prompt_off=prompt_flag.upper() == "Y")
-
-
-def _parse_if_then_payload(block: ClassifiedBlock) -> IfThen:
-    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
-    padded = (args + ["", "", "", "", "", "", ""])[:7]
-    conj = padded[3] or None
-    lhs2 = padded[4] or None
-    op2 = padded[5] or None
-    rhs2 = padded[6] or None
-    return IfThen(
-        lhs=padded[0],
-        op=padded[1],
-        rhs=padded[2],
-        conj=conj,
-        lhs2=lhs2,
-        op2=op2,
-        rhs2=rhs2,
-    )
-
-
-def _parse_rows_in_file_payload(block: ClassifiedBlock) -> RowsInFile:
-    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
-    csv_path = args[0] if args else ""
-    var_name = args[1] if len(args) > 1 else ""
-    prompt_flag = args[2] if len(args) > 2 else "N"
-    return RowsInFile(
-        csv_path=csv_path,
-        var_name=var_name,
-        prompt_off=prompt_flag.upper() == "Y",
-    )
-
-
-def _parse_run_loop_payload(block: ClassifiedBlock) -> RunLoop:
-    args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
-    input_csv = args[0] if args else ""
-    chunk_csv = args[1] if len(args) > 1 else ""
-    chunk_size_raw = args[2] if len(args) > 2 else "0"
-    prompt_flag = args[3] if len(args) > 3 else "N"
-    try:
-        chunk_size = int(chunk_size_raw)
-    except ValueError:
-        chunk_size = 0
-    return RunLoop(
-        input_csv_path=input_csv,
-        chunk_csv_path=chunk_csv,
-        chunk_size=chunk_size,
-        prompt_off=prompt_flag.upper() == "Y",
-    )
 
 
 def _leaf_node(

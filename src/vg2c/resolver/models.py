@@ -68,6 +68,39 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Scope-building helpers (shared with scope_builder.py)
+# ---------------------------------------------------------------------------
+
+def _quoted_args(value: str) -> list[str]:
+    """Extract double-quoted argument strings from a UTILITIES option value."""
+    return re.findall(r'"([^"]*)"', value)
+
+
+class ScopeIdSource:
+    """Protocol-style duck type expected by build_scope methods.
+
+    scope_builder._ScopeBuilderState satisfies this interface.
+    """
+
+    def new_scope_id(self) -> int:  # pragma: no cover
+        raise NotImplementedError
+
+
+# Type alias for the recursive parse_children callable injected into build_scope.
+# Defined as a plain alias so it can be used at runtime as well as for type hints.
+ParseChildrenFn = Callable[
+    [
+        "list[ClassifiedBlock]",   # blocks
+        int,                       # start index
+        "set[str] | None",         # stop_tokens
+        ScopeIdSource,             # state
+        "list[Diagnostic]",        # diagnostics
+    ],
+    "tuple[list[ScopeNode], int, str | None]",
+]
+
+
+# ---------------------------------------------------------------------------
 # Macro control payload types
 # ---------------------------------------------------------------------------
 
@@ -87,6 +120,74 @@ class MacroFrame:
 class StartMacro:
     csv_path: str
     prompt_off: bool
+
+    # ------------------------------------------------------------------
+    # Scope building
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_block(cls, block: ClassifiedBlock) -> StartMacro:
+        """Parse a {START-MACRO} block into a StartMacro payload."""
+        args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
+        csv_path = args[0] if args else ""
+        prompt_flag = args[1] if len(args) > 1 else "N"
+        return cls(csv_path=csv_path, prompt_off=prompt_flag.upper() == "Y")
+
+    def build_scope(
+        self,
+        blocks: list[ClassifiedBlock],
+        start_i: int,
+        state: ScopeIdSource,
+        diagnostics: list[Diagnostic],
+        parse_children: ParseChildrenFn,
+    ) -> tuple[ScopeNode, int]:
+        """Build a 'macro' ScopeNode, consuming blocks until {END-MACRO}."""
+        start_block = blocks[start_i]
+        children, i, end_token = parse_children(
+            blocks, start_i + 1, {"END-MACRO"}, state, diagnostics
+        )
+
+        if end_token != "END-MACRO":
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="unclosed-macro",
+                    message="Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF.",
+                    block_index=start_block.index,
+                    span=start_block.span,
+                )
+            )
+            end_index = blocks[-1].index if blocks else start_block.index
+            return (
+                ScopeNode(
+                    scope_id=state.new_scope_id(),
+                    kind="macro",
+                    start_index=start_block.index,
+                    end_index=end_index,
+                    children=tuple(children),
+                    block_index=None,
+                    control_payload=self,
+                ),
+                i,
+            )
+
+        end_index = blocks[i].index
+        return (
+            ScopeNode(
+                scope_id=state.new_scope_id(),
+                kind="macro",
+                start_index=start_block.index,
+                end_index=end_index,
+                children=tuple(children),
+                block_index=None,
+                control_payload=self,
+            ),
+            i + 1,
+        )
+
+    # ------------------------------------------------------------------
+    # Emission
+    # ------------------------------------------------------------------
 
     def emit_scope(
         self,
@@ -133,6 +234,121 @@ class IfThen:
     lhs2: str | None
     op2: str | None
     rhs2: str | None
+
+    # ------------------------------------------------------------------
+    # Scope building
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_block(cls, block: ClassifiedBlock) -> IfThen:
+        """Parse an {IF-THEN} block into an IfThen payload."""
+        args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
+        padded = (args + ["", "", "", "", "", "", ""])[:7]
+        return cls(
+            lhs=padded[0],
+            op=padded[1],
+            rhs=padded[2],
+            conj=padded[3] or None,
+            lhs2=padded[4] or None,
+            op2=padded[5] or None,
+            rhs2=padded[6] or None,
+        )
+
+    def build_scope(
+        self,
+        blocks: list[ClassifiedBlock],
+        start_i: int,
+        state: ScopeIdSource,
+        diagnostics: list[Diagnostic],
+        parse_children: ParseChildrenFn,
+    ) -> tuple[ScopeNode, int]:
+        """Build an 'if' ScopeNode with if-branch and optional else-branch children."""
+        start_block = blocks[start_i]
+
+        if_children, i, token = parse_children(
+            blocks, start_i + 1, {"ELSE", "END-IF"}, state, diagnostics
+        )
+
+        branch_nodes: list[ScopeNode] = [
+            ScopeNode(
+                scope_id=state.new_scope_id(),
+                kind="if-branch",
+                start_index=start_block.index,
+                end_index=(
+                    if_children[-1].end_index if if_children else start_block.index
+                ),
+                children=tuple(if_children),
+                block_index=None,
+                control_payload=None,
+            )
+        ]
+
+        end_index = blocks[-1].index if blocks else start_block.index
+        next_i = i
+
+        if token == "ELSE":
+            else_children, j, else_stop = parse_children(
+                blocks, i + 1, {"END-IF"}, state, diagnostics
+            )
+            branch_nodes.append(
+                ScopeNode(
+                    scope_id=state.new_scope_id(),
+                    kind="else-branch",
+                    start_index=blocks[i].index,
+                    end_index=(
+                        else_children[-1].end_index
+                        if else_children
+                        else blocks[i].index
+                    ),
+                    children=tuple(else_children),
+                    block_index=None,
+                    control_payload=Else(),
+                )
+            )
+            if else_stop == "END-IF":
+                end_index = blocks[j].index
+                next_i = j + 1
+            else:
+                diagnostics.append(
+                    Diagnostic(
+                        severity="error",
+                        code="unclosed-if",
+                        message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
+                        block_index=start_block.index,
+                        span=start_block.span,
+                    )
+                )
+                next_i = j
+        elif token == "END-IF":
+            end_index = blocks[i].index
+            next_i = i + 1
+        else:
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="unclosed-if",
+                    message="Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF.",
+                    block_index=start_block.index,
+                    span=start_block.span,
+                )
+            )
+
+        return (
+            ScopeNode(
+                scope_id=state.new_scope_id(),
+                kind="if",
+                start_index=start_block.index,
+                end_index=end_index,
+                children=tuple(branch_nodes),
+                block_index=None,
+                control_payload=self,
+            ),
+            next_i,
+        )
+
+    # ------------------------------------------------------------------
+    # Emission
+    # ------------------------------------------------------------------
 
     def _build_condition_expr(self) -> str:
         """Build a Python boolean expression from this IfThen payload."""
@@ -201,6 +417,19 @@ class RowsInFile:
     var_name: str
     prompt_off: bool
 
+    @classmethod
+    def from_block(cls, block: ClassifiedBlock) -> RowsInFile:
+        """Parse a {ROWS-IN-FILE} block into a RowsInFile payload."""
+        args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
+        csv_path = args[0] if args else ""
+        var_name = args[1] if len(args) > 1 else ""
+        prompt_flag = args[2] if len(args) > 2 else "N"
+        return cls(
+            csv_path=csv_path,
+            var_name=var_name,
+            prompt_off=prompt_flag.upper() == "Y",
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class RunLoop:
@@ -208,6 +437,85 @@ class RunLoop:
     chunk_csv_path: str
     chunk_size: int
     prompt_off: bool
+
+    # ------------------------------------------------------------------
+    # Scope building
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_block(cls, block: ClassifiedBlock) -> RunLoop:
+        """Parse a {RUN-LOOP} block into a RunLoop payload."""
+        args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
+        input_csv = args[0] if args else ""
+        chunk_csv = args[1] if len(args) > 1 else ""
+        chunk_size_raw = args[2] if len(args) > 2 else "0"
+        prompt_flag = args[3] if len(args) > 3 else "N"
+        try:
+            chunk_size = int(chunk_size_raw)
+        except ValueError:
+            chunk_size = 0
+        return cls(
+            input_csv_path=input_csv,
+            chunk_csv_path=chunk_csv,
+            chunk_size=chunk_size,
+            prompt_off=prompt_flag.upper() == "Y",
+        )
+
+    def build_scope(
+        self,
+        blocks: list[ClassifiedBlock],
+        start_i: int,
+        state: ScopeIdSource,
+        diagnostics: list[Diagnostic],
+        parse_children: ParseChildrenFn,
+    ) -> tuple[ScopeNode, int]:
+        """Build a 'loop' ScopeNode, consuming blocks until {END-LOOP}."""
+        start_block = blocks[start_i]
+        children, i, end_token = parse_children(
+            blocks, start_i + 1, {"END-LOOP"}, state, diagnostics
+        )
+
+        if end_token != "END-LOOP":
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="unclosed-loop",
+                    message="Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF.",
+                    block_index=start_block.index,
+                    span=start_block.span,
+                )
+            )
+            end_index = blocks[-1].index if blocks else start_block.index
+            return (
+                ScopeNode(
+                    scope_id=state.new_scope_id(),
+                    kind="loop",
+                    start_index=start_block.index,
+                    end_index=end_index,
+                    children=tuple(children),
+                    block_index=None,
+                    control_payload=self,
+                ),
+                i,
+            )
+
+        end_index = blocks[i].index
+        return (
+            ScopeNode(
+                scope_id=state.new_scope_id(),
+                kind="loop",
+                start_index=start_block.index,
+                end_index=end_index,
+                children=tuple(children),
+                block_index=None,
+                control_payload=self,
+            ),
+            i + 1,
+        )
+
+    # ------------------------------------------------------------------
+    # Emission
+    # ------------------------------------------------------------------
 
     def emit_scope(
         self,
