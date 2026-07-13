@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
@@ -37,7 +37,6 @@ class HtmlReport(CheckedUtilitySpec):
         self.app_server_default: str | None = None
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block) -> list[str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         if report_type == "HTML-RUN":
@@ -66,9 +65,8 @@ class HtmlReport(CheckedUtilitySpec):
                 kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
         if include_template:
             kwargs["template"] = repr(block.resolved_body)
-        stmt = EmitContext.render_method_call(
-            "html_report", method, args=args, kwargs=kwargs
-        )
+        method_obj = getattr(HtmlReport, method)
+        stmt = method_obj.render(*args, **kwargs)
         return [stmt]
 
     @staticmethod
@@ -207,6 +205,7 @@ class HtmlReport(CheckedUtilitySpec):
                 rows.append(normalized_row)
         return rows
 
+    @emittable
     def run(
         self,
         instance: str | None = None,
@@ -228,6 +227,7 @@ class HtmlReport(CheckedUtilitySpec):
                 elif key == "FORMAT" and len(parts) >= 3:
                     self.styles[parts[1]] = parts[2:]
 
+    @emittable
     def defer(
         self,
         id: str,
@@ -246,6 +246,7 @@ class HtmlReport(CheckedUtilitySpec):
             "options": self._extract_options(parsed_rows),
         }
 
+    @emittable
     def delete(self, instance: str | None = None) -> None:
         self.styles.clear()
         self.css_file = None
@@ -425,6 +426,7 @@ class HtmlReport(CheckedUtilitySpec):
 
         return table_content
 
+    @emittable
     def layout(
         self,
         ctx: Any,

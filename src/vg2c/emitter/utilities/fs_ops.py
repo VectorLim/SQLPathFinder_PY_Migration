@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
@@ -43,20 +43,16 @@ class FileSystemOps(CheckedUtilitySpec):
         return None
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
         if block.kind is Kind.FS_COPY:
             return cls._emit_copy_block(block)
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        stmt = EmitContext.render_method_call(
-            "ctx",
-            "write_file",
-            kwargs={
-                "path": repr(resolve_output_path(block)),
-                "template": repr(block.resolved_body),
-            },
+        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        stmt = PipelineContext.write_file.render(
+            path=repr(resolve_output_path(block)),
+            template=repr(block.resolved_body),
         )
         return "write_file", [stmt]
 
@@ -88,55 +84,40 @@ class FileSystemOps(CheckedUtilitySpec):
         stmt = cls._emit_spf_delete(argv)
         return "fs_delete", [stmt]
 
-    @staticmethod
-    def _emit_robocopy(argv: list[str]) -> str:
+    @classmethod
+    def _emit_robocopy(cls, argv: list[str]) -> str:
         # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
         file_name = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         source_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         dest_dir = MacroState.to_py_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = f"str(Path({source_dir}) / {file_name})"
         dst_expr = dest_dir
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
+        return cls.copy.render(src=src_expr, dst=dst_expr)
 
-    @staticmethod
-    def _emit_spf_copy(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_copy(cls, argv: list[str]) -> str:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
         src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         dst_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = src
         dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
+        return cls.copy.render(src=src_expr, dst=dst_expr)
 
-    @staticmethod
-    def _emit_spf_rename(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_rename(cls, argv: list[str]) -> str:
         # SPFRename.va arg layout: <source_path> <dest_path>
         src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         dst = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr("")
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "rename",
-            kwargs={"src": src, "dst": dst},
-        )
+        return cls.rename.render(src=src, dst=dst)
 
-    @staticmethod
-    def _emit_spf_delete(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_delete(cls, argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
         paths_expr = "[" + ", ".join(MacroState.to_py_expr(p) for p in items) + "]"
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "delete",
-            kwargs={"paths": paths_expr},
-        )
+        return cls.delete.render(paths=paths_expr)
 
+    @emittable
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
         src, dst = Path(src), Path(dst)
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -145,9 +126,11 @@ class FileSystemOps(CheckedUtilitySpec):
         else:
             shutil.copy2(src, dst)
 
+    @emittable
     def rename(self, src: str | Path, dst: str | Path) -> None:
         Path(src).replace(Path(dst))
 
+    @emittable
     def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
         for p in paths:
             path = Path(p)
@@ -156,3 +139,9 @@ class FileSystemOps(CheckedUtilitySpec):
                     shutil.rmtree(path, ignore_errors=True)
             else:
                 path.unlink(missing_ok=True)
+
+    @emittable
+    def write_file(self, path: str | Path, content: str) -> None:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content, encoding="utf-8")

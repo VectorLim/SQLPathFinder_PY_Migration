@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Any, ContextManager
 
-from typing import Any, ContextManager
-
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import UtilitySpec
 
 
@@ -50,19 +49,22 @@ class PipelineContext(UtilitySpec):
             )
         return method
 
+    @emittable
     def write_file(
         self,
         path: str,
         template: str,
         vars: dict[str, str] | None = None,
     ) -> None:
-        self.macro.write_file(path, template, vars=vars)
+        content = self.macro.substitute(template, vars=vars)
+        self.fs_ops.write_file(path, content)
 
     def _read_datasyncx(self, sql: str, reader: Any):
         result = reader.read(site="KM", query=sql)
         result.columns = [col.lower() for col in result.columns]
         return result
 
+    @emittable
     def run_query(
         self,
         sql,
@@ -72,7 +74,7 @@ class PipelineContext(UtilitySpec):
         header: list[str] | None = None,
         crosstab: dict | None = None,
     ):
-        sql = self.macro.substitute_sql(sql)
+        sql = self.macro.substitute(sql)
 
         if hasattr(reader, "execute"):
             result = reader.execute(sql, inputs or [])
@@ -89,5 +91,6 @@ class PipelineContext(UtilitySpec):
 
         self.csv_io.write(output, result, header=header)
 
+    @emittable
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)

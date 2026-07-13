@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Protocol
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     normalize_macro_name,
@@ -64,18 +64,11 @@ class MacroState(CheckedUtilitySpec):
             named = match.group(1)
             if named is not None:
                 parts.append(
-                    EmitContext.render_method_call(
-                        cls.utility_name,
-                        "named",
-                        args=(repr(normalize_macro_name(named)),),
-                    )
+                    cls.named.render(repr(normalize_macro_name(named)))
                 )
             else:
                 parts.append(
-                    EmitContext.render_method_call(
-                        cls.utility_name,
-                        "positional",
-                    )
+                    cls.positional.render()
                 )
 
             cursor = match.end()
@@ -91,7 +84,6 @@ class MacroState(CheckedUtilitySpec):
         return " + ".join(parts)
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
         payload = block.control_payload
         if not isinstance(payload, RowsInFile):
@@ -99,21 +91,16 @@ class MacroState(CheckedUtilitySpec):
 
         csv_path_expr = cls.to_py_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = EmitContext.render_method_call(
-            "csv_io",
-            "row_count",
-            args=(csv_path_expr,),
-        )
-        stmt = EmitContext.render_method_call(
-            "macro",
-            "set_named",
-            args=(repr(set_name), f"str({row_count_call})"),
-        )
+        
+        from vg2c.emitter.utilities.csv_io import CsvIO
+        row_count_call = CsvIO.row_count.render(csv_path_expr)
+        stmt = cls.set_named.render(repr(set_name), f"str({row_count_call})")
         return "rows_in_file", [stmt]
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]
 
+    @emittable
     def named(self, name: str) -> str:
         key = name.upper()
         for frame in reversed(self._stack):
@@ -121,9 +108,11 @@ class MacroState(CheckedUtilitySpec):
                 return frame[key]
         return ""
 
+    @emittable
     def set_named(self, name: str, value: str) -> None:
         self._stack[-1][name.upper()] = value
 
+    @emittable
     def positional(self) -> str:
         frame = self._stack[-1]
         cursor = frame.get("__cursor__", 0)
@@ -133,27 +122,11 @@ class MacroState(CheckedUtilitySpec):
             return pos_list[cursor]
         return ""
 
-    def substitute_sql(self, sql: str) -> str:
-        if "<<<" in sql:
-            sql = self.NAMED_PLACEHOLDER_RE.sub(
-                lambda m: self.named(normalize_macro_name(m.group(1))),
-                sql,
-            )
-        return sql
+    @emittable
+    def substitute(self, text: str, vars: dict[str, str] | None = None) -> str:
+        if not text:
+            return ""
 
-    def resolve_file_path(self, raw_path: str) -> Path:
-        """Resolve a possibly-macro path with local basename fallback for abs paths."""
-        if not raw_path:
-            return Path("")
-        resolved = self.substitute_sql(raw_path)
-        return resolve_path(resolved)
-
-    def write_file(
-        self,
-        path: str,
-        template: str,
-        vars: dict[str, str] | None = None,
-    ) -> None:
         def _lookup(name: str) -> str:
             key = normalize_macro_name(name)
             if vars is not None:
@@ -166,13 +139,17 @@ class MacroState(CheckedUtilitySpec):
                 return _lookup(named)
             return self.positional()
 
-        content = self.PLACEHOLDER_RE.sub(_replace, template)
-        content = content.lstrip("\n")
+        content = self.PLACEHOLDER_RE.sub(_replace, text)
+        return content.lstrip("\n")
 
-        out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(content, encoding="utf-8")
+    def resolve_file_path(self, raw_path: str) -> Path:
+        """Resolve a possibly-macro path with local basename fallback for abs paths."""
+        if not raw_path:
+            return Path("")
+        resolved = self.substitute(raw_path)
+        return resolve_path(resolved)
 
+    @emittable
     def eval_condition(self, lhs: str, op: str, rhs: str) -> bool:
         lhs_val = self.named(lhs) if lhs.startswith("VAR(") else lhs
         rhs_val = self.named(rhs) if rhs.startswith("VAR(") else rhs
@@ -190,6 +167,7 @@ class MacroState(CheckedUtilitySpec):
         if len(self._stack) > 1:
             self._stack.pop()
 
+    @emittable
     @contextmanager
     def scope(self, row: dict[str, str] | None = None) -> Iterator[None]:
         self.push_frame(named=row)

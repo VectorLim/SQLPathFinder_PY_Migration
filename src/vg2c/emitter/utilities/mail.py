@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
@@ -24,7 +24,6 @@ class MailService(UtilitySpec):
     utility_name = "email"
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block: Any) -> list[str] | None:
         argv = cls._utility_argv(block)
         if not cls._is_mail_utility(argv):
@@ -69,7 +68,7 @@ class MailService(UtilitySpec):
             )
             to = payload[4]
 
-            kwargs: dict[str, str] = {
+            kwargs: dict[str, Any] = {
                 "to": MacroState.to_py_expr(to),
                 "subject": MacroState.to_py_expr(subject),
                 "body": MacroState.to_py_expr(body),
@@ -79,21 +78,18 @@ class MailService(UtilitySpec):
             if from_addr and from_addr.lower() != "self":
                 kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
 
-            return EmitContext.render_method_call("email", "send", kwargs=kwargs)
+            return cls.send.render(**kwargs)
 
         if len(payload) >= 3:
-            return EmitContext.render_method_call(
-                "email",
-                "send",
-                kwargs={
-                    "to": MacroState.to_py_expr(payload[0]),
-                    "subject": MacroState.to_py_expr(payload[1]),
-                    "body": MacroState.to_py_expr(payload[2]),
-                },
+            return cls.send.render(
+                to=MacroState.to_py_expr(payload[0]),
+                subject=MacroState.to_py_expr(payload[1]),
+                body=MacroState.to_py_expr(payload[2]),
             )
 
         return None
 
+    @emittable
     def send(
         self,
         to: str,

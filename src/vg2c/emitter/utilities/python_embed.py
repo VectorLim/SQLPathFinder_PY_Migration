@@ -1,10 +1,7 @@
-"""PythonEmbed - directly embeds Python code blocks."""
-
 from __future__ import annotations
 
 from typing import Any
 
-from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.kind import Kind
 
@@ -26,7 +23,6 @@ class PythonEmbed(CheckedUtilitySpec):
         return None
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block: Any) -> list[str] | None:
         # Wrap the original python body directly in the step function definition
         return [block.resolved_body]

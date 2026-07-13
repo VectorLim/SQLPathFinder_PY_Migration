@@ -35,7 +35,7 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
         line
         for line in lines
         if not line.lstrip().startswith("handles =")
-        and "@EmitContext.step_emitter" not in line
+        and "@emittable" not in line
     ]
 
     return "\n".join(lines).rstrip()
@@ -74,6 +74,29 @@ class UtilitySpec(ABC):
                     f"{handled_kind}: {owner.__name__} and {cls.__name__}"
                 )
             UtilitySpec._emit_handlers[handled_kind] = cls
+
+        # Wrap emit_block automatically so that callers get step-wrapped results.
+        if "emit_block" in cls.__dict__:
+            raw_emit_block = cls.__dict__["emit_block"]
+            if isinstance(raw_emit_block, classmethod):
+                func = raw_emit_block.__func__
+                is_class_method = True
+            elif isinstance(raw_emit_block, staticmethod):
+                func = raw_emit_block.__func__
+                is_class_method = False
+            else:
+                func = raw_emit_block
+                is_class_method = False
+
+            def wrapped_emit_block(cls: type[UtilitySpec], block: Any, *args: Any, **kwargs: Any) -> Any:
+                if is_class_method:
+                    result = func(cls, block, *args, **kwargs)
+                else:
+                    result = func(block, *args, **kwargs)
+                from vg2c.emitter.models import EmitContext
+                return EmitContext._wrap_in_step(cls, block, result)
+
+            cls.emit_block = classmethod(wrapped_emit_block)
 
     @classmethod
     def get_source(cls) -> str:

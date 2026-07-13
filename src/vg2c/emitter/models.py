@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, Generic, TypeVar, overload, ParamSpec
 
 from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 
-__all__ = ["EmitContext", "EmittedScript", "IndentWriter"]
+P = ParamSpec("P")
+R = TypeVar("R")
+
+__all__ = ["EmitContext", "EmittedScript", "IndentWriter", "emittable"]
 
 
 @dataclass
@@ -72,27 +75,21 @@ class EmitContext:
         return "\n".join(lines), f"{name}(ctx)"
 
     @staticmethod
-    def step_emitter(func):
-        """Decorator to wrap utility emit_block class methods."""
-
-        def wrapper(cls, block, *args, **kwargs):
-            result = func(cls, block, *args, **kwargs)
-            if result is None:
-                return None
-            if (
-                isinstance(result, tuple)
-                and len(result) == 2
-                and isinstance(result[1], list)
-            ):
-                suffix, body_lines = result
-            else:
-                suffix = getattr(cls, "utility_name", "utility")
-                body_lines = result
-            return EmitContext._emit_step_source(
-                EmitContext._step_name(block, suffix), body_lines
-            )
-
-        return wrapper
+    def _wrap_in_step(cls: type[Any], block: Any, result: Any) -> tuple[str, str] | None:
+        if result is None:
+            return None
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], list)
+        ):
+            suffix, body_lines = result
+        else:
+            suffix = getattr(cls, "utility_name", "utility")
+            body_lines = result
+        return EmitContext._emit_step_source(
+            EmitContext._step_name(block, suffix), body_lines
+        )
 
     def emit_block(self, block: Any) -> tuple[str, str]:
         from vg2c.emitter.utilities._base import UtilitySpec
@@ -178,3 +175,68 @@ class IndentWriter:
     def source(self) -> str:
         """Get the full source text."""
         return "\n".join(self.lines)
+
+
+class emittable(Generic[P, R]):
+    """Decorator / descriptor to make utility methods renderable at emit-time."""
+
+    def __init__(self, func: Callable[P, R]) -> None:
+        self.func = func
+        self.__name__ = func.__name__
+        self.__doc__ = func.__doc__
+
+    @overload
+    def __get__(self, instance: None, owner: Any) -> EmittableMethod[P, R]: ...
+
+    @overload
+    def __get__(self, instance: object, owner: Any) -> BoundEmittableMethod[P, R]: ...
+
+    def __get__(self, instance: Any, owner: Any) -> Any:
+        if instance is None:
+            return EmittableMethod(self.func, owner)
+        return BoundEmittableMethod(self.func, instance, owner)
+
+
+class EmittableMethod(Generic[P, R]):
+    """Unbound emittable method descriptor wrapper (accessed via Class)."""
+
+    def __init__(self, func: Callable[P, R], owner: Any) -> None:
+        self.func = func
+        self.owner = owner
+
+    def __call__(self, instance: Any, *args: P.args, **kwargs: P.kwargs) -> R:
+        # Standard unbound method call: first argument is the instance
+        return self.func(instance, *args, **kwargs)
+
+    def render(self, *args: Any, **kwargs: Any) -> str:
+        """Render the Python method call statement string for emission."""
+        utility_name = getattr(self.owner, "utility_name", self.owner.__name__.lower())
+        return EmitContext.render_method_call(
+            utility_name=utility_name,
+            method_name=self.func.__name__,
+            args=args,
+            kwargs=kwargs,
+        )
+
+
+class BoundEmittableMethod(Generic[P, R]):
+    """Bound emittable method wrapper (accessed via Instance)."""
+
+    def __init__(self, func: Callable[P, R], instance: Any, owner: Any) -> None:
+        self.func = func
+        self.instance = instance
+        self.owner = owner
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        # Standard bound method call: self.instance is already bound
+        return self.func(self.instance, *args, **kwargs)
+
+    def render(self, *args: Any, **kwargs: Any) -> str:
+        """Render the Python method call statement string for emission."""
+        utility_name = getattr(self.owner, "utility_name", self.owner.__name__.lower())
+        return EmitContext.render_method_call(
+            utility_name=utility_name,
+            method_name=self.func.__name__,
+            args=args,
+            kwargs=kwargs,
+        )

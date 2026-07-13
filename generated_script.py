@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1826): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1954): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 1995): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2161): filters on Flag
-# - step_0055_sql_query (Line 2362): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2385): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1804): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1932): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1973): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2139): filters on Flag
+# - step_0055_sql_query (Line 2340): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2363): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -20,10 +20,9 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 from typing import Any, Callable
+from typing import Any, Callable, ContextManager
 from typing import Any, ClassVar, TYPE_CHECKING
-from typing import Any, ContextManager
 from typing import Any, Iterator
-from typing import Callable
 from typing import Iterator, Protocol
 from vg2c.dispatch.dialects.sqlite import SqliteReader
 import csv
@@ -57,7 +56,7 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
         line
         for line in lines
         if not line.lstrip().startswith("handles =")
-        and "@EmitContext.step_emitter" not in line
+        and "@emittable" not in line
     ]
 
     return "\n".join(lines).rstrip()
@@ -95,6 +94,29 @@ class UtilitySpec(ABC):
                     f"{handled_kind}: {owner.__name__} and {cls.__name__}"
                 )
             UtilitySpec._emit_handlers[handled_kind] = cls
+
+        # Wrap emit_block automatically so that callers get step-wrapped results.
+        if "emit_block" in cls.__dict__:
+            raw_emit_block = cls.__dict__["emit_block"]
+            if isinstance(raw_emit_block, classmethod):
+                func = raw_emit_block.__func__
+                is_class_method = True
+            elif isinstance(raw_emit_block, staticmethod):
+                func = raw_emit_block.__func__
+                is_class_method = False
+            else:
+                func = raw_emit_block
+                is_class_method = False
+
+            def wrapped_emit_block(c: type[UtilitySpec], block: Any, *args: Any, **kwargs: Any) -> Any:
+                if is_class_method:
+                    result = func(c, block, *args, **kwargs)
+                else:
+                    result = func(block, *args, **kwargs)
+                from vg2c.emitter.models import EmitContext
+                return EmitContext._wrap_in_step(c, block, result)
+
+            cls.emit_block = classmethod(wrapped_emit_block)
 
     @classmethod
     def get_source(cls) -> str:
@@ -604,18 +626,11 @@ class MacroState:
             named = match.group(1)
             if named is not None:
                 parts.append(
-                    EmitContext.render_method_call(
-                        cls.utility_name,
-                        "named",
-                        args=(repr(normalize_macro_name(named)),),
-                    )
+                    cls.named.render(repr(normalize_macro_name(named)))
                 )
             else:
                 parts.append(
-                    EmitContext.render_method_call(
-                        cls.utility_name,
-                        "positional",
-                    )
+                    cls.positional.render()
                 )
 
             cursor = match.end()
@@ -638,16 +653,10 @@ class MacroState:
 
         csv_path_expr = cls.to_py_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = EmitContext.render_method_call(
-            "csv_io",
-            "row_count",
-            args=(csv_path_expr,),
-        )
-        stmt = EmitContext.render_method_call(
-            "macro",
-            "set_named",
-            args=(repr(set_name), f"str({row_count_call})"),
-        )
+
+        from vg2c.emitter.utilities.csv_io import CsvIO
+        row_count_call = CsvIO.row_count.render(csv_path_expr)
+        stmt = cls.set_named.render(repr(set_name), f"str({row_count_call})")
         return "rows_in_file", [stmt]
 
     def __init__(self) -> None:
@@ -787,7 +796,7 @@ class MailService:
             )
             to = payload[4]
 
-            kwargs: dict[str, str] = {
+            kwargs: dict[str, Any] = {
                 "to": MacroState.to_py_expr(to),
                 "subject": MacroState.to_py_expr(subject),
                 "body": MacroState.to_py_expr(body),
@@ -797,17 +806,13 @@ class MailService:
             if from_addr and from_addr.lower() != "self":
                 kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
 
-            return EmitContext.render_method_call("email", "send", kwargs=kwargs)
+            return cls.send.render(**kwargs)
 
         if len(payload) >= 3:
-            return EmitContext.render_method_call(
-                "email",
-                "send",
-                kwargs={
-                    "to": MacroState.to_py_expr(payload[0]),
-                    "subject": MacroState.to_py_expr(payload[1]),
-                    "body": MacroState.to_py_expr(payload[2]),
-                },
+            return cls.send.render(
+                to=MacroState.to_py_expr(payload[0]),
+                subject=MacroState.to_py_expr(payload[1]),
+                body=MacroState.to_py_expr(payload[2]),
             )
 
         return None
@@ -891,15 +896,11 @@ class ExternalProcess:
         stmt = cls._emit_run(argv)
         return [stmt]
 
-    @staticmethod
-    def _emit_run(argv: list[str]) -> str:
+    @classmethod
+    def _emit_run(cls, argv: list[str]) -> str:
         expr_items = [MacroState.to_py_expr(token) for token in argv]
         argv_expr = "[" + ", ".join(expr_items) + "]"
-        return EmitContext.render_method_call(
-            "external",
-            "run",
-            kwargs={"argv": argv_expr},
-        )
+        return cls.run.render(argv=argv_expr)
 
     @staticmethod
     def _resolve_exedir() -> str:
@@ -970,13 +971,10 @@ class FileSystemOps:
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        stmt = EmitContext.render_method_call(
-            "ctx",
-            "write_file",
-            kwargs={
-                "path": repr(resolve_output_path(block)),
-                "template": repr(block.resolved_body),
-            },
+        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        stmt = PipelineContext.write_file.render(
+            path=repr(resolve_output_path(block)),
+            template=repr(block.resolved_body),
         )
         return "write_file", [stmt]
 
@@ -1008,54 +1006,38 @@ class FileSystemOps:
         stmt = cls._emit_spf_delete(argv)
         return "fs_delete", [stmt]
 
-    @staticmethod
-    def _emit_robocopy(argv: list[str]) -> str:
+    @classmethod
+    def _emit_robocopy(cls, argv: list[str]) -> str:
         # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
         file_name = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         source_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         dest_dir = MacroState.to_py_expr(argv[3]) if len(argv) > 3 else repr(".")
         src_expr = f"str(Path({source_dir}) / {file_name})"
         dst_expr = dest_dir
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
+        return cls.copy.render(src=src_expr, dst=dst_expr)
 
-    @staticmethod
-    def _emit_spf_copy(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_copy(cls, argv: list[str]) -> str:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
         src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         dst_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
         src_expr = src
         dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "copy",
-            kwargs={"src": src_expr, "dst": dst_expr},
-        )
+        return cls.copy.render(src=src_expr, dst=dst_expr)
 
-    @staticmethod
-    def _emit_spf_rename(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_rename(cls, argv: list[str]) -> str:
         # SPFRename.va arg layout: <source_path> <dest_path>
         src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
         dst = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr("")
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "rename",
-            kwargs={"src": src, "dst": dst},
-        )
+        return cls.rename.render(src=src, dst=dst)
 
-    @staticmethod
-    def _emit_spf_delete(argv: list[str]) -> str:
+    @classmethod
+    def _emit_spf_delete(cls, argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
         paths_expr = "[" + ", ".join(MacroState.to_py_expr(p) for p in items) + "]"
-        return EmitContext.render_method_call(
-            "fs_ops",
-            "delete",
-            kwargs={"paths": paths_expr},
-        )
+        return cls.delete.render(paths=paths_expr)
 
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
         src, dst = Path(src), Path(dst)
@@ -1126,9 +1108,8 @@ class HtmlReport:
                 kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
         if include_template:
             kwargs["template"] = repr(block.resolved_body)
-        stmt = EmitContext.render_method_call(
-            "html_report", method, args=args, kwargs=kwargs
-        )
+        method_obj = getattr(HtmlReport, method)
+        stmt = method_obj.render(*args, **kwargs)
         return [stmt]
 
     @staticmethod
@@ -1700,11 +1681,7 @@ class SqliteEngine:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = MacroState.to_py_expr(call.csv_path)
                 parts.append(
-                    EmitContext.render_method_call(
-                        "csv_io",
-                        "sql_get_csv_list",
-                        args=(csv_path_expr, repr(call.column_ref), repr(call.lead_in)),
-                    )
+                    CsvIO.sql_get_csv_list.render(csv_path_expr, repr(call.column_ref), repr(call.lead_in))
                 )
 
             cursor = match.end()
@@ -1776,7 +1753,8 @@ class SqliteEngine:
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = EmitContext.render_method_call("ctx", "run_query", kwargs=kwargs)
+        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        stmt = PipelineContext.run_query.render(**kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]
 

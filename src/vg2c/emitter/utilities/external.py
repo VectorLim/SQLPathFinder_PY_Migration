@@ -6,7 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
@@ -40,28 +40,23 @@ class ExternalProcess(CheckedUtilitySpec):
         return split_utility_command(text)
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block) -> list[str] | None:
         argv = cls._utility_argv(block)
         if not argv:
             return ["pass  # TODO: empty external utility command"]
 
-        basename = argv[0].split("/")[-1].split("\\")[-1].lower()
-        if "run_python_script" in basename:
-            return ["pass  # Python script embedded directly, external run omitted"]
+        # basename = argv[0].split("/")[-1].split("\\")[-1].lower()
+        # if "run_python_script" in basename:
+        #     return ["pass  # Python script embedded directly, external run omitted"]
 
         stmt = cls._emit_run(argv)
         return [stmt]
 
-    @staticmethod
-    def _emit_run(argv: list[str]) -> str:
+    @classmethod
+    def _emit_run(cls, argv: list[str]) -> str:
         expr_items = [MacroState.to_py_expr(token) for token in argv]
         argv_expr = "[" + ", ".join(expr_items) + "]"
-        return EmitContext.render_method_call(
-            "external",
-            "run",
-            kwargs={"argv": argv_expr},
-        )
+        return cls.run.render(argv=argv_expr)
 
     @staticmethod
     def _resolve_exedir() -> str:
@@ -81,6 +76,7 @@ class ExternalProcess(CheckedUtilitySpec):
             for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
         ]
 
+    @emittable
     def run(
         self,
         argv: list[str],

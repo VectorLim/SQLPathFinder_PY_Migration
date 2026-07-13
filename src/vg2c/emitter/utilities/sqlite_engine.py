@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from functools import partial
 
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.macro_state import MacroState
@@ -83,11 +83,7 @@ class SqliteEngine(CheckedUtilitySpec):
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = MacroState.to_py_expr(call.csv_path)
                 parts.append(
-                    EmitContext.render_method_call(
-                        "csv_io",
-                        "sql_get_csv_list",
-                        args=(csv_path_expr, repr(call.column_ref), repr(call.lead_in)),
-                    )
+                    CsvIO.sql_get_csv_list.render(csv_path_expr, repr(call.column_ref), repr(call.lead_in))
                 )
 
             cursor = match.end()
@@ -124,7 +120,6 @@ class SqliteEngine(CheckedUtilitySpec):
         return [p for p in parts if p]
 
     @classmethod
-    @EmitContext.step_emitter
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
         sqlite = block.kind is Kind.SQLITE_QUERY
         return cls._emit_sql(block, sqlite=sqlite)
@@ -160,6 +155,7 @@ class SqliteEngine(CheckedUtilitySpec):
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = EmitContext.render_method_call("ctx", "run_query", kwargs=kwargs)
+        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        stmt = PipelineContext.run_query.render(**kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]

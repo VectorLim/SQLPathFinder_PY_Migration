@@ -8,6 +8,7 @@ from typing import Any, Iterator
 
 import pandas
 
+from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import resolve_path
 
@@ -21,6 +22,7 @@ class CsvIO(UtilitySpec):
     # Read
     # ------------------------------------------------------------------
 
+    @emittable
     def iter(self, name: str) -> Iterator[dict[str, str]]:
         """Yield each data row as a dict keyed by header names."""
         path = resolve_path(name)
@@ -63,6 +65,7 @@ class CsvIO(UtilitySpec):
     def _single_quote(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
+    @emittable
     def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
         """Return chunked IN-list clause for Oracle-style SQL.
 
@@ -84,6 +87,7 @@ class CsvIO(UtilitySpec):
 
         return "".join(parts)
 
+    @emittable
     def row_count(self, name: str) -> int:
         """Count data rows (excludes header); 0 if file missing."""
         path = resolve_path(name)
@@ -94,6 +98,7 @@ class CsvIO(UtilitySpec):
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
+    @emittable
     def iter_chunks(
         self, input_name: str, chunk_name: str, chunk_size: int
     ) -> Iterator[Path]:
@@ -135,6 +140,7 @@ class CsvIO(UtilitySpec):
     # Write
     # ------------------------------------------------------------------
 
+    @emittable
     def write(self, name: str, content: Any, header: list[str] | None = None) -> None:
         """Write *content* to a CSV file.
 
