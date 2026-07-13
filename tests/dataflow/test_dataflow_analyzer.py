@@ -88,7 +88,7 @@ def test_external_utility_candidate_softens_missing_producer() -> None:
     program = _analyze_blocks(
         [
             _block(
-                0, Kind.UTILITY, utilities='@EXEDIR@\\SPFCopy.bat "source.csv" "." "N"'
+                0, Kind.FS_COPY, utilities='@EXEDIR@\\SPFCopy.bat "source.csv" "." "N"'
             ),
             _block(
                 1, Kind.MACRO_CONTROL, utilities='{ROWS-IN-FILE} "source.csv" "CNT" "N"'

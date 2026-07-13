@@ -23,6 +23,7 @@ class MailService(EmitterUtility):
     """Send email. Reads connection config from environment variables."""
 
     utility_name = "email"
+    handles = (Kind.EMAIL,)
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -31,7 +32,7 @@ class MailService(EmitterUtility):
             return None
         argv = split_utility_command(text)
         if MailService._is_mail_utility(argv):
-            return Kind.UTILITY, "/UTILITIES command is SQLPathFinder_Email.va"
+            return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
         return None
 
     @classmethod

@@ -8,7 +8,7 @@ class UnknownUtility(EmitterUtility):
     """Emit handler for unrecognised /UTILITIES commands."""
 
     utility_name = "utility"
-    handles = (Kind.UTILITY,)
+    handles = (Kind.UNKNOWN,)
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:

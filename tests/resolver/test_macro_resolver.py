@@ -31,7 +31,7 @@ def _block(
 def test_start_macro_payload_is_parsed() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "config.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "echo run"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "echo run"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     tree, _ = build_scope_tree(blocks)
@@ -97,7 +97,7 @@ def test_run_loop_payload_is_parsed() -> None:
 def test_scope_id_assigned_for_every_block() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "echo hello"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "echo hello"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     tree, _ = build_scope_tree(blocks)

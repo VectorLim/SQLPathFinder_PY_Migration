@@ -42,7 +42,7 @@ def test_script_another_has_mars_write_and_utility(FIXTURES: Path) -> None:
     assert _has_kind(classified, Kind.PYTHON_EMBED)
     assert _has_any_kind(
         classified,
-        (Kind.UTILITY, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
+        (Kind.EMAIL, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
     )
 
 
@@ -102,10 +102,10 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
             v.lstrip().startswith(token) for v in macro_values
         ), f"Missing macro token {token}"
 
-    utility_values = [
+    email_values = [
         item.options.lookup.get("UTILITIES", "")
         for item in classified
-        if item.kind is Kind.UTILITY
+        if item.kind is Kind.EMAIL
     ]
     external_values = [
         item.options.lookup.get("UTILITIES", "")
@@ -124,7 +124,7 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         for marker in ("getcsrsu.bat", "setsiteparam.exe")
     )
     assert any("RoboCopy.va" in value for value in fs_copy_values)
-    assert any("SQLPathFinder_Email.va" in value for value in utility_values)
+    assert any("SQLPathFinder_Email.va" in value for value in email_values)
 
     unknown_blocks = [item for item in classified if item.kind is Kind.UNKNOWN]
     assert not unknown_blocks, _unknown_failure_message(unknown_blocks)

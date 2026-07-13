@@ -79,11 +79,11 @@ def test_fs_delete_utility_rule() -> None:
     assert not diagnostics
 
 
-def test_email_utility_falls_back_to_generic_utility_kind() -> None:
+def test_email_utility_classification() -> None:
     classified, diagnostics = classify(
         [_block({"UTILITIES": '@EXEDIR@\\SQLPathFinder_Email.va "to" "sub" "body"'})]
     )
-    assert classified[0].kind is Kind.UTILITY
+    assert classified[0].kind is Kind.EMAIL
     assert not diagnostics
 
 

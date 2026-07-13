@@ -69,7 +69,9 @@ def test_assemble_all_utilities_imports_are_deduped_and_grouped() -> None:
         )
 
 
-def _make_utility_block(index: int, utilities: str, body: str = "") -> ResolvedBlock:
+def _make_utility_block(
+    index: int, utilities: str, body: str = "", kind: Kind = Kind.EMAIL
+) -> ResolvedBlock:
     options = BlockOptions.from_pairs([("UTILITIES", utilities)])
     parsed = ParsedBlock(
         index=index,
@@ -78,7 +80,7 @@ def _make_utility_block(index: int, utilities: str, body: str = "") -> ResolvedB
         raw="",
         span=SourceSpan(None, 1, 1),
     )
-    classified = ClassifiedBlock(parsed, Kind.UTILITY, "test")
+    classified = ClassifiedBlock(parsed, kind, "test")
     return ResolvedBlock(classified, options, body, (), None, 0)
 
 
@@ -88,7 +90,7 @@ def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
         '@EXEDIR@\\SQLPathFinder_Email.va "report.csv" "self" "Subject" "body.txt" "user@example.com" "" "" "N" "N"',
     )
 
-    func_source, call_site = UtilitySpec.dispatch_and_emit(block, set())
+    func_source, call_site = UtilitySpec.dispatch_and_emit(block)
 
     assert "def step_0008_email(ctx)" in func_source
     assert (
@@ -99,9 +101,11 @@ def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
 
 
 def test_emit_block_keeps_unknown_utility_fallback() -> None:
-    block = _make_utility_block(9, '@EXEDIR@\\SomeOtherUtility.va "x"')
+    block = _make_utility_block(
+        9, '@EXEDIR@\\SomeOtherUtility.va "x"', kind=Kind.UNKNOWN
+    )
 
-    func_source, call_site = UtilitySpec.dispatch_and_emit(block, set())
+    func_source, call_site = UtilitySpec.dispatch_and_emit(block)
 
     assert "utility command not classified" in func_source
     assert call_site == "step_0009_utility(ctx)"

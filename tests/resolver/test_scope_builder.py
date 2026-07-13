@@ -34,7 +34,7 @@ def test_empty_program() -> None:
 def test_macro_pair_wraps_inner_leaves() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "run.bat"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "run.bat"}),
         _block(2, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "out.csv"}),
         _block(3, Kind.SQLITE_QUERY, {"ENGINE": "SQLite"}),
         _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
@@ -53,9 +53,9 @@ def test_if_else_builds_if_node_with_branches() -> None:
         _block(
             0, Kind.MACRO_CONTROL, {"UTILITIES": '{IF-THEN} "A" "EQS" "1" "" "" "" ""'}
         ),
-        _block(1, Kind.UTILITY, {"UTILITIES": "left.bat"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "left.bat"}),
         _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{ELSE}"}),
-        _block(3, Kind.UTILITY, {"UTILITIES": "right.bat"}),
+        _block(3, Kind.EXTERNAL_RUN, {"UTILITIES": "right.bat"}),
         _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-IF}"}),
     ]
     root, diagnostics = build_scope_tree(blocks)
@@ -70,7 +70,7 @@ def test_if_else_builds_if_node_with_branches() -> None:
 def test_unclosed_macro_emits_diagnostic() -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.UTILITY, {"UTILITIES": "x.bat"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "x.bat"}),
     ]
     _, diagnostics = build_scope_tree(blocks)
     assert any(d.code == "unclosed-macro" for d in diagnostics)
@@ -93,7 +93,7 @@ def test_rows_in_file_is_leaf_not_scope() -> None:
         _block(
             0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}
         ),
-        _block(1, Kind.UTILITY, {"UTILITIES": "after.bat"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "after.bat"}),
     ]
     root, diagnostics = build_scope_tree(blocks)
     assert diagnostics == []
@@ -108,7 +108,7 @@ def test_run_loop_pair_wraps_inner_leaves() -> None:
             {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "100" "N"'},
         ),
         _block(1, Kind.SQL_QUERY, {"NODE": "MARS", "ENGINE": "VA"}),
-        _block(2, Kind.UTILITY, {"UTILITIES": "append.bat"}),
+        _block(2, Kind.EXTERNAL_RUN, {"UTILITIES": "append.bat"}),
         _block(3, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"}),
     ]
     root, diagnostics = build_scope_tree(blocks)
@@ -132,7 +132,7 @@ def test_unclosed_run_loop_emits_diagnostic() -> None:
             Kind.MACRO_CONTROL,
             {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "5" "N"'},
         ),
-        _block(1, Kind.UTILITY, {"UTILITIES": "x.bat"}),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "x.bat"}),
     ]
     _, diagnostics = build_scope_tree(blocks)
     assert any(d.code == "unclosed-loop" for d in diagnostics)

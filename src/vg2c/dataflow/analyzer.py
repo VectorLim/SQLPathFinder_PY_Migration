@@ -205,7 +205,7 @@ def _collect_external_utility_candidates(
     candidates: list[ProducerRecord] = []
     for block in blocks:
         if block.kind not in {
-            Kind.UTILITY,
+            Kind.EMAIL,
             Kind.EXTERNAL_RUN,
             Kind.FS_COPY,
             Kind.FS_DELETE,

@@ -26,7 +26,7 @@ def _make_block(
 def test_emit_block_embeds_python_body() -> None:
     code = "import os\nprint(os.getcwd())"
     block = _make_block(3, Kind.PYTHON_EMBED, code, csv="script.py")
-    result = UtilitySpec.dispatch_and_emit(block, set())
+    result = UtilitySpec.dispatch_and_emit(block)
 
     assert result is not None
     func_source, call_site = result
@@ -44,7 +44,7 @@ def test_emit_block_preserves_multiline_indentation() -> None:
         "        break"
     )
     block = _make_block(7, Kind.PYTHON_EMBED, code, csv="loop.py")
-    result = UtilitySpec.dispatch_and_emit(block, set())
+    result = UtilitySpec.dispatch_and_emit(block)
 
     assert result is not None
     func_source, _ = result
@@ -56,7 +56,7 @@ def test_emit_block_preserves_multiline_indentation() -> None:
 
 def test_emit_block_empty_body() -> None:
     block = _make_block(1, Kind.PYTHON_EMBED, "", csv="empty.py")
-    result = UtilitySpec.dispatch_and_emit(block, set())
+    result = UtilitySpec.dispatch_and_emit(block)
 
     assert result is not None
     func_source, call_site = result

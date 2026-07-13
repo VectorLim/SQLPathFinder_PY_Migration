@@ -25,7 +25,7 @@ def test_resolve_reader_cls_sql_bearing(kind: Kind, expected: type | None) -> No
     "kind",
     [
         Kind.WRITE_FILE,
-        Kind.UTILITY,
+        Kind.EMAIL,
         Kind.MACRO_CONTROL,
         Kind.HTML_REPORT,
         Kind.UNKNOWN,

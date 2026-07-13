@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1858): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1986): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 2027): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2193): filters on Flag
-# - step_0055_sql_query (Line 2394): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2417): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1830): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1958): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1999): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2165): filters on Flag
+# - step_0055_sql_query (Line 2366): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2389): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -48,15 +48,16 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
         return ""
 
     lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
-    lines[0] = lines[0].replace("(EmitterUtility):", ":")
-    lines[0] = lines[0].replace("(UtilitySpec):", ":")
-    lines[0] = lines[0].replace(f"({class_name}, UtilitySpec):", f"({class_name}):")
+    lines[0] = lines[0].replace(f"({EmitterUtility.__name__}):", ":")
+    lines[0] = lines[0].replace(f"({UtilitySpec.__name__}):", ":")
+    lines[0] = lines[0].replace(
+        f"({class_name}, {UtilitySpec.__name__}):", f"({class_name}):"
+    )
 
     lines = [
         line
         for line in lines
-        if not line.lstrip().startswith("handles =")
-        and "@emittable" not in line
+        if not line.lstrip().startswith("handles =") and "@emittable" not in line
     ]
 
     return "\n".join(lines).rstrip()
@@ -127,7 +128,9 @@ class UtilitySpec(ABC):
         return "\n".join(lines), f"{name}(ctx)"
 
     @classmethod
-    def _wrap_in_step(cls, subclass: type[UtilitySpec], block: Any, result: Any) -> tuple[str, str] | None:
+    def _wrap_in_step(
+        cls, subclass: type[UtilitySpec], block: Any, result: Any
+    ) -> tuple[str, str] | None:
         if result is None:
             return None
         if (
@@ -139,49 +142,18 @@ class UtilitySpec(ABC):
         else:
             suffix = getattr(subclass, "utility_name", "utility")
             body_lines = result
-        return cls._emit_step_source(
-            cls._step_name(block, suffix), body_lines
-        )
+        return cls._emit_step_source(cls._step_name(block, suffix), body_lines)
 
     @classmethod
     def dispatch_and_emit(cls, block: Any) -> tuple[str, str]:
         handler_cls = cls._emit_handlers.get(block.kind)
-        if handler_cls is not None and block.kind is not Kind.UTILITY:
+        if handler_cls is not None:
             emitted = handler_cls.emit_block(block)
             if emitted is not None:
                 wrapped = cls._wrap_in_step(handler_cls, block, emitted)
                 if wrapped is not None:
                     return wrapped
-
-        if block.kind is Kind.UTILITY:
-            for utility_cls in cls._registry.values():
-                if utility_cls is handler_cls:
-                    continue
-                if getattr(utility_cls, "handles", ()):
-                    continue
-                emitted = utility_cls.emit_block(block)
-                if emitted is not None:
-                    wrapped = cls._wrap_in_step(utility_cls, block, emitted)
-                    if wrapped is not None:
-                        return wrapped
-
-            if handler_cls is not None:
-                emitted = handler_cls.emit_block(block)
-                if emitted is not None:
-                    wrapped = cls._wrap_in_step(handler_cls, block, emitted)
-                    if wrapped is not None:
-                        return wrapped
-
-        kind_fallbacks = {
-            Kind.HTML_REPORT: ("html_report", "pass  # HTML report not translated"),
-        }
-        suffix, default_stmt = kind_fallbacks.get(
-            block.kind,
-            ("unknown", f"pass  # TODO: unhandled kind={block.kind}"),
-        )
-        return cls._emit_step_source(
-            cls._step_name(block, suffix), [default_stmt]
-        )
+        return "", ""
 
 class EmitterUtility(UtilitySpec):
     """Utility that participates in Stage 1 classification and block emission."""
@@ -802,7 +774,7 @@ class MailService:
             return None
         argv = split_utility_command(text)
         if MailService._is_mail_utility(argv):
-            return Kind.UTILITY, "/UTILITIES command is SQLPathFinder_Email.va"
+            return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
         return None
 
     @classmethod
