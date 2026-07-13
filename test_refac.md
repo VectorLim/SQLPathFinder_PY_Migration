@@ -1,65 +1,98 @@
-## Plan: Refresh Frontend Test Module
+## Plan: Resolver Test Module Refresh
 
-Refresh only frontend tests to align with current parser/classifier behavior, remove brittle/legacy assertions, and increase realistic coverage using real fixtures with stable key expectations (not full-sequence snapshots for large fixtures).
+Refresh only resolver-layer tests so they match current resolver architecture (scope_builder + macro_resolver + resolve orchestration), replace shallow/legacy assertions with fixture-backed behavior checks, and relocate non-resolver SQL macro expander tests out of resolver scope.
+
+**Pre-edit brief**
+- Resolver modules under test:
+  - c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\__init__.py (resolve orchestration)
+  - c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\scope_builder.py (scope tree + structural diagnostics)
+  - c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\macro_resolver.py (control payload parsing + scope_id mapping)
+  - c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\models.py (payload/scope dataclasses)
+- Fixture files to use:
+  - c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\script_short.txt
+  - c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\script_another.txt
+  - c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\sql_script.txt
+  - c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\actual_script.txt
+  - Optional focused edge fixture: c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\test_long.txt (only if needed for nested macro depth stability)
+- Outdated/redundant tests to remove or rewrite:
+  - tests/resolver/test_fixtures.py::test_pipeline_runs_end_to_end (too shallow)
+  - tests/resolver/test_fixtures.py::test_no_error_diagnostics_on_clean_fixtures (duplicate shallow signal)
+  - tests/resolver/test_fixtures.py::test_script_short_flat_scope_and_no_runtime_refs (weak value)
+  - tests/resolver/test_macro_resolver.py token-by-token synthetic duplication (rewrite into compact paramized + fixture-backed checks)
+  - tests/resolver/test_scope_builder.py duplicated orphan/unclosed patterns can be compacted into parameterized structural diagnostics tests
+  - tests/resolver/test_sql_macro_expander.py is not resolver-owned (move to tests/dataflow)
+- Behaviors refreshed tests must protect:
+  - Correct scope construction for macro/if/else boundaries and leaf placement
+  - Correct control payload parsing from real macro-control utilities strings
+  - Resolver scope_id assignment for all blocks, including boundary/control indices
+  - Resolver diagnostics for malformed/orphan/unclosed control flow
+  - Resolver integration contract: parse -> classify -> resolve using real fixtures, with explicit expected outputs for selected fixtures
 
 **Steps**
-1. Phase 1 — Baseline + scope lock
-2. Confirm frontend contract boundaries from source: parse/classify public API in c:\Project\SQLPathFinder_PY_Migration\src\vg2c\frontend\parser.py and c:\Project\SQLPathFinder_PY_Migration\src\vg2c\frontend\classifier.py; classification semantics sourced from utility checks in c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\*.py. This is read-only and blocks all test rewrites.
-3. Confirm fixture set for this pass (representative + stable): script_short.txt, script_another.txt, sql_script.txt, actual_script.txt, plus focused oracle-node fixtures oasys.txt and aries_simple.txt. *parallel with step 4 planning, blocks implementation*
-4. Phase 2 — Rewrite parser tests (tests/frontend/test_parser.py)
-5. Remove redundant synthetic tests that assert identical body-preservation mechanics across SQL/Python/CSV/HTML with near-duplicate structure.
-6. Keep/modernize one compact synthetic test each for parser-only edge behavior that fixtures do not isolate well: separator whitespace, inline-options diagnostic path, unclosed-options error path, duplicate option key diagnostic path, and source-span monotonicity.
-7. Add fixture-driven parser assertions for realistic behavior: block counts, key option extraction, and expected diagnostics shape (including actual_script leading-separator empty-block warning behavior).
-8. Phase 3 — Rewrite classifier tests (tests/frontend/test_classifier.py)
-9. Replace brittle implementation-detail checks (notably utility registry class-name ordering) with behavior-level precedence tests.
-10. Cover classification precedence and edge mapping with concise cases: WRITE-FILE .py -> PYTHON_EMBED, WRITE-FILE non-.py -> WRITE_FILE, macro-token UTILITIES -> MACRO_CONTROL, utility command mapping (external/fs/delete/mail), sqlite detection by OLEDB/ENGINE, Oracle SQL detection for MARS/OASYS/ARIES including <<<TOKEN>>> placeholders, unknown fallback and unknown-kind diagnostic.
-11. Keep synthetic option blocks only where they directly represent classifier input contract; avoid asserting private/internal sequence assumptions.
-12. Phase 4 — Refresh fixture integration tests (tests/frontend/test_fixtures.py)
-13. Replace “has kind” shallow checks with explicit stable expectations per fixture:
-14. script_short.txt: single SQLITE_QUERY block; key option values (CSV owner.csv, HEADERS owner); no error diagnostics.
-15. script_another.txt: three blocks classified as SQL_QUERY, PYTHON_EMBED, EXTERNAL_RUN; preserve expected utility payload signature for Run_Python_Script.
-16. sql_script.txt: mixed dialect flow includes SQL_QUERY and SQLITE_QUERY with expected table-list handling in SQLite block.
-17. actual_script.txt: architecture-level behavior checks (contains HTML_REPORT, MACRO_CONTROL, FS_DELETE, FS_COPY, EXTERNAL_RUN, UTILITY/mail, SQLITE_QUERY, SQL_QUERY), no UNKNOWN blocks, no error diagnostics, and macro control token coverage for critical branch tokens.
-18. oasys.txt + aries_simple.txt: SQL_QUERY classification for Oracle-engine variants.
-19. Refactor helper utilities in test_fixtures.py only if duplication clearly reduced (single parse+classify fixture loader and common diagnostic/kind helpers).
-20. Phase 5 — Validate only frontend scope
-21. Run only frontend tests: .venv\Scripts\python -m pytest -q tests/frontend
-22. If failures occur: update tests to match current intended behavior; if a real frontend source defect is exposed, stop and surface issue clearly before any source modification.
-23. Report delta: removed obsolete assertions, rewritten tests, added fixture-based behavior guarantees, and any surfaced source-risk notes.
+1. Phase 1 - Scope lock + ownership cleanup
+2. Move c:\Project\SQLPathFinder_PY_Migration\tests\resolver\test_sql_macro_expander.py to c:\Project\SQLPathFinder_PY_Migration\tests\dataflow\test_sql_macro_expander.py without broadening assertions, only path/module ownership correction. This is the user-approved scope decision and unblocks resolver-only cleanup.
+3. In tests/resolver, keep focus on resolver behavior only (scope_builder, macro_resolver, resolve). Avoid adding dataflow-only assertions in resolver tests.
+4. Phase 2 - Shared test helpers for resolver fixture flow
+5. Standardize one helper path in tests/resolver for parse+classify+resolve fixture loading (reuse tests/conftest.py FIXTURES). Keep helper minimal and local to resolver tests to reduce repeated boilerplate.
+6. Add small traversal helpers only where they remove duplication: all scope nodes, diagnostics-by-code, macro-control blocks by token.
+7. Phase 3 - Refresh tests/resolver/test_scope_builder.py
+8. Replace repetitive single-purpose tests with grouped behavior tests:
+9. Structural happy path from compact synthetic blocks: macro, if/else, loop nesting produces expected node kinds and child placement.
+10. Parameterized structural diagnostics for orphan/end and unclosed flows (END-MACRO, END-LOOP, END-IF, ELSE, unclosed START-MACRO/RUN-LOOP/IF-THEN).
+11. Malformed block handling test: malformed blocks become leaf + warning malformed-block-skipped.
+12. Add one fixture-backed scope-tree test using actual_script.txt validating stable architecture signals (presence of macro + if nodes, nested depth threshold, no orphan/unclosed diagnostics for this fixture).
+13. Phase 4 - Refresh tests/resolver/test_macro_resolver.py
+14. Convert token parser checks into concise parameterized payload validation for supported control tokens (START-MACRO, END-MACRO, IF-THEN, ELSE, END-IF, ROWS-IN-FILE, RUN-LOOP, END-LOOP) using explicit expected fields.
+15. Add fallback/edge checks:
+16. Unknown macro token -> warning unknown-macro-control and control_payload None.
+17. Invalid RUN-LOOP chunk size -> chunk_size coerced to 0.
+18. Missing quoted args -> default empty strings and prompt_off semantics preserved.
+19. Add fixture-backed assertions from actual_script.txt for explicit first-occurrence payload values (for example StartMacro macrotmp.csv, RowsInFile ICMPCS_config.csv/CONFIG, IfThen CONFIG/LE/0).
+20. Validate scope_id assignment contract on fixture-derived resolved blocks: every block has non-negative scope_id and macro controls map to containing scopes.
+21. Phase 5 - Refresh tests/resolver/test_fixtures.py
+22. Replace shallow pipeline smoke tests with explicit fixture expectations:
+23. script_short.txt: exact single-block resolved structure (program root with one leaf scope, no control payloads, no resolver errors).
+24. script_another.txt: no macro scopes; all resolved blocks remain leaf-scoped; no resolver-introduced control payloads.
+25. sql_script.txt: resolver preserves SQL body (no SQL macro expansion yet), sql_macro_calls empty at resolver stage, and control payload absence for non-macro blocks.
+26. actual_script.txt: assert explicit resolver outputs:
+27. Contains expected macro-control token family in resolved payloads.
+28. Multiple macro and if scopes exist with meaningful nesting depth.
+29. Macro control blocks have typed control_payload values for sampled known lines/tokens.
+30. No orphan/unclosed diagnostics for this representative real fixture.
+31. Keep expectations stable and behavior-level (avoid brittle full-tree snapshots for very large fixture).
+32. Phase 6 - DRY cleanup + legacy test removal
+33. Remove legacy tests superseded by stronger fixture-backed coverage.
+34. Ensure no repeated assertion patterns across files; use paramization where it improves clarity.
+35. Phase 7 - Validation (resolver scope only)
+36. Run resolver tests only: .venv\Scripts\python -m pytest -q tests/resolver
+37. Run relocated ownership test only: .venv\Scripts\python -m pytest -q tests/dataflow/test_sql_macro_expander.py
+38. If failures occur, adjust tests to current intended behavior; if a real resolver bug is detected, report issue clearly before touching resolver source.
 
 **Relevant files**
-- c:\Project\SQLPathFinder_PY_Migration\tests\frontend\test_parser.py — remove redundant parser tests; add fixture-backed parser behavior/diagnostic tests.
-- c:\Project\SQLPathFinder_PY_Migration\tests\frontend\test_classifier.py — replace brittle internals with behavior-first classification precedence tests.
-- c:\Project\SQLPathFinder_PY_Migration\tests\frontend\test_fixtures.py — add explicit stable expected outcomes for representative fixtures.
-- c:\Project\SQLPathFinder_PY_Migration\tests\conftest.py — reuse FIXTURES path fixture; no expected changes unless helper extraction is clearly beneficial.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\frontend\parser.py — reference parser contract and diagnostics behavior (no planned edits).
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\frontend\classifier.py — reference fallback behavior and unknown-kind diagnostic path (no planned edits).
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\sqlite_engine.py — reference SQL/SQLite/Oracle node check behavior.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\python_embed.py — reference .py WRITE-FILE mapping.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\fs_ops.py — reference WRITE_FILE/FS_COPY/FS_DELETE mapping.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\macro_state.py — reference macro-control detection.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\external.py — reference external-run detection.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\html_report.py — reference HTML_REPORT detection.
-- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\emitter\utilities\mail.py — reference mail utility fallback as Kind.UTILITY.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\script_short.txt — sqlite baseline fixture.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\script_another.txt — SQL + Python embed + external run fixture.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\sql_script.txt — mixed Oracle + SQLite fixture.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\actual_script.txt — broad production-like coverage fixture.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\oasys.txt — Oracle OASYS minimal fixture.
-- c:\Project\SQLPathFinder_PY_Migration\tests\fixtures\aries_simple.txt — Oracle ARIES minimal fixture.
+- c:\Project\SQLPathFinder_PY_Migration\tests\resolver\test_scope_builder.py - rewrite for structural + edge diagnostics coverage with less redundancy.
+- c:\Project\SQLPathFinder_PY_Migration\tests\resolver\test_macro_resolver.py - rewrite into parameterized payload/scope behavior tests with fixture-backed assertions.
+- c:\Project\SQLPathFinder_PY_Migration\tests\resolver\test_fixtures.py - replace shallow smoke tests with explicit fixture expectations.
+- c:\Project\SQLPathFinder_PY_Migration\tests\resolver\test_sql_macro_expander.py - remove from resolver scope by relocation.
+- c:\Project\SQLPathFinder_PY_Migration\tests\dataflow\test_sql_macro_expander.py - relocated file destination.
+- c:\Project\SQLPathFinder_PY_Migration\tests\conftest.py - reuse FIXTURES fixture path, no behavior changes expected.
+- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\scope_builder.py - behavior reference only.
+- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\macro_resolver.py - behavior reference only.
+- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\__init__.py - orchestration reference only.
+- c:\Project\SQLPathFinder_PY_Migration\src\vg2c\resolver\models.py - payload type reference only.
 
 **Verification**
-1. Execute .venv\Scripts\python -m pytest -q tests/frontend
-2. Confirm no changes outside tests/frontend (and optional helper-only changes if explicitly justified).
-3. Ensure removed tests correspond to obsolete/redundant behavior, and replacement tests cover realistic fixture-driven behavior plus parser/classifier edge cases.
-4. Re-check that assertions remain behavior-focused (public parse/classify contract), not internal class registry order or implementation internals.
+1. Execute .venv\Scripts\python -m pytest -q tests/resolver.
+2. Execute .venv\Scripts\python -m pytest -q tests/dataflow/test_sql_macro_expander.py (relocated ownership file only).
+3. Confirm changed files are limited to resolver tests plus relocation target; no frontend/emitter/dataflow analyzer source edits.
+4. Confirm assertions test resolver outcomes (payloads, scopes, diagnostics), not private implementation details.
 
 **Decisions**
-- Use stable key expectations for fixture assertions (user preference), not full-sequence snapshots for large fixtures.
-- Scope limited to frontend test module in this pass; do not broaden to other test modules.
-- No frontend source edits planned unless test rewrite reveals a genuine defect.
+- Use the same refresh pattern from frontend pass: fixture-backed stable expectations + compact targeted synthetic edge tests.
+- Keep this pass resolver-focused; no broad dataflow/frontend test rewrites.
+- Relocate SQL macro expander test file out of resolver scope per user decision.
+- Do not modify src resolver code unless tests expose a real defect; if exposed, surface first.
 
 **Further Considerations**
-1. If fixture files are expected to churn frequently, consider centralizing fixture expectations in a compact data table inside test_fixtures.py to minimize maintenance cost.
-2. For actual_script.txt, keep assertions at architecture-signal level (critical kinds + no UNKNOWN/error + key token presence) to avoid brittle fixture-line coupling.
-3. If frontend-only pytest still imports problematic modules due package import side effects, we may need test isolation tweaks while staying within frontend test scope.
+1. If actual_script.txt expectations prove brittle, prefer sampled explicit payload checkpoints plus invariant counts/ranges over exact full-tree snapshots.
+2. If resolver diagnostics include frontend parse/classify diagnostics in integration tests, separate resolver-added diagnostics from upstream diagnostics in assertions.
+3. If relocation is blocked by import path tooling, keep a one-line shim file in tests/resolver temporarily and remove in next cleanup step.

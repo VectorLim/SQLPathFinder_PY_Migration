@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from vg2c.dataflow.sql_macro_expander import expand_sql_macros
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
-from vg2c.dataflow.sql_macro_expander import expand_sql_macros
 from vg2c.resolver.models import ResolvedBlock
 
 

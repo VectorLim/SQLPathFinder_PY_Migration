@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
@@ -8,6 +10,13 @@ from vg2c.frontend.models import (
 )
 from vg2c.kind import Kind
 from vg2c.resolver.scope_builder import build_scope_tree
+
+from tests.resolver._fixture_flow import (
+    all_scope_nodes,
+    diagnostics_by_code,
+    max_scope_depth,
+    parse_classify_fixture,
+)
 
 
 def _block(
@@ -31,13 +40,25 @@ def test_empty_program() -> None:
     assert diagnostics == []
 
 
-def test_macro_pair_wraps_inner_leaves() -> None:
+def test_structural_happy_path_nested_scopes() -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
-        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "run.bat"}),
-        _block(2, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "out.csv"}),
-        _block(3, Kind.SQLITE_QUERY, {"ENGINE": "SQLite"}),
-        _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
+        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "outer.csv" "N"'}),
+        _block(
+            1,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{IF-THEN} "A" "EQS" "1" "" "" "" ""'},
+        ),
+        _block(
+            2,
+            Kind.MACRO_CONTROL,
+            {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "25" "N"'},
+        ),
+        _block(3, Kind.EXTERNAL_RUN, {"UTILITIES": "inside_loop.bat"}),
+        _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"}),
+        _block(5, Kind.MACRO_CONTROL, {"UTILITIES": "{ELSE}"}),
+        _block(6, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "branch.txt"}),
+        _block(7, Kind.MACRO_CONTROL, {"UTILITIES": "{END-IF}"}),
+        _block(8, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
     root, diagnostics = build_scope_tree(blocks)
 
@@ -45,50 +66,55 @@ def test_macro_pair_wraps_inner_leaves() -> None:
     assert len(root.children) == 1
     macro = root.children[0]
     assert macro.kind == "macro"
-    assert [c.block_index for c in macro.children] == [1, 2, 3]
-
-
-def test_if_else_builds_if_node_with_branches() -> None:
-    blocks = [
-        _block(
-            0, Kind.MACRO_CONTROL, {"UTILITIES": '{IF-THEN} "A" "EQS" "1" "" "" "" ""'}
-        ),
-        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "left.bat"}),
-        _block(2, Kind.MACRO_CONTROL, {"UTILITIES": "{ELSE}"}),
-        _block(3, Kind.EXTERNAL_RUN, {"UTILITIES": "right.bat"}),
-        _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-IF}"}),
-    ]
-    root, diagnostics = build_scope_tree(blocks)
-
-    assert diagnostics == []
-    assert len(root.children) == 1
-    if_node = root.children[0]
+    assert len(macro.children) == 1
+    if_node = macro.children[0]
     assert if_node.kind == "if"
     assert [branch.kind for branch in if_node.children] == ["if-branch", "else-branch"]
 
+    loop = if_node.children[0].children[0]
+    assert loop.kind == "loop"
+    assert [child.block_index for child in loop.children] == [3]
 
-def test_unclosed_macro_emits_diagnostic() -> None:
+
+@pytest.mark.parametrize(
+    ("utilities", "expected_code"),
+    [
+        ("{END-MACRO}", "orphan-end-macro"),
+        ("{END-LOOP}", "orphan-end-loop"),
+        ("{END-IF}", "orphan-end-if"),
+        ("{ELSE}", "orphan-else"),
+    ],
+)
+def test_orphan_structural_tokens_emit_errors(
+    utilities: str,
+    expected_code: str,
+) -> None:
+    blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities})]
+    _, diagnostics = build_scope_tree(blocks)
+    assert diagnostics_by_code(diagnostics, expected_code)
+
+
+@pytest.mark.parametrize(
+    ("utilities", "expected_code"),
+    [
+        ('{START-MACRO} "a.csv" "N"', "unclosed-macro"),
+        ('{RUN-LOOP} "in.csv" "chunk.csv" "2" "N"', "unclosed-loop"),
+        ('{IF-THEN} "A" "EQS" "1" "" "" "" ""', "unclosed-if"),
+    ],
+)
+def test_unclosed_openers_emit_errors(
+    utilities: str,
+    expected_code: str,
+) -> None:
     blocks = [
-        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "a.csv" "N"'}),
+        _block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities}),
         _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "x.bat"}),
     ]
     _, diagnostics = build_scope_tree(blocks)
-    assert any(d.code == "unclosed-macro" for d in diagnostics)
+    assert diagnostics_by_code(diagnostics, expected_code)
 
 
-def test_orphan_end_macro_emits_diagnostic() -> None:
-    blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"})]
-    _, diagnostics = build_scope_tree(blocks)
-    assert any(d.code == "orphan-end-macro" for d in diagnostics)
-
-
-def test_orphan_else_emits_diagnostic() -> None:
-    blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": "{ELSE}"})]
-    _, diagnostics = build_scope_tree(blocks)
-    assert any(d.code == "orphan-else" for d in diagnostics)
-
-
-def test_rows_in_file_is_leaf_not_scope() -> None:
+def test_rows_in_file_stays_leaf() -> None:
     blocks = [
         _block(
             0, Kind.MACRO_CONTROL, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}
@@ -100,7 +126,17 @@ def test_rows_in_file_is_leaf_not_scope() -> None:
     assert [node.kind for node in root.children] == ["leaf", "leaf"]
 
 
-def test_run_loop_pair_wraps_inner_leaves() -> None:
+def test_malformed_block_is_leaf_with_warning() -> None:
+    blocks = [
+        _block(0, Kind.MALFORMED),
+        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "after_malformed.bat"}),
+    ]
+    root, diagnostics = build_scope_tree(blocks)
+    assert diagnostics_by_code(diagnostics, "malformed-block-skipped")
+    assert [node.kind for node in root.children] == ["leaf", "leaf"]
+
+
+def test_run_loop_parses_payload_and_wraps_inner_leaf() -> None:
     blocks = [
         _block(
             0,
@@ -125,20 +161,22 @@ def test_run_loop_pair_wraps_inner_leaves() -> None:
     assert [c.block_index for c in loop.children] == [1, 2]
 
 
-def test_unclosed_run_loop_emits_diagnostic() -> None:
-    blocks = [
-        _block(
-            0,
-            Kind.MACRO_CONTROL,
-            {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "5" "N"'},
-        ),
-        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "x.bat"}),
-    ]
-    _, diagnostics = build_scope_tree(blocks)
-    assert any(d.code == "unclosed-loop" for d in diagnostics)
+def test_actual_script_fixture_scope_invariants(FIXTURES) -> None:
+    classified, _ = parse_classify_fixture(FIXTURES, "actual_script.txt")
+    root, diagnostics = build_scope_tree(classified)
 
+    nodes = list(all_scope_nodes(root))
+    assert any(node.kind == "macro" for node in nodes)
+    assert any(node.kind == "if" for node in nodes)
+    assert max_scope_depth(root) >= 4
 
-def test_orphan_end_loop_emits_diagnostic() -> None:
-    blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"})]
-    _, diagnostics = build_scope_tree(blocks)
-    assert any(d.code == "orphan-end-loop" for d in diagnostics)
+    disallowed = {
+        "orphan-end-macro",
+        "orphan-end-loop",
+        "orphan-end-if",
+        "orphan-else",
+        "unclosed-macro",
+        "unclosed-loop",
+        "unclosed-if",
+    }
+    assert not [diag for diag in diagnostics if diag.code in disallowed]
