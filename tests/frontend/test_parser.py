@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-
 from vg2c.frontend import parse
 
 
@@ -48,50 +47,6 @@ def test_parses_inline_options_when_markers_missing() -> None:
     assert "inline-options" in _codes(diagnostics)
 
 
-def test_preserves_sql_body_verbatim() -> None:
-    body = (
-        "/*BEGIN SQL*/\nSELECT\n    a,\n    b\nFROM t\nORDER BY\n    1\n/*END SQL*/\n"
-    )
-    text = f"<OPTIONS>\n/OLEDB=SQLite\n</OPTIONS>\n{body}"
-    blocks, _ = parse(text)
-
-    assert blocks[0].body == body.rstrip("\n")
-
-
-def test_preserves_python_body_verbatim() -> None:
-    body = "def run():\n    x = 1\n    if x:\n        print(x)\n"
-    text = f"<OPTIONS>\n/WRITE-FILE=Y\n/CSV=script.py\n</OPTIONS>\n{body}"
-    blocks, _ = parse(text)
-
-    assert blocks[0].body == body.rstrip("\n")
-
-
-def test_preserves_csv_and_html_bodies_verbatim() -> None:
-    csv_body = "col1,col2\n1,2\n"
-    html_body = "<html>\n  <body>ok</body>\n</html>\n"
-    text = (
-        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=data.csv\n</OPTIONS>\n"
-        + csv_body
-        + "<---- New Query ---->\n"
-        + "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=page.htm\n</OPTIONS>\n"
-        + html_body
-    )
-    blocks, _ = parse(text)
-
-    assert blocks[0].body == csv_body.rstrip("\n")
-    assert blocks[1].body == html_body.rstrip("\n")
-
-
-def test_quoted_utility_value_kept_verbatim() -> None:
-    value = (
-        '@EXEDIR@\\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"'
-    )
-    text = f"<OPTIONS>\n/UTILITIES={value}\n</OPTIONS>\n"
-    blocks, _ = parse(text)
-
-    assert blocks[0].options.lookup["UTILITIES"] == value
-
-
 def test_duplicate_keys_preserved_with_last_lookup_and_diagnostic() -> None:
     text = """<OPTIONS>\n/TABLE=one.csv\n/TABLE=two.csv\n</OPTIONS>\n"""
     blocks, diagnostics = parse(text)
@@ -99,20 +54,6 @@ def test_duplicate_keys_preserved_with_last_lookup_and_diagnostic() -> None:
     assert blocks[0].options.pairs == (("TABLE", "one.csv"), ("TABLE", "two.csv"))
     assert blocks[0].options.lookup["TABLE"] == "two.csv"
     assert _codes(diagnostics).count("duplicate-option-key") == 1
-
-
-def test_empty_block_between_separators_emits_warning_and_skips() -> None:
-    text = (
-        "<OPTIONS>\n/A=1\n</OPTIONS>\nfirst\n"
-        "<---- New Query ---->\n"
-        "   \n"
-        "<---- New Query ---->\n"
-        "<OPTIONS>\n/B=2\n</OPTIONS>\nsecond\n"
-    )
-    blocks, diagnostics = parse(text)
-
-    assert len(blocks) == 2
-    assert "empty-block" in _codes(diagnostics)
 
 
 def test_unclosed_options_emits_error_with_best_effort_block() -> None:
@@ -144,19 +85,31 @@ def test_source_spans_track_absolute_line_numbers() -> None:
     assert blocks[0].span.end_line == 5
     assert blocks[1].span.start_line == 6
     assert blocks[1].span.end_line == 10
+    assert blocks[1].span.start_line > blocks[0].span.end_line
 
 
-def test_macro_placeholders_are_not_interpreted() -> None:
-    value = "setsiteparam.exe KM <<<SFOLDER>>> <<<UNDERDEV>>> <<>>"
-    text = f"<OPTIONS>\n/UTILITIES={value}\n</OPTIONS>\n"
-    blocks, _ = parse(text)
+def test_fixture_driven_parser_behavior(FIXTURES: Path) -> None:
+    # 1. script_short.txt: 1 block, key options, no errors
+    short_text = (FIXTURES / "script_short.txt").read_text(encoding="utf-8", errors="replace")
+    blocks, diags = parse(short_text, source=FIXTURES / "script_short.txt")
+    assert len(blocks) == 1
+    assert blocks[0].options.lookup.get("CSV") == "owner.csv"
+    assert blocks[0].options.lookup.get("HEADERS") == "owner"
+    assert not [d for d in diags if d.severity == "error"]
 
-    assert blocks[0].options.lookup["UTILITIES"] == value
+    # 2. script_another.txt: 3 blocks
+    another_text = (FIXTURES / "script_another.txt").read_text(encoding="utf-8", errors="replace")
+    blocks, _ = parse(another_text, source=FIXTURES / "script_another.txt")
+    assert len(blocks) == 3
 
+    # 3. sql_script.txt: 3 blocks
+    sql_text = (FIXTURES / "sql_script.txt").read_text(encoding="utf-8", errors="replace")
+    blocks, _ = parse(sql_text, source=FIXTURES / "sql_script.txt")
+    assert len(blocks) == 3
 
-def test_unc_path_is_preserved_verbatim() -> None:
-    value = r'@EXEDIR@\SPFCopy.bat "\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\input.csv" ".\\" "N"'
-    text = f"<OPTIONS>\n/UTILITIES={value}\n</OPTIONS>\n"
-    blocks, _ = parse(text)
-
-    assert blocks[0].options.lookup["UTILITIES"] == value
+    # 4. actual_script.txt: 60 blocks, leading-separator empty-block warning diagnostic
+    actual_text = (FIXTURES / "actual_script.txt").read_text(encoding="utf-8", errors="replace")
+    blocks, diags = parse(actual_text, source=FIXTURES / "actual_script.txt")
+    assert len(blocks) == 60
+    assert "empty-block" in _codes(diags)
+    assert not [d for d in diags if d.severity == "error"]

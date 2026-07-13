@@ -10,7 +10,6 @@ from vg2c.dataflow.models import (
     ConsumerKind,
     ConsumerRecord,
     DataflowEdge,
-    ProducerKind,
     ProducerRecord,
     ScopeRelation,
 )
@@ -171,7 +170,7 @@ def _collect_explicit_producers(
                     block_index=block.index,
                     csv_path=csv_path,
                     scope_id=block.scope_id,
-                    producer_kind=_producer_kind_for_block(block.kind),
+                    producer_kind=block.kind,
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
@@ -188,7 +187,7 @@ def _collect_explicit_producers(
                     block_index=block.index,
                     csv_path=_normalize_csv_path(payload.chunk_csv_path),
                     scope_id=block.scope_id,
-                    producer_kind="run-loop-chunk",
+                    producer_kind=block.kind,
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
@@ -204,12 +203,7 @@ def _collect_external_utility_candidates(
 ) -> list[ProducerRecord]:
     candidates: list[ProducerRecord] = []
     for block in blocks:
-        if block.kind not in {
-            Kind.EMAIL,
-            Kind.EXTERNAL_RUN,
-            Kind.FS_COPY,
-            Kind.FS_DELETE,
-        }:
+        if not block.kind.is_external_utility:
             continue
         utilities = block.resolved_options.lookup.get("UTILITIES", "")
         for token in _CSV_TOKEN_RE.findall(utilities):
@@ -218,7 +212,7 @@ def _collect_external_utility_candidates(
                     block_index=block.index,
                     csv_path=_normalize_csv_path(token),
                     scope_id=block.scope_id,
-                    producer_kind="external-presumed",
+                    producer_kind=block.kind,
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
@@ -289,17 +283,6 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
                 )
     return consumers
 
-
-def _producer_kind_for_block(kind: Kind) -> ProducerKind:
-    if kind is Kind.WRITE_FILE:
-        return "write-file"
-    if kind is Kind.PYTHON_EMBED:
-        return "python-embed"
-    if kind is Kind.SQL_QUERY:
-        return "db-read"
-    if kind is Kind.SQLITE_QUERY:
-        return "sqlite-query"
-    return "unknown"
 
 
 def _index_by_path(producers: list[ProducerRecord]) -> dict[str, list[ProducerRecord]]:

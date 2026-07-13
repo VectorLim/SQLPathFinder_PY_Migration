@@ -44,7 +44,7 @@ def test_detects_write_file_and_table_consumer() -> None:
         ]
     )
     assert any(
-        p.csv_path == "foo.csv" and p.producer_kind == "write-file"
+        p.csv_path == "foo.csv" and p.producer_kind is Kind.WRITE_FILE
         for p in program.producers
     )
     assert any(
@@ -68,7 +68,7 @@ def test_sqlite_block_can_be_producer_and_consumer() -> None:
         ]
     )
     assert any(
-        p.csv_path == "b.csv" and p.producer_kind == "sqlite-query"
+        p.csv_path == "b.csv" and p.producer_kind is Kind.SQLITE_QUERY
         for p in program.producers
     )
     assert any(c.csv_path == "a.csv" for c in program.consumers)

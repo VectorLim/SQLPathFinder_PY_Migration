@@ -6,6 +6,7 @@ import pytest
 
 from vg2c.dataflow import analyze
 from vg2c.frontend import classify, parse
+from vg2c.kind import Kind
 from vg2c.resolver import resolve
 
 FIXTURE_NAMES = [
@@ -67,7 +68,7 @@ def test_sql_script_links_db_read_to_sql_macro_consumer(FIXTURES: Path) -> None:
     assert target_edges
     assert all(edge.producer is not None for edge in target_edges)
     assert all(
-        edge.producer.producer_kind == "db-read"
+        edge.producer.producer_kind is Kind.SQL_QUERY
         for edge in target_edges
         if edge.producer
     )

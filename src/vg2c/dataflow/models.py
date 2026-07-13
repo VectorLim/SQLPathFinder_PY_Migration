@@ -4,17 +4,9 @@ from dataclasses import dataclass
 from typing import Literal, Mapping
 
 from vg2c.frontend.models import Diagnostic
+from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedProgram
 
-ProducerKind = Literal[
-    "write-file",
-    "python-embed",
-    "db-read",
-    "sqlite-query",
-    "external-presumed",
-    "run-loop-chunk",
-    "unknown",
-]
 
 ConsumerKind = Literal["table", "start-macro", "rows-in-file", "sql-macro", "run-loop"]
 
@@ -32,7 +24,7 @@ class ProducerRecord:
     block_index: int
     csv_path: str
     scope_id: int
-    producer_kind: ProducerKind
+    producer_kind: Kind
     is_conditional: bool
     is_in_loop: bool
 

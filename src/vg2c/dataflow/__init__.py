@@ -4,7 +4,6 @@ from vg2c.dataflow.models import (
     ConsumerKind,
     ConsumerRecord,
     DataflowEdge,
-    ProducerKind,
     ProducerRecord,
 )
 
@@ -13,7 +12,6 @@ __all__ = [
     "ConsumerKind",
     "ConsumerRecord",
     "DataflowEdge",
-    "ProducerKind",
     "ProducerRecord",
     "analyze",
 ]

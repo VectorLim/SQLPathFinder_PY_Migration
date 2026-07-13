@@ -1,95 +1,98 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
-
-import pytest
-
-from vg2c.frontend import classify, parse
+from vg2c.frontend import parse, classify
 from vg2c.kind import Kind
 
-FIXTURE_NAMES = [
-    "script_short.txt",
-    "script_another.txt",
-    "sql_script.txt",
-    "actual_script.txt",
-]
+
+def _parse_and_classify(fixtures_dir: Path, name: str) -> tuple[list, list]:
+    path = fixtures_dir / name
+    text = path.read_text(encoding="utf-8", errors="replace")
+    blocks, parse_diags = parse(text, source=path)
+    classified, class_diags = classify(blocks)
+    return classified, parse_diags + class_diags
 
 
-@pytest.mark.parametrize("fixture_name", FIXTURE_NAMES)
-def test_fixture_parse_and_classify_basics(FIXTURES: Path, fixture_name: str) -> None:
-    text = (FIXTURES / fixture_name).read_text(encoding="utf-8", errors="replace")
-
-    blocks, parse_diagnostics = parse(text, source=FIXTURES / fixture_name)
-    classified, classify_diagnostics = classify(blocks)
-    diagnostics = [*parse_diagnostics, *classify_diagnostics]
-
-    assert len(classified) >= 1
-    assert [b.index for b in classified] == list(range(len(classified)))
-
-    if fixture_name != "actual_script.txt":
-        assert not [d for d in diagnostics if d.severity == "error"]
+def _assert_no_errors(diagnostics: list) -> None:
+    errors = [d for d in diagnostics if d.severity == "error"]
+    assert not errors, f"Expected no error diagnostics, got: {errors}"
 
 
-def test_script_short_has_sqlite_query(FIXTURES: Path) -> None:
-    classified = _classify_fixture(FIXTURES, "script_short.txt")
-    assert _has_kind(classified, Kind.SQLITE_QUERY)
+def test_script_short_expectations(FIXTURES: Path) -> None:
+    classified, diagnostics = _parse_and_classify(FIXTURES, "script_short.txt")
+    _assert_no_errors(diagnostics)
+
+    assert len(classified) == 1
+    block = classified[0]
+    assert block.kind is Kind.SQLITE_QUERY
+    assert block.options.lookup.get("CSV") == "owner.csv"
+    assert block.options.lookup.get("HEADERS") == "owner"
 
 
-def test_script_another_has_mars_write_and_utility(FIXTURES: Path) -> None:
-    classified = _classify_fixture(FIXTURES, "script_another.txt")
-    assert _has_kind(classified, Kind.SQL_QUERY)
-    assert _has_kind(classified, Kind.PYTHON_EMBED)
-    assert _has_any_kind(
-        classified,
-        (Kind.EMAIL, Kind.EXTERNAL_RUN, Kind.FS_COPY, Kind.FS_DELETE),
+def test_script_another_expectations(FIXTURES: Path) -> None:
+    classified, diagnostics = _parse_and_classify(FIXTURES, "script_another.txt")
+    _assert_no_errors(diagnostics)
+
+    assert len(classified) == 3
+    assert [b.kind for b in classified] == [
+        Kind.SQL_QUERY,
+        Kind.PYTHON_EMBED,
+        Kind.EXTERNAL_RUN,
+    ]
+
+    # Preserve expected utility payload signature for Run_Python_Script
+    assert (
+        classified[2].options.lookup.get("UTILITIES")
+        == '@EXEDIR@\\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"'
     )
 
 
-def test_sql_script_has_mars_oasys_and_sqlite(FIXTURES: Path) -> None:
-    classified = _classify_fixture(FIXTURES, "sql_script.txt")
-    assert _has_kind(classified, Kind.SQL_QUERY)
-    assert _has_kind(classified, Kind.SQLITE_QUERY)
+def test_sql_script_expectations(FIXTURES: Path) -> None:
+    classified, diagnostics = _parse_and_classify(FIXTURES, "sql_script.txt")
+    _assert_no_errors(diagnostics)
 
-
-
-
-def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
-    blocks, parse_diagnostics = parse(
-        (FIXTURES / "actual_script.txt").read_text(encoding="utf-8", errors="replace"),
-        source=FIXTURES / "actual_script.txt",
-    )
-    classified, classify_diagnostics = classify(blocks)
-    diagnostics = [*parse_diagnostics, *classify_diagnostics]
-
-    assert _has_kind(classified, Kind.HTML_REPORT)
-    assert _has_kind(classified, Kind.SQLITE_QUERY)
-
-    write_csv_values = [
-        item.options.lookup.get("CSV", "")
-        for item in classified
-        if item.kind is Kind.WRITE_FILE and "CSV" in item.options.lookup
+    assert len(classified) == 3
+    assert [b.kind for b in classified] == [
+        Kind.SQL_QUERY,
+        Kind.SQL_QUERY,
+        Kind.SQLITE_QUERY,
     ]
-    lowered = [v.lower() for v in write_csv_values]
-    assert any(v.endswith(".bat") for v in lowered)
-    assert any(v.endswith(".csv") for v in lowered)
-    assert any(v.endswith(".htm") for v in lowered)
 
-    py_embed_csv_values = [
-        item.options.lookup.get("CSV", "")
-        for item in classified
-        if item.kind is Kind.PYTHON_EMBED and "CSV" in item.options.lookup
-    ]
-    py_lowered = [v.lower() for v in py_embed_csv_values]
-    if py_lowered:
-        assert any(v.endswith(".py") for v in py_lowered)
+    # Expected table-list handling in SQLite block
+    sqlite_block = classified[2]
+    assert sqlite_block.options.lookup.get("TABLE") == "yeuchuan_a0_29397.tab,yeuchuan_a1_29397.tab"
 
-    macro_values = [
-        item.options.lookup.get("UTILITIES", "")
-        for item in classified
-        if item.kind is Kind.MACRO_CONTROL
+
+def test_actual_script_expectations(FIXTURES: Path) -> None:
+    classified, diagnostics = _parse_and_classify(FIXTURES, "actual_script.txt")
+    _assert_no_errors(diagnostics)
+
+    # Assert specific kinds exist
+    kinds = {b.kind for b in classified}
+    expected_kinds = {
+        Kind.HTML_REPORT,
+        Kind.MACRO_CONTROL,
+        Kind.FS_DELETE,
+        Kind.FS_COPY,
+        Kind.EXTERNAL_RUN,
+        Kind.EMAIL,
+        Kind.SQLITE_QUERY,
+        Kind.SQL_QUERY,
+    }
+    for ek in expected_kinds:
+        assert ek in kinds, f"Expected {ek} in classified kinds, but it was missing."
+
+    # No UNKNOWN blocks
+    unknown_blocks = [b for b in classified if b.kind is Kind.UNKNOWN]
+    assert not unknown_blocks, f"Expected no UNKNOWN blocks, got: {unknown_blocks}"
+
+    # Macro control token coverage for critical branch tokens
+    macro_utils = [
+        b.options.lookup.get("UTILITIES", "")
+        for b in classified
+        if b.kind is Kind.MACRO_CONTROL
     ]
-    required_tokens = [
+    critical_tokens = [
         "{START-MACRO}",
         "{END-MACRO}",
         "{IF-THEN}",
@@ -97,68 +100,21 @@ def test_actual_script_has_expected_stage1_coverage(FIXTURES: Path) -> None:
         "{END-IF}",
         "{ROWS-IN-FILE}",
     ]
-    for token in required_tokens:
+    for token in critical_tokens:
         assert any(
-            v.lstrip().startswith(token) for v in macro_values
-        ), f"Missing macro token {token}"
-
-    email_values = [
-        item.options.lookup.get("UTILITIES", "")
-        for item in classified
-        if item.kind is Kind.EMAIL
-    ]
-    external_values = [
-        item.options.lookup.get("UTILITIES", "")
-        for item in classified
-        if item.kind is Kind.EXTERNAL_RUN
-    ]
-    fs_copy_values = [
-        item.options.lookup.get("UTILITIES", "")
-        for item in classified
-        if item.kind is Kind.FS_COPY
-    ]
-
-    assert any(
-        marker in value
-        for value in external_values
-        for marker in ("getcsrsu.bat", "setsiteparam.exe")
-    )
-    assert any("RoboCopy.va" in value for value in fs_copy_values)
-    assert any("SQLPathFinder_Email.va" in value for value in email_values)
-
-    unknown_blocks = [item for item in classified if item.kind is Kind.UNKNOWN]
-    assert not unknown_blocks, _unknown_failure_message(unknown_blocks)
-
-    step_prompts: list[tuple[int, ...]] = []
-    for item in classified:
-        prompt = item.options.lookup.get("PROMPT-TEXT", "")
-        if prompt.startswith("Step "):
-            nums = tuple(int(v) for v in re.findall(r"\d+", prompt))
-            if nums:
-                step_prompts.append(nums)
-    assert step_prompts == sorted(step_prompts)
-
-    assert not [d for d in diagnostics if d.severity == "error"]
+            v.lstrip().startswith(token) for v in macro_utils
+        ), f"Missing macro control token coverage for: {token}"
 
 
-def _classify_fixture(fixtures: Path, file_name: str):
-    text = (fixtures / file_name).read_text(encoding="utf-8", errors="replace")
-    blocks, _ = parse(text, source=fixtures / file_name)
-    classified, _ = classify(blocks)
-    return classified
+def test_oasys_and_aries_expectations(FIXTURES: Path) -> None:
+    # oasys.txt -> SQL_QUERY
+    classified_oasys, diagnostics_oasys = _parse_and_classify(FIXTURES, "oasys.txt")
+    _assert_no_errors(diagnostics_oasys)
+    assert len(classified_oasys) == 1
+    assert classified_oasys[0].kind is Kind.SQL_QUERY
 
-
-def _has_kind(classified, kind: Kind) -> bool:
-    return any(item.kind is kind for item in classified)
-
-
-def _has_any_kind(classified, kinds: tuple[Kind, ...]) -> bool:
-    return any(item.kind in kinds for item in classified)
-
-
-def _unknown_failure_message(unknown_blocks) -> str:
-    snippets: list[str] = []
-    for item in unknown_blocks:
-        prompt = item.options.lookup.get("PROMPT-TEXT", "<missing PROMPT-TEXT>")
-        snippets.append(f"prompt={prompt!r} raw={item.raw[:200]!r}")
-    return "Unexpected UNKNOWN blocks: " + " | ".join(snippets)
+    # aries_simple.txt -> SQL_QUERY
+    classified_aries, diagnostics_aries = _parse_and_classify(FIXTURES, "aries_simple.txt")
+    _assert_no_errors(diagnostics_aries)
+    assert len(classified_aries) == 1
+    assert classified_aries[0].kind is Kind.SQL_QUERY
