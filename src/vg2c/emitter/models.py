@@ -44,25 +44,90 @@ class EmitContext:
 
         return render_method_call(utility_name, method_name, args=args, kwargs=kwargs)
 
+    @staticmethod
+    def _step_name(block: Any, suffix: str) -> str:
+        return f"step_{block.index:04d}_{suffix}"
+
+    @staticmethod
+    def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
+        lines = [f"def {name}(ctx) -> None:"]
+        if body_lines:
+            for body_line in body_lines:
+                for line in body_line.split("\n"):
+                    if line.strip():
+                        lines.append(f"    {line}")
+                    else:
+                        lines.append("")
+        else:
+            lines.append("    pass")
+        return "\n".join(lines), f"{name}(ctx)"
+
+    @staticmethod
+    def step_emitter(arg=None):
+        """Decorator to wrap utility emit_block class methods.
+
+        Can be used as:
+            @EmitContext.step_emitter
+            def emit_block(cls, block): ...
+
+        or:
+            @EmitContext.step_emitter("custom_suffix")
+            def emit_block(cls, block): ...
+        """
+        if callable(arg):
+            func = arg
+            def wrapper(cls, block, *args, **kwargs):
+                result = func(cls, block, *args, **kwargs)
+                if result is None:
+                    return None
+                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
+                    suffix, body_lines = result
+                else:
+                    suffix = getattr(cls, "utility_name", "utility")
+                    body_lines = result
+                return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), body_lines)
+            return wrapper
+
+        default_suffix = arg
+        def decorator(func):
+            def wrapper(cls, block, *args, **kwargs):
+                result = func(cls, block, *args, **kwargs)
+                if result is None:
+                    return None
+                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
+                    suffix, body_lines = result
+                else:
+                    suffix = default_suffix or getattr(cls, "utility_name", "utility")
+                    body_lines = result
+                return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), body_lines)
+            return wrapper
+        return decorator
+
     def emit_block(self, block: Any) -> tuple[str, str]:
         from vg2c.emitter.utilities._base import UtilitySpec
-        from vg2c.emitter.utilities._emit_helpers import _emit_step_source, _step_name
 
         reader_cls = getattr(block, "reader_cls", None)
         if reader_cls is not None:
             self.add_import(reader_cls.__module__, reader_cls.__name__)
 
         handler_cls = UtilitySpec._emit_handlers.get(block.kind)
-        if handler_cls is not None:
+        if handler_cls is not None and block.kind is not Kind.UTILITY:
             emitted = handler_cls.emit_block(block)
             if emitted is not None:
                 return emitted
 
         if block.kind is Kind.UTILITY:
             for utility_cls in UtilitySpec._registry.values():
+                if utility_cls is handler_cls:
+                    continue
                 if getattr(utility_cls, "handles", ()):
                     continue
                 emitted = utility_cls.emit_block(block)
+                if emitted is not None:
+                    return emitted
+
+            if handler_cls is not None:
+                emitted = handler_cls.emit_block(block)
                 if emitted is not None:
                     return emitted
 
@@ -73,7 +138,7 @@ class EmitContext:
             block.kind,
             ("unknown", f"pass  # TODO: unhandled kind={block.kind}"),
         )
-        return _emit_step_source(_step_name(block, suffix), [default_stmt])
+        return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), [default_stmt])
 
 
 @dataclass(frozen=True, slots=True)

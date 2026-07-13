@@ -4,18 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
-from vg2c.emitter.utilities._emit_helpers import (
-    _emit_step_source,
-    _step_name,
-)
 from vg2c.kind import Kind
 
 
 class PythonEmbed(CheckedUtilitySpec):
     """Utility class for directly embedding Python script blocks."""
 
-    utility_name = "py_embed"
+    utility_name = "python_embed"
     handles = (Kind.PYTHON_EMBED,)
 
     @staticmethod
@@ -28,10 +25,8 @@ class PythonEmbed(CheckedUtilitySpec):
             return Kind.PYTHON_EMBED, "/WRITE-FILE=Y targeting .py script"
         return None
 
-    @staticmethod
-    def emit_block(block: Any) -> tuple[str, str] | None:
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block: Any) -> list[str] | None:
         # Wrap the original python body directly in the step function definition
-        return _emit_step_source(
-            _step_name(block, "python_embed"),
-            [block.resolved_body],
-        )
+        return [block.resolved_body]

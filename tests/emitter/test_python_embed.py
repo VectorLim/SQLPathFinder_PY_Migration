@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from vg2c.emitter.utilities.python_embed import PythonEmbed
-from vg2c.emitter.utilities._emit_helpers import _step_name
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock

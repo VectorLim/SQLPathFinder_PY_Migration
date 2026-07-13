@@ -5,12 +5,11 @@ from __future__ import annotations
 import re
 from functools import partial
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     resolve_output_path,
@@ -126,24 +125,26 @@ class SqliteEngine(CheckedUtilitySpec):
         parts = [p.strip() for p in stripped.split(",")]
         return [p for p in parts if p]
 
-    @staticmethod
-    def emit_block(block) -> tuple[str, str] | None:
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block) -> tuple[str, list[str]] | None:
         sqlite = block.kind is Kind.SQLITE_QUERY
-        return SqliteEngine._emit_sql(block, sqlite=sqlite)
+        return cls._emit_sql(block, sqlite=sqlite)
 
-    @staticmethod
+    @classmethod
     def _emit_sql(
+        cls,
         block,
         *,
         sqlite: bool,
-    ) -> tuple[str, str]:
-        sql = SqliteEngine._extract_sql_text(block)
+    ) -> tuple[str, list[str]]:
+        sql = cls._extract_sql_text(block)
         output = resolve_output_path(block)
         reader_cls = getattr(block, "reader_cls", None)
         if reader_cls is None:
             raise ValueError("SQL emission requires dispatch metadata")
         crosstab = CrosstabUtility.extract_options(block)
-        header = None if crosstab else SqliteEngine._extract_header(block)
+        header = None if crosstab else cls._extract_header(block)
 
         reader_kwargs = getattr(block, "reader_kwargs", {})
         reader_kwargs_items = [f"{k}={repr(v)}" for k, v in reader_kwargs.items()]
@@ -155,7 +156,7 @@ class SqliteEngine(CheckedUtilitySpec):
             "reader": RawExpr(inst_expr),
         }
         if sqlite:
-            kwargs["inputs"] = SqliteEngine._extract_table_inputs(block)
+            kwargs["inputs"] = cls._extract_table_inputs(block)
         if header:
             kwargs["header"] = header
         if crosstab:
@@ -163,4 +164,4 @@ class SqliteEngine(CheckedUtilitySpec):
 
         stmt = render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
-        return _emit_step_source(_step_name(block, suffix), [stmt])
+        return suffix, [stmt]

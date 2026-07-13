@@ -6,11 +6,10 @@ from pathlib import Path
 import re
 from typing import Any
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     resolve_path,
@@ -39,17 +38,18 @@ class HtmlReport(CheckedUtilitySpec):
         self.prompt_text: str | None = None
         self.app_server_default: str | None = None
 
-    @staticmethod
-    def emit_block(block) -> tuple[str, str] | None:
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block) -> list[str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         if report_type == "HTML-RUN":
-            return HtmlReport._emit_html_run(block)
+            return cls._emit_html_run(block)
         elif report_type == "HTML-LAYOUT":
-            return HtmlReport._emit_html_layout(block)
+            return cls._emit_html_layout(block)
         elif report_type == "HTML-DELETE":
-            return HtmlReport._emit_html_delete(block)
+            return cls._emit_html_delete(block)
         elif report_type == "HTML-DEFER":
-            return HtmlReport._emit_html_defer(block)
+            return cls._emit_html_defer(block)
         return None
 
     @staticmethod
@@ -60,7 +60,7 @@ class HtmlReport(CheckedUtilitySpec):
         *,
         args: tuple[RawExpr, ...] = (),
         include_template: bool = False,
-    ) -> tuple[str, str]:
+    ) -> list[str]:
         kwargs = {}
         for key in option_keys:
             val = block.resolved_options.lookup.get(key)
@@ -69,12 +69,12 @@ class HtmlReport(CheckedUtilitySpec):
                     option_to_python_expr(val)
                 )
         if include_template:
-            kwargs["template"] = block.resolved_body
+            kwargs["template"] = RawExpr(repr(block.resolved_body))
         stmt = render_method_call("html_report", method, args=args, kwargs=kwargs)
-        return _emit_step_source(_step_name(block, "html_report"), [stmt])
+        return [stmt]
 
     @staticmethod
-    def _emit_html_defer(block) -> tuple[str, str]:
+    def _emit_html_defer(block) -> list[str]:
         return HtmlReport._emit_method(
             block,
             "defer",
@@ -83,7 +83,7 @@ class HtmlReport(CheckedUtilitySpec):
         )
 
     @staticmethod
-    def _emit_html_run(block) -> tuple[str, str]:
+    def _emit_html_run(block) -> list[str]:
         return HtmlReport._emit_method(
             block,
             "run",
@@ -92,7 +92,7 @@ class HtmlReport(CheckedUtilitySpec):
         )
 
     @staticmethod
-    def _emit_html_layout(block) -> tuple[str, str]:
+    def _emit_html_layout(block) -> list[str]:
         return HtmlReport._emit_method(
             block,
             "layout",
@@ -108,7 +108,7 @@ class HtmlReport(CheckedUtilitySpec):
         )
 
     @staticmethod
-    def _emit_html_delete(block) -> tuple[str, str]:
+    def _emit_html_delete(block) -> list[str]:
         return HtmlReport._emit_method(block, "delete", ["INSTANCE"])
 
     @staticmethod

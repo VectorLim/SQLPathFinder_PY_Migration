@@ -12,9 +12,7 @@ __all__ = [
     "NAMED_PLACEHOLDER_RE",
     "PLACEHOLDER_RE",
     "RawExpr",
-    "_emit_step_source",
     "_render_value",
-    "_step_name",
     "normalize_macro_name",
     "option_to_python_expr",
     "placeholders_to_python_expr",
@@ -143,6 +141,8 @@ def placeholders_to_python_expr(text: str) -> str:
 def _render_value(value: Any) -> str:
     if isinstance(value, RawExpr):
         return value.source
+    if isinstance(value, str):
+        return repr(value)
     return repr(value)
 
 
@@ -159,21 +159,3 @@ def render_method_call(
     for key, value in (kwargs or {}).items():
         parts.append(f"{key}={_render_value(value)}")
     return f"{receiver}.{method_name}({', '.join(parts)})"
-
-
-def _step_name(block: Any, suffix: str) -> str:
-    return f"step_{block.index:04d}_{suffix}"
-
-
-def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
-    lines = [f"def {name}(ctx) -> None:"]
-    if body_lines:
-        for body_line in body_lines:
-            for line in body_line.split("\n"):
-                if line.strip():
-                    lines.append(f"    {line}")
-                else:
-                    lines.append("")
-    else:
-        lines.append("    pass")
-    return "\n".join(lines), f"{name}(ctx)"

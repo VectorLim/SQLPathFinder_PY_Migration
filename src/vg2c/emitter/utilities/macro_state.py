@@ -7,11 +7,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Protocol
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     normalize_macro_name,
@@ -47,11 +46,12 @@ class MacroState(CheckedUtilitySpec):
             return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
         return None
 
-    @staticmethod
-    def emit_block(block) -> tuple[str, str] | None:
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block) -> tuple[str, list[str]] | None:
         payload = block.control_payload
         if not isinstance(payload, RowsInFile):
-            return _emit_step_source(_step_name(block, "macro_control"), ["pass"])
+            return "macro_control", ["pass"]
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
@@ -65,7 +65,7 @@ class MacroState(CheckedUtilitySpec):
             "set_named",
             args=(set_name, RawExpr(f"str({row_count_call})")),
         )
-        return _emit_step_source(_step_name(block, "rows_in_file"), [stmt])
+        return "rows_in_file", [stmt]
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]

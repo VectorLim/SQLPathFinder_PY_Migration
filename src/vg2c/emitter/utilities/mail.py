@@ -9,11 +9,10 @@ from pathlib import Path
 from typing import Any
 
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     split_utility_command,
@@ -24,21 +23,19 @@ from vg2c.emitter.utilities._emit_helpers import (
 class MailService(UtilitySpec):
     """Send email. Reads connection config from environment variables."""
 
-    utility_name = "mail"
+    utility_name = "email"
 
-    @staticmethod
-    def emit_block(block: Any) -> tuple[str, str] | None:
-        argv = MailService._utility_argv(block)
-        if not MailService._is_mail_utility(argv):
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block: Any) -> list[str] | None:
+        argv = cls._utility_argv(block)
+        if not cls._is_mail_utility(argv):
             return None
 
-        stmt = MailService._emit_send(argv, block.resolved_body)
+        stmt = cls._emit_send(argv, block.resolved_body)
         if stmt is None:
-            return _emit_step_source(
-                _step_name(block, "email"),
-                ["pass  # TODO: unsupported email utility command"],
-            )
-        return _emit_step_source(_step_name(block, "email"), [stmt])
+            return ["pass  # TODO: unsupported email utility command"]
+        return [stmt]
 
     @staticmethod
     def _utility_argv(block: Any) -> list[str]:
@@ -84,11 +81,11 @@ class MailService(UtilitySpec):
             if from_addr and from_addr.lower() != "self":
                 kwargs["from_addr"] = RawExpr(option_to_python_expr(from_addr))
 
-            return render_method_call("mail", "send", kwargs=kwargs)
+            return render_method_call("email", "send", kwargs=kwargs)
 
         if len(payload) >= 3:
             return render_method_call(
-                "mail",
+                "email",
                 "send",
                 kwargs={
                     "to": RawExpr(option_to_python_expr(payload[0])),

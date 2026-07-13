@@ -5,11 +5,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     resolve_output_path,
@@ -45,56 +44,51 @@ class FileSystemOps(CheckedUtilitySpec):
             return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
         return None
 
-    @staticmethod
-    def emit_block(block) -> tuple[str, str] | None:
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block) -> tuple[str, list[str]] | None:
         if block.kind is Kind.FS_COPY:
-            return FileSystemOps._emit_copy_block(block)
+            return cls._emit_copy_block(block)
         if block.kind is Kind.FS_DELETE:
-            return FileSystemOps._emit_delete_block(block)
+            return cls._emit_delete_block(block)
 
         stmt = render_method_call(
             "ctx",
             "write_file",
             kwargs={
                 "path": resolve_output_path(block),
-                "template": block.resolved_body,
+                "template": RawExpr(repr(block.resolved_body)),
             },
         )
-        return _emit_step_source(_step_name(block, "write_file"), [stmt])
+        return "write_file", [stmt]
 
     @staticmethod
     def _utility_argv(block) -> list[str]:
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
         return split_utility_command(text)
 
-    @staticmethod
-    def _emit_copy_block(block) -> tuple[str, str]:
-        argv = FileSystemOps._utility_argv(block)
+    @classmethod
+    def _emit_copy_block(cls, block) -> tuple[str, list[str]]:
+        argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "robocopy" in basename:
-            stmt = FileSystemOps._emit_robocopy(argv)
+            stmt = cls._emit_robocopy(argv)
         elif "spfcopy" in basename:
-            stmt = FileSystemOps._emit_spf_copy(argv)
+            stmt = cls._emit_spf_copy(argv)
         elif "spfrename" in basename:
-            stmt = FileSystemOps._emit_spf_rename(argv)
+            stmt = cls._emit_spf_rename(argv)
         else:
-            return _emit_step_source(
-                _step_name(block, "fs_copy"),
-                ["pass  # TODO: unsupported FS copy utility command"],
-            )
-        return _emit_step_source(_step_name(block, "fs_copy"), [stmt])
+            return "fs_copy", ["pass  # TODO: unsupported FS copy utility command"]
+        return "fs_copy", [stmt]
 
-    @staticmethod
-    def _emit_delete_block(block) -> tuple[str, str]:
-        argv = FileSystemOps._utility_argv(block)
+    @classmethod
+    def _emit_delete_block(cls, block) -> tuple[str, list[str]]:
+        argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "spfdelete" not in basename:
-            return _emit_step_source(
-                _step_name(block, "fs_delete"),
-                ["pass  # TODO: unsupported FS delete utility command"],
-            )
-        stmt = FileSystemOps._emit_spf_delete(argv)
-        return _emit_step_source(_step_name(block, "fs_delete"), [stmt])
+            return "fs_delete", ["pass  # TODO: unsupported FS delete utility command"]
+        stmt = cls._emit_spf_delete(argv)
+        return "fs_delete", [stmt]
 
     @staticmethod
     def _emit_robocopy(argv: list[str]) -> str:

@@ -31,7 +31,12 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
     lines[0] = lines[0].replace("(UtilitySpec):", ":")
     lines[0] = lines[0].replace(f"({class_name}, UtilitySpec):", f"({class_name}):")
 
-    lines = [line for line in lines if not line.lstrip().startswith("handles =")]
+    lines = [
+        line
+        for line in lines
+        if not line.lstrip().startswith("handles =")
+        and "@EmitContext.step_emitter" not in line
+    ]
 
     return "\n".join(lines).rstrip()
 

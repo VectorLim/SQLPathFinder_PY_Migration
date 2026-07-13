@@ -6,11 +6,10 @@ import os
 import subprocess
 from pathlib import Path
 
+from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     RawExpr,
-    _emit_step_source,
-    _step_name,
     option_to_python_expr,
     render_method_call,
     split_utility_command,
@@ -19,19 +18,20 @@ from vg2c.kind import Kind
 
 
 class ExternalProcess(CheckedUtilitySpec):
-    """Thin wrapper around subprocess.run."""
+    """Execute generic shell command or script block."""
 
     utility_name = "external"
     handles = (Kind.EXTERNAL_RUN,)
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
-        utilities = options.lookup.get("UTILITIES")
-        if not utilities:
+        text = options.lookup.get("UTILITIES", "").strip()
+        if not text:
             return None
-
-        first_token = utilities.strip().split(maxsplit=1)[0].strip().strip('"')
-        basename = first_token.split("/")[-1].split("\\")[-1].lower()
+        argv = split_utility_command(text)
+        if not argv:
+            return None
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower()
         if "run_python_script" in basename or basename.endswith((".bat", ".exe")):
             return Kind.EXTERNAL_RUN, "/UTILITIES command maps to external run"
         return None
@@ -41,24 +41,19 @@ class ExternalProcess(CheckedUtilitySpec):
         text = block.resolved_options.lookup.get("UTILITIES", "").strip()
         return split_utility_command(text)
 
-    @staticmethod
-    def emit_block(block) -> tuple[str, str] | None:
-        argv = ExternalProcess._utility_argv(block)
+    @classmethod
+    @EmitContext.step_emitter
+    def emit_block(cls, block) -> list[str] | None:
+        argv = cls._utility_argv(block)
         if not argv:
-            return _emit_step_source(
-                _step_name(block, "external"),
-                ["pass  # TODO: empty external utility command"],
-            )
+            return ["pass  # TODO: empty external utility command"]
 
         basename = argv[0].split("/")[-1].split("\\")[-1].lower()
         if "run_python_script" in basename:
-            return _emit_step_source(
-                _step_name(block, "external"),
-                ["pass  # Python script embedded directly, external run omitted"],
-            )
+            return ["pass  # Python script embedded directly, external run omitted"]
 
-        stmt = ExternalProcess._emit_run(argv)
-        return _emit_step_source(_step_name(block, "external"), [stmt])
+        stmt = cls._emit_run(argv)
+        return [stmt]
 
     @staticmethod
     def _emit_run(argv: list[str]) -> str:
