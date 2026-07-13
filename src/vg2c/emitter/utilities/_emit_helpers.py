@@ -121,7 +121,11 @@ def placeholders_to_python_expr(text: str) -> str:
 
         named = match.group(1)
         if named is not None:
-            parts.append(render_method_call("macro", "named", args=(normalize_macro_name(named),)))
+            parts.append(
+                render_method_call(
+                    "macro", "named", args=(normalize_macro_name(named),)
+                )
+            )
         else:
             parts.append("ctx.macro.positional()")
 
