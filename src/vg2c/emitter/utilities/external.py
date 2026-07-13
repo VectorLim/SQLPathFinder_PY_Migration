@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
     split_utility_command,
@@ -15,7 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class ExternalProcess(CheckedUtilitySpec):
+class ExternalProcess(EmitterUtility):
     """Execute generic shell command or script block."""
 
     utility_name = "external"

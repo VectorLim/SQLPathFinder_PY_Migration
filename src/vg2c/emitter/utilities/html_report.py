@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
     resolve_path,
@@ -15,7 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class HtmlReport(CheckedUtilitySpec):
+class HtmlReport(EmitterUtility):
     """Utility for generating HTML report files."""
 
     utility_name = "html_report"

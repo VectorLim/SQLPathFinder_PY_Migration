@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from vg2c.emitter.utilities.python_embed import PythonEmbed
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
@@ -25,7 +26,7 @@ def _make_block(
 def test_emit_block_embeds_python_body() -> None:
     code = "import os\nprint(os.getcwd())"
     block = _make_block(3, Kind.PYTHON_EMBED, code, csv="script.py")
-    result = PythonEmbed.emit_block(block)
+    result = UtilitySpec.dispatch_and_emit(block, set())
 
     assert result is not None
     func_source, call_site = result
@@ -43,7 +44,7 @@ def test_emit_block_preserves_multiline_indentation() -> None:
         "        break"
     )
     block = _make_block(7, Kind.PYTHON_EMBED, code, csv="loop.py")
-    result = PythonEmbed.emit_block(block)
+    result = UtilitySpec.dispatch_and_emit(block, set())
 
     assert result is not None
     func_source, _ = result
@@ -55,7 +56,7 @@ def test_emit_block_preserves_multiline_indentation() -> None:
 
 def test_emit_block_empty_body() -> None:
     block = _make_block(1, Kind.PYTHON_EMBED, "", csv="empty.py")
-    result = PythonEmbed.emit_block(block)
+    result = UtilitySpec.dispatch_and_emit(block, set())
 
     assert result is not None
     func_source, call_site = result

@@ -6,7 +6,7 @@ import re
 from functools import partial
 
 from vg2c.emitter.utilities.csv_io import CsvIO
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
@@ -16,7 +16,7 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class SqliteEngine(CheckedUtilitySpec):
+class SqliteEngine(EmitterUtility):
     """Emit query calls for external and SQLite readers."""
 
     utility_name = "sqlite_engine"

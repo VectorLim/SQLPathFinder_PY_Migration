@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.kind import Kind
 
 
-class PythonEmbed(CheckedUtilitySpec):
+class PythonEmbed(EmitterUtility):
     """Utility class for directly embedding Python script blocks."""
 
     utility_name = "python_embed"

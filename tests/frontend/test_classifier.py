@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.emitter.utilities import CheckedUtilitySpec
+from vg2c.emitter.utilities import EmitterUtility
 from vg2c.frontend import classify
 from vg2c.kind import Kind
 from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
@@ -118,10 +118,11 @@ def test_unknown_rule_emits_diagnostic() -> None:
 
 
 def test_checked_utility_registry_order_matches_classifier_sequence() -> None:
-    names = [cls.__name__ for cls in CheckedUtilitySpec.iter_checks()]
+    names = [cls.__name__ for cls in EmitterUtility.iter_checks()]
     # PythonEmbed must precede FileSystemOps (both match WRITE-FILE=Y)
     assert names.index("PythonEmbed") < names.index("FileSystemOps")
     # MacroState must precede ExternalProcess (both match UTILITIES)
     assert names.index("MacroState") < names.index("ExternalProcess")
     # UnknownUtility is in the check registry but always returns None
     assert "UnknownUtility" in names
+    assert "MailService" in names

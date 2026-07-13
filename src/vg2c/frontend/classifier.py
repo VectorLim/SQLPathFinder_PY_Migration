@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.emitter.utilities import CheckedUtilitySpec
+from vg2c.emitter.utilities import EmitterUtility
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
@@ -42,7 +42,7 @@ def classify(
 
 
 def _classify_one(options: BlockOptions) -> tuple[Kind, str] | None:
-    for utility_cls in CheckedUtilitySpec.iter_checks():
+    for utility_cls in EmitterUtility.iter_checks():
         outcome = utility_cls.check(options)
         if outcome is not None:
             return outcome

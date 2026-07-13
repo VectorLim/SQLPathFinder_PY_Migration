@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.kind import Kind
 
 
-class UnknownUtility(CheckedUtilitySpec):
+class UnknownUtility(EmitterUtility):
     """Emit handler for unrecognised /UTILITIES commands."""
 
     utility_name = "utility"

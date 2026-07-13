@@ -12,12 +12,12 @@ import inspect
 import sys
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import CheckedUtilitySpec, UtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility, UtilitySpec
 from vg2c.emitter.utilities._topo_sort import topological_sort
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities.csv_io import CsvIO
 
-# CheckedUtilitySpec subclasses — import order = classifier check order:
+# EmitterUtility subclasses — import order = classifier check order:
 from vg2c.emitter.utilities.html_report import HtmlReport
 from vg2c.emitter.utilities.python_embed import PythonEmbed
 from vg2c.emitter.utilities.fs_ops import FileSystemOps
@@ -200,7 +200,7 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
 
 __all__ = [
     "assemble_all_utilities",
-    "CheckedUtilitySpec",
+    "EmitterUtility",
     "CrosstabUtility",
     "CsvIO",
     "ExternalProcess",

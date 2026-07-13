@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.models import EmitContext, EmittedScript, IndentWriter
+from vg2c.emitter.models import EmittedScript, IndentWriter
 from vg2c.emitter.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
 from vg2c.frontend.models import Diagnostic
@@ -16,17 +16,16 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     Returns:
         An EmittedScript containing the generated Python source and merged diagnostics.
     """
-    ctx = EmitContext()
-    ctx.dispatch_map = {db.index: db for db in dispatched.dispatched}
-
     # Walk the scope tree and emit code
-    functions, run_body, walker_diags = walk_and_emit(dispatched, ctx)
+    functions, run_body, walker_diags = walk_and_emit(dispatched)
 
     # Assemble embedded utility classes.
     utility_imports, utility_sources = assemble_all_utilities()
 
-    # Merge utility imports into ctx.imports
-    ctx.imports.update(utility_imports)
+    imports = set(utility_imports)
+    imports.add("from datasyncx.readers.aries_reader import AriesReader")
+    imports.add("from datasyncx.readers.mars_reader import MarsReader")
+    imports.add("from vg2c.dispatch.dialects.sqlite import SqliteReader")
 
     # Assemble the final script
     script_writer = IndentWriter()
@@ -37,7 +36,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write("")
 
     # Imports
-    for imp in sorted(ctx.imports):
+    for imp in sorted(imports):
         script_writer.write(imp)
     script_writer.write("")
 
@@ -88,11 +87,11 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
             )
         )
         return EmittedScript(
-            source=source, imports=tuple(ctx.imports), diagnostics=tuple(diags)
+            source=source, imports=tuple(imports), diagnostics=tuple(diags)
         )
 
     return EmittedScript(
-        source=source, imports=tuple(ctx.imports), diagnostics=tuple(merged_diags)
+        source=source, imports=tuple(imports), diagnostics=tuple(merged_diags)
     )
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator, Protocol
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities._emit_helpers import (
     normalize_macro_name,
     resolve_path,
@@ -26,7 +26,7 @@ class MacroLookup(Protocol):
     def positional(self) -> str: ...
 
 
-class MacroState(CheckedUtilitySpec):
+class MacroState(EmitterUtility):
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.models import EmitContext, IndentWriter
+from vg2c.emitter.models import IndentWriter
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
     normalize_macro_name,
 )
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.csv_io import CsvIO
-from vg2c.emitter.utilities.pipeline_context import PipelineContext
 from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
@@ -75,34 +76,35 @@ def _build_condition_expr(payload: IfThen) -> str:
     op_symbol, op_type = _OPERATOR_TABLE.get(payload.op, ("==", "string"))
     numeric = op_type == "numeric"
 
-    lhs = _operand_expr(payload.lhs, numeric=numeric, allow_bare_macro=numeric)
-    rhs = _operand_expr(payload.rhs, numeric=numeric, allow_bare_macro=numeric)
+    lhs = _operand_expr(payload.lhs, numeric, numeric)
+    rhs = _operand_expr(payload.rhs, numeric, numeric)
 
     expr = f"{lhs} {op_symbol} {rhs}"
 
     if payload.conj and payload.lhs2 and payload.op2 and payload.rhs2:
         op2_symbol, op2_type = _OPERATOR_TABLE.get(payload.op2, ("==", "string"))
         numeric2 = op2_type == "numeric"
-        lhs2 = _operand_expr(payload.lhs2, numeric=numeric2, allow_bare_macro=numeric2)
-        rhs2 = _operand_expr(payload.rhs2, numeric=numeric2, allow_bare_macro=numeric2)
+        lhs2 = _operand_expr(payload.lhs2, numeric2, numeric2)
+        rhs2 = _operand_expr(payload.rhs2, numeric2, numeric2)
         conj_op = " and " if payload.conj.upper() == "AND" else " or "
         expr += f"{conj_op}{lhs2} {op2_symbol} {rhs2}"
 
     return expr
 
 
+
 def walk_and_emit(
     dispatched: DispatchedProgram,
-    ctx: EmitContext,
 ) -> tuple[list[str], str, tuple[Diagnostic, ...]]:
     """Walk scope tree and emit Python code.
 
     Returns:
         (functions_list, run_body_source, diagnostics) where functions_list is
-        the emitted helper function definitions and run_body_source is the main
+        the emitted helper function definitions, and run_body_source is the main
         run() body.
     """
     block_by_index = {b.index: b for b in dispatched.analyzed.resolved.blocks}
+    dispatch_map = {db.index: db for db in dispatched.dispatched}
 
     functions: list[str] = []
     diagnostics: list[Diagnostic] = []
@@ -110,9 +112,8 @@ def walk_and_emit(
 
     _walk_scope(
         dispatched.analyzed.resolved.scope_tree,
-        dispatched,
+        dispatch_map,
         block_by_index,
-        ctx,
         writer,
         functions,
         diagnostics,
@@ -123,9 +124,8 @@ def walk_and_emit(
 
 def _walk_scope(
     node: ScopeNode,
-    dispatched: DispatchedProgram,
+    dispatch_map: dict[int, Any],
     block_by_index: dict[int, ResolvedBlock],
-    ctx: EmitContext,
     writer: IndentWriter,
     functions: list[str],
     diagnostics: list[Diagnostic],
@@ -136,9 +136,8 @@ def _walk_scope(
         for child in node.children:
             _walk_scope(
                 child,
-                dispatched,
+                dispatch_map,
                 block_by_index,
-                ctx,
                 writer,
                 functions,
                 diagnostics,
@@ -163,9 +162,8 @@ def _walk_scope(
             for child in node.children:
                 _walk_scope(
                     child,
-                    dispatched,
+                    dispatch_map,
                     block_by_index,
-                    ctx,
                     writer,
                     functions,
                     diagnostics,
@@ -188,9 +186,8 @@ def _walk_scope(
             for child in node.children:
                 _walk_scope(
                     child,
-                    dispatched,
+                    dispatch_map,
                     block_by_index,
-                    ctx,
                     writer,
                     functions,
                     diagnostics,
@@ -218,9 +215,8 @@ def _walk_scope(
             for child in if_branch.children:
                 _walk_scope(
                     child,
-                    dispatched,
+                    dispatch_map,
                     block_by_index,
-                    ctx,
                     writer,
                     functions,
                     diagnostics,
@@ -233,9 +229,8 @@ def _walk_scope(
             for child in else_branch.children:
                 _walk_scope(
                     child,
-                    dispatched,
+                    dispatch_map,
                     block_by_index,
-                    ctx,
                     writer,
                     functions,
                     diagnostics,
@@ -247,9 +242,8 @@ def _walk_scope(
         for child in node.children:
             _walk_scope(
                 child,
-                dispatched,
+                dispatch_map,
                 block_by_index,
-                ctx,
                 writer,
                 functions,
                 diagnostics,
@@ -261,13 +255,13 @@ def _walk_scope(
         if block_index is None:
             return
 
-        block = ctx.dispatch_map.get(block_index) or block_by_index.get(block_index)
+        block = dispatch_map.get(block_index) or block_by_index.get(block_index)
         if block is None:
             return
 
         # Emit the function
         try:
-            func_code, call_site = ctx.emit_block(block)
+            func_code, call_site = UtilitySpec.dispatch_and_emit(block)
             functions.append(func_code)
             writer.write(call_site)
         except Exception as exc:

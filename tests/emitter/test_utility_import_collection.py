@@ -7,7 +7,7 @@ from vg2c.emitter.utilities import (
     _scan_imports_and_dependencies,
     assemble_all_utilities,
 )
-from vg2c.emitter.models import EmitContext
+from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
@@ -88,7 +88,7 @@ def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
         '@EXEDIR@\\SQLPathFinder_Email.va "report.csv" "self" "Subject" "body.txt" "user@example.com" "" "" "N" "N"',
     )
 
-    func_source, call_site = EmitContext().emit_block(block)
+    func_source, call_site = UtilitySpec.dispatch_and_emit(block, set())
 
     assert "def step_0008_email(ctx)" in func_source
     assert (
@@ -101,7 +101,7 @@ def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
 def test_emit_block_keeps_unknown_utility_fallback() -> None:
     block = _make_utility_block(9, '@EXEDIR@\\SomeOtherUtility.va "x"')
 
-    func_source, call_site = EmitContext().emit_block(block)
+    func_source, call_site = UtilitySpec.dispatch_and_emit(block, set())
 
     assert "utility command not classified" in func_source
     assert call_site == "step_0009_utility(ctx)"

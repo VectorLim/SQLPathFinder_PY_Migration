@@ -10,18 +10,29 @@ from typing import Any
 
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
     split_utility_command,
     strip_quotes,
 )
+from vg2c.kind import Kind
 
 
-class MailService(UtilitySpec):
+class MailService(EmitterUtility):
     """Send email. Reads connection config from environment variables."""
 
     utility_name = "email"
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        text = options.lookup.get("UTILITIES", "")
+        if not text:
+            return None
+        argv = split_utility_command(text)
+        if MailService._is_mail_utility(argv):
+            return Kind.UTILITY, "/UTILITIES command is SQLPathFinder_Email.va"
+        return None
 
     @classmethod
     def emit_block(cls, block: Any) -> list[str] | None:

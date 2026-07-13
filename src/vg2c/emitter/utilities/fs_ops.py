@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import CheckedUtilitySpec
+from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities._emit_helpers import (
     resolve_path,
@@ -17,7 +17,7 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.kind import Kind
 
 
-class FileSystemOps(CheckedUtilitySpec):
+class FileSystemOps(EmitterUtility):
 
     utility_name = "fs_ops"
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
@@ -143,6 +143,6 @@ class FileSystemOps(CheckedUtilitySpec):
 
     @emittable
     def write_file(self, path: str | Path, content: str) -> None:
-        out = resolve_path(path, True)
+        out = resolve_path(path, for_write=True)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(content, encoding="utf-8")

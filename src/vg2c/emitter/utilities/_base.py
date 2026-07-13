@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from vg2c.frontend.models import BlockOptions
 
 
-__all__ = ["CheckedUtilitySpec", "UtilitySpec"]
+__all__ = ["EmitterUtility", "UtilitySpec"]
 
 
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
@@ -27,7 +27,7 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
         return ""
 
     lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
-    lines[0] = lines[0].replace("(CheckedUtilitySpec):", ":")
+    lines[0] = lines[0].replace("(EmitterUtility):", ":")
     lines[0] = lines[0].replace("(UtilitySpec):", ":")
     lines[0] = lines[0].replace(f"({class_name}, UtilitySpec):", f"({class_name}):")
 
@@ -75,29 +75,6 @@ class UtilitySpec(ABC):
                 )
             UtilitySpec._emit_handlers[handled_kind] = cls
 
-        # Wrap emit_block automatically so that callers get step-wrapped results.
-        if "emit_block" in cls.__dict__:
-            raw_emit_block = cls.__dict__["emit_block"]
-            if isinstance(raw_emit_block, classmethod):
-                func = raw_emit_block.__func__
-                is_class_method = True
-            elif isinstance(raw_emit_block, staticmethod):
-                func = raw_emit_block.__func__
-                is_class_method = False
-            else:
-                func = raw_emit_block
-                is_class_method = False
-
-            def wrapped_emit_block(cls: type[UtilitySpec], block: Any, *args: Any, **kwargs: Any) -> Any:
-                if is_class_method:
-                    result = func(cls, block, *args, **kwargs)
-                else:
-                    result = func(block, *args, **kwargs)
-                from vg2c.emitter.models import EmitContext
-                return EmitContext._wrap_in_step(cls, block, result)
-
-            cls.emit_block = classmethod(wrapped_emit_block)
-
     @classmethod
     def get_source(cls) -> str:
         custom = getattr(cls, "__vg2c_source__", None)
@@ -108,14 +85,89 @@ class UtilitySpec(ABC):
         return _strip_embed_artifacts(source, cls.__name__)
 
     @staticmethod
-    def emit_block(block: Any) -> tuple[str, str] | None:
+    def emit_block(block: Any) -> list[str] | tuple[str, list[str]] | None:
         return None
 
+    @staticmethod
+    def _step_name(block: Any, suffix: str) -> str:
+        return f"step_{block.index:04d}_{suffix}"
 
-class CheckedUtilitySpec(UtilitySpec):
-    """Utility that participates in Stage 1 classification."""
+    @staticmethod
+    def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
+        lines = [f"def {name}(ctx) -> None:"]
+        if body_lines:
+            for body_line in body_lines:
+                for line in body_line.split("\n"):
+                    if line.strip():
+                        lines.append(f"    {line}")
+                    else:
+                        lines.append("")
+        else:
+            lines.append("    pass")
+        return "\n".join(lines), f"{name}(ctx)"
 
-    _check_handlers: ClassVar[list[type[CheckedUtilitySpec]]] = []
+    @classmethod
+    def _wrap_in_step(cls, subclass: type[UtilitySpec], block: Any, result: Any) -> tuple[str, str] | None:
+        if result is None:
+            return None
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], list)
+        ):
+            suffix, body_lines = result
+        else:
+            suffix = getattr(subclass, "utility_name", "utility")
+            body_lines = result
+        return cls._emit_step_source(
+            cls._step_name(block, suffix), body_lines
+        )
+
+    @classmethod
+    def dispatch_and_emit(cls, block: Any) -> tuple[str, str]:
+        handler_cls = cls._emit_handlers.get(block.kind)
+        if handler_cls is not None and block.kind is not Kind.UTILITY:
+            emitted = handler_cls.emit_block(block)
+            if emitted is not None:
+                wrapped = cls._wrap_in_step(handler_cls, block, emitted)
+                if wrapped is not None:
+                    return wrapped
+
+        if block.kind is Kind.UTILITY:
+            for utility_cls in cls._registry.values():
+                if utility_cls is handler_cls:
+                    continue
+                if getattr(utility_cls, "handles", ()):
+                    continue
+                emitted = utility_cls.emit_block(block)
+                if emitted is not None:
+                    wrapped = cls._wrap_in_step(utility_cls, block, emitted)
+                    if wrapped is not None:
+                        return wrapped
+
+            if handler_cls is not None:
+                emitted = handler_cls.emit_block(block)
+                if emitted is not None:
+                    wrapped = cls._wrap_in_step(handler_cls, block, emitted)
+                    if wrapped is not None:
+                        return wrapped
+
+        kind_fallbacks = {
+            Kind.HTML_REPORT: ("html_report", "pass  # HTML report not translated"),
+        }
+        suffix, default_stmt = kind_fallbacks.get(
+            block.kind,
+            ("unknown", f"pass  # TODO: unhandled kind={block.kind}"),
+        )
+        return cls._emit_step_source(
+            cls._step_name(block, suffix), [default_stmt]
+        )
+
+
+class EmitterUtility(UtilitySpec):
+    """Utility that participates in Stage 1 classification and block emission."""
+
+    _check_handlers: ClassVar[list[type[EmitterUtility]]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -123,7 +175,7 @@ class CheckedUtilitySpec(UtilitySpec):
         if inspect.isabstract(cls):
             return
 
-        CheckedUtilitySpec._check_handlers.append(cls)
+        EmitterUtility._check_handlers.append(cls)
 
     @staticmethod
     @abstractmethod
@@ -131,5 +183,10 @@ class CheckedUtilitySpec(UtilitySpec):
         raise NotImplementedError
 
     @classmethod
-    def iter_checks(cls) -> tuple[type[CheckedUtilitySpec], ...]:
+    @abstractmethod
+    def emit_block(cls, block: Any) -> list[str] | tuple[str, list[str]] | None:
+        raise NotImplementedError
+
+    @classmethod
+    def iter_checks(cls) -> tuple[type[EmitterUtility], ...]:
         return tuple(cls._check_handlers)
