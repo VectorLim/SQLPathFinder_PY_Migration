@@ -1,7 +1,7 @@
 """vg2c CLI — translate VG2 scripts to Python.
 
 Usage:
-    vg2c translate <input> [-o output.py] [--strict]
+    vg2c <input> [<output>] [--strict]
 """
 
 from __future__ import annotations
@@ -54,10 +54,13 @@ def cmd_translate(args: argparse.Namespace) -> int:
     # Write output
     if args.output:
         out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(emitted.source, encoding="utf-8")
+        if len(out_path.parts) == 1:
+            out_path = input_path.parent / out_path
     else:
-        print(emitted.source, end="")
+        out_path = input_path.with_suffix(".py")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(emitted.source, encoding="utf-8")
 
     # --strict: exit 1 if any error-severity diagnostics
     if args.strict and any(d.severity == "error" for d in emitted.diagnostics):
@@ -70,14 +73,13 @@ def build_parser() -> argparse.ArgumentParser:
         prog="vg2c",
         description="Translate VG2 pipeline scripts to Python.",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    tr = sub.add_parser("translate", help="Translate a VG2 script to Python.")
-    tr.add_argument("input", help="Path to the VG2 source file.")
-    tr.add_argument(
-        "-o", "--output", metavar="FILE", help="Write output to FILE (default: stdout)."
+    parser.add_argument("input", help="Path to the VG2 source file.")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        help="Path to the output Python file. If omitted or specified as a bare name, it will follow the directory of the input file.",
     )
-    tr.add_argument(
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Exit 1 if any error diagnostic is emitted.",
@@ -89,11 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "translate":
-        sys.exit(cmd_translate(args))
-    else:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
+    sys.exit(cmd_translate(args))
 
 
 if __name__ == "__main__":

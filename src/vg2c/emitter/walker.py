@@ -12,7 +12,6 @@ from vg2c.emitter.utilities._emit_helpers import (
 from vg2c.emitter.utilities.macro_state import MacroState
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.frontend.models import Diagnostic
-from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
     RunLoop,

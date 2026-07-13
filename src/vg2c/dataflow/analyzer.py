@@ -243,31 +243,25 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
                     )
 
         payload = block.control_payload
+        payload_csv_path = None
+        consumer_kind = None
         if isinstance(payload, StartMacro) and payload.csv_path:
-            consumers.append(
-                ConsumerRecord(
-                    block_index=block.index,
-                    csv_path=_normalize_csv_path(payload.csv_path),
-                    scope_id=block.scope_id,
-                    consumer_kind="start-macro",
-                )
-            )
+            payload_csv_path = payload.csv_path
+            consumer_kind = "start-macro"
         elif isinstance(payload, RowsInFile) and payload.csv_path:
-            consumers.append(
-                ConsumerRecord(
-                    block_index=block.index,
-                    csv_path=_normalize_csv_path(payload.csv_path),
-                    scope_id=block.scope_id,
-                    consumer_kind="rows-in-file",
-                )
-            )
+            payload_csv_path = payload.csv_path
+            consumer_kind = "rows-in-file"
         elif isinstance(payload, RunLoop) and payload.input_csv_path:
+            payload_csv_path = payload.input_csv_path
+            consumer_kind = "run-loop"
+
+        if payload_csv_path and consumer_kind:
             consumers.append(
                 ConsumerRecord(
                     block_index=block.index,
-                    csv_path=_normalize_csv_path(payload.input_csv_path),
+                    csv_path=_normalize_csv_path(payload_csv_path),
                     scope_id=block.scope_id,
-                    consumer_kind="run-loop",
+                    consumer_kind=consumer_kind,
                 )
             )
 
