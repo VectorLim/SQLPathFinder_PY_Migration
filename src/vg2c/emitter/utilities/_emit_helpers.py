@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 import re
 import shlex
@@ -11,12 +10,9 @@ from vg2c.kind import Kind
 __all__ = [
     "NAMED_PLACEHOLDER_RE",
     "PLACEHOLDER_RE",
-    "RawExpr",
-    "_render_value",
     "normalize_macro_name",
     "option_to_python_expr",
     "placeholders_to_python_expr",
-    "render_method_call",
     "resolve_output_path",
     "resolve_path",
     "split_utility_command",
@@ -25,11 +21,6 @@ __all__ = [
 
 PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
-
-
-@dataclass(frozen=True, slots=True)
-class RawExpr:
-    source: str
 
 
 def strip_quotes(value: str) -> str:
@@ -121,11 +112,7 @@ def placeholders_to_python_expr(text: str) -> str:
 
         named = match.group(1)
         if named is not None:
-            parts.append(
-                render_method_call(
-                    "macro", "named", args=(normalize_macro_name(named),)
-                )
-            )
+            parts.append(f"ctx.macro.named({repr(normalize_macro_name(named))})")
         else:
             parts.append("ctx.macro.positional()")
 
@@ -140,26 +127,3 @@ def placeholders_to_python_expr(text: str) -> str:
     if len(parts) == 1:
         return parts[0]
     return " + ".join(parts)
-
-
-def _render_value(value: Any) -> str:
-    if isinstance(value, RawExpr):
-        return value.source
-    if isinstance(value, str):
-        return repr(value)
-    return repr(value)
-
-
-def render_method_call(
-    utility_name: str,
-    method_name: str,
-    *,
-    args: tuple[Any, ...] = (),
-    kwargs: dict[str, Any] | None = None,
-) -> str:
-    """Render a Python method-call expression for the generated script."""
-    receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
-    parts: list[str] = [_render_value(arg) for arg in args]
-    for key, value in (kwargs or {}).items():
-        parts.append(f"{key}={_render_value(value)}")
-    return f"{receiver}.{method_name}({', '.join(parts)})"

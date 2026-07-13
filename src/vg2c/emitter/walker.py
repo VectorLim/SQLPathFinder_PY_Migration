@@ -6,9 +6,7 @@ from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmitContext, IndentWriter
 from vg2c.emitter.utilities._emit_helpers import (
     NAMED_PLACEHOLDER_RE,
-    RawExpr,
     normalize_macro_name,
-    render_method_call,
 )
 from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
@@ -47,15 +45,21 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         return _int_expr("0") if numeric else repr("")
 
     if value.startswith("VAR(") and value.endswith(")"):
-        base = render_method_call("macro", "named", args=(normalize_macro_name(value[4:-1].strip()),))
+        base = EmitContext.render_method_call(
+            "macro", "named", args=(repr(normalize_macro_name(value[4:-1].strip())),)
+        )
         return _int_expr(base) if numeric else base
 
     if NAMED_PLACEHOLDER_RE.fullmatch(value):
-        base = render_method_call("macro", "named", args=(normalize_macro_name(value),))
+        base = EmitContext.render_method_call(
+            "macro", "named", args=(repr(normalize_macro_name(value)),)
+        )
         return _int_expr(base) if numeric else base
 
     if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = render_method_call("macro", "named", args=(normalize_macro_name(value),))
+        base = EmitContext.render_method_call(
+            "macro", "named", args=(repr(normalize_macro_name(value)),)
+        )
         return _int_expr(base) if numeric else base
 
     if numeric:
@@ -153,12 +157,12 @@ def _walk_scope(
                 iter_call = ctx.render_method_call(
                     "csv_io",
                     "iter",
-                    args=(payload.csv_path,),
+                    args=(repr(payload.csv_path),),
                 )
                 scope_call = ctx.render_method_call(
                     "ctx",
                     "macro.scope",
-                    args=(RawExpr("__row"),),
+                    args=("__row",),
                 )
                 writer.write(f"for __row in {iter_call}:")
                 writer.push_indent()
@@ -189,8 +193,8 @@ def _walk_scope(
                 "csv_io",
                 "iter_chunks",
                 args=(
-                    payload.input_csv_path,
-                    payload.chunk_csv_path,
+                    repr(payload.input_csv_path),
+                    repr(payload.chunk_csv_path),
                     int(payload.chunk_size),
                 ),
             )

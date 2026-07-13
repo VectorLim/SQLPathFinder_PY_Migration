@@ -12,9 +12,7 @@ from typing import Any
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     split_utility_command,
     strip_quotes,
 )
@@ -54,8 +52,8 @@ class MailService(UtilitySpec):
         return [part.strip() for part in strip_quotes(value).split(",") if part.strip()]
 
     @staticmethod
-    def _list_expr(values: list[str]) -> RawExpr:
-        return RawExpr("[" + ", ".join(option_to_python_expr(v) for v in values) + "]")
+    def _list_expr(values: list[str]) -> str:
+        return "[" + ", ".join(option_to_python_expr(v) for v in values) + "]"
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -71,26 +69,26 @@ class MailService(UtilitySpec):
             )
             to = payload[4]
 
-            kwargs: dict[str, RawExpr] = {
-                "to": RawExpr(option_to_python_expr(to)),
-                "subject": RawExpr(option_to_python_expr(subject)),
-                "body": RawExpr(option_to_python_expr(body)),
+            kwargs: dict[str, str] = {
+                "to": option_to_python_expr(to),
+                "subject": option_to_python_expr(subject),
+                "body": option_to_python_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = RawExpr(option_to_python_expr(from_addr))
+                kwargs["from_addr"] = option_to_python_expr(from_addr)
 
-            return render_method_call("email", "send", kwargs=kwargs)
+            return EmitContext.render_method_call("email", "send", kwargs=kwargs)
 
         if len(payload) >= 3:
-            return render_method_call(
+            return EmitContext.render_method_call(
                 "email",
                 "send",
                 kwargs={
-                    "to": RawExpr(option_to_python_expr(payload[0])),
-                    "subject": RawExpr(option_to_python_expr(payload[1])),
-                    "body": RawExpr(option_to_python_expr(payload[2])),
+                    "to": option_to_python_expr(payload[0]),
+                    "subject": option_to_python_expr(payload[1]),
+                    "body": option_to_python_expr(payload[2]),
                 },
             )
 

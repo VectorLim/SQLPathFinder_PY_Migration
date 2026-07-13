@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1844): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1972): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 2013): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2179): filters on Flag
-# - step_0055_sql_query (Line 2380): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2403): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1817): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1945): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 1986): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2152): filters on Flag
+# - step_0055_sql_query (Line 2353): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2376): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -13,7 +13,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datasyncx.readers.aries_reader import AriesReader
 from datasyncx.readers.mars_reader import MarsReader
 from email.message import EmailMessage
@@ -136,9 +135,6 @@ PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
 
 NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
 
-class RawExpr:
-    source: str
-
 def strip_quotes(value: str) -> str:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
@@ -222,7 +218,7 @@ def placeholders_to_python_expr(text: str) -> str:
 
         named = match.group(1)
         if named is not None:
-            parts.append(render_method_call("macro", "named", args=(normalize_macro_name(named),)))
+            parts.append(f"ctx.macro.named({repr(normalize_macro_name(named))})")
         else:
             parts.append("ctx.macro.positional()")
 
@@ -237,27 +233,6 @@ def placeholders_to_python_expr(text: str) -> str:
     if len(parts) == 1:
         return parts[0]
     return " + ".join(parts)
-
-def _render_value(value: Any) -> str:
-    if isinstance(value, RawExpr):
-        return value.source
-    if isinstance(value, str):
-        return repr(value)
-    return repr(value)
-
-def render_method_call(
-    utility_name: str,
-    method_name: str,
-    *,
-    args: tuple[Any, ...] = (),
-    kwargs: dict[str, Any] | None = None,
-) -> str:
-    """Render a Python method-call expression for the generated script."""
-    receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
-    parts: list[str] = [_render_value(arg) for arg in args]
-    for key, value in (kwargs or {}).items():
-        parts.append(f"{key}={_render_value(value)}")
-    return f"{receiver}.{method_name}({', '.join(parts)})"
 
 class CrosstabUtility:
     utility_name = "crosstab"
@@ -664,8 +639,8 @@ class MailService:
         return [part.strip() for part in strip_quotes(value).split(",") if part.strip()]
 
     @staticmethod
-    def _list_expr(values: list[str]) -> RawExpr:
-        return RawExpr("[" + ", ".join(option_to_python_expr(v) for v in values) + "]")
+    def _list_expr(values: list[str]) -> str:
+        return "[" + ", ".join(option_to_python_expr(v) for v in values) + "]"
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -681,26 +656,26 @@ class MailService:
             )
             to = payload[4]
 
-            kwargs: dict[str, RawExpr] = {
-                "to": RawExpr(option_to_python_expr(to)),
-                "subject": RawExpr(option_to_python_expr(subject)),
-                "body": RawExpr(option_to_python_expr(body)),
+            kwargs: dict[str, str] = {
+                "to": option_to_python_expr(to),
+                "subject": option_to_python_expr(subject),
+                "body": option_to_python_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = RawExpr(option_to_python_expr(from_addr))
+                kwargs["from_addr"] = option_to_python_expr(from_addr)
 
-            return render_method_call("email", "send", kwargs=kwargs)
+            return EmitContext.render_method_call("email", "send", kwargs=kwargs)
 
         if len(payload) >= 3:
-            return render_method_call(
+            return EmitContext.render_method_call(
                 "email",
                 "send",
                 kwargs={
-                    "to": RawExpr(option_to_python_expr(payload[0])),
-                    "subject": RawExpr(option_to_python_expr(payload[1])),
-                    "body": RawExpr(option_to_python_expr(payload[2])),
+                    "to": option_to_python_expr(payload[0]),
+                    "subject": option_to_python_expr(payload[1]),
+                    "body": option_to_python_expr(payload[2]),
                 },
             )
 
@@ -788,8 +763,8 @@ class ExternalProcess:
     @staticmethod
     def _emit_run(argv: list[str]) -> str:
         expr_items = [option_to_python_expr(token) for token in argv]
-        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return render_method_call(
+        argv_expr = "[" + ", ".join(expr_items) + "]"
+        return EmitContext.render_method_call(
             "external",
             "run",
             kwargs={"argv": argv_expr},
@@ -864,12 +839,12 @@ class FileSystemOps:
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        stmt = render_method_call(
+        stmt = EmitContext.render_method_call(
             "ctx",
             "write_file",
             kwargs={
-                "path": resolve_output_path(block),
-                "template": RawExpr(repr(block.resolved_body)),
+                "path": repr(resolve_output_path(block)),
+                "template": repr(block.resolved_body),
             },
         )
         return "write_file", [stmt]
@@ -908,9 +883,9 @@ class FileSystemOps:
         file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
         dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
-        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
-        dst_expr = RawExpr(dest_dir)
-        return render_method_call(
+        src_expr = f"str(Path({source_dir}) / {file_name})"
+        dst_expr = dest_dir
+        return EmitContext.render_method_call(
             "fs_ops",
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -921,9 +896,9 @@ class FileSystemOps:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
         src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        src_expr = RawExpr(src)
-        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
-        return render_method_call(
+        src_expr = src
+        dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
+        return EmitContext.render_method_call(
             "fs_ops",
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -934,20 +909,18 @@ class FileSystemOps:
         # SPFRename.va arg layout: <source_path> <dest_path>
         src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         dst = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
-        return render_method_call(
+        return EmitContext.render_method_call(
             "fs_ops",
             "rename",
-            kwargs={"src": RawExpr(src), "dst": RawExpr(dst)},
+            kwargs={"src": src, "dst": dst},
         )
 
     @staticmethod
     def _emit_spf_delete(argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = RawExpr(
-            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
-        )
-        return render_method_call(
+        paths_expr = "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        return EmitContext.render_method_call(
             "fs_ops",
             "delete",
             kwargs={"paths": paths_expr},
@@ -1012,19 +985,19 @@ class HtmlReport:
         method: str,
         option_keys: list[str],
         *,
-        args: tuple[RawExpr, ...] = (),
+        args: tuple[str, ...] = (),
         include_template: bool = False,
     ) -> list[str]:
         kwargs = {}
         for key in option_keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(
-                    option_to_python_expr(val)
-                )
+                kwargs[key.lower().replace("-", "_")] = option_to_python_expr(val)
         if include_template:
-            kwargs["template"] = RawExpr(repr(block.resolved_body))
-        stmt = render_method_call("html_report", method, args=args, kwargs=kwargs)
+            kwargs["template"] = repr(block.resolved_body)
+        stmt = EmitContext.render_method_call(
+            "html_report", method, args=args, kwargs=kwargs
+        )
         return [stmt]
 
     @staticmethod
@@ -1057,7 +1030,7 @@ class HtmlReport:
                 "CHART-INSTANCE",
                 "APP_SERVER_DEFAULT",
             ],
-            args=(RawExpr("ctx"),),
+            args=("ctx",),
             include_template=True,
         )
 
@@ -1533,15 +1506,15 @@ class MacroState:
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = render_method_call(
+        row_count_call = EmitContext.render_method_call(
             "csv_io",
             "row_count",
-            args=(RawExpr(csv_path_expr),),
+            args=(csv_path_expr,),
         )
-        stmt = render_method_call(
+        stmt = EmitContext.render_method_call(
             "macro",
             "set_named",
-            args=(set_name, RawExpr(f"str({row_count_call})")),
+            args=(repr(set_name), f"str({row_count_call})"),
         )
         return "rows_in_file", [stmt]
 
@@ -1697,12 +1670,12 @@ class SqliteEngine:
         return f'"""{escaped}"""'
 
     @staticmethod
-    def _extract_sql_text(block) -> str | RawExpr:
+    def _extract_sql_text(block) -> str:
         sql = getattr(block, "rewritten_sql", None)
         if sql is None:
             sql = block.resolved_body
         if "@@SQLMACRO:" not in sql:
-            return RawExpr(SqliteEngine._format_sql_literal(sql))
+            return SqliteEngine._format_sql_literal(sql)
 
         parts: list[str] = []
         cursor = 0
@@ -1718,10 +1691,10 @@ class SqliteEngine:
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
                 parts.append(
-                    render_method_call(
+                    EmitContext.render_method_call(
                         "csv_io",
                         "sql_get_csv_list",
-                        args=(RawExpr(csv_path_expr), call.column_ref, call.lead_in),
+                        args=(csv_path_expr, repr(call.column_ref), repr(call.lead_in)),
                     )
                 )
 
@@ -1732,8 +1705,8 @@ class SqliteEngine:
             parts.append(SqliteEngine._format_sql_literal(tail))
 
         if not parts:
-            return RawExpr(SqliteEngine._format_sql_literal(sql))
-        return RawExpr(" + ".join(parts))
+            return SqliteEngine._format_sql_literal(sql)
+        return " + ".join(parts)
 
     @staticmethod
     def _extract_table_inputs(block) -> list[str]:
@@ -1784,8 +1757,8 @@ class SqliteEngine:
 
         kwargs: dict[str, object] = {
             "sql": sql,
-            "output": output,
-            "reader": RawExpr(inst_expr),
+            "output": repr(output),
+            "reader": inst_expr,
         }
         if sqlite:
             kwargs["inputs"] = cls._extract_table_inputs(block)
@@ -1794,7 +1767,7 @@ class SqliteEngine:
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = render_method_call("ctx", "run_query", kwargs=kwargs)
+        stmt = EmitContext.render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]
 

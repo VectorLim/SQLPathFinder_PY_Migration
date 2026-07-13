@@ -8,9 +8,7 @@ from pathlib import Path
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     resolve_output_path,
     split_utility_command,
     strip_quotes,
@@ -52,12 +50,12 @@ class FileSystemOps(CheckedUtilitySpec):
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        stmt = render_method_call(
+        stmt = EmitContext.render_method_call(
             "ctx",
             "write_file",
             kwargs={
-                "path": resolve_output_path(block),
-                "template": RawExpr(repr(block.resolved_body)),
+                "path": repr(resolve_output_path(block)),
+                "template": repr(block.resolved_body),
             },
         )
         return "write_file", [stmt]
@@ -96,9 +94,9 @@ class FileSystemOps(CheckedUtilitySpec):
         file_name = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         source_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
         dest_dir = option_to_python_expr(argv[3]) if len(argv) > 3 else repr(".")
-        src_expr = RawExpr(f"str(Path({source_dir}) / {file_name})")
-        dst_expr = RawExpr(dest_dir)
-        return render_method_call(
+        src_expr = f"str(Path({source_dir}) / {file_name})"
+        dst_expr = dest_dir
+        return EmitContext.render_method_call(
             "fs_ops",
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -109,9 +107,9 @@ class FileSystemOps(CheckedUtilitySpec):
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
         src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         dst_dir = option_to_python_expr(argv[2]) if len(argv) > 2 else repr(".")
-        src_expr = RawExpr(src)
-        dst_expr = RawExpr(f"str(Path({dst_dir}) / Path({src}).name)")
-        return render_method_call(
+        src_expr = src
+        dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
+        return EmitContext.render_method_call(
             "fs_ops",
             "copy",
             kwargs={"src": src_expr, "dst": dst_expr},
@@ -122,20 +120,18 @@ class FileSystemOps(CheckedUtilitySpec):
         # SPFRename.va arg layout: <source_path> <dest_path>
         src = option_to_python_expr(argv[1]) if len(argv) > 1 else repr("")
         dst = option_to_python_expr(argv[2]) if len(argv) > 2 else repr("")
-        return render_method_call(
+        return EmitContext.render_method_call(
             "fs_ops",
             "rename",
-            kwargs={"src": RawExpr(src), "dst": RawExpr(dst)},
+            kwargs={"src": src, "dst": dst},
         )
 
     @staticmethod
     def _emit_spf_delete(argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = RawExpr(
-            "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
-        )
-        return render_method_call(
+        paths_expr = "[" + ", ".join(option_to_python_expr(p) for p in items) + "]"
+        return EmitContext.render_method_call(
             "fs_ops",
             "delete",
             kwargs={"paths": paths_expr},

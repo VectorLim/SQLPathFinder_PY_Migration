@@ -9,9 +9,7 @@ from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     resolve_output_path,
     strip_quotes,
 )
@@ -64,12 +62,12 @@ class SqliteEngine(CheckedUtilitySpec):
         return f'"""{escaped}"""'
 
     @staticmethod
-    def _extract_sql_text(block) -> str | RawExpr:
+    def _extract_sql_text(block) -> str:
         sql = getattr(block, "rewritten_sql", None)
         if sql is None:
             sql = block.resolved_body
         if "@@SQLMACRO:" not in sql:
-            return RawExpr(SqliteEngine._format_sql_literal(sql))
+            return SqliteEngine._format_sql_literal(sql)
 
         parts: list[str] = []
         cursor = 0
@@ -85,10 +83,10 @@ class SqliteEngine(CheckedUtilitySpec):
                 call = block.sql_macro_calls[call_index]
                 csv_path_expr = option_to_python_expr(call.csv_path)
                 parts.append(
-                    render_method_call(
+                    EmitContext.render_method_call(
                         "csv_io",
                         "sql_get_csv_list",
-                        args=(RawExpr(csv_path_expr), call.column_ref, call.lead_in),
+                        args=(csv_path_expr, repr(call.column_ref), repr(call.lead_in)),
                     )
                 )
 
@@ -99,8 +97,8 @@ class SqliteEngine(CheckedUtilitySpec):
             parts.append(SqliteEngine._format_sql_literal(tail))
 
         if not parts:
-            return RawExpr(SqliteEngine._format_sql_literal(sql))
-        return RawExpr(" + ".join(parts))
+            return SqliteEngine._format_sql_literal(sql)
+        return " + ".join(parts)
 
     @staticmethod
     def _extract_table_inputs(block) -> list[str]:
@@ -152,8 +150,8 @@ class SqliteEngine(CheckedUtilitySpec):
 
         kwargs: dict[str, object] = {
             "sql": sql,
-            "output": output,
-            "reader": RawExpr(inst_expr),
+            "output": repr(output),
+            "reader": inst_expr,
         }
         if sqlite:
             kwargs["inputs"] = cls._extract_table_inputs(block)
@@ -162,6 +160,6 @@ class SqliteEngine(CheckedUtilitySpec):
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        stmt = render_method_call("ctx", "run_query", kwargs=kwargs)
+        stmt = EmitContext.render_method_call("ctx", "run_query", kwargs=kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]

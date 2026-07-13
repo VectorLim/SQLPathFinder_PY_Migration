@@ -9,9 +9,7 @@ from typing import Any
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     resolve_path,
 )
 from vg2c.kind import Kind
@@ -58,19 +56,19 @@ class HtmlReport(CheckedUtilitySpec):
         method: str,
         option_keys: list[str],
         *,
-        args: tuple[RawExpr, ...] = (),
+        args: tuple[str, ...] = (),
         include_template: bool = False,
     ) -> list[str]:
         kwargs = {}
         for key in option_keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = RawExpr(
-                    option_to_python_expr(val)
-                )
+                kwargs[key.lower().replace("-", "_")] = option_to_python_expr(val)
         if include_template:
-            kwargs["template"] = RawExpr(repr(block.resolved_body))
-        stmt = render_method_call("html_report", method, args=args, kwargs=kwargs)
+            kwargs["template"] = repr(block.resolved_body)
+        stmt = EmitContext.render_method_call(
+            "html_report", method, args=args, kwargs=kwargs
+        )
         return [stmt]
 
     @staticmethod
@@ -103,7 +101,7 @@ class HtmlReport(CheckedUtilitySpec):
                 "CHART-INSTANCE",
                 "APP_SERVER_DEFAULT",
             ],
-            args=(RawExpr("ctx"),),
+            args=("ctx",),
             include_template=True,
         )
 

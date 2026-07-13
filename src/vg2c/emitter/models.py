@@ -40,9 +40,18 @@ class EmitContext:
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> str:
-        from vg2c.emitter.utilities._emit_helpers import render_method_call
+        """Render a Python method-call expression for the generated script."""
 
-        return render_method_call(utility_name, method_name, args=args, kwargs=kwargs)
+        def _render_value(value: Any) -> str:
+            if isinstance(value, str):
+                return value
+            return repr(value)
+
+        receiver = "ctx" if utility_name == "ctx" else f"ctx.{utility_name}"
+        parts: list[str] = [_render_value(arg) for arg in args]
+        for key, value in (kwargs or {}).items():
+            parts.append(f"{key}={_render_value(value)}")
+        return f"{receiver}.{method_name}({', '.join(parts)})"
 
     @staticmethod
     def _step_name(block: Any, suffix: str) -> str:
@@ -63,45 +72,27 @@ class EmitContext:
         return "\n".join(lines), f"{name}(ctx)"
 
     @staticmethod
-    def step_emitter(arg=None):
-        """Decorator to wrap utility emit_block class methods.
+    def step_emitter(func):
+        """Decorator to wrap utility emit_block class methods."""
 
-        Can be used as:
-            @EmitContext.step_emitter
-            def emit_block(cls, block): ...
+        def wrapper(cls, block, *args, **kwargs):
+            result = func(cls, block, *args, **kwargs)
+            if result is None:
+                return None
+            if (
+                isinstance(result, tuple)
+                and len(result) == 2
+                and isinstance(result[1], list)
+            ):
+                suffix, body_lines = result
+            else:
+                suffix = getattr(cls, "utility_name", "utility")
+                body_lines = result
+            return EmitContext._emit_step_source(
+                EmitContext._step_name(block, suffix), body_lines
+            )
 
-        or:
-            @EmitContext.step_emitter("custom_suffix")
-            def emit_block(cls, block): ...
-        """
-        if callable(arg):
-            func = arg
-            def wrapper(cls, block, *args, **kwargs):
-                result = func(cls, block, *args, **kwargs)
-                if result is None:
-                    return None
-                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
-                    suffix, body_lines = result
-                else:
-                    suffix = getattr(cls, "utility_name", "utility")
-                    body_lines = result
-                return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), body_lines)
-            return wrapper
-
-        default_suffix = arg
-        def decorator(func):
-            def wrapper(cls, block, *args, **kwargs):
-                result = func(cls, block, *args, **kwargs)
-                if result is None:
-                    return None
-                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
-                    suffix, body_lines = result
-                else:
-                    suffix = default_suffix or getattr(cls, "utility_name", "utility")
-                    body_lines = result
-                return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), body_lines)
-            return wrapper
-        return decorator
+        return wrapper
 
     def emit_block(self, block: Any) -> tuple[str, str]:
         from vg2c.emitter.utilities._base import UtilitySpec
@@ -138,7 +129,9 @@ class EmitContext:
             block.kind,
             ("unknown", f"pass  # TODO: unhandled kind={block.kind}"),
         )
-        return EmitContext._emit_step_source(EmitContext._step_name(block, suffix), [default_stmt])
+        return EmitContext._emit_step_source(
+            EmitContext._step_name(block, suffix), [default_stmt]
+        )
 
 
 @dataclass(frozen=True, slots=True)

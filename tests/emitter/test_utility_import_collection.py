@@ -92,7 +92,7 @@ def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
 
     assert "def step_0008_email(ctx)" in func_source
     assert (
-        'ctx.email.send(to="user@example.com", subject="Subject", body="body.txt", attachments=["report.csv"])'
+        "ctx.email.send(to='user@example.com', subject='Subject', body='body.txt', attachments=['report.csv'])"
         in func_source
     )
     assert call_site == "step_0008_email(ctx)"

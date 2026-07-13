@@ -10,9 +10,7 @@ from typing import Iterator, Protocol
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     normalize_macro_name,
     resolve_path,
     PLACEHOLDER_RE,
@@ -55,15 +53,15 @@ class MacroState(CheckedUtilitySpec):
 
         csv_path_expr = option_to_python_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        row_count_call = render_method_call(
+        row_count_call = EmitContext.render_method_call(
             "csv_io",
             "row_count",
-            args=(RawExpr(csv_path_expr),),
+            args=(csv_path_expr,),
         )
-        stmt = render_method_call(
+        stmt = EmitContext.render_method_call(
             "macro",
             "set_named",
-            args=(set_name, RawExpr(f"str({row_count_call})")),
+            args=(repr(set_name), f"str({row_count_call})"),
         )
         return "rows_in_file", [stmt]
 

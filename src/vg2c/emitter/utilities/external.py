@@ -9,9 +9,7 @@ from pathlib import Path
 from vg2c.emitter.models import EmitContext
 from vg2c.emitter.utilities._base import CheckedUtilitySpec
 from vg2c.emitter.utilities._emit_helpers import (
-    RawExpr,
     option_to_python_expr,
-    render_method_call,
     split_utility_command,
 )
 from vg2c.kind import Kind
@@ -58,8 +56,8 @@ class ExternalProcess(CheckedUtilitySpec):
     @staticmethod
     def _emit_run(argv: list[str]) -> str:
         expr_items = [option_to_python_expr(token) for token in argv]
-        argv_expr = RawExpr("[" + ", ".join(expr_items) + "]")
-        return render_method_call(
+        argv_expr = "[" + ", ".join(expr_items) + "]"
+        return EmitContext.render_method_call(
             "external",
             "run",
             kwargs={"argv": argv_expr},
