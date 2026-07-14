@@ -3,12 +3,14 @@ from __future__ import annotations
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic
 from vg2c.resolver.macro_resolver import resolve_macros
 from vg2c.resolver.models import (
-    MacroControlPayload,
-    MacroFrame,
     ResolvedBlock,
     ResolvedProgram,
-    ScopeNode,
     SqlMacroCall,
+)
+from vg2c.resolver.operands import (
+    MacroControlPayload,
+    MacroFrame,
+    ScopeNode,
 )
 from vg2c.resolver.scope_builder import build_scope_tree
 

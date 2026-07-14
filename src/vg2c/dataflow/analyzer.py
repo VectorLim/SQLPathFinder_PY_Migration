@@ -19,6 +19,8 @@ from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
+)
+from vg2c.resolver.operands import (
     RowsInFile,
     RunLoop,
     ScopeNode,
@@ -44,11 +46,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
     explicit_producers = _collect_explicit_producers(blocks, scope_rel)
     utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
     consumers = _collect_consumers(blocks)
-
     producers_by_path = _index_by_path(explicit_producers)
-    _emit_multi_producer_diagnostics(
-        producers_by_path, scope_rel, diagnostics, block_by_index
-    )
 
     edges: list[DataflowEdge] = []
     matched_producer_keys: set[tuple[int, str]] = set()
@@ -93,35 +91,6 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
                         message=(
                             f"Consumer index {consumer.block_index} appears before or at producer index {producer.block_index} "
                             f"for {consumer.csv_path}."
-                        ),
-                        block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].span,
-                    )
-                )
-
-            if producer.is_conditional and not scope_rel.is_ancestor(
-                producer.scope_id, consumer.scope_id
-            ):
-                diagnostics.append(
-                    Diagnostic(
-                        severity="warning",
-                        code="dataflow-scope-crossing-branch",
-                        message=(
-                            f"Consumer {consumer.csv_path} is outside producer conditional branch scope."
-                        ),
-                        block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].span,
-                    )
-                )
-            elif producer.is_in_loop and not scope_rel.is_ancestor(
-                producer.scope_id, consumer.scope_id
-            ):
-                diagnostics.append(
-                    Diagnostic(
-                        severity="info",
-                        code="dataflow-scope-crossing-loop",
-                        message=(
-                            f"Consumer {consumer.csv_path} is outside producer macro-loop scope."
                         ),
                         block_index=consumer.block_index,
                         span=block_by_index[consumer.block_index].span,
@@ -278,7 +247,6 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
     return consumers
 
 
-
 def _index_by_path(producers: list[ProducerRecord]) -> dict[str, list[ProducerRecord]]:
     by_path: dict[str, list[ProducerRecord]] = defaultdict(list)
     for producer in producers:
@@ -340,55 +308,6 @@ def _classify_edge_relation(
     return relation, consumer.block_index > producer.block_index
 
 
-def _emit_multi_producer_diagnostics(
-    producers_by_path: dict[str, list[ProducerRecord]],
-    scope_rel: "_ScopeRelations",
-    diagnostics: list[Diagnostic],
-    block_by_index,
-) -> None:
-    for path, producers in producers_by_path.items():
-        if len(producers) < 2:
-            continue
-        for i in range(len(producers)):
-            for j in range(i + 1, len(producers)):
-                left = producers[i]
-                right = producers[j]
-                if _are_branch_exclusive(left.scope_id, right.scope_id, scope_rel):
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="info",
-                            code="dataflow-branch-exclusive-producers",
-                            message=f"CSV {path} has branch-exclusive producers.",
-                            block_index=right.block_index,
-                            span=block_by_index[right.block_index].span,
-                        )
-                    )
-                else:
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="info",
-                            code="dataflow-overwrite-same-scope",
-                            message=f"CSV {path} is produced multiple times in overlapping scopes.",
-                            block_index=right.block_index,
-                            span=block_by_index[right.block_index].span,
-                        )
-                    )
-
-
-def _are_branch_exclusive(
-    scope_a: int, scope_b: int, scope_rel: "_ScopeRelations"
-) -> bool:
-    branch_a = scope_rel.nearest_kind(scope_a, {"if-branch", "else-branch"})
-    branch_b = scope_rel.nearest_kind(scope_b, {"if-branch", "else-branch"})
-    if branch_a is None or branch_b is None or branch_a == branch_b:
-        return False
-    parent_a = scope_rel.parent_of.get(branch_a)
-    parent_b = scope_rel.parent_of.get(branch_b)
-    if parent_a is None or parent_b is None:
-        return False
-    if parent_a != parent_b:
-        return False
-    return scope_rel.kind_of.get(branch_a) != scope_rel.kind_of.get(branch_b)
 
 
 def _normalize_csv_path(value: str) -> str:

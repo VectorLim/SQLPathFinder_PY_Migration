@@ -4,11 +4,8 @@ from vg2c.frontend.models import (
     ClassifiedBlock,
     Diagnostic,
 )
-from vg2c.resolver.models import (
-    MacroControlPayload,
-    ResolvedBlock,
-    ScopeNode,
-)
+from vg2c.resolver.models import ResolvedBlock
+from vg2c.resolver.operands import MacroControlPayload, ScopeNode
 
 
 def resolve_macros(

@@ -15,15 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     strip_quotes,
 )
 from vg2c.kind import Kind
-from vg2c.resolver.models import RowsInFile
-
-
-class MacroLookup(Protocol):
-    """Minimal interface for macro substitution."""
-
-    def named(self, name: str) -> str: ...
-
-    def positional(self) -> str: ...
+from vg2c.resolver.operands import RowsInFile
 
 
 class MacroState(EmitterUtility):
@@ -63,13 +55,9 @@ class MacroState(EmitterUtility):
 
             named = match.group(1)
             if named is not None:
-                parts.append(
-                    cls.named.render(repr(normalize_macro_name(named)))
-                )
+                parts.append(cls.named.render(repr(normalize_macro_name(named))))
             else:
-                parts.append(
-                    cls.positional.render()
-                )
+                parts.append(cls.positional.render())
 
             cursor = match.end()
 
@@ -91,8 +79,9 @@ class MacroState(EmitterUtility):
 
         csv_path_expr = cls.to_py_expr(payload.csv_path)
         set_name = payload.var_name.upper()
-        
+
         from vg2c.emitter.utilities.csv_io import CsvIO
+
         row_count_call = CsvIO.row_count.render(csv_path_expr)
         stmt = cls.set_named.render(repr(set_name), f"str({row_count_call})")
         return "rows_in_file", [stmt]

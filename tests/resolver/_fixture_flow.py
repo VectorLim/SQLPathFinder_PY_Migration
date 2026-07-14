@@ -8,7 +8,8 @@ from vg2c.frontend import classify, parse
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic
 from vg2c.kind import Kind
 from vg2c.resolver import resolve
-from vg2c.resolver.models import ResolvedBlock, ResolvedProgram, ScopeNode
+from vg2c.resolver.models import ResolvedBlock, ResolvedProgram
+from vg2c.resolver.operands import ScopeNode
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 

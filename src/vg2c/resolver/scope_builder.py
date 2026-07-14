@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic
 from vg2c.kind import Kind
-from vg2c.resolver.models import (
+from vg2c.resolver.operands import (
     Else,
     EndIf,
     EndLoop,
@@ -29,8 +29,16 @@ _SCOPE_TOKENS: dict[str, type] = {
 # Orphan closer tokens: valid as stop-tokens inside a scope, but an error at
 # the top level.  Maps token string → (diagnostic code, message, payload type).
 _ORPHAN_TOKENS: dict[str, tuple[str, str, type]] = {
-    "END-MACRO": ("orphan-end-macro", "Found {END-MACRO} without a matching opener.", EndMacro),
-    "END-LOOP": ("orphan-end-loop", "Found {END-LOOP} without a matching {RUN-LOOP}.", EndLoop),
+    "END-MACRO": (
+        "orphan-end-macro",
+        "Found {END-MACRO} without a matching opener.",
+        EndMacro,
+    ),
+    "END-LOOP": (
+        "orphan-end-loop",
+        "Found {END-LOOP} without a matching {RUN-LOOP}.",
+        EndLoop,
+    ),
     "END-IF": ("orphan-end-if", "Found {END-IF} without a matching opener.", EndIf),
     "ELSE": ("orphan-else", "Found {ELSE} without a matching {IF-THEN}.", Else),
 }
