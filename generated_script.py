@@ -1,8 +1,3 @@
-# SQL statements containing filters:
-# - step_0000_sql_query (Line 1893): filters on f0.facility, f0.history_deleted_flag, f0.operation, f0.owner, f0.prevout_date, f2.history_deleted_flag, la.attribute_number, p.latest_version, p.prodgroup3
-# - step_0001_sql_query (Line 1943): filters on u0.ws_operation
-# - step_0002_sql_query (Line 1976): filters on ats.data_domain, ats.operation
-
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
 
@@ -1125,6 +1120,87 @@ class HtmlReport:
 
     utility_name = "html_report"
 
+    # ---------------------------------------------------------------------------
+    # HTML scaffold for documents that don't already have an <html> wrapper
+    # ---------------------------------------------------------------------------
+    _HTML_SCAFFOLD = """\
+    <html>
+    <head>
+    <title>{title}</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+    {css_decl}
+
+
+
+    <!--@SPF-JS-HEADER@-->
+    <style type="text/css">
+
+    table.tblout, td.tblout, tr.tblout
+    {{
+        border-width:0px;
+        border-collapse:collapse;
+        border-style:none;
+        text-align:left;
+        vertical-align:top;
+    }}
+
+    td.tblout {{
+        padding:10px;
+    }}
+    img {{ vertical-align:top;}}
+
+
+    </style>
+    </head>
+    <body>
+
+    {body}
+    </body>
+    </html>
+    """
+
+    # ---------------------------------------------------------------------------
+    # CSS rule definitions used by _build_css
+    # ---------------------------------------------------------------------------
+    _CSS_RULES: list[dict[str, Any]] = [
+    {
+        "name": "COLUMN-BORDER",
+        "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
+        "extras": [
+            "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
+            "  table.tblin \n{\n     caption-side:top;\n}",
+        ],
+        "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
+    },
+    {
+        "name": "Column-Headers",
+        "template": "th, #colhdr\n{{\n{decls}\n}}",
+        "defaults": [
+            ("padding-top", "     padding-top:5px;"),
+            ("padding-bottom", "     padding-bottom:4px;"),
+        ],
+    },
+    {
+        "name": "Column-Data",
+        "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
+        "extras": ["  caption {padding-top:5px;}"],
+    },
+    {"name": "Column-Alt-Row", "template": "td.alt\n{{\n{decls}\n}}"},
+    {"name": "At-Top-of-Report", "template": "p.at-top-of-report\n{{\n{decls}\n}}"},
+    {
+        "name": "JQX-All-IChart-Text",
+        "template": (
+            ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text,"
+            " .jqx-chart-axis-description, .jqx-chart-title-text,"
+            " .jqx-chart-title-description {{\n{decls}\n}}"
+        ),
+        "defaults": [("fill", "     fill:black;")],
+    },
+    {"name": "At-Top-of-Col1", "template": "p.at-top-of-col1\n{{\n{decls}\n}}"},
+    {"name": "At-Top-of-Col2", "template": "p.at-top-of-col2\n{{\n{decls}\n}}"},
+    {"name": "At-Top-of-Col3", "template": "p.at-top-of-col3\n{{\n{decls}\n}}"},
+]
+
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         report = options.lookup.get("REPORT")
@@ -1140,76 +1216,45 @@ class HtmlReport:
         self.prompt_text: str | None = None
         self.app_server_default: str | None = None
 
+    # ------------------------------------------------------------------
+    # Emit-time (code-generation) helpers
+    # ------------------------------------------------------------------
+
     @classmethod
     def emit_block(cls, block) -> list[str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
+
+        def _kwargs(keys: list[str]) -> dict[str, str]:
+            out: dict[str, str] = {}
+            for key in keys:
+                val = block.resolved_options.lookup.get(key)
+                if val is not None:
+                    out[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
+            return out
+
         if report_type == "HTML-RUN":
-            return cls._emit_html_run(block)
-        elif report_type == "HTML-LAYOUT":
-            return cls._emit_html_layout(block)
-        elif report_type == "HTML-DELETE":
-            return cls._emit_html_delete(block)
-        elif report_type == "HTML-DEFER":
-            return cls._emit_html_defer(block)
+            kw = _kwargs(["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"])
+            kw["template"] = repr(block.resolved_body)
+            return [cls.run.render(**kw)]
+
+        if report_type == "HTML-LAYOUT":
+            kw = _kwargs(["OUTLOOK", "INSTANCE", "JSON-ONLY", "CHART-INSTANCE", "APP_SERVER_DEFAULT"])
+            kw["template"] = repr(block.resolved_body)
+            return [cls.layout.render("ctx", **kw)]
+
+        if report_type == "HTML-DEFER":
+            kw = _kwargs(["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"])
+            kw["template"] = repr(block.resolved_body)
+            return [cls.defer.render(**kw)]
+
+        if report_type == "HTML-DELETE":
+            return [cls.delete.render(**_kwargs(["INSTANCE"]))]
+
         return None
 
-    @staticmethod
-    def _emit_method(
-        block,
-        method: str,
-        option_keys: list[str],
-        *,
-        args: tuple[str, ...] = (),
-        include_template: bool = False,
-    ) -> list[str]:
-        kwargs = {}
-        for key in option_keys:
-            val = block.resolved_options.lookup.get(key)
-            if val is not None:
-                kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
-        if include_template:
-            kwargs["template"] = repr(block.resolved_body)
-        method_obj = getattr(HtmlReport, method)
-        stmt = method_obj.render(*args, **kwargs)
-        return [stmt]
-
-    @staticmethod
-    def _emit_html_defer(block) -> list[str]:
-        return HtmlReport._emit_method(
-            block,
-            "defer",
-            ["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"],
-            include_template=True,
-        )
-
-    @staticmethod
-    def _emit_html_run(block) -> list[str]:
-        return HtmlReport._emit_method(
-            block,
-            "run",
-            ["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"],
-            include_template=True,
-        )
-
-    @staticmethod
-    def _emit_html_layout(block) -> list[str]:
-        return HtmlReport._emit_method(
-            block,
-            "layout",
-            [
-                "OUTLOOK",
-                "INSTANCE",
-                "JSON-ONLY",
-                "CHART-INSTANCE",
-                "APP_SERVER_DEFAULT",
-            ],
-            args=("ctx",),
-            include_template=True,
-        )
-
-    @staticmethod
-    def _emit_html_delete(block) -> list[str]:
-        return HtmlReport._emit_method(block, "delete", ["INSTANCE"])
+    # ------------------------------------------------------------------
+    # Template parsing
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _parse_template_rows(template: str | None) -> list[list[str]]:
@@ -1227,12 +1272,8 @@ class HtmlReport:
             if len(parts) < 2:
                 continue
             key = parts[0].upper()
-            if parts[1] == "":
-                val_list = [part for part in parts[2:] if part != ""]
-            else:
-                val_list = [part for part in parts[1:] if part != ""]
-
-            if len(val_list) == 0:
+            val_list = [p for p in (parts[2:] if parts[1] == "" else parts[1:]) if p != ""]
+            if not val_list:
                 options[key] = ""
             elif len(val_list) == 1:
                 options[key] = val_list[0]
@@ -1244,9 +1285,7 @@ class HtmlReport:
     def _as_list(val: Any) -> list[str]:
         if val is None:
             return []
-        if isinstance(val, list):
-            return val
-        return [str(val)]
+        return val if isinstance(val, list) else [str(val)]
 
     def _ensure_parsed_payload(
         self, report: dict[str, Any]
@@ -1255,54 +1294,15 @@ class HtmlReport:
         if not isinstance(rows, list):
             rows = self._parse_template_rows(report.get("template"))
             report["parsed_rows"] = rows
-
         options = report.get("options")
         if not isinstance(options, dict):
             options = self._extract_options(rows)
             report["options"] = options
         return rows, options
 
-    @staticmethod
-    def _parse_layout_template(template: str) -> tuple[dict[str, str], str]:
-        directives: dict[str, str] = {}
-        html_lines: list[str] = []
-        for line in template.splitlines():
-            if line.startswith(":"):
-                parts = line[1:].split(":", 1)
-                if len(parts) == 2:
-                    directives[parts[0].strip().upper()] = parts[1].strip()
-                    continue
-            html_lines.append(line)
-        return directives, "\n".join(html_lines)
-
-    @staticmethod
-    def _resolve_csv_path(raw_path: str, ctx: Any) -> Path:
-        if not raw_path:
-            return Path("")
-        if ctx and hasattr(ctx, "macro"):
-            return ctx.macro.resolve_file_path(raw_path)
-        return resolve_path(raw_path)
-
-    @staticmethod
-    def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        if not csv_path.is_file() or not csv_path.exists():
-            return rows
-
-        if ctx and hasattr(ctx, "csv_io") and hasattr(ctx.csv_io, "iter"):
-            for row in ctx.csv_io.iter(str(csv_path)):
-                normalized_row = {k.lower(): v for k, v in row.items() if k}
-                rows.append(normalized_row)
-            return rows
-
-        import csv
-
-        with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.DictReader(fh)
-            for row in reader:
-                normalized_row = {k.lower(): v for k, v in row.items() if k}
-                rows.append(normalized_row)
-        return rows
+    # ------------------------------------------------------------------
+    # Emittable runtime methods
+    # ------------------------------------------------------------------
 
     def run(
         self,
@@ -1314,16 +1314,14 @@ class HtmlReport:
         self.instance = instance
         self.prompt_text = prompt_text
         self.app_server_default = app_server_default
-
-        if template:
-            for parts in self._parse_template_rows(template):
-                if len(parts) < 2:
-                    continue
-                key = parts[0].upper()
-                if key == "CSS":
-                    self.css_file = parts[1]
-                elif key == "FORMAT" and len(parts) >= 3:
-                    self.styles[parts[1]] = parts[2:]
+        for parts in self._parse_template_rows(template):
+            if len(parts) < 2:
+                continue
+            key = parts[0].upper()
+            if key == "CSS":
+                self.css_file = parts[1]
+            elif key == "FORMAT" and len(parts) >= 3:
+                self.styles[parts[1]] = parts[2:]
 
     def defer(
         self,
@@ -1348,180 +1346,6 @@ class HtmlReport:
         self.css_file = None
         self.deferred_reports.clear()
 
-    def _build_css(self) -> str:
-        css_blocks = []
-
-        def get_decls(name: str) -> list[str]:
-            raw_decls = self.styles.get(name, [])
-            decls = []
-            for d in raw_decls:
-                d = d.strip()
-                if not d:
-                    continue
-                if ":" in d:
-                    key, val = d.split(":", 1)
-                    key = key.strip()
-                    val = val.strip()
-                    if key == "font-size" and val.isdigit():
-                        val = val + "px"
-                    decls.append(f"     {key}:{val};")
-                else:
-                    decls.append(f"     {d};")
-            return decls
-
-        css_rules: list[dict[str, Any]] = [
-            {
-                "name": "COLUMN-BORDER",
-                "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
-                "extras": [
-                    "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
-                    "  table.tblin \n{\n     caption-side:top;\n}",
-                ],
-                "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
-            },
-            {
-                "name": "Column-Headers",
-                "template": "th, #colhdr\n{{\n{decls}\n}}",
-                "defaults": [
-                    ("padding-top", "     padding-top:5px;"),
-                    ("padding-bottom", "     padding-bottom:4px;"),
-                ],
-            },
-            {
-                "name": "Column-Data",
-                "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
-                "extras": ["  caption {padding-top:5px;}"],
-            },
-            {
-                "name": "Column-Alt-Row",
-                "template": "td.alt\n{{\n{decls}\n}}",
-            },
-            {
-                "name": "At-Top-of-Report",
-                "template": "p.at-top-of-report\n{{\n{decls}\n}}",
-            },
-            {
-                "name": "JQX-All-IChart-Text",
-                "template": ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {{\n{decls}\n}}",
-                "defaults": [("fill", "     fill:black;")],
-            },
-        ]
-
-        for rule in css_rules:
-            decls = get_decls(rule["name"])
-            if not decls:
-                continue
-
-            extra_decls = list(decls)
-            for token, default_decl in rule.get("defaults", []):
-                if not any(token in decl for decl in extra_decls):
-                    extra_decls.append(default_decl)
-
-            css_blocks.append(rule["template"].format(decls="\n".join(extra_decls)))
-            for extra_block in rule.get("extras", []):
-                css_blocks.append(extra_block)
-
-            tail_template = rule.get("tail_template")
-            if tail_template:
-                css_blocks.append(tail_template.format(decls="\n".join(decls)))
-
-        col_rules = {
-            "At-Top-of-Col1": "p.at-top-of-col1 {{\n{decls}\n}}",
-            "At-Top-of-Col2": "p.at-top-of-col2 {{\n{decls}\n}}",
-            "At-Top-of-Col3": "p.at-top-of-col3 {{\n{decls}\n}}",
-        }
-        for format_name, selector in col_rules.items():
-            decls = get_decls(format_name)
-            if decls:
-                css_blocks.append(selector.format(decls="\n".join(decls)))
-
-        return "\n\n".join(css_blocks)
-
-    def _render_report(self, report_id: str, ctx: Any) -> str:
-        if report_id not in self.deferred_reports:
-            return ""
-
-        report = self.deferred_reports[report_id]
-        _, options = self._ensure_parsed_payload(report)
-
-        cols = self._as_list(options.get("COLUMN-DATA"))
-        headers = self._as_list(options.get("COLUMN-HEADERS"))
-        alignments = self._as_list(options.get("COLUMN-ALIGNMENT"))
-        alignments = alignments + ["middle-left"] * (len(cols) - len(alignments))
-
-        def parse_alignment(align: str) -> tuple[str, str]:
-            parts = align.split("-")
-            valign = "middle"
-            halign = "left"
-            if len(parts) >= 2:
-                valign = parts[0]
-                halign = parts[1]
-            elif len(parts) == 1:
-                valign = "middle"
-                halign = parts[0]
-            return valign, halign
-
-        def format_value(col_name: str, val: Any) -> str:
-            if val is None:
-                return "&nbsp;"
-            s = str(val).strip()
-            if s == "" or s.lower() == "nan":
-                return "&nbsp;"
-            if s.endswith("%"):
-                return s
-            if "ce%" in col_name.lower() or "percent" in col_name.lower():
-                try:
-                    fval = float(s)
-                    return f"{fval * 100:.2f}%"
-                except ValueError:
-                    pass
-            return s
-
-        csv_path = self._resolve_csv_path(options.get("INPUT-FILE", ""), ctx)
-        rows = self._iter_csv_rows(csv_path, ctx)
-
-        table_html = []
-        table_html.append('<table class="tblin">')
-        table_html.append("")
-        table_html.append("")
-        for _ in cols:
-            table_html.append("<COL>")
-        table_html.append("")
-
-        table_html.append("<thead>")
-        table_html.append("<tr id='colhdr'>")
-        for h in headers:
-            table_html.append(f"<th>{h}</th>")
-        table_html.append("</tr>")
-        table_html.append("</thead>")
-
-        for idx, row in enumerate(rows):
-            cell_class = "tblin" if idx % 2 == 0 else "alt"
-            table_html.append("<tr>")
-            for col_idx, col in enumerate(cols):
-                val = row.get(col.lower(), "")
-                val_str = format_value(col, val)
-                valign, halign = parse_alignment(alignments[col_idx])
-                table_html.append(
-                    f'<td class="{cell_class}" style="vertical-align:{valign};text-align:{halign};">{val_str}</td>'
-                )
-            table_html.append("</tr>")
-
-        table_html.append("")
-        table_html.append("<tfoot>")
-        table_html.append("</tfoot>")
-        table_html.append("</table>")
-
-        table_content = "\n".join(table_html)
-
-        top_report = options.get("AT-TOP-OF-REPORT")
-        if top_report:
-            table_content = (
-                f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
-            )
-
-        return table_content
-
     def layout(
         self,
         ctx: Any,
@@ -1534,24 +1358,42 @@ class HtmlReport:
     ) -> None:
         directives, html_content = self._parse_layout_template(template)
         path = directives.get("FILE", "report.html")
-        css_file = directives.get("CSS")
+        css_file = directives.get("CSS") or self.css_file
         css_embed = directives.get("CSSEMBED", "").upper() in ("Y", "YES", "TRUE")
         title = directives.get("TITLE", "SQLPathFinder Report")
 
-        # Replace HTM placeholders
-        def replace_report(match: re.Match) -> str:
-            report_id = match.group(1)
-            if report_id in self.deferred_reports:
-                return self._render_report(report_id, ctx)
-            return match.group(0)
+        html_content = re.sub(
+            r"HTM:([A-Za-z0-9_]+)",
+            lambda m: self._render_report(m.group(1), ctx)
+            if m.group(1) in self.deferred_reports
+            else m.group(0),
+            html_content,
+        )
 
-        html_content = re.sub(r"HTM:([A-Za-z0-9_]+)", replace_report, html_content)
+        css_decl = self._resolve_css(css_file, css_embed)
 
-        # Resolve CSS content
-        resolved_css_file = css_file if css_file else self.css_file
+        if "<html>" not in html_content.lower():
+            html_content = self._HTML_SCAFFOLD.format(
+                title=title, css_decl=css_decl, body=html_content
+            )
+        elif css_decl:
+            if "</head>" in html_content:
+                html_content = html_content.replace("</head>", f"{css_decl}\n</head>", 1)
+            else:
+                html_content = f"{css_decl}\n{html_content}"
+
+        out_filename = self._resolve_output_filename(path, instance)
+        self._write_html(ctx, out_filename, html_content)
+
+    # ------------------------------------------------------------------
+    # CSS helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_css(self, css_file: str | None, css_embed: bool) -> str:
+        """Return a <style> or <link> tag string (or empty string)."""
         css_content = ""
-        if resolved_css_file:
-            css_path = Path(resolved_css_file)
+        if css_file:
+            css_path = Path(css_file)
             if css_path.exists():
                 css_content = css_path.read_text(encoding="utf-8", errors="replace")
             elif self.styles:
@@ -1564,92 +1406,184 @@ class HtmlReport:
         elif self.styles:
             css_content = self._build_css()
 
-        # Build style or link tags
-        css_decl = ""
-        if resolved_css_file:
-            if css_embed:
-                if css_content:
-                    css_decl = f'<style type="text/css">\n{css_content}\n</style>'
-            else:
-                css_decl = f'<link rel="stylesheet" type="text/css" href="{resolved_css_file}" />'
-        elif css_embed and css_content:
-            css_decl = f'<style type="text/css">\n{css_content}\n</style>'
+        if css_embed and css_content:
+            return f'<style type="text/css">\n{css_content}\n</style>'
+        if css_file and not css_embed:
+            return f'<link rel="stylesheet" type="text/css" href="{css_file}" />'
+        return ""
 
-        # Wrap in full HTML document if needed
-        if "<html>" not in html_content.lower():
-            html_content = (
-                f"<html>\n<head>\n<title>{title}</title>\n"
-                f'<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">\n'
-                f"{css_decl}\n\n\n\n"
-                f"<!--@SPF-JS-HEADER@-->\n"
-                f'<style type="text/css">\n\n'
-                f"table.tblout, td.tblout, tr.tblout\n"
-                f"{{\n"
-                f"     border-width:0px;\n"
-                f"     border-collapse:collapse;\n"
-                f"     border-style:none;\n"
-                f"     text-align:left;\n"
-                f"     vertical-align:top;\n"
-                f"}}\n\n"
-                f"td.tblout {{\n"
-                f"    padding:10px;\n"
-                f"}}\n"
-                f"img {{ vertical-align:top;}}\n\n\n"
-                f"</style>\n"
-                f"</head>\n"
-                f"<body>\n\n"
-                f"{html_content}\n"
-                f"</body>\n"
-                f"</html>\n"
-            )
-        else:
-            if css_decl:
-                if "</head>" in html_content:
-                    html_content = html_content.replace(
-                        "</head>", f"{css_decl}\n</head>", 1
-                    )
+    def _build_css(self) -> str:
+        def get_decls(name: str) -> list[str]:
+            decls: list[str] = []
+            for d in self.styles.get(name, []):
+                d = d.strip()
+                if not d:
+                    continue
+                if ":" in d:
+                    key, val = d.split(":", 1)
+                    key, val = key.strip(), val.strip()
+                    if key == "font-size" and val.isdigit():
+                        val += "px"
+                    decls.append(f"     {key}:{val};")
                 else:
-                    html_content = f"{css_decl}\n{html_content}"
+                    decls.append(f"     {d};")
+            return decls
 
-        # Resolve output filename
-        out_filename = path
-        if out_filename.startswith("email:") or not out_filename:
-            fallback_name = "report.html"
-            for report in self.deferred_reports.values():
-                rows, _ = self._ensure_parsed_payload(report)
-                found = False
-                for parts in rows:
-                    if not parts:
-                        continue
-                    if (
-                        parts[0].upper() == "OUTPUT-FILE"
-                        and len(parts) >= 2
-                        and parts[1]
-                    ):
-                        fallback_name = parts[1]
-                        found = True
-                        break
-                if found:
+        css_blocks: list[str] = []
+        for rule in self._CSS_RULES:
+            decls = get_decls(rule["name"])
+            if not decls:
+                continue
+            extra_decls = list(decls)
+            for token, default_decl in rule.get("defaults", []):
+                if not any(token in d for d in extra_decls):
+                    extra_decls.append(default_decl)
+            css_blocks.append(rule["template"].format(decls="\n".join(extra_decls)))
+            for extra in rule.get("extras", []):
+                css_blocks.append(extra)
+            tail = rule.get("tail_template")
+            if tail:
+                css_blocks.append(tail.format(decls="\n".join(decls)))
+
+        return "\n\n".join(css_blocks)
+
+    # ------------------------------------------------------------------
+    # Report rendering
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_layout_template(template: str) -> tuple[dict[str, str], str]:
+        directives: dict[str, str] = {}
+        html_lines: list[str] = []
+        for line in template.splitlines():
+            if line.startswith(":"):
+                parts = line[1:].split(":", 1)
+                if len(parts) == 2:
+                    directives[parts[0].strip().upper()] = parts[1].strip()
+                    continue
+            html_lines.append(line)
+        return directives, "\n".join(html_lines)
+
+    @staticmethod
+    def _resolve_csv_path(raw_path: str, ctx: Any) -> Path:
+        if not raw_path:
+            return Path("")
+        if ctx and hasattr(ctx, "macro"):
+            return ctx.macro.resolve_file_path(raw_path)
+        return resolve_path(raw_path)
+
+    @staticmethod
+    def _iter_csv_rows(csv_path: Path, ctx: Any) -> list[dict[str, Any]]:
+        if not csv_path.is_file() or not csv_path.exists():
+            return []
+        if ctx and hasattr(ctx, "csv_io") and hasattr(ctx.csv_io, "iter"):
+            return [
+                {k.lower(): v for k, v in row.items() if k}
+                for row in ctx.csv_io.iter(str(csv_path))
+            ]
+        import csv
+        with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            return [
+                {k.lower(): v for k, v in row.items() if k}
+                for row in csv.DictReader(fh)
+            ]
+
+    def _render_report(self, report_id: str, ctx: Any) -> str:
+        if report_id not in self.deferred_reports:
+            return ""
+        report = self.deferred_reports[report_id]
+        _, options = self._ensure_parsed_payload(report)
+
+        cols = self._as_list(options.get("COLUMN-DATA"))
+        headers = self._as_list(options.get("COLUMN-HEADERS"))
+        alignments = self._as_list(options.get("COLUMN-ALIGNMENT"))
+        alignments += ["middle-left"] * (len(cols) - len(alignments))
+
+        def parse_alignment(align: str) -> tuple[str, str]:
+            parts = align.split("-")
+            if len(parts) >= 2:
+                return parts[0], parts[1]
+            return "middle", parts[0] if parts else "left"
+
+        def format_value(col_name: str, val: Any) -> str:
+            if val is None:
+                return "&nbsp;"
+            s = str(val).strip()
+            if s == "" or s.lower() == "nan":
+                return "&nbsp;"
+            if s.endswith("%"):
+                return s
+            if "ce%" in col_name.lower() or "percent" in col_name.lower():
+                try:
+                    return f"{float(s) * 100:.2f}%"
+                except ValueError:
+                    pass
+            return s
+
+        csv_path = self._resolve_csv_path(options.get("INPUT-FILE", ""), ctx)
+        rows = self._iter_csv_rows(csv_path, ctx)
+
+        lines: list[str] = ['<table class="tblin">', "", ""]
+        for _ in cols:
+            lines.append("<COL>")
+        lines += [
+            "",
+            "<thead>",
+            "<tr id='colhdr'>",
+            *[f"<th>{h}</th>" for h in headers],
+            "</tr>",
+            "</thead>",
+        ]
+        for idx, row in enumerate(rows):
+            cell_class = "tblin" if idx % 2 == 0 else "alt"
+            lines.append("<tr>")
+            for col_idx, col in enumerate(cols):
+                val_str = format_value(col, row.get(col.lower(), ""))
+                valign, halign = parse_alignment(alignments[col_idx])
+                lines.append(
+                    f'<td class="{cell_class}" style="vertical-align:{valign};text-align:{halign};">{val_str}</td>'
+                )
+            lines.append("</tr>")
+        lines += ["", "<tfoot>", "</tfoot>", "</table>"]
+
+        table_content = "\n".join(lines)
+        top_report = options.get("AT-TOP-OF-REPORT")
+        if top_report:
+            table_content = f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
+        return table_content
+
+    # ------------------------------------------------------------------
+    # Output helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_output_filename(self, path: str, instance: str | None) -> str:
+        if not path.startswith("email:") and path:
+            return path
+        fallback_name = "report.html"
+        for report in self.deferred_reports.values():
+            rows, _ = self._ensure_parsed_payload(report)
+            for parts in rows:
+                if parts and parts[0].upper() == "OUTPUT-FILE" and len(parts) >= 2 and parts[1]:
+                    fallback_name = parts[1]
                     break
-            instance_id = instance or self.instance
-            if instance_id:
-                out_filename = f"{instance_id}_{fallback_name.lower()}"
             else:
-                out_filename = fallback_name.lower()
+                continue
+            break
+        instance_id = instance or self.instance
+        base = fallback_name.lower()
+        return f"{instance_id}_{base}" if instance_id else base
 
-        # Write output file
+    @staticmethod
+    def _write_html(ctx: Any, filename: str, content: str) -> None:
+        resolved = filename
+        if ctx and hasattr(ctx, "macro"):
+            resolved = ctx.macro.substitute(filename)
         if ctx and hasattr(ctx, "write_file"):
-            resolved_path = out_filename
-            if hasattr(ctx, "macro"):
-                resolved_path = ctx.macro.substitute(out_filename)
-            ctx.write_file(resolved_path, html_content)
+            ctx.write_file(resolved, content)
         else:
-            resolved_path = out_filename
-            if ctx and hasattr(ctx, "macro"):
-                resolved_path = ctx.macro.substitute(out_filename)
-            out_path = Path(resolved_path)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(html_content, encoding="utf-8")
+            out = Path(resolved)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(content, encoding="utf-8")
 
 class PythonEmbed:
     """Utility class for directly embedding Python script blocks."""
@@ -1890,154 +1824,32 @@ class WaitFile:
             time.sleep(interval)
         return Path(path).exists()
 
-def step_0000_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT 
-              Prod AS Prod
-             ,Operator AS Operator
-             ,Replace(Replace(Replace(Replace(Replace(Replace(Link,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Link
-             ,Lot AS Lot
-             ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
-             ,code AS code
-             ,Max(codeqty) AS codeqty
-    FROM
-    (
-    SELECT  
-              p.prodgroup3 AS Prod
-             ,f0.last_operator_id AS Operator
-             ,(SELECT la.attribute_value FROM @[]@.F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 6244 AND la.src_erase_date IS NULL AND rownum <= 1) AS Link
-             ,f2.lot AS Lot
-             ,f0.out_date AS out_date
-             ,f2.code AS code
-             ,f2.codeqty AS codeqty
-    FROM 
-    @[]@.F_LotHist f0
-    LEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
-    INNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot
-    LEFT JOIN @[]@.F_LotCodeHist f2 ON f2.lot = f0.lot AND f2.operation = f0.operation AND f2.prevout_date = f0.prevout_date AND NVL(f2.history_deleted_flag,'N') = 'N'
-     AND      f2.code In ('GN51'
-    ,'CJ03'
-    ,'CJ04'
-    ,'CJ37') 
-    WHERE
-    NVL(f0.history_deleted_flag,'N') = 'N'
-    AND      f0.owner <> 'EMPTYFOUP'
-     AND      f0.operation = '1204' 
-     AND      f0.facility = 'A15' 
-     AND      f0.prevout_date >= SYSDATE - 90 
-     AND      p.prodgroup3 = 'SHD' 
-    -- Tail A
-    )
-    GROUP BY 
-              Prod
-             ,Operator
-             ,Link
-             ,Lot
-             ,out_date
-             ,code
-    /*END SQL*/
+def step_0000_utility(ctx) -> None:
+    pass  # TODO: utility command not classified
 
-    """, output='yeuchuan_a0_5133.tab', reader=MarsReader(), crosstab={'row_keys': ['Prod', 'Operator', 'Link', 'Lot', 'out_date'], 'header_key': 'code', 'value_key': 'codeqty'})
+def step_0001_html_report(ctx) -> None:
+    ctx.html_report.defer(instance='10105', id='MYREPORT5', prompt_text='Step 4. Create an HTML Report', app_server_default='atd_atm.hadoop', template='\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12\nTYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nINPUT-FILE<\\\\>\\\\kmatshfs.intel.com\\kmatanalysis$\\MAOATM\\KuAT\\TCB\\atrms_percentage.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nOUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nNOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-DATA<\\\\><\\\\>total_pcg<\\\\>total_flag<\\\\>ce%<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-HEADERS<\\\\><\\\\>Total Pcg<\\\\>Total Flag<\\\\>Ce%<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>')
 
-def step_0001_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT 
-              u0.visualid AS visual_id
-             ,ua0.ws_loss_code AS Loss_Code
-             ,u0.lotnum AS lot_1
-    FROM 
-    A_Ube_Unit_Hist2 u0
-    LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
-    ,MAX(CASE WHEN uuha.attr_name = 'WS_LOSS_CODE' THEN uuha.attr_value END) WS_LOSS_CODE
-    FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
-    WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
-     AND      (u0.lotnum In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_5133.tab', 'Lot', 'u0.lotnum In') + """) 
-     AND      u0.ws_operation = '1204' 
-    AND uuha.attr_name IN ('dummy'
-    ,'WS_LOSS_CODE'
-    )
-    GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
-    WHERE 1=1
-     AND      (u0.lotnum In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_5133.tab', 'Lot', 'u0.lotnum In') + """) 
-     AND      (ua0.ws_loss_code LIKE  'GN51%'
-    OR ua0.ws_loss_code LIKE 'CJ03%'
-    OR ua0.ws_loss_code LIKE 'CJ04%'
-    OR ua0.ws_loss_code LIKE 'CJ37%'
-    ) 
-     AND      u0.ws_operation = '1204' 
-    /*END SQL*/
+def step_0002_html_report(ctx) -> None:
+    ctx.html_report.defer(instance='10105', id='MYREPORT2', app_server_default='atd_atm.hadoop', template='\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12\nTYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nINPUT-FILE<\\\\>\\\\kmatshfs.intel.com\\kmatanalysis$\\MAOATM\\KuAT\\TCB\\atrms_summary.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nOUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nNOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nAT-TOP-OF-REPORT<\\\\><\\\\>ATRMS PCG GAPS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-DATA<\\\\><\\\\>operation<\\\\>pcg<\\\\>a01<\\\\>a15<\\\\>a48<\\\\>a90<\\\\>new_flag<\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-HEADERS<\\\\><\\\\>Operation<\\\\>Pcg<\\\\>A01<\\\\>A15<\\\\>A48<\\\\>A90<\\\\>New Flag<\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>')
 
-    """, output='yeuchuan_a1_5133.tab', reader=AriesReader(), header=['visual_id', 'Loss_Code', 'lot_1'])
-
-def step_0002_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT /*+  ordered */
-              dt.test_head_id AS Bonder
-             ,di.visual_id AS visual_id_1
-    FROM 
-    A_Device_Item di
-    INNER JOIN A_Device_Testing dt ON dt.di_id = di.di_id
-    INNER JOIN A_Testing_Session ats ON ats.lao_start_ww = dt.lao_start_ww AND ats.ts_id = dt.ts_id AND ats.data_domain='METROLOGY'
-    WHERE 1=1
-     AND      ats.operation = '1204' 
-     AND      (di.visual_id In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a1_5133.tab', 'visual_id', 'di.visual_id In') + """) 
-    /*END SQL*/
-
-    """, output='yeuchuan_a2_5133.tab', reader=AriesReader(), header=['Bonder', 'visual_id_1'])
-
-def step_0003_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
-
-    DROP INDEX IF EXISTS IdxA1;
-    Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5133] ([lot_1],[visual_id]);
-    DROP INDEX IF EXISTS IdxA2;
-    Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_5133] ([visual_id_1]);
-
-    SELECT /*L0*/ 
-              a0.[Prod] AS [Prod]
-             ,a0.[Operator] AS [Operator]
-             ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[Link],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [Link]
-             ,a2.[Bonder] AS [Bonder]
-             ,a0.[Lot] AS [Lot]
-             ,a0.[out_date] AS [out_date]
-             ,a1.[visual_id] AS [visual_id]
-             ,a1.[Loss_Code] AS [Loss_Code]
-    FROM 
-               [yeuchuan_a0_5133] a0
-     LEFT OUTER JOIN [yeuchuan_a1_5133] a1
-      ON a0.[Lot] = a1.[lot_1] 
-     LEFT OUTER JOIN [yeuchuan_a2_5133] a2
-      ON a1.[visual_id] = a2.[visual_id_1]
-    """, output='Yield.tab', reader=SqliteReader(), inputs=['yeuchuan_a0_5133.tab', 'yeuchuan_a1_5133.tab', 'yeuchuan_a2_5133.tab'], header=['Prod', 'Operator', 'Link', 'Bonder', 'Lot', 'out_date', 'visual_id', 'Loss_Code'])
+def step_0003_html_report(ctx) -> None:
+    ctx.html_report.run(instance='10105', app_server_default='atd_atm.hadoop', template='\n\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8\nTYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nFORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle\nFORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>')
 
 def step_0004_html_report(ctx) -> None:
-    ctx.html_report.defer(instance='5133', id='MYREPORT2', prompt_text='Step 3. Create an HTML Report', app_server_default='atd_atm.hadoop', template='\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12\nTYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nINPUT-FILE<\\\\>\\\\PGATSHFS.intel.com\\PGATAnalysis$\\MAOATM\\KuAT\\TCB\\Yield Loss.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nOUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nNOPREPROCESS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>prod<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>operator<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>link<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>bonder<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>lot<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nSORT<\\\\>out_date<\\\\>Asc<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-DATA<\\\\><\\\\>prod<\\\\>operator<\\\\>link<\\\\>bonder<\\\\>lot<\\\\>out_date<\\\\>loss_code<\\\\>qty<\\\\>root cause<\\\\>action taken<\\\\><\\\\>\nCOLUMN-HEADERS<\\\\><\\\\>Prod<\\\\>Operator<\\\\>Link<\\\\>Bonder<\\\\>Lot<\\\\>Out Date<\\\\>Loss Code<\\\\>Qty<\\\\>Root Cause<\\\\>Action Taken<\\\\><\\\\>\nCOLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\><\\\\>\nCOLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>')
+    ctx.html_report.layout(ctx, outlook='N', instance='10105', json_only='N', chart_instance='6403', app_server_default='atd_atm.hadoop', template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:email:self\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:N\n:RR:NO\n:B:N\n:EM-A:\\\\kmatshfs.intel.com\\kmatanalysis$\\MAOATM\\KuAT\\TCB\\atrms_raw.csv\n:EM-S:\n:SEC:Y\n:TITLE:ATRMS PCG GAPS\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\nHTM:MYREPORT5\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\nHTM:MYREPORT2\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><i><font face="intelone display light" size="4" color="gray">Rev2-12012025<br>Exclude A04 & A06 data</font></i>\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>')
 
 def step_0005_html_report(ctx) -> None:
-    ctx.html_report.run(instance='5133', app_server_default='atd_atm.hadoop', template='\n\n\n\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8\nTYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nFORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle\nFORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>')
-
-def step_0006_html_report(ctx) -> None:
-    ctx.html_report.layout(ctx, outlook='N', instance='5133', json_only='N', chart_instance='28257', app_server_default='atd_atm.hadoop', template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:N\n:RR:NO\n:B:N\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:TCB Yield Loss Auto Update Report (12H)\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\nHTM:MYREPORT2\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>')
-
-def step_0007_html_report(ctx) -> None:
-    ctx.html_report.delete(instance='5133')
+    ctx.html_report.delete(instance='10105')
 
 def run() -> None:
     ctx = PipelineContext()
-    step_0000_sql_query(ctx)
-    step_0001_sql_query(ctx)
-    step_0002_sql_query(ctx)
-    step_0003_sqlite_query(ctx)
+    step_0000_utility(ctx)
+    step_0001_html_report(ctx)
+    step_0002_html_report(ctx)
+    step_0003_html_report(ctx)
     step_0004_html_report(ctx)
     step_0005_html_report(ctx)
-    step_0006_html_report(ctx)
-    step_0007_html_report(ctx)
 
 if __name__ == "__main__":
     run()
