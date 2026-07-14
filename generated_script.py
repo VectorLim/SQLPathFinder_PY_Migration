@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1833): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1961): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 2002): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2168): filters on Flag
-# - step_0055_sql_query (Line 2369): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2392): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1858): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1986): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 2027): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2193): filters on Flag
+# - step_0055_sql_query (Line 2394): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2417): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -27,6 +27,7 @@ from typing import Iterator, Protocol
 from vg2c.dispatch.dialects.sqlite import SqliteReader
 import csv
 import inspect
+import keyring
 import os
 import pandas
 import pandas as pd
@@ -763,25 +764,45 @@ class MacroState:
             self.pop_frame()
 
 class MailService:
-    """Send email. Reads connection config from environment variables."""
+    """Send email. Credentials are read from Windows Credential Manager (service: SMTP)."""
 
     utility_name = "email"
 
-    SMTP_PASSWORD_ENV = "Lyc040513"
-
+    KEYRING_SERVICE = "SMTP"
     DEFAULT_SMTP_HOST = "smtpauth.intel.com"
     DEFAULT_SMTP_PORT = 587
-    DEFAULT_FROM_ADDRESS = "yeu.chuan.lim@intel.com"
+
+    # ------------------------------------------------------------------
+    # Credential retrieval
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _load_credential(cls) -> keyring.credentials.Credential:
+        cred = keyring.get_credential(cls.KEYRING_SERVICE, None)
+        if cred is None:
+            raise RuntimeError(
+                f"No credential found for service '{cls.KEYRING_SERVICE}' in Windows "
+                "Credential Manager. Add a generic credential with:\n"
+                f"  cmdkey /generic:{cls.KEYRING_SERVICE} /user:<email> /pass:<password>"
+            )
+        return cred
+
+    # ------------------------------------------------------------------
+    # Stage-1 classification
+    # ------------------------------------------------------------------
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         text = options.lookup.get("UTILITIES", "")
         if not text:
             return None
-        argv = split_utility_command(text)
-        if MailService._is_mail_utility(argv):
+        if MailService._is_mail_utility(split_utility_command(text)):
             return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
         return None
+
+    # ------------------------------------------------------------------
+    # Emission
+    # ------------------------------------------------------------------
 
     @classmethod
     def emit_block(cls, block: Any) -> list[str] | None:
@@ -795,8 +816,7 @@ class MailService:
 
     @staticmethod
     def _utility_argv(block: Any) -> list[str]:
-        text = block.resolved_options.lookup.get("UTILITIES", "")
-        return split_utility_command(text)
+        return split_utility_command(block.resolved_options.lookup.get("UTILITIES", ""))
 
     @staticmethod
     def _is_mail_utility(argv: list[str]) -> bool:
@@ -807,7 +827,7 @@ class MailService:
 
     @staticmethod
     def _csv_items(value: str) -> list[str]:
-        return [part.strip() for part in strip_quotes(value).split(",") if part.strip()]
+        return [p.strip() for p in strip_quotes(value).split(",") if p.strip()]
 
     @staticmethod
     def _list_expr(values: list[str]) -> str:
@@ -842,6 +862,10 @@ class MailService:
 
         return None
 
+    # ------------------------------------------------------------------
+    # Runtime send (emittable)
+    # ------------------------------------------------------------------
+
     def send(
         self,
         to: str,
@@ -850,7 +874,8 @@ class MailService:
         attachments: list[str] | None = None,
         from_addr: str | None = None,
     ) -> None:
-        sender = from_addr or self.DEFAULT_FROM_ADDRESS
+        cred = self._load_credential()
+        sender = from_addr or cred.username
 
         msg = EmailMessage()
         msg["Subject"] = subject
@@ -873,13 +898,13 @@ class MailService:
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()
-                if self.SMTP_PASSWORD_ENV:
-                    smtp.login(self.DEFAULT_FROM_ADDRESS, self.SMTP_PASSWORD_ENV)
+                smtp.login(cred.username, cred.password)
                 smtp.send_message(msg)
         except smtplib.SMTPAuthenticationError as exc:
             raise RuntimeError(
-                f"MailService: failed to send email via "
-                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. Error: {exc}"
+                f"MailService: SMTP authentication failed for {cred.username!r} via "
+                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. "
+                "Check the credential stored under Windows Credential Manager → SMTP."
             ) from exc
 
     @staticmethod
@@ -1828,7 +1853,7 @@ def step_0011_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
 
 def step_0013_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\Config', body='')
+    ctx.email.send(to='yeu.chuan.lim@intel.com', subject='Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\Config', body='')
 
 def step_0015_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
@@ -2456,59 +2481,61 @@ def step_0056_sqlite_query(ctx) -> None:
 
 def run() -> None:
     ctx = PipelineContext()
-    step_0000_html_report(ctx)
-    step_0001_html_report(ctx)
-    step_0002_html_report(ctx)
-    step_0003_write_file(ctx)
-    step_0004_write_file(ctx)
-    step_0005_external(ctx)
-    for __row in ctx.csv_io.iter('macrotmp.csv'):
-        with ctx.macro.scope(__row):
-            step_0007_external(ctx)
-    step_0009_fs_delete(ctx)
-    for __row in ctx.csv_io.iter('ctime.csv'):
-        with ctx.macro.scope(__row):
-            step_0011_rows_in_file(ctx)
-            if int(ctx.macro.named('CONFIG')) <= int('0'):
-                step_0013_email(ctx)
-            else:
-                step_0015_sqlite_query(ctx)
-                step_0016_rows_in_file(ctx)
-                if int(ctx.macro.named('CONFIGSETS')) != int('1'):
-                    step_0018_email(ctx)
-                else:
-                    for __row in ctx.csv_io.iter('configsets.csv'):
-                        with ctx.macro.scope(__row):
-                            if ctx.macro.named('CSRV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
-                                step_0022_write_file(ctx)
-                                step_0023_email(ctx)
-                            if ctx.macro.named('MMSV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
-                                step_0026_write_file(ctx)
-                                step_0027_email(ctx)
-                            step_0029_fs_copy(ctx)
-                            step_0030_rows_in_file(ctx)
-                            if int(ctx.macro.named('HIST')) <= int('0'):
-                                step_0032_write_file(ctx)
-                                step_0033_write_file(ctx)
-                            else:
-                                step_0035_fs_copy(ctx)
-    for __row in ctx.csv_io.iter('configsets.csv'):
-        with ctx.macro.scope(__row):
-            step_0042_fs_copy(ctx)
-            step_0043_sqlite_query(ctx)
-            step_0044_sql_query(ctx)
-            step_0045_rows_in_file(ctx)
-            if int(ctx.macro.named('LOTS')) > int('0'):
-                step_0047_sql_query(ctx)
-                step_0048_sql_query(ctx)
-                step_0049_sqlite_query(ctx)
-                step_0050_sqlite_query(ctx)
-                step_0051_sqlite_query(ctx)
-                step_0052_rows_in_file(ctx)
-                if int(ctx.macro.named('FLAG')) > int('0'):
-                    step_0054_sqlite_query(ctx)
-                    step_0055_sql_query(ctx)
-                    step_0056_sqlite_query(ctx)
+    step_0013_email(ctx)
+
+    # step_0000_html_report(ctx)
+    # step_0001_html_report(ctx)
+    # step_0002_html_report(ctx)
+    # step_0003_write_file(ctx)
+    # step_0004_write_file(ctx)
+    # step_0005_external(ctx)
+    # for __row in ctx.csv_io.iter('macrotmp.csv'):
+    #     with ctx.macro.scope(__row):
+    #         step_0007_external(ctx)
+    # step_0009_fs_delete(ctx)
+    # for __row in ctx.csv_io.iter('ctime.csv'):
+    #     with ctx.macro.scope(__row):
+    #         step_0011_rows_in_file(ctx)
+    #         if int(ctx.macro.named('CONFIG')) <= int('0'):
+    #             step_0013_email(ctx)
+    #         else:
+    #             step_0015_sqlite_query(ctx)
+    #             step_0016_rows_in_file(ctx)
+    #             if int(ctx.macro.named('CONFIGSETS')) != int('1'):
+    #                 step_0018_email(ctx)
+    #             else:
+    #                 for __row in ctx.csv_io.iter('configsets.csv'):
+    #                     with ctx.macro.scope(__row):
+    #                         if ctx.macro.named('CSRV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
+    #                             step_0022_write_file(ctx)
+    #                             step_0023_email(ctx)
+    #                         if ctx.macro.named('MMSV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
+    #                             step_0026_write_file(ctx)
+    #                             step_0027_email(ctx)
+    #                         step_0029_fs_copy(ctx)
+    #                         step_0030_rows_in_file(ctx)
+    #                         if int(ctx.macro.named('HIST')) <= int('0'):
+    #                             step_0032_write_file(ctx)
+    #                             step_0033_write_file(ctx)
+    #                         else:
+    #                             step_0035_fs_copy(ctx)
+    # for __row in ctx.csv_io.iter('configsets.csv'):
+    #     with ctx.macro.scope(__row):
+    #         step_0042_fs_copy(ctx)
+    #         step_0043_sqlite_query(ctx)
+    #         step_0044_sql_query(ctx)
+    #         step_0045_rows_in_file(ctx)
+    #         if int(ctx.macro.named('LOTS')) > int('0'):
+    #             step_0047_sql_query(ctx)
+    #             step_0048_sql_query(ctx)
+    #             step_0049_sqlite_query(ctx)
+    #             step_0050_sqlite_query(ctx)
+    #             step_0051_sqlite_query(ctx)
+    #             step_0052_rows_in_file(ctx)
+    #             if int(ctx.macro.named('FLAG')) > int('0'):
+    #                 step_0054_sqlite_query(ctx)
+    #                 step_0055_sql_query(ctx)
+    #                 step_0056_sqlite_query(ctx)
 
 if __name__ == "__main__":
     run()

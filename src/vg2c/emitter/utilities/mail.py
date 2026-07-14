@@ -1,4 +1,20 @@
-"""MailService - send email via stdlib smtplib."""
+"""MailService - send email via stdlib smtplib.
+
+Credentials
+-----------
+Stored in Windows Credential Manager under the service name ``SMTP``:
+
+    Internet or network address : SMTP
+    User name                   : <your SMTP login e-mail, e.g. you@intel.com>
+    Password                    : <your SMTP password>
+
+To create/update the entry from PowerShell::
+
+    cmdkey /generic:SMTP /user:you@intel.com /pass:YOUR_PASSWORD
+
+Or via Control Panel → Credential Manager → Windows Credentials → Add a
+generic credential.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +22,8 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
+
+import keyring
 
 from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import EmitterUtility
@@ -18,26 +36,46 @@ from vg2c.kind import Kind
 
 
 class MailService(EmitterUtility):
-    """Send email. Reads connection config from environment variables."""
+    """Send email. Credentials are read from Windows Credential Manager (service: SMTP)."""
 
     utility_name = "email"
     handles = (Kind.EMAIL,)
 
-    SMTP_PASSWORD = "Lyc040513"
-
+    KEYRING_SERVICE = "SMTP"
     DEFAULT_SMTP_HOST = "smtpauth.intel.com"
     DEFAULT_SMTP_PORT = 587
-    DEFAULT_FROM_ADDRESS = "yeu.chuan.lim@intel.com"
+
+    # ------------------------------------------------------------------
+    # Credential retrieval
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _load_credential(cls) -> keyring.credentials.Credential:
+        cred = keyring.get_credential(cls.KEYRING_SERVICE, None)
+        if cred is None:
+            raise RuntimeError(
+                f"No credential found for service '{cls.KEYRING_SERVICE}' in Windows "
+                "Credential Manager. Add a generic credential with:\n"
+                f"  cmdkey /generic:{cls.KEYRING_SERVICE} /user:<email> /pass:<password>"
+            )
+        return cred
+
+    # ------------------------------------------------------------------
+    # Stage-1 classification
+    # ------------------------------------------------------------------
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         text = options.lookup.get("UTILITIES", "")
         if not text:
             return None
-        argv = split_utility_command(text)
-        if MailService._is_mail_utility(argv):
+        if MailService._is_mail_utility(split_utility_command(text)):
             return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
         return None
+
+    # ------------------------------------------------------------------
+    # Emission
+    # ------------------------------------------------------------------
 
     @classmethod
     def emit_block(cls, block: Any) -> list[str] | None:
@@ -51,8 +89,7 @@ class MailService(EmitterUtility):
 
     @staticmethod
     def _utility_argv(block: Any) -> list[str]:
-        text = block.resolved_options.lookup.get("UTILITIES", "")
-        return split_utility_command(text)
+        return split_utility_command(block.resolved_options.lookup.get("UTILITIES", ""))
 
     @staticmethod
     def _is_mail_utility(argv: list[str]) -> bool:
@@ -63,7 +100,7 @@ class MailService(EmitterUtility):
 
     @staticmethod
     def _csv_items(value: str) -> list[str]:
-        return [part.strip() for part in strip_quotes(value).split(",") if part.strip()]
+        return [p.strip() for p in strip_quotes(value).split(",") if p.strip()]
 
     @staticmethod
     def _list_expr(values: list[str]) -> str:
@@ -98,6 +135,10 @@ class MailService(EmitterUtility):
 
         return None
 
+    # ------------------------------------------------------------------
+    # Runtime send (emittable)
+    # ------------------------------------------------------------------
+
     @emittable
     def send(
         self,
@@ -107,7 +148,8 @@ class MailService(EmitterUtility):
         attachments: list[str] | None = None,
         from_addr: str | None = None,
     ) -> None:
-        sender = from_addr or self.DEFAULT_FROM_ADDRESS
+        cred = self._load_credential()
+        sender = from_addr or cred.username
 
         msg = EmailMessage()
         msg["Subject"] = subject
@@ -130,13 +172,13 @@ class MailService(EmitterUtility):
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()
-                if self.SMTP_PASSWORD:
-                    smtp.login(self.DEFAULT_FROM_ADDRESS, self.SMTP_PASSWORD)
+                smtp.login(cred.username, cred.password)
                 smtp.send_message(msg)
         except smtplib.SMTPAuthenticationError as exc:
             raise RuntimeError(
-                f"MailService: failed to send email via "
-                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. Error: {exc}"
+                f"MailService: SMTP authentication failed for {cred.username!r} via "
+                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. "
+                "Check the credential stored under Windows Credential Manager → SMTP."
             ) from exc
 
     @staticmethod
