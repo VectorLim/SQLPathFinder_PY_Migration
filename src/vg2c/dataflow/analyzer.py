@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from types import MappingProxyType
 
 from vg2c.dataflow.models import (
+    CSVGenerationCall,
     AnalyzedProgram,
     ConsumerKind,
     ConsumerRecord,
@@ -20,7 +21,7 @@ from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
 )
-from vg2c.resolver.operands import (
+from vg2c.operands import (
     RowsInFile,
     RunLoop,
     ScopeNode,
@@ -31,7 +32,7 @@ _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    expanded_blocks, sql_macro_diags = expand_sql_macros(list(resolved.blocks))
+    expanded_blocks, calls_by_block, sql_macro_diags = expand_sql_macros(list(resolved.blocks))
     expanded_resolved = ResolvedProgram(
         blocks=tuple(expanded_blocks),
         scope_tree=resolved.scope_tree,
@@ -40,34 +41,21 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
     diagnostics: list[Diagnostic] = list(expanded_resolved.diagnostics)
     blocks = list(expanded_resolved.blocks)
-    block_by_index = {block.index: block for block in blocks}
     scope_rel = _ScopeRelations(expanded_resolved.scope_tree)
-
-    explicit_producers = _collect_explicit_producers(blocks, scope_rel)
-    utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
-    consumers = _collect_consumers(blocks)
-    producers_by_path = _index_by_path(explicit_producers)
 
     edges: list[DataflowEdge] = []
     matched_producer_keys: set[tuple[int, str]] = set()
+    consumers = _collect_consumers(blocks, calls_by_block)
 
     for consumer in consumers:
+        explicit_producers = _collect_explicit_producers(blocks, scope_rel)
+        producers_by_path = _index_by_path(explicit_producers)
         producer = _choose_explicit_producer(consumer, producers_by_path)
         if producer is None:
+            utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
             external = _choose_external_candidate(consumer, utility_candidates)
             if external is not None:
                 producer = external
-                diagnostics.append(
-                    Diagnostic(
-                        severity="info",
-                        code="dataflow-likely-external-producer",
-                        message=(
-                            f"Consumer path {consumer.csv_path} likely produced by a preceding utility block."
-                        ),
-                        block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].span,
-                    )
-                )
 
         scope_relation, order_ok = _classify_edge_relation(
             producer, consumer, scope_rel
@@ -83,35 +71,6 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
         if producer is not None:
             matched_producer_keys.add((producer.block_index, producer.csv_path))
-            if not order_ok:
-                diagnostics.append(
-                    Diagnostic(
-                        severity="warning",
-                        code="dataflow-order-violation",
-                        message=(
-                            f"Consumer index {consumer.block_index} appears before or at producer index {producer.block_index} "
-                            f"for {consumer.csv_path}."
-                        ),
-                        block_index=consumer.block_index,
-                        span=block_by_index[consumer.block_index].span,
-                    )
-                )
-
-    unused = tuple(
-        producer
-        for producer in explicit_producers
-        if (producer.block_index, producer.csv_path) not in matched_producer_keys
-    )
-    for producer in unused:
-        diagnostics.append(
-            Diagnostic(
-                severity="info",
-                code="dataflow-unused-output",
-                message=f"Produced CSV {producer.csv_path} has no structural consumer.",
-                block_index=producer.block_index,
-                span=block_by_index[producer.block_index].span,
-            )
-        )
 
     producers_map = {k: tuple(v) for k, v in producers_by_path.items()}
     return AnalyzedProgram(
@@ -120,7 +79,7 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
         producers_by_path=MappingProxyType(producers_map),
         consumers=tuple(consumers),
         edges=tuple(edges),
-        unused_producers=unused,
+        csv_generation_calls_by_block=calls_by_block,
         diagnostics=tuple(diagnostics),
     )
 
@@ -193,7 +152,10 @@ def _collect_external_utility_candidates(
     return candidates
 
 
-def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
+def _collect_consumers(
+    blocks: list[ResolvedBlock],
+    calls_by_block: dict[int, tuple[CSVGenerationCall, ...]],
+) -> list[ConsumerRecord]:
     consumers: list[ConsumerRecord] = []
     for block in blocks:
         for key, value in block.resolved_options.pairs:
@@ -234,7 +196,7 @@ def _collect_consumers(blocks: list[ResolvedBlock]) -> list[ConsumerRecord]:
                 )
             )
 
-        for call in block.sql_macro_calls:
+        for call in calls_by_block.get(block.index, ()):
             for csv_path in call.consumed_csv_paths():
                 consumers.append(
                     ConsumerRecord(

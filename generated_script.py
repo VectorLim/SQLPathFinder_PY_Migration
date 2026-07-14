@@ -1670,10 +1670,10 @@ class SqliteEngine:
                 parts.append(SqliteEngine._format_sql_literal(literal))
 
             call_index = int(match.group(1))
-            if call_index < 0 or call_index >= len(block.sql_macro_calls):
+            if call_index < 0 or call_index >= len(block.csv_generation_calls):
                 parts.append(SqliteEngine._format_sql_literal(match.group(0)))
             else:
-                call = block.sql_macro_calls[call_index]
+                call = block.csv_generation_calls[call_index]
                 csv_path_expr = MacroState.to_py_expr(call.csv_path)
                 parts.append(
                     CsvIO.sql_get_csv_list.render(csv_path_expr, repr(call.column_ref), repr(call.lead_in))

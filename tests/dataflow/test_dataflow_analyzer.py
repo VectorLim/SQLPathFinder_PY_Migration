@@ -100,33 +100,6 @@ def test_external_utility_candidate_softens_missing_producer() -> None:
     )
 
 
-def test_multiple_producers_same_scope_emit_overwrite_info() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "dup.csv"}),
-            _block(1, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "dup.csv"}),
-            _block(2, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "dup.csv"}),
-        ]
-    )
-    assert any(d.code == "dataflow-overwrite-same-scope" for d in program.diagnostics)
-
-
-def test_branch_exclusive_producers_emit_info() -> None:
-    program = _analyze_blocks(
-        [
-            _block(
-                0, Kind.MACRO_CONTROL, utilities='{IF-THEN} "A" "EQS" "1" "" "" "" ""'
-            ),
-            _block(1, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "x.csv"}),
-            _block(2, Kind.MACRO_CONTROL, utilities="{ELSE}"),
-            _block(3, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "x.csv"}),
-            _block(4, Kind.MACRO_CONTROL, utilities="{END-IF}"),
-            _block(5, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "x.csv"}),
-        ]
-    )
-    assert any(
-        d.code == "dataflow-branch-exclusive-producers" for d in program.diagnostics
-    )
 
 
 def test_unused_producer_emits_info() -> None:

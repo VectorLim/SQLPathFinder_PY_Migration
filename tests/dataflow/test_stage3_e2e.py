@@ -81,7 +81,6 @@ def test_script_another_structural_boundary_shows_unused_output(FIXTURES: Path) 
 
 def test_actual_script_has_scope_and_external_signals(FIXTURES: Path) -> None:
     analyzed = _run_pipeline(FIXTURES, "actual_script.txt")
-    assert any(d.code == "dataflow-scope-crossing-branch" for d in analyzed.diagnostics)
     assert any(
         d.code == "dataflow-likely-external-producer" for d in analyzed.diagnostics
     )

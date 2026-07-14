@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable
 
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic
 
-from vg2c.resolver.operands.base import (
+from vg2c.operands.base import (
     _OPERATOR_TABLE,
     ParseChildrenFn,
     ScopeIdSource,

@@ -80,6 +80,7 @@ def dispatch(
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
                 step_name=step_name,
+                csv_generation_calls=analyzed.csv_generation_calls_by_block.get(block.index, ()),
                 sql_filters=tuple(sql_filters),
             )
         )

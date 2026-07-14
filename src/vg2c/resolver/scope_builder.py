@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from vg2c.frontend.models import ClassifiedBlock, Diagnostic
 from vg2c.kind import Kind
-from vg2c.resolver.operands import (
+from vg2c.operands import (
     Else,
     EndIf,
     EndLoop,

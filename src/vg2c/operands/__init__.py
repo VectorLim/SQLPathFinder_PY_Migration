@@ -9,16 +9,16 @@ defines the ``MacroControlPayload`` union used by ``ResolvedBlock`` and
 
 from __future__ import annotations
 
-from vg2c.resolver.operands.base import (
+from vg2c.operands.base import (
     MacroFrame,
     ParseChildrenFn,
     ScopeIdSource,
     ScopeNode,
 )
-from vg2c.resolver.operands.conditional import Else, EndIf, IfThen
-from vg2c.resolver.operands.file_ops import RowsInFile
-from vg2c.resolver.operands.loop import EndLoop, RunLoop
-from vg2c.resolver.operands.macro import EndMacro, StartMacro
+from vg2c.operands.conditional import Else, EndIf, IfThen
+from vg2c.operands.file_ops import RowsInFile
+from vg2c.operands.loop import EndLoop, RunLoop
+from vg2c.operands.macro import EndMacro, StartMacro
 
 MacroControlPayload = (
     StartMacro | EndMacro | IfThen | Else | EndIf | RowsInFile | RunLoop | EndLoop

@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import Enum
 
 
+
 class Kind(str, Enum):
     SQL_QUERY = "SQL_QUERY"
     SQLITE_QUERY = "SQLITE_QUERY"

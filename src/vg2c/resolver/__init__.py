@@ -5,9 +5,8 @@ from vg2c.resolver.macro_resolver import resolve_macros
 from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
-    SqlMacroCall,
 )
-from vg2c.resolver.operands import (
+from vg2c.operands import (
     MacroControlPayload,
     MacroFrame,
     ScopeNode,
@@ -40,7 +39,6 @@ __all__ = [
     "ResolvedBlock",
     "ResolvedProgram",
     "ScopeNode",
-    "SqlMacroCall",
     "build_scope_tree",
     "resolve",
     "resolve_macros",

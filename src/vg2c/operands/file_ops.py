@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from vg2c.frontend.models import ClassifiedBlock
 
-from vg2c.resolver.operands.base import _quoted_args
+from vg2c.operands.base import _quoted_args
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from vg2c.frontend.models import SourceSpan
-from vg2c.resolver.models import SqlGetCsvListCall
+from vg2c.dataflow.models import CSVGenerationCall
 from vg2c.dataflow.sql_macros.base import (
     MacroExpansion,
     MacroParseError,
@@ -41,7 +41,7 @@ class SqlGetCsvListHandler(SqlMacroHandler):
         lead_in = unquote_arg(args[2])
         column_ref = parse_column_ref(column_raw)
 
-        call = SqlGetCsvListCall(
+        call = CSVGenerationCall(
             name=self.name,
             csv_path=csv_path_raw,
             column_ref=column_ref,

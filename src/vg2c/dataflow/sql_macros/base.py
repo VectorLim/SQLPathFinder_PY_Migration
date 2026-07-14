@@ -15,14 +15,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from vg2c.frontend.models import SourceSpan
-from vg2c.resolver.models import SqlMacroCall
+from vg2c.dataflow.models import CSVGenerationCall
 
 
 @dataclass(frozen=True, slots=True)
 class MacroExpansion:
     """Successful parse result from a SQL macro handler."""
 
-    call: SqlMacroCall
+    call: CSVGenerationCall
     appended_text: str = ""
 
 

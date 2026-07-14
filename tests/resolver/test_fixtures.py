@@ -61,7 +61,7 @@ def test_sql_script_preserves_sql_and_has_no_resolver_sql_expansion(
     ]
     assert sql_blocks
     assert any("SQL_Get_CSV_List" in block.resolved_body for block in sql_blocks)
-    assert all(block.sql_macro_calls == () for block in program.blocks)
+    # ResolvedBlocks no longer contain SQL macro/CSV-generation call slots.
     assert all(block.control_payload is None for block in sql_blocks)
 
 

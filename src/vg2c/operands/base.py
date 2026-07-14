@@ -21,7 +21,7 @@ from vg2c.frontend.models import ClassifiedBlock, Diagnostic, SourceSpan
 
 if TYPE_CHECKING:
     from vg2c.emitter.models import IndentWriter
-    from vg2c.resolver.operands import MacroControlPayload
+    from vg2c.operands import MacroControlPayload
 
 
 # ---------------------------------------------------------------------------

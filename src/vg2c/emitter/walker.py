@@ -7,7 +7,7 @@ from vg2c.emitter.models import IndentWriter
 from vg2c.emitter.utilities._base import UtilitySpec
 from vg2c.frontend.models import Diagnostic
 from vg2c.resolver.models import ResolvedBlock
-from vg2c.resolver.operands import ScopeNode
+from vg2c.operands import ScopeNode
 
 __all__ = ["walk_and_emit"]
 

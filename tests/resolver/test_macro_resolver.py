@@ -12,7 +12,7 @@ from vg2c.frontend.models import (
 )
 from vg2c.kind import Kind
 from vg2c.resolver.macro_resolver import resolve_macros
-from vg2c.resolver.operands import (
+from vg2c.operands import (
     Else,
     EndIf,
     EndLoop,

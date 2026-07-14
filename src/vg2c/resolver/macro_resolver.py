@@ -5,7 +5,7 @@ from vg2c.frontend.models import (
     Diagnostic,
 )
 from vg2c.resolver.models import ResolvedBlock
-from vg2c.resolver.operands import MacroControlPayload, ScopeNode
+from vg2c.operands import MacroControlPayload, ScopeNode
 
 
 def resolve_macros(
@@ -26,7 +26,6 @@ def resolve_macros(
                 classified=block,
                 resolved_options=block.options,
                 resolved_body=block.body,
-                sql_macro_calls=(),
                 control_payload=payload,
                 scope_id=scope_for_block.get(block.index, 0),
             )

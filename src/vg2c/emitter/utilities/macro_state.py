@@ -15,7 +15,7 @@ from vg2c.emitter.utilities._emit_helpers import (
     strip_quotes,
 )
 from vg2c.kind import Kind
-from vg2c.resolver.operands import RowsInFile
+from vg2c.operands import RowsInFile
 
 
 class MacroState(EmitterUtility):

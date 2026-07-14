@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from vg2c.dataflow.models import CSVGenerationCall
 from vg2c.dataflow.sql_macros import HANDLERS, MacroParseError
 from vg2c.frontend.models import Diagnostic, SourceSpan
 from vg2c.kind import Kind
@@ -13,9 +14,14 @@ _SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 def expand_sql_macros(
     blocks: list[ResolvedBlock],
-) -> tuple[list[ResolvedBlock], list[Diagnostic]]:
+) -> tuple[
+    list[ResolvedBlock],
+    dict[int, tuple[CSVGenerationCall, ...]],
+    list[Diagnostic],
+]:
     diagnostics: list[Diagnostic] = []
     updated_blocks: list[ResolvedBlock] = []
+    calls_by_block: dict[int, tuple[CSVGenerationCall, ...]] = {}
 
     for block in blocks:
         if block.kind not in _SCANNED_KINDS:
@@ -28,18 +34,20 @@ def expand_sql_macros(
             block_index=block.index,
         )
         diagnostics.extend(local_diags)
+        if calls:
+            calls_by_block[block.index] = tuple(calls)
         updated_blocks.append(
             ResolvedBlock(
                 classified=block,
                 resolved_options=block.resolved_options,
                 resolved_body=rewritten_body,
-                sql_macro_calls=tuple(calls),
                 control_payload=block.control_payload,
                 scope_id=block.scope_id,
             )
         )
 
-    return updated_blocks, diagnostics
+    return updated_blocks, calls_by_block, diagnostics
+
 
 
 def _expand_body(
