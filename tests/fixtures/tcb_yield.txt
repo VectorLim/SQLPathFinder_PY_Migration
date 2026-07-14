@@ -1,0 +1,288 @@
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a0_5133.tab
+/CTROW=Prod,Operator,Link,Lot,out_date
+/CTVALUE=codeqty
+/CTHEADER=code
+/CTARRAY=a0,5133
+/HEADERS=Prod,Operator,Link,Lot,out_date,code,codeqty
+/INSTANCE=5133
+/PROMPT-TEXT=Step 1.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          Prod AS Prod
+         ,Operator AS Operator
+         ,Replace(Replace(Replace(Replace(Replace(Replace(Link,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Link
+         ,Lot AS Lot
+         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+         ,code AS code
+         ,Max(codeqty) AS codeqty
+FROM
+(
+SELECT  
+          p.prodgroup3 AS Prod
+         ,f0.last_operator_id AS Operator
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 6244 AND la.src_erase_date IS NULL AND rownum <= 1) AS Link
+         ,f2.lot AS Lot
+         ,f0.out_date AS out_date
+         ,f2.code AS code
+         ,f2.codeqty AS codeqty
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+LEFT JOIN @[]@F_LotCodeHist f2 ON f2.lot = f0.lot AND f2.operation = f0.operation AND f2.prevout_date = f0.prevout_date AND NVL(f2.history_deleted_flag,'N') = 'N'
+ AND      f2.code In ('GN51'
+,'CJ03'
+,'CJ04'
+,'CJ37') 
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation = '1204' 
+ AND      f0.facility = 'A15' 
+ AND      f0.prevout_date >= SYSDATE - 90 
+ AND      p.prodgroup3 = 'SHD' 
+-- Tail A
+)
+GROUP BY 
+          Prod
+         ,Operator
+         ,Link
+         ,Lot
+         ,out_date
+         ,code
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a1_5133.tab
+/HEADERS=visual_id,Loss_Code,lot_1
+/INSTANCE=5133
+/PROMPT-TEXT=Step 1.1-a1. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          u0.visualid AS visual_id
+         ,ua0.ws_loss_code AS Loss_Code
+         ,u0.lotnum AS lot_1
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'WS_LOSS_CODE' THEN uuha.attr_value END) WS_LOSS_CODE
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5133.tab", Lot, "u0.lotnum In") 
+ AND      u0.ws_operation = '1204' 
+AND uuha.attr_name IN ('dummy'
+,'WS_LOSS_CODE'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+WHERE 1=1
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5133.tab", Lot, "u0.lotnum In") 
+ AND      (ua0.ws_loss_code LIKE  'GN51%'
+OR ua0.ws_loss_code LIKE 'CJ03%'
+OR ua0.ws_loss_code LIKE 'CJ04%'
+OR ua0.ws_loss_code LIKE 'CJ37%'
+) 
+ AND      u0.ws_operation = '1204' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a2_5133.tab
+/HEADERS=Bonder,visual_id_1
+/INSTANCE=5133
+/PROMPT-TEXT=Step 1.1-a2. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT /*+  ordered */
+          dt.test_head_id AS Bonder
+         ,di.visual_id AS visual_id_1
+FROM 
+A_Device_Item di
+INNER JOIN A_Device_Testing dt ON dt.di_id = di.di_id
+INNER JOIN A_Testing_Session ats ON ats.lao_start_ww = dt.lao_start_ww AND ats.ts_id = dt.ts_id AND ats.data_domain='METROLOGY'
+WHERE 1=1
+ AND      ats.operation = '1204' 
+ AND      (di.visual_id In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5133.tab", visual_id, "di.visual_id In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/CSV=Yield.tab
+/TABLE=yeuchuan_a0_5133.tab,yeuchuan_a1_5133.tab,yeuchuan_a2_5133.tab
+/HEADERS=Prod,Operator,Link,Bonder,Lot,out_date,visual_id,Loss_Code
+/DELETE=*Instance*
+/INSTANCE=5133
+/SQLITE_DT=,Prod(c),Operator(c),Link(x),Bonder(c),Lot(c),out_date(d),visual_id(c),Loss_Code(c),lot_1(c),visual_id_1(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5133] ([lot_1],[visual_id]);
+DROP INDEX IF EXISTS IdxA2;
+Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_5133] ([visual_id_1]);
+
+SELECT /*L0*/ 
+          a0.[Prod] AS [Prod]
+         ,a0.[Operator] AS [Operator]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[Link],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [Link]
+         ,a2.[Bonder] AS [Bonder]
+         ,a0.[Lot] AS [Lot]
+         ,a0.[out_date] AS [out_date]
+         ,a1.[visual_id] AS [visual_id]
+         ,a1.[Loss_Code] AS [Loss_Code]
+FROM 
+           [yeuchuan_a0_5133] a0
+ LEFT OUTER JOIN [yeuchuan_a1_5133] a1
+  ON a0.[Lot] = a1.[lot_1] 
+ LEFT OUTER JOIN [yeuchuan_a2_5133] a2
+  ON a1.[visual_id] = a2.[visual_id_1]
+
+<---- New Query ---->
+
+
+<---- New Query ---->
+<OPTIONS>
+/INSTANCE=5133
+/ID=MYREPORT2
+/REPORT=HTML-DEFER
+/PROMPT-TEXT=Step 3. Create an HTML Report
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>\\PGATSHFS.intel.com\PGATAnalysis$\MAOATM\KuAT\TCB\Yield Loss.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>prod<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>operator<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>link<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>bonder<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>lot<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+SORT<\\>out_date<\\>Asc<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>prod<\\>operator<\\>link<\\>bonder<\\>lot<\\>out_date<\\>loss_code<\\>qty<\\>root cause<\\>action taken<\\><\\>
+COLUMN-HEADERS<\\><\\>Prod<\\>Operator<\\>Link<\\>Bonder<\\>Lot<\\>Out Date<\\>Loss Code<\\>Qty<\\>Root Cause<\\>Action Taken<\\><\\>
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\><\\>
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-RUN
+/INSTANCE=5133
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+
+
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8
+TYPE<\\>CSS<\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\>
+FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>text-decoration:normal<\\>vertical-align:middle
+FORMAT<\\>Column-Data<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>Column-Alt-Row<\\>background-color:#f7f5dc<\\>color:#333<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>At-Top-of-Report<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:15<\\>font-style:normal<\\>font-weight:bold<\\>text-align:center<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col1<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col2<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col3<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>JQX-All-IChart-Text<\\>background-color:white<\\>color:black<\\>font-family:Verdana<\\>font-size:11<\\>font-style:normal<\\>font-weight:normal<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>border-style:solid<\\>border-width:1px<\\>border-spacing:4px<\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-LAYOUT
+/OUTLOOK=N
+/INSTANCE=5133
+/JSON-ONLY=N
+/CHART-INSTANCE=28257
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+:CSS:sqlpathfinder_style_1.css
+:CSSEMBED:N
+:RR:NO
+:B:N
+:EM-A:
+:EM-S:
+:SEC:Y
+:TITLE:TCB Yield Loss Auto Update Report (12H)
+<table class="tblout">
+<tr class="tblout">
+<td class="tblout">
+HTM:MYREPORT2
+</td>
+</tr>
+</table>
+</td><td class="tblout" valign="top">
+<table class="tblout">
+<tr class="tblout"><td class="tblout"></td></tr>
+</table>
+</td></tr></table>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-DELETE
+/INSTANCE=5133
+</OPTIONS>
+N/A

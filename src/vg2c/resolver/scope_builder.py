@@ -89,20 +89,6 @@ def _parse_children(
         if stop_tokens and token in stop_tokens:
             return children, i, token
 
-        if block.kind is Kind.MALFORMED:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="malformed-block-skipped",
-                    message="Resolver skipped a malformed block.",
-                    block_index=block.index,
-                    span=block.span,
-                )
-            )
-            children.append(_leaf_node(state, block.index))
-            i += 1
-            continue
-
         if token in _SCOPE_TOKENS:
             payload = _SCOPE_TOKENS[token].from_block(block)
             subtree, next_i = payload.build_scope(

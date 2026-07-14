@@ -126,16 +126,6 @@ def test_rows_in_file_stays_leaf() -> None:
     assert [node.kind for node in root.children] == ["leaf", "leaf"]
 
 
-def test_malformed_block_is_leaf_with_warning() -> None:
-    blocks = [
-        _block(0, Kind.MALFORMED),
-        _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "after_malformed.bat"}),
-    ]
-    root, diagnostics = build_scope_tree(blocks)
-    assert diagnostics_by_code(diagnostics, "malformed-block-skipped")
-    assert [node.kind for node in root.children] == ["leaf", "leaf"]
-
-
 def test_run_loop_parses_payload_and_wraps_inner_leaf() -> None:
     blocks = [
         _block(

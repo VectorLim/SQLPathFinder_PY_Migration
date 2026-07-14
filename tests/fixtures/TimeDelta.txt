@@ -1,0 +1,319 @@
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a0_10607.tab
+/HEADERS=prodgroup3,Link,lot,out_date,wtb
+/INSTANCE=10607
+/PROMPT-TEXT=Step 2.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          prodgroup3 AS prodgroup3
+         ,Replace(Replace(Replace(Replace(Replace(Replace(Link,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Link
+         ,lot AS lot
+         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+         ,Replace(Replace(Replace(Replace(Replace(Replace(wtb,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS wtb
+FROM
+(
+SELECT  
+          p.prodgroup3 AS prodgroup3
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 6244 AND la.src_erase_date IS NULL AND rownum <= 1) AS Link
+         ,f0.lot AS lot
+         ,f0.out_date AS out_date
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 1225 AND la.src_erase_date IS NULL AND rownum <= 1) AS wtb
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation In ('1204'
+,'2511') 
+ AND      f0.out_date >= (SYSDATE - 12/24) 
+-- Tail A
+)
+WHERE
+              wtb = 'N' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a1_10607.tab
+/HEADERS=Bonder,lot_1,test_name,max_time,min_time
+/INSTANCE=10607
+/PROMPT-TEXT=Step 2.1-a1. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          Bonder AS Bonder
+         ,lot_1 AS lot_1
+         ,test_name AS test_name
+         ,Max(max_time) AS max_time
+         ,Min(min_time) AS min_time
+FROM
+(
+SELECT  
+          dt.test_head_id AS Bonder
+         ,ats.lot AS lot_1
+         ,t.test_name AS test_name
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS max_time
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS min_time
+FROM 
+A_Testing_Session ats
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+WHERE ats.data_domain='METROLOGY'
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_10607.tab", lot, "ats.lot In") 
+ AND      ats.operation = '1204' 
+ AND      t.test_name = 'PROCESSTIMESTAMP' 
+)
+GROUP BY 
+          Bonder
+         ,lot_1
+         ,test_name
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/CSV=timestamp_raw.csv
+/TABLE=yeuchuan_a0_10607.tab,yeuchuan_a1_10607.tab
+/HEADERS=prodgroup3,Link,Bonder,lot,out_date,test_name,max_time,min_time
+/DELETE=*Instance*
+/INSTANCE=10607
+/SQLITE_DT=,prodgroup3(c),Link(x),Bonder(c),lot(c),out_date(d),lot_1(c),test_name(c),max_time(c),min_time(c),wtb(x)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_10607] ([lot_1]);
+
+SELECT /*L0*/ 
+          a0.[prodgroup3] AS [prodgroup3]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[Link],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [Link]
+         ,a1.[Bonder] AS [Bonder]
+         ,a0.[lot] AS [lot]
+         ,a0.[out_date] AS [out_date]
+         ,a1.[test_name] AS [test_name]
+         ,a1.[max_time] AS [max_time]
+         ,a1.[min_time] AS [min_time]
+FROM 
+           [yeuchuan_a0_10607] a0
+ LEFT OUTER JOIN [yeuchuan_a1_10607] a1
+  ON a0.[lot] = a1.[lot_1]
+
+<---- New Query ---->
+
+<OPTIONS>
+/JSL=Y
+/OUTLOOK=N
+/PROMPT-TEXT=Step 3. Create a JMP Program
+/INSTANCE=10607
+</OPTIONS>
+/*------------------------------------------------------------------------------------
+|
+| Load file to a JMP Table table
+|
+ --------------------------------------------------------------------------------------*/
+If (IsEmpty(::Default_Dir),::Default_Dir ="$default$dir$");
+::MyInFile1= ::Default_Dir || "timestamp_raw.csv";
+Try(Close( Data Table ("timestamp_raw_csv") , NoSave);,Print("Warning Only: Table could not be found!"));
+
+::myspfcsv= Open(::MyInFile1,
+Import Settings(
+   End Of Line( CRLF, CR, LF ),
+   End Of Field( Comma ),
+   Strip Quotes( 1 ),
+   Use Apostrophe as Quotation Mark( 0 ),
+   Labels( 1 ),
+   Column Names Start( 1 ),
+   Data Starts( 2 ),
+   Lines To Read( All ),
+   Year Rule( "10-90" )
+   ));
+Wait(0.1);
+/*Set Columns Lowercase*/
+For(j = 1, j <= NCol(myspfcsv), j++,
+  col = Column(j); nm = lowercase(char(column name(j)));
+  col << Set Name(nm);
+);
+::myspfcsv << Set Name("timestamp_raw_csv");
+
+dt=current data table ();
+dt<<select where (is missing (:Bonder));
+dt<<delete rows;
+dt<<new column ("TimeDelta_max", numeric,format (fixed dec, 8,3), formula((:out_date - :max_time) / 3600));
+dt<<new column ("TimeDelta_min", numeric,format (fixed dec, 8,3), formula((:out_date - :min_time) / 3600));
+
+dt<<select where ((:TimeDelta_max>0)&(:TimeDelta_min<24));
+dt<<delete rows;
+strpath="\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\";
+dt << save  (strpath||"TimeDelta.csv");
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=10607
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\WaitFile.va "\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\TimeDelta.csv" "30"
+/PROMPT-TEXT=Step 4. Wait for a file to appear or a period of time to elapse
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=10607
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\TimeDelta.csv" "RowsInFile" "N"
+/PROMPT-TEXT=Step 5. Count Rows in a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=10607
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "RowsInFile" "GT" "0" "" "" "" ""
+/PROMPT-TEXT=Step 6. Apply Conditional Logic
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+
+<---- New Query ---->
+<OPTIONS>
+/INSTANCE=10607
+/ID=MYREPORT2
+/REPORT=HTML-DEFER
+/PROMPT-TEXT=Step 7. Create an HTML Report
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\TimeDelta.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+AT-TOP-OF-REPORT<\\><\\>Bonder - IS Time Delta : Please check the time setting in bonder<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>prodgroup3<\\>link<\\>bonder<\\>lot<\\>out_date<\\>test_name<\\>max_time<\\>min_time<\\>timedelta_max<\\>timedelta_min<\\><\\>
+COLUMN-HEADERS<\\><\\>Prodgroup3<\\>Link<\\>Bonder<\\>Lot<\\>Out Date<\\>Test Name<\\>Max Time<\\>Min Time<\\>Timedelta Max<\\>Timedelta Min<\\><\\>
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\><\\>
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-RUN
+/INSTANCE=10607
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8
+TYPE<\\>CSS<\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\>
+FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>text-decoration:normal<\\>vertical-align:middle
+FORMAT<\\>Column-Data<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>Column-Alt-Row<\\>background-color:#f7f5dc<\\>color:#333<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>At-Top-of-Report<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:15<\\>font-style:normal<\\>font-weight:bold<\\>text-align:center<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col1<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col2<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col3<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>JQX-All-IChart-Text<\\>background-color:white<\\>color:black<\\>font-family:Verdana<\\>font-size:11<\\>font-style:normal<\\>font-weight:normal<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>border-style:solid<\\>border-width:1px<\\>border-spacing:4px<\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-LAYOUT
+/OUTLOOK=N
+/INSTANCE=10607
+/JSON-ONLY=N
+/CHART-INSTANCE=25586
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+:FILE:email:kuat.tcb.staff@intel.com, kuat.fol.shift.engineers@intel.com,kuat.fol.mtse@intel.com
+:CSS:sqlpathfinder_style_1.css
+:CSSEMBED:N
+:RR:NO
+:B:N
+:EM-A:
+:EM-S:
+:SEC:Y
+:TITLE:IS-Bonder Time Mismatch
+<table class="tblout">
+<tr class="tblout">
+<td class="tblout">
+HTM:MYREPORT2
+</td>
+</tr>
+</table>
+</td><td class="tblout" valign="top">
+<table class="tblout">
+<tr class="tblout"><td class="tblout"></td></tr>
+</table>
+</td></tr></table>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-DELETE
+/INSTANCE=10607
+</OPTIONS>
+N/A
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=10607
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+

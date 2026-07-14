@@ -27,6 +27,7 @@ from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
 from vg2c.emitter.utilities.generic import UnknownUtility
 from vg2c.emitter.utilities.mail import MailService
 from vg2c.emitter.utilities.pipeline_context import PipelineContext
+from vg2c.emitter.utilities.wait_file import WaitFile
 
 
 def _alias_text(alias: ast.alias) -> str:
@@ -212,4 +213,5 @@ __all__ = [
     "PipelineContext",
     "SqliteEngine",
     "PythonEmbed",
+    "WaitFile",
 ]

@@ -29,7 +29,6 @@ def test_resolve_reader_cls_sql_bearing(kind: Kind, expected: type | None) -> No
         Kind.MACRO_CONTROL,
         Kind.HTML_REPORT,
         Kind.UNKNOWN,
-        Kind.MALFORMED,
     ],
 )
 def test_resolve_reader_cls_non_sql_returns_none(kind: Kind) -> None:

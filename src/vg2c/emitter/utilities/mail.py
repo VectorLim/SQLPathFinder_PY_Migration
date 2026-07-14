@@ -113,7 +113,11 @@ class MailService(EmitterUtility):
         if len(payload) >= 5:
             attachments = cls._csv_items(payload[0])
             from_addr = strip_quotes(payload[1])
-            body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
+            body = (
+                payload[3]
+                if strip_quotes(payload[3])
+                else (body_fallback or payload[2])
+            )
 
             kwargs: dict[str, Any] = {
                 "to": MacroState.to_py_expr(payload[4]),

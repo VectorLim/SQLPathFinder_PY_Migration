@@ -113,7 +113,7 @@ class HtmlReport(EmitterUtility):
         for line in (template or "").splitlines():
             if not line.strip():
                 continue
-            rows.append([part.strip() for part in line.split("<\\>")])
+            rows.append([part.strip() for part in re.split(r"<\\\\>", line)])
         return rows
 
     @staticmethod

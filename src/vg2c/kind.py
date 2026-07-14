@@ -11,11 +11,11 @@ class Kind(str, Enum):
     FS_COPY = "FS_COPY"
     FS_DELETE = "FS_DELETE"
     EXTERNAL_RUN = "EXTERNAL_RUN"
+    WAIT_FILE = "WAIT_FILE"
     HTML_REPORT = "HTML_REPORT"
     EMAIL = "EMAIL"
     MACRO_CONTROL = "MACRO_CONTROL"
     UNKNOWN = "UNKNOWN"
-    MALFORMED = "MALFORMED"
 
     @property
     def is_csv_producer(self) -> bool:
@@ -35,5 +35,6 @@ class Kind(str, Enum):
             Kind.EXTERNAL_RUN,
             Kind.FS_COPY,
             Kind.FS_DELETE,
+            Kind.WAIT_FILE,
         }
 
