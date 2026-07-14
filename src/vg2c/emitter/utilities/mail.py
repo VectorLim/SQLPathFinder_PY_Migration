@@ -6,7 +6,7 @@ import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 
 from vg2c.emitter.models import emittable
@@ -24,6 +24,22 @@ class MailService(EmitterUtility):
 
     utility_name = "email"
     handles = (Kind.EMAIL,)
+
+    SMTP_PASSWORD_ENV = "Lyc040513"
+
+    DEFAULT_SMTP_HOST = "smtpauth.intel.com"
+    DEFAULT_SMTP_PORT = 587
+    DEFAULT_FROM_ADDRESS = "yeu.chuan.lim@intel.com"
+
+    class _SMTPSettings(NamedTuple):
+        host: str
+        port: int
+        password: str
+        sender: str
+
+        @property
+        def uses_authentication(self) -> bool:
+            return bool(self.password)
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -65,6 +81,32 @@ class MailService(EmitterUtility):
     @staticmethod
     def _list_expr(values: list[str]) -> str:
         return "[" + ", ".join(MacroState.to_py_expr(v) for v in values) + "]"
+
+    @classmethod
+    def _smtp_settings(cls, from_addr: str | None = None) -> _SMTPSettings:
+
+        return cls._SMTPSettings(
+            host=cls.DEFAULT_SMTP_HOST,
+            port=cls.DEFAULT_SMTP_PORT,
+            password=cls.SMTP_PASSWORD_ENV,
+            sender=from_addr or cls.DEFAULT_FROM_ADDRESS,
+        )
+
+    @classmethod
+    def _send_via_smtp(cls, message: EmailMessage, settings: _SMTPSettings) -> None:
+        try:
+            with smtplib.SMTP(settings.host, settings.port) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                if settings.uses_authentication:
+                    smtp.login(cls.DEFAULT_FROM_ADDRESS, settings.password)
+                smtp.send_message(message)
+        except smtplib.SMTPAuthenticationError as exc:
+            raise RuntimeError(
+                "MailService: failed to send email via "
+                f"{settings.host}:{settings.port}. Error: {exc}"
+            ) from exc
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -110,18 +152,11 @@ class MailService(EmitterUtility):
         attachments: list[str] | None = None,
         from_addr: str | None = None,
     ) -> None:
-        host = os.environ.get("VG2C_SMTP_HOST", "")
-        if not host:
-            raise RuntimeError(
-                "MailService: VG2C_SMTP_HOST is not set. "
-                "Set the environment variable to your SMTP server hostname."
-            )
-        port = int(os.environ.get("VG2C_SMTP_PORT", "25"))
-        sender = from_addr or os.environ.get("VG2C_FROM_ADDRESS", "vg2c@localhost")
+        settings = self._smtp_settings(from_addr)
 
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = sender
+        msg["From"] = settings.sender
         msg["To"] = to
         msg.set_content(self._resolve_body(body))
 
@@ -135,8 +170,7 @@ class MailService(EmitterUtility):
                     filename=p.name,
                 )
 
-        with smtplib.SMTP(host, port) as smtp:
-            smtp.send_message(msg)
+        self._send_via_smtp(msg, settings)
 
     @staticmethod
     def _resolve_body(body: str) -> str:

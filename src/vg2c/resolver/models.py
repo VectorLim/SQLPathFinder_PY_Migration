@@ -71,6 +71,7 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
 # Scope-building helpers (shared with scope_builder.py)
 # ---------------------------------------------------------------------------
 
+
 def _quoted_args(value: str) -> list[str]:
     """Extract double-quoted argument strings from a UTILITIES option value."""
     return re.findall(r'"([^"]*)"', value)
@@ -90,11 +91,11 @@ class ScopeIdSource:
 # Defined as a plain alias so it can be used at runtime as well as for type hints.
 ParseChildrenFn = Callable[
     [
-        "list[ClassifiedBlock]",   # blocks
-        int,                       # start index
-        "set[str] | None",         # stop_tokens
-        ScopeIdSource,             # state
-        "list[Diagnostic]",        # diagnostics
+        "list[ClassifiedBlock]",  # blocks
+        int,  # start index
+        "set[str] | None",  # stop_tokens
+        ScopeIdSource,  # state
+        "list[Diagnostic]",  # diagnostics
     ],
     "tuple[list[ScopeNode], int, str | None]",
 ]
