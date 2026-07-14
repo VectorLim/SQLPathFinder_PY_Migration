@@ -17,9 +17,9 @@ def test_mars_placeholder_in_emitted_sql():
     text = (FIXTURES / "actual_script.txt").read_text(
         encoding="utf-8", errors="replace"
     )
-    p, pd = parse(text, source=FIXTURES / "actual_script.txt")
-    c, cd = classify(p)
-    r = resolve(c, diagnostics=[*pd, *cd])
+    p = parse(text, source=FIXTURES / "actual_script.txt")
+    c = classify(p)
+    r = resolve(c)
     a = analyze(r)
     d = dispatch(a)
     e = emit(d)

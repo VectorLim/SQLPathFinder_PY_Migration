@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,6 @@ from vg2c.resolver.scope_builder import build_scope_tree
 
 from tests.resolver._fixture_flow import (
     blocks_for_token,
-    diagnostics_by_code,
     parse_classify_fixture,
 )
 
@@ -48,7 +48,7 @@ def _block(
 
 
 def _resolve_blocks(blocks: list[ClassifiedBlock]):
-    tree, _ = build_scope_tree(blocks)
+    tree = build_scope_tree(blocks)
     return resolve_macros(blocks, tree)
 
 
@@ -96,7 +96,7 @@ def test_control_payloads_are_parsed(
     expected_attrs: dict[str, object],
 ) -> None:
     blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities})]
-    resolved, _ = _resolve_blocks(blocks)
+    resolved = _resolve_blocks(blocks)
 
     payload = resolved[0].control_payload
     assert isinstance(payload, payload_type)
@@ -117,7 +117,7 @@ def test_orphan_closers_receive_payload_types(
     payload_type: type,
 ) -> None:
     blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities})]
-    resolved, _ = _resolve_blocks(blocks)
+    resolved = _resolve_blocks(blocks)
     assert isinstance(resolved[0].control_payload, payload_type)
 
 
@@ -133,17 +133,17 @@ def test_else_payload_present_when_else_branch_exists() -> None:
         _block(3, Kind.EXTERNAL_RUN, {"UTILITIES": "false_branch.bat"}),
         _block(4, Kind.MACRO_CONTROL, {"UTILITIES": "{END-IF}"}),
     ]
-    resolved, _ = _resolve_blocks(blocks)
+    resolved = _resolve_blocks(blocks)
     assert isinstance(resolved[2].control_payload, Else)
 
 
-def test_unknown_macro_control_emits_warning_and_has_no_payload() -> None:
+def test_unknown_macro_control_emits_warning_and_has_no_payload(caplog) -> None:
     blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": '{DO-WHATEVER} "x"'})]
-    tree, scope_diags = build_scope_tree(blocks)
-    resolved, _ = resolve_macros(blocks, tree)
-
-    assert diagnostics_by_code(scope_diags, "unknown-macro-control")
-    assert resolved[0].control_payload is None
+    with caplog.at_level(logging.WARNING):
+        tree = build_scope_tree(blocks)
+        resolved = resolve_macros(blocks, tree)
+        assert "unknown-macro-control" in caplog.text
+        assert resolved[0].control_payload is None
 
 
 def test_invalid_run_loop_chunk_size_coerces_to_zero() -> None:
@@ -154,7 +154,7 @@ def test_invalid_run_loop_chunk_size_coerces_to_zero() -> None:
             {"UTILITIES": '{RUN-LOOP} "in.csv" "chunk.csv" "bad" "N"'},
         )
     ]
-    resolved, _ = _resolve_blocks(blocks)
+    resolved = _resolve_blocks(blocks)
 
     payload = resolved[0].control_payload
     assert isinstance(payload, RunLoop)
@@ -166,7 +166,7 @@ def test_missing_quoted_args_use_defaults() -> None:
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": "{START-MACRO}"}),
         _block(1, Kind.MACRO_CONTROL, {"UTILITIES": '{START-MACRO} "x.csv" "Y"'}),
     ]
-    resolved, _ = _resolve_blocks(blocks)
+    resolved = _resolve_blocks(blocks)
 
     first = resolved[0].control_payload
     second = resolved[1].control_payload
@@ -179,9 +179,9 @@ def test_missing_quoted_args_use_defaults() -> None:
 
 
 def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -> None:
-    classified, _ = parse_classify_fixture(FIXTURES, "actual_script.txt")
-    tree, _ = build_scope_tree(classified)
-    resolved, _ = resolve_macros(classified, tree)
+    classified = parse_classify_fixture(FIXTURES, "actual_script.txt")
+    tree = build_scope_tree(classified)
+    resolved = resolve_macros(classified, tree)
 
     start_macro = blocks_for_token(resolved, "START-MACRO")[0].control_payload
     rows_in_file = blocks_for_token(resolved, "ROWS-IN-FILE")[0].control_payload
@@ -203,9 +203,9 @@ def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -
 def test_scope_id_assigned_and_control_blocks_map_to_containing_scope(
     FIXTURES: Path,
 ) -> None:
-    classified, _ = parse_classify_fixture(FIXTURES, "actual_script.txt")
-    tree, _ = build_scope_tree(classified)
-    resolved, _ = resolve_macros(classified, tree)
+    classified = parse_classify_fixture(FIXTURES, "actual_script.txt")
+    tree = build_scope_tree(classified)
+    resolved = resolve_macros(classified, tree)
 
     assert all(block.scope_id >= 0 for block in resolved)
 

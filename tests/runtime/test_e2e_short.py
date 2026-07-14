@@ -19,9 +19,9 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 def _run_full_pipeline(fixture_name: str) -> str:
     text = (FIXTURES / fixture_name).read_text(encoding="utf-8", errors="replace")
-    p, pd = parse(text, source=FIXTURES / fixture_name)
-    c, cd = classify(p)
-    r = resolve(c, diagnostics=[*pd, *cd])
+    p = parse(text, source=FIXTURES / fixture_name)
+    c = classify(p)
+    r = resolve(c)
     a = analyze(r)
     d = dispatch(a)
     e = emit(d)

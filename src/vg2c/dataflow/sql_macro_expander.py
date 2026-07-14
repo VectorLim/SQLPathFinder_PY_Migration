@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import re
 
+from vg2c import logger
 from vg2c.dataflow.models import CSVGenerationCall
 from vg2c.dataflow.sql_macros import HANDLERS, MacroParseError
-from vg2c.frontend.models import Diagnostic, SourceSpan
+from vg2c.frontend.models import SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
+
+log = logger.getLogger("vg2c.dataflow.sql_macro_expander")
 
 _SQL_CALL_RE = re.compile(r"\b(SQL_[A-Za-z0-9_]+)\s*\(")
 _SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
@@ -17,9 +20,7 @@ def expand_sql_macros(
 ) -> tuple[
     list[ResolvedBlock],
     dict[int, tuple[CSVGenerationCall, ...]],
-    list[Diagnostic],
 ]:
-    diagnostics: list[Diagnostic] = []
     updated_blocks: list[ResolvedBlock] = []
     calls_by_block: dict[int, tuple[CSVGenerationCall, ...]] = {}
 
@@ -28,12 +29,11 @@ def expand_sql_macros(
             updated_blocks.append(block)
             continue
 
-        rewritten_body, calls, local_diags = _expand_body(
+        rewritten_body, calls = _expand_body(
             body=block.resolved_body,
             span=block.span,
             block_index=block.index,
         )
-        diagnostics.extend(local_diags)
         if calls:
             calls_by_block[block.index] = tuple(calls)
         updated_blocks.append(
@@ -46,7 +46,7 @@ def expand_sql_macros(
             )
         )
 
-    return updated_blocks, calls_by_block, diagnostics
+    return updated_blocks, calls_by_block
 
 
 
@@ -54,8 +54,7 @@ def _expand_body(
     body: str,
     span: SourceSpan,
     block_index: int,
-) -> tuple[str, list, list[Diagnostic]]:
-    diagnostics: list[Diagnostic] = []
+) -> tuple[str, list]:
     calls: list = []
     result_parts: list[str] = []
     cursor = 0
@@ -72,14 +71,9 @@ def _expand_body(
 
         handler = HANDLERS.get(name)
         if handler is None:
-            diagnostics.append(
-                _diag(
-                    "info",
-                    "unknown-sql-macro",
-                    f"Left SQL macro {name} unchanged.",
-                    block_index,
-                    span,
-                )
+            loc = f"{span.file or '<input>'}:{span.start_line}:1"
+            log.info(
+                f"[unknown-sql-macro] {loc} (block {block_index}): Left SQL macro {name} unchanged."
             )
             result_parts.append(call_text)
             cursor = match.end
@@ -90,14 +84,9 @@ def _expand_body(
         outcome = handler.build_call(args, span, body[: match.start])
 
         if isinstance(outcome, MacroParseError):
-            diagnostics.append(
-                _diag(
-                    "warning",
-                    "sql-macro-parse-failed",
-                    f"{outcome.message}; left call unchanged.",
-                    block_index,
-                    span,
-                )
+            loc = f"{span.file or '<input>'}:{span.start_line}:1"
+            log.warning(
+                f"[sql-macro-parse-failed] {loc} (block {block_index}): {outcome.message}; left call unchanged."
             )
             result_parts.append(call_text)
             cursor = match.end
@@ -108,7 +97,7 @@ def _expand_body(
         result_parts.append(outcome.appended_text)
         cursor = match.end
 
-    return "".join(result_parts), calls, diagnostics
+    return "".join(result_parts), calls
 
 
 class _SqlCallMatch:
@@ -192,15 +181,3 @@ def _split_args(args_text: str) -> list[str]:
     if current:
         args.append("".join(current).strip())
     return args
-
-
-def _diag(
-    severity: str, code: str, message: str, block_index: int, span: SourceSpan
-) -> Diagnostic:
-    return Diagnostic(
-        severity=severity,  # type: ignore[arg-type]
-        code=code,
-        message=message,
-        block_index=block_index,
-        span=span,
-    )

@@ -7,27 +7,38 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
+from vg2c import logger
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
-from vg2c.frontend.models import Diagnostic
 from vg2c.resolver import resolve
 
 
+class ErrorDetectingHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.has_errors = False
 
-def _format_diagnostic(diag: Diagnostic, source: Path | None) -> str:
-    loc = str(source) if source else "<input>"
-    if diag.span is not None:
-        loc = f"{loc}:{diag.span.start_line}:1"
-    code = f"[{diag.code}] " if diag.code else ""
-    return f"{diag.severity.upper()} {code}{loc}: {diag.message}"
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.ERROR:
+            self.has_errors = True
 
 
 def cmd_translate(args: argparse.Namespace) -> int:
+    # Initialize basic logging
+    logger.basicConfig(level=logger.INFO)
+
+    # Attach error detector if strict mode is active
+    error_detector = ErrorDetectingHandler()
+    vg2c_logger = logger.getLogger()
+    if args.strict:
+        vg2c_logger.addHandler(error_detector)
+
     input_path = Path(args.input)
     if not input_path.exists():
         print(f"ERROR: input file not found: {input_path}", file=sys.stderr)
@@ -35,21 +46,16 @@ def cmd_translate(args: argparse.Namespace) -> int:
 
     text = input_path.read_text(encoding="utf-8", errors="replace")
 
-    parsed, pdiag = parse(text, source=input_path)
-    classified, cdiag = classify(parsed)
-    resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
-    analyzed = analyze(resolved)
-    dispatched = dispatch(analyzed)
-    emitted = emit(dispatched)
-
-    # Print diagnostics to stderr, sorted by severity then block order
-    severity_order = {"error": 0, "warning": 1, "info": 2}
-    sorted_diags = sorted(
-        emitted.diagnostics,
-        key=lambda d: (severity_order.get(d.severity, 9), d.block_index or 0),
-    )
-    for diag in sorted_diags:
-        print(_format_diagnostic(diag, input_path), file=sys.stderr)
+    try:
+        parsed = parse(text, source=input_path)
+        classified = classify(parsed)
+        resolved = resolve(classified)
+        analyzed = analyze(resolved)
+        dispatched = dispatch(analyzed)
+        emitted = emit(dispatched)
+    finally:
+        if args.strict:
+            vg2c_logger.removeHandler(error_detector)
 
     # Write output
     if args.output:
@@ -62,8 +68,8 @@ def cmd_translate(args: argparse.Namespace) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(emitted.source, encoding="utf-8")
 
-    # --strict: exit 1 if any error-severity diagnostics
-    if args.strict and any(d.severity == "error" for d in emitted.diagnostics):
+    # --strict: exit 1 if any error-severity logs occurred
+    if args.strict and error_detector.has_errors:
         return 1
     return 0
 

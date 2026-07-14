@@ -15,7 +15,6 @@ from vg2c.dataflow.models import (
     ScopeRelation,
 )
 from vg2c.dataflow.sql_macro_expander import expand_sql_macros
-from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -32,14 +31,12 @@ _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    expanded_blocks, calls_by_block, sql_macro_diags = expand_sql_macros(list(resolved.blocks))
+    expanded_blocks, calls_by_block = expand_sql_macros(list(resolved.blocks))
     expanded_resolved = ResolvedProgram(
         blocks=tuple(expanded_blocks),
         scope_tree=resolved.scope_tree,
-        diagnostics=tuple([*resolved.diagnostics, *sql_macro_diags]),
     )
 
-    diagnostics: list[Diagnostic] = list(expanded_resolved.diagnostics)
     blocks = list(expanded_resolved.blocks)
     scope_rel = _ScopeRelations(expanded_resolved.scope_tree)
 
@@ -80,7 +77,6 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
         consumers=tuple(consumers),
         edges=tuple(edges),
         csv_generation_calls_by_block=calls_by_block,
-        diagnostics=tuple(diagnostics),
     )
 
 

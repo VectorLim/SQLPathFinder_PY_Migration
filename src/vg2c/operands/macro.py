@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from vg2c.frontend.models import ClassifiedBlock, Diagnostic
+from vg2c import logger
+from vg2c.frontend.models import ClassifiedBlock
 
 from vg2c.operands.base import (
     ParseChildrenFn,
@@ -16,6 +17,8 @@ from vg2c.operands.base import (
 
 if TYPE_CHECKING:
     from vg2c.emitter.models import IndentWriter
+
+log = logger.getLogger("vg2c.operands.macro")
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,24 +43,19 @@ class StartMacro:
         blocks: list[ClassifiedBlock],
         start_i: int,
         state: ScopeIdSource,
-        diagnostics: list[Diagnostic],
         parse_children: ParseChildrenFn,
     ) -> tuple[ScopeNode, int]:
         """Build a 'macro' ScopeNode, consuming blocks until {END-MACRO}."""
         start_block = blocks[start_i]
         children, i, end_token = parse_children(
-            blocks, start_i + 1, {"END-MACRO"}, state, diagnostics
+            blocks, start_i + 1, {"END-MACRO"}, state
         )
 
         if end_token != "END-MACRO":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="unclosed-macro",
-                    message="Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF.",
-                    block_index=start_block.index,
-                    span=start_block.span,
-                )
+            loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            log.error(
+                f"[unclosed-macro] {loc} (block {start_block.index}): "
+                "Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF."
             )
             end_index = blocks[-1].index if blocks else start_block.index
             return (

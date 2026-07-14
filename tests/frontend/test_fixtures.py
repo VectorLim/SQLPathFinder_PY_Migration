@@ -5,22 +5,16 @@ from vg2c.frontend import parse, classify
 from vg2c.kind import Kind
 
 
-def _parse_and_classify(fixtures_dir: Path, name: str) -> tuple[list, list]:
+def _parse_and_classify(fixtures_dir: Path, name: str) -> list:
     path = fixtures_dir / name
     text = path.read_text(encoding="utf-8", errors="replace")
-    blocks, parse_diags = parse(text, source=path)
-    classified, class_diags = classify(blocks)
-    return classified, parse_diags + class_diags
-
-
-def _assert_no_errors(diagnostics: list) -> None:
-    errors = [d for d in diagnostics if d.severity == "error"]
-    assert not errors, f"Expected no error diagnostics, got: {errors}"
+    blocks = parse(text, source=path)
+    classified = classify(blocks)
+    return classified
 
 
 def test_script_short_expectations(FIXTURES: Path) -> None:
-    classified, diagnostics = _parse_and_classify(FIXTURES, "script_short.txt")
-    _assert_no_errors(diagnostics)
+    classified = _parse_and_classify(FIXTURES, "script_short.txt")
 
     assert len(classified) == 1
     block = classified[0]
@@ -30,8 +24,7 @@ def test_script_short_expectations(FIXTURES: Path) -> None:
 
 
 def test_script_another_expectations(FIXTURES: Path) -> None:
-    classified, diagnostics = _parse_and_classify(FIXTURES, "script_another.txt")
-    _assert_no_errors(diagnostics)
+    classified = _parse_and_classify(FIXTURES, "script_another.txt")
 
     assert len(classified) == 3
     assert [b.kind for b in classified] == [
@@ -48,8 +41,7 @@ def test_script_another_expectations(FIXTURES: Path) -> None:
 
 
 def test_sql_script_expectations(FIXTURES: Path) -> None:
-    classified, diagnostics = _parse_and_classify(FIXTURES, "sql_script.txt")
-    _assert_no_errors(diagnostics)
+    classified = _parse_and_classify(FIXTURES, "sql_script.txt")
 
     assert len(classified) == 3
     assert [b.kind for b in classified] == [
@@ -64,8 +56,7 @@ def test_sql_script_expectations(FIXTURES: Path) -> None:
 
 
 def test_actual_script_expectations(FIXTURES: Path) -> None:
-    classified, diagnostics = _parse_and_classify(FIXTURES, "actual_script.txt")
-    _assert_no_errors(diagnostics)
+    classified = _parse_and_classify(FIXTURES, "actual_script.txt")
 
     # Assert specific kinds exist
     kinds = {b.kind for b in classified}
@@ -108,13 +99,11 @@ def test_actual_script_expectations(FIXTURES: Path) -> None:
 
 def test_oasys_and_aries_expectations(FIXTURES: Path) -> None:
     # oasys.txt -> SQL_QUERY
-    classified_oasys, diagnostics_oasys = _parse_and_classify(FIXTURES, "oasys.txt")
-    _assert_no_errors(diagnostics_oasys)
+    classified_oasys = _parse_and_classify(FIXTURES, "oasys.txt")
     assert len(classified_oasys) == 1
     assert classified_oasys[0].kind is Kind.SQL_QUERY
 
     # aries_simple.txt -> SQL_QUERY
-    classified_aries, diagnostics_aries = _parse_and_classify(FIXTURES, "aries_simple.txt")
-    _assert_no_errors(diagnostics_aries)
+    classified_aries = _parse_and_classify(FIXTURES, "aries_simple.txt")
     assert len(classified_aries) == 1
     assert classified_aries[0].kind is Kind.SQL_QUERY

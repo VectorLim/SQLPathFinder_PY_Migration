@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from vg2c.frontend.models import ClassifiedBlock, Diagnostic
+from vg2c import logger
+from vg2c.frontend.models import ClassifiedBlock
 from vg2c.kind import Kind
 from vg2c.operands import (
     Else,
@@ -16,6 +17,8 @@ from vg2c.operands import (
     ScopeNode,
     StartMacro,
 )
+
+log = logger.getLogger("vg2c.resolver.scope_builder")
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 
@@ -56,8 +59,7 @@ class _ScopeBuilderState:
 
 def build_scope_tree(
     blocks: list[ClassifiedBlock],
-) -> tuple[ScopeNode, list[Diagnostic]]:
-    diagnostics: list[Diagnostic] = []
+) -> ScopeNode:
     state = _ScopeBuilderState()
 
     children, _, _ = _parse_children(
@@ -65,7 +67,6 @@ def build_scope_tree(
         start=0,
         stop_tokens=None,
         state=state,
-        diagnostics=diagnostics,
     )
 
     root_end = blocks[-1].index if blocks else -1
@@ -78,7 +79,7 @@ def build_scope_tree(
         block_index=None,
         control_payload=None,
     )
-    return root, diagnostics
+    return root
 
 
 def _parse_children(
@@ -86,7 +87,6 @@ def _parse_children(
     start: int,
     stop_tokens: set[str] | None,
     state: _ScopeBuilderState,
-    diagnostics: list[Diagnostic],
 ) -> tuple[list[ScopeNode], int, str | None]:
     children: list[ScopeNode] = []
     i = start
@@ -100,7 +100,7 @@ def _parse_children(
         if token in _SCOPE_TOKENS:
             payload = _SCOPE_TOKENS[token].from_block(block)
             subtree, next_i = payload.build_scope(
-                blocks, i, state, diagnostics, _parse_children
+                blocks, i, state, _parse_children
             )
             children.append(subtree)
             i = next_i
@@ -115,28 +115,18 @@ def _parse_children(
 
         if token in _ORPHAN_TOKENS:
             code, message, payload_cls = _ORPHAN_TOKENS[token]
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code=code,
-                    message=message,
-                    block_index=block.index,
-                    span=block.span,
-                )
+            loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
+            log.error(
+                f"[{code}] {loc} (block {block.index}): {message}"
             )
             children.append(_leaf_node(state, block.index, payload_cls()))
             i += 1
             continue
 
         if token is not None:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="unknown-macro-control",
-                    message=f"Unknown macro control token {{{token}}}; treated as leaf.",
-                    block_index=block.index,
-                    span=block.span,
-                )
+            loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
+            log.warning(
+                f"[unknown-macro-control] {loc} (block {block.index}): Unknown macro control token {{{token}}}; treated as leaf."
             )
             children.append(_leaf_node(state, block.index))
             i += 1

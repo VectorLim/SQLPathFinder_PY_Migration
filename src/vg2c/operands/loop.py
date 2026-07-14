@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from vg2c.frontend.models import ClassifiedBlock, Diagnostic
+from vg2c import logger
+from vg2c.frontend.models import ClassifiedBlock
 
 from vg2c.operands.base import (
     ParseChildrenFn,
@@ -16,6 +17,8 @@ from vg2c.operands.base import (
 
 if TYPE_CHECKING:
     from vg2c.emitter.models import IndentWriter
+
+log = logger.getLogger("vg2c.operands.loop")
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,16 +38,12 @@ class RunLoop:
         args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
         input_csv = args[0] if args else ""
         chunk_csv = args[1] if len(args) > 1 else ""
-        chunk_size_raw = args[2] if len(args) > 2 else "0"
+        chunk_sz = int(args[2]) if len(args) > 2 and args[2].isdigit() else 0
         prompt_flag = args[3] if len(args) > 3 else "N"
-        try:
-            chunk_size = int(chunk_size_raw)
-        except ValueError:
-            chunk_size = 0
         return cls(
             input_csv_path=input_csv,
             chunk_csv_path=chunk_csv,
-            chunk_size=chunk_size,
+            chunk_size=chunk_sz,
             prompt_off=prompt_flag.upper() == "Y",
         )
 
@@ -53,24 +52,19 @@ class RunLoop:
         blocks: list[ClassifiedBlock],
         start_i: int,
         state: ScopeIdSource,
-        diagnostics: list[Diagnostic],
         parse_children: ParseChildrenFn,
     ) -> tuple[ScopeNode, int]:
         """Build a 'loop' ScopeNode, consuming blocks until {END-LOOP}."""
         start_block = blocks[start_i]
         children, i, end_token = parse_children(
-            blocks, start_i + 1, {"END-LOOP"}, state, diagnostics
+            blocks, start_i + 1, {"END-LOOP"}, state
         )
 
         if end_token != "END-LOOP":
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="unclosed-loop",
-                    message="Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF.",
-                    block_index=start_block.index,
-                    span=start_block.span,
-                )
+            loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            log.error(
+                f"[unclosed-loop] {loc} (block {start_block.index}): "
+                "Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF."
             )
             end_index = blocks[-1].index if blocks else start_block.index
             return (

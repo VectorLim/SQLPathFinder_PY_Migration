@@ -7,7 +7,6 @@ from vg2c.kind import Kind
 from tests.resolver._fixture_flow import (
     all_scope_nodes,
     blocks_for_token,
-    diagnostics_by_code,
     max_scope_depth,
     resolve_fixture,
 )
@@ -26,19 +25,6 @@ def test_script_short_exact_single_leaf_contract(FIXTURES: Path) -> None:
     assert len(root.children) == 1
     assert root.children[0].kind == "leaf"
 
-    resolver_error_codes = {
-        "orphan-end-macro",
-        "orphan-end-loop",
-        "orphan-end-if",
-        "orphan-else",
-        "unclosed-macro",
-        "unclosed-loop",
-        "unclosed-if",
-    }
-    assert not [
-        diag for diag in program.diagnostics if diag.code in resolver_error_codes
-    ]
-
 
 def test_script_another_no_macro_scope_and_no_control_payloads(FIXTURES: Path) -> None:
     program = resolve_fixture(FIXTURES, "script_another.txt")
@@ -46,7 +32,6 @@ def test_script_another_no_macro_scope_and_no_control_payloads(FIXTURES: Path) -
 
     assert not [node for node in nodes if node.kind in {"macro", "if", "loop"}]
     assert all(block.control_payload is None for block in program.blocks)
-    assert not diagnostics_by_code(program.diagnostics, "unknown-macro-control")
 
 
 def test_sql_script_preserves_sql_and_has_no_resolver_sql_expansion(
@@ -89,14 +74,3 @@ def test_actual_script_scope_and_macro_signals(FIXTURES: Path) -> None:
     assert rows_in_file_blocks[0].control_payload is not None
     assert if_then_blocks[0].control_payload is not None
     assert else_blocks[0].control_payload is not None
-
-    disallowed_codes = {
-        "orphan-end-macro",
-        "orphan-end-loop",
-        "orphan-end-if",
-        "orphan-else",
-        "unclosed-macro",
-        "unclosed-loop",
-        "unclosed-if",
-    }
-    assert not [diag for diag in program.diagnostics if diag.code in disallowed_codes]

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generic, TypeVar, overload, ParamSpec
 
-from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 
 P = ParamSpec("P")
@@ -18,7 +17,6 @@ class EmittedScript:
 
     source: str
     imports: tuple[str, ...]
-    diagnostics: tuple[Diagnostic, ...]
 
 
 class IndentWriter:

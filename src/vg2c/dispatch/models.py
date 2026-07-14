@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from vg2c.dataflow.models import AnalyzedProgram, CSVGenerationCall
-from vg2c.frontend.models import Diagnostic, copy_dataclass_fields
+from vg2c.frontend.models import copy_dataclass_fields
 from vg2c.resolver.models import ResolvedBlock
 
 
@@ -59,4 +59,3 @@ class DispatchedBlock(ResolvedBlock):
 class DispatchedProgram:
     analyzed: AnalyzedProgram
     dispatched: tuple[DispatchedBlock, ...]
-    diagnostics: tuple[Diagnostic, ...]

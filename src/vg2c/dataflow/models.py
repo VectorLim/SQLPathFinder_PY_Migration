@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
-from vg2c.frontend.models import Diagnostic, SourceSpan
+from vg2c.frontend.models import SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedProgram
 
@@ -70,5 +70,4 @@ class AnalyzedProgram:
     consumers: tuple[ConsumerRecord, ...]
     edges: tuple[DataflowEdge, ...]
     csv_generation_calls_by_block: Mapping[int, tuple[CSVGenerationCall, ...]]
-    diagnostics: tuple[Diagnostic, ...]
 

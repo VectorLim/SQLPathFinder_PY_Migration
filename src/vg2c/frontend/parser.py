@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from vg2c.frontend.models import BlockOptions, Diagnostic, ParsedBlock, SourceSpan
+from vg2c import logger
+from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
+
+log = logger.getLogger("vg2c.frontend.parser")
 
 SEPARATOR_RE = re.compile(
     r"^[ \t]*<----[ \t]*New Query[ \t]*---->[ \t]*$", re.MULTILINE
@@ -13,19 +16,34 @@ CLOSE_OPTIONS_RE = re.compile(r"^[ \t]*</OPTIONS>[ \t]*$", re.MULTILINE)
 OPTION_LINE_RE = re.compile(r"^/([A-Z][A-Z0-9_\-]*)=(.*)$", re.IGNORECASE)
 
 
+def _log_msg(
+    code: str,
+    message: str,
+    block_index: int | None = None,
+    span: SourceSpan | None = None,
+) -> str:
+    if span is not None and span.file is not None:
+        loc = f"{span.file}:{span.start_line}:1"
+    elif span is not None:
+        loc = f"<input>:{span.start_line}:1"
+    else:
+        loc = "<input>"
+
+    block_info = f" (block {block_index})" if block_index is not None else ""
+    return f"[{code}] {loc}{block_info}: {message}"
+
+
 def parse(
     text: str | bytes, source: Path | None = None
-) -> tuple[list[ParsedBlock], list[Diagnostic]]:
-    diagnostics: list[Diagnostic] = []
-    normalized = _normalize_input(text, diagnostics)
+) -> list[ParsedBlock]:
+    normalized = _normalize_input(text)
 
     blocks: list[ParsedBlock] = []
     for segment, start_line, end_line in _split_segments(normalized):
         span = SourceSpan(file=source, start_line=start_line, end_line=end_line)
         if segment.strip() == "":
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
+            log.warning(
+                _log_msg(
                     code="empty-block",
                     message="Ignored an empty block between query separators.",
                     span=span,
@@ -38,13 +56,11 @@ def parse(
             segment=segment,
             block_index=block_index,
             span=span,
-            diagnostics=diagnostics,
         )
         options = _parse_options(
             options_region=options_region,
             block_index=block_index,
             span=span,
-            diagnostics=diagnostics,
         )
 
         blocks.append(
@@ -57,10 +73,10 @@ def parse(
             )
         )
 
-    return blocks, diagnostics
+    return blocks
 
 
-def _normalize_input(text: str | bytes, diagnostics: list[Diagnostic]) -> str:
+def _normalize_input(text: str | bytes) -> str:
     normalized = (
         text.decode("utf-8", errors="replace") if isinstance(text, bytes) else text
     )
@@ -100,7 +116,6 @@ def _extract_options_and_body(
     segment: str,
     block_index: int,
     span: SourceSpan,
-    diagnostics: list[Diagnostic],
 ) -> tuple[str, str]:
     open_match = OPEN_OPTIONS_RE.search(segment)
     if open_match:
@@ -111,9 +126,8 @@ def _extract_options_and_body(
                 segment[close_match.end() :],
             )
 
-        diagnostics.append(
-            Diagnostic(
-                severity="error",
+        log.error(
+            _log_msg(
                 code="unclosed-options",
                 message="Found <OPTIONS> without a matching </OPTIONS>.",
                 block_index=block_index,
@@ -122,9 +136,8 @@ def _extract_options_and_body(
         )
         return segment[open_match.end() :], ""
 
-    diagnostics.append(
-        Diagnostic(
-            severity="info",
+    log.info(
+        _log_msg(
             code="inline-options",
             message="Parsed block using inline option lines (no <OPTIONS> markers).",
             block_index=block_index,
@@ -155,7 +168,6 @@ def _parse_options(
     options_region: str,
     block_index: int,
     span: SourceSpan,
-    diagnostics: list[Diagnostic],
 ) -> BlockOptions:
     pairs: list[tuple[str, str]] = []
     seen_keys: set[str] = set()
@@ -168,9 +180,8 @@ def _parse_options(
 
         option_match = OPTION_LINE_RE.match(line)
         if not option_match:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
+            log.warning(
+                _log_msg(
                     code="malformed-option-line",
                     message=f"Ignored malformed option line: {line}",
                     block_index=block_index,
@@ -184,9 +195,8 @@ def _parse_options(
         pairs.append((key, value))
 
         if key in seen_keys and key not in duplicate_reported:
-            diagnostics.append(
-                Diagnostic(
-                    severity="info",
+            log.info(
+                _log_msg(
                     code="duplicate-option-key",
                     message=f"Option key /{key} appears more than once in this block.",
                     block_index=block_index,

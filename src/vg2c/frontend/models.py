@@ -56,13 +56,3 @@ class ClassifiedBlock(ParsedBlock):
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "reason", reason)
 
-
-
-@dataclass(frozen=True, slots=True)
-class Diagnostic:
-    severity: Literal["info", "warning", "error"]
-    code: str
-    message: str
-    block_index: int | None = None
-    span: SourceSpan | None = None
-    hint: str | None = None

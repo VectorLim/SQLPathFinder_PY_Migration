@@ -1,10 +1,10 @@
-from __future__ import annotations
-
+from vg2c import logger
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmittedScript, IndentWriter
 from vg2c.emitter.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
-from vg2c.frontend.models import Diagnostic
+
+log = logger.getLogger("vg2c.emitter")
 
 
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
@@ -14,10 +14,10 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         dispatched: Output from Stage 4.
 
     Returns:
-        An EmittedScript containing the generated Python source and merged diagnostics.
+        An EmittedScript containing the generated Python source.
     """
     # Walk the scope tree and emit code
-    functions, run_body, walker_diags = walk_and_emit(dispatched)
+    functions, run_body = walk_and_emit(dispatched)
 
     # Assemble embedded utility classes.
     utility_imports, utility_sources = assemble_all_utilities()
@@ -69,29 +69,22 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Run filter post-processing comments
     source = post_process_comments(source, dispatched, script_writer.step_lines)
 
-    merged_diags = [*dispatched.diagnostics, *walker_diags]
-
     # Validate syntax
     try:
         import ast
 
         ast.parse(source)
     except SyntaxError as e:
-        # Emit diagnostic but include source anyway (with error marked)
-        diags = list(merged_diags)
-        diags.append(
-            Diagnostic(
-                severity="error",
-                code="emit-syntax-error",
-                message=f"Generated script has syntax error at line {e.lineno}: {e.msg}",
-            )
+        log.error(
+            f"[emit-syntax-error] <generated_script>:{e.lineno}:1: "
+            f"Generated script has syntax error at line {e.lineno}: {e.msg}"
         )
         return EmittedScript(
-            source=source, imports=tuple(imports), diagnostics=tuple(diags)
+            source=source, imports=tuple(imports)
         )
 
     return EmittedScript(
-        source=source, imports=tuple(imports), diagnostics=tuple(merged_diags)
+        source=source, imports=tuple(imports)
     )
 
 

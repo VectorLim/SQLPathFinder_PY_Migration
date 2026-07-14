@@ -271,9 +271,9 @@ def test_html_report_layout_ignores_unknown_directives(tmp_path, monkeypatch):
 def test_html_report_fixture_flow_parity_order():
     fixture = Path(__file__).parent.parent / "fixtures" / "html_test.txt"
     text = fixture.read_text(encoding="utf-8", errors="replace")
-    parsed, parse_diag = parse(text, source=fixture)
-    classified, classify_diag = classify(parsed)
-    resolved = resolve(classified, diagnostics=[*parse_diag, *classify_diag])
+    parsed = parse(text, source=fixture)
+    classified = classify(parsed)
+    resolved = resolve(classified)
     analyzed = analyze(resolved)
     dispatched = dispatch(analyzed)
     source = emit(dispatched).source

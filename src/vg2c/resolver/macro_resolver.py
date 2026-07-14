@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from vg2c.frontend.models import (
     ClassifiedBlock,
-    Diagnostic,
 )
 from vg2c.resolver.models import ResolvedBlock
 from vg2c.operands import MacroControlPayload, ScopeNode
@@ -11,8 +10,7 @@ from vg2c.operands import MacroControlPayload, ScopeNode
 def resolve_macros(
     blocks: list[ClassifiedBlock],
     scope_tree: ScopeNode,
-) -> tuple[list[ResolvedBlock], list[Diagnostic]]:
-    diagnostics: list[Diagnostic] = []
+) -> list[ResolvedBlock]:
     indices = {block.index for block in blocks}
 
     scope_for_block = _build_scope_lookup(scope_tree, indices)
@@ -31,7 +29,7 @@ def resolve_macros(
             )
         )
 
-    return resolved, diagnostics
+    return resolved
 
 
 def _build_scope_lookup(scope_tree: ScopeNode, indices: set[int]) -> dict[int, int]:

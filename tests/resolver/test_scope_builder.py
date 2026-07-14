@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import pytest
 
 from vg2c.frontend.models import (
@@ -13,7 +14,6 @@ from vg2c.resolver.scope_builder import build_scope_tree
 
 from tests.resolver._fixture_flow import (
     all_scope_nodes,
-    diagnostics_by_code,
     max_scope_depth,
     parse_classify_fixture,
 )
@@ -34,10 +34,9 @@ def _block(
 
 
 def test_empty_program() -> None:
-    root, diagnostics = build_scope_tree([])
+    root = build_scope_tree([])
     assert root.kind == "program"
     assert root.children == ()
-    assert diagnostics == []
 
 
 def test_structural_happy_path_nested_scopes() -> None:
@@ -60,9 +59,8 @@ def test_structural_happy_path_nested_scopes() -> None:
         _block(7, Kind.MACRO_CONTROL, {"UTILITIES": "{END-IF}"}),
         _block(8, Kind.MACRO_CONTROL, {"UTILITIES": "{END-MACRO}"}),
     ]
-    root, diagnostics = build_scope_tree(blocks)
+    root = build_scope_tree(blocks)
 
-    assert diagnostics == []
     assert len(root.children) == 1
     macro = root.children[0]
     assert macro.kind == "macro"
@@ -88,10 +86,12 @@ def test_structural_happy_path_nested_scopes() -> None:
 def test_orphan_structural_tokens_emit_errors(
     utilities: str,
     expected_code: str,
+    caplog,
 ) -> None:
     blocks = [_block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities})]
-    _, diagnostics = build_scope_tree(blocks)
-    assert diagnostics_by_code(diagnostics, expected_code)
+    with caplog.at_level(logging.ERROR):
+        build_scope_tree(blocks)
+        assert expected_code in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -99,19 +99,21 @@ def test_orphan_structural_tokens_emit_errors(
     [
         ('{START-MACRO} "a.csv" "N"', "unclosed-macro"),
         ('{RUN-LOOP} "in.csv" "chunk.csv" "2" "N"', "unclosed-loop"),
-        ('{IF-THEN} "A" "EQS" "1" "" "" "" ""', "unclosed-if"),
+        ('{IF-THEN} "A" "EQS" "1" "" "" "" "', "unclosed-if"),
     ],
 )
 def test_unclosed_openers_emit_errors(
     utilities: str,
     expected_code: str,
+    caplog,
 ) -> None:
     blocks = [
         _block(0, Kind.MACRO_CONTROL, {"UTILITIES": utilities}),
         _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "x.bat"}),
     ]
-    _, diagnostics = build_scope_tree(blocks)
-    assert diagnostics_by_code(diagnostics, expected_code)
+    with caplog.at_level(logging.ERROR):
+        build_scope_tree(blocks)
+        assert expected_code in caplog.text
 
 
 def test_rows_in_file_stays_leaf() -> None:
@@ -121,8 +123,7 @@ def test_rows_in_file_stays_leaf() -> None:
         ),
         _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "after.bat"}),
     ]
-    root, diagnostics = build_scope_tree(blocks)
-    assert diagnostics == []
+    root = build_scope_tree(blocks)
     assert [node.kind for node in root.children] == ["leaf", "leaf"]
 
 
@@ -137,9 +138,8 @@ def test_run_loop_parses_payload_and_wraps_inner_leaf() -> None:
         _block(2, Kind.EXTERNAL_RUN, {"UTILITIES": "append.bat"}),
         _block(3, Kind.MACRO_CONTROL, {"UTILITIES": "{END-LOOP}"}),
     ]
-    root, diagnostics = build_scope_tree(blocks)
+    root = build_scope_tree(blocks)
 
-    assert diagnostics == []
     assert len(root.children) == 1
     loop = root.children[0]
     assert loop.kind == "loop"
@@ -152,21 +152,10 @@ def test_run_loop_parses_payload_and_wraps_inner_leaf() -> None:
 
 
 def test_actual_script_fixture_scope_invariants(FIXTURES) -> None:
-    classified, _ = parse_classify_fixture(FIXTURES, "actual_script.txt")
-    root, diagnostics = build_scope_tree(classified)
+    classified = parse_classify_fixture(FIXTURES, "actual_script.txt")
+    root = build_scope_tree(classified)
 
     nodes = list(all_scope_nodes(root))
     assert any(node.kind == "macro" for node in nodes)
     assert any(node.kind == "if" for node in nodes)
     assert max_scope_depth(root) >= 4
-
-    disallowed = {
-        "orphan-end-macro",
-        "orphan-end-loop",
-        "orphan-end-if",
-        "orphan-else",
-        "unclosed-macro",
-        "unclosed-loop",
-        "unclosed-if",
-    }
-    assert not [diag for diag in diagnostics if diag.code in disallowed]

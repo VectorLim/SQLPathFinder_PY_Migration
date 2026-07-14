@@ -1,19 +1,20 @@
 from __future__ import annotations
 
+from vg2c import logger
 from vg2c.emitter.utilities import EmitterUtility
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
-    Diagnostic,
     ParsedBlock,
 )
 from vg2c.kind import Kind
 
+log = logger.getLogger("vg2c.frontend.classifier")
+
 
 def classify(
     blocks: list[ParsedBlock],
-) -> tuple[list[ClassifiedBlock], list[Diagnostic]]:
-    diagnostics: list[Diagnostic] = []
+) -> list[ClassifiedBlock]:
     classified: list[ClassifiedBlock] = []
 
     for block in blocks:
@@ -24,21 +25,17 @@ def classify(
                     parsed=block, kind=Kind.UNKNOWN, reason="no rule matched"
                 )
             )
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="unknown-kind",
-                    message="Block did not match any known Stage 1 classification rule.",
-                    block_index=block.index,
-                    span=block.span,
-                )
+            loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
+            log.warning(
+                f"[unknown-kind] {loc} (block {block.index}): "
+                "Block did not match any known Stage 1 classification rule."
             )
             continue
 
         kind, reason = result
         classified.append(ClassifiedBlock(parsed=block, kind=kind, reason=reason))
 
-    return classified, diagnostics
+    return classified
 
 
 def _classify_one(options: BlockOptions) -> tuple[Kind, str] | None:

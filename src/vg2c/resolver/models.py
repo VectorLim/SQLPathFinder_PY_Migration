@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
-    Diagnostic,
     copy_dataclass_fields,
 )
 from vg2c.operands import MacroControlPayload, ScopeNode
@@ -48,5 +47,4 @@ class ResolvedBlock(ClassifiedBlock):
 class ResolvedProgram:
     blocks: tuple[ResolvedBlock, ...]
     scope_tree: ScopeNode
-    diagnostics: tuple[Diagnostic, ...]
 

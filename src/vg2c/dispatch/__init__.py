@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dialects as _dialects  # noqa: F401
 from vg2c.dispatch.base import DialectHandler
@@ -9,7 +7,6 @@ from vg2c.dispatch.models import (
     DispatchedProgram,
     ReaderTarget,
 )
-from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 
 __all__ = [
@@ -31,9 +28,8 @@ def dispatch(
 
     Returns:
         A ``DispatchedProgram`` wrapping *analyzed* and adding per-SQL-block
-        dispatch metadata plus merged Stage 1–4 diagnostics.
+        dispatch metadata.
     """
-    diagnostics: list[Diagnostic] = list(analyzed.diagnostics)
     dispatched: list[DispatchedBlock] = []
 
     for block in analyzed.resolved.blocks:
@@ -63,8 +59,7 @@ def dispatch(
         rewritten_sql = handler.substitute(body=block.resolved_body)
 
         # --- Step 6: reader target ---
-        reader_target, target_diags = handler.build_reader_target(block)
-        diagnostics.extend(target_diags)
+        reader_target = handler.build_reader_target(block)
 
         # Detect SQL filters
         sqlite = block.kind is Kind.SQLITE_QUERY
@@ -88,5 +83,4 @@ def dispatch(
     return DispatchedProgram(
         analyzed=analyzed,
         dispatched=tuple(dispatched),
-        diagnostics=tuple(diagnostics),
     )

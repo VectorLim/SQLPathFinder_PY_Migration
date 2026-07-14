@@ -3,10 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from vg2c import logger
 from vg2c.dispatch.models import ReaderTarget
-from vg2c.frontend.models import Diagnostic
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
+
+log = logger.getLogger("vg2c.dispatch.base")
 
 
 class DialectHandler(ABC):
@@ -100,15 +102,14 @@ class DialectHandler(ABC):
     @classmethod
     def build_reader_target(
         cls, block: ResolvedBlock
-    ) -> tuple[ReaderTarget, list[Diagnostic]]:
+    ) -> ReaderTarget:
         """Build a ReaderTarget from a resolved block."""
-        diags: list[Diagnostic] = []
         opts = block.resolved_options.lookup
 
         node = opts.get("NODE", "")
         instance = opts.get("INSTANCE")
         record_raw = opts.get("RECORD")
-        record_name, record_version = cls._parse_record(record_raw, block, diags)
+        record_name, record_version = cls._parse_record(record_raw, block)
 
         target = ReaderTarget(
             record_name=record_name,
@@ -116,13 +117,12 @@ class DialectHandler(ABC):
             node=node,
             instance=instance,
         )
-        return target, diags
+        return target
 
     @staticmethod
     def _parse_record(
         record_raw: str | None,
         block: ResolvedBlock,
-        diags: list[Diagnostic],
     ) -> tuple[str | None, str | None]:
         """Parse /RECORD=Name@version. Returns (name, version) or (raw, None) with diagnostic."""
         if record_raw is None:
@@ -132,13 +132,9 @@ class DialectHandler(ABC):
         if len(parts) == 2 and parts[0] and parts[1]:
             return parts[0], parts[1]
 
-        diags.append(
-            Diagnostic(
-                severity="info",
-                code="dispatch-record-malformed",
-                message=f"/RECORD={record_raw!r} is not in Name@version format; stored raw.",
-                block_index=block.index,
-                span=block.span,
-            )
+        loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
+        log.info(
+            f"[dispatch-record-malformed] {loc} (block {block.index}): "
+            f"/RECORD={record_raw!r} is not in Name@version format; stored raw."
         )
         return record_raw, None
