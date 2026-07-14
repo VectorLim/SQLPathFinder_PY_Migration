@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1862): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1990): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 2031): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2197): filters on Flag
-# - step_0055_sql_query (Line 2398): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2421): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1856): filters on a0.icmpcs
+# - step_0044_sql_query (Line 1984): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 2025): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2191): filters on Flag
+# - step_0055_sql_query (Line 2392): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2415): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -16,7 +16,6 @@ from contextlib import contextmanager
 from datasyncx.readers.aries_reader import AriesReader
 from datasyncx.readers.mars_reader import MarsReader
 from email.message import EmailMessage
-from functools import partial
 from pathlib import Path
 from typing import Any
 from typing import Any, Callable
@@ -1267,7 +1266,7 @@ class HtmlReport:
         for line in (template or "").splitlines():
             if not line.strip():
                 continue
-            rows.append([part.strip() for part in re.split(r"<\\\\>", line)])
+            rows.append([part.strip() for part in line.split("<\\>")])
         return rows
 
     @staticmethod
@@ -1615,8 +1614,6 @@ class SqliteEngine:
 
     utility_name = "sqlite_engine"
 
-    _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
-
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         if options.lookup.get("OLEDB", "").upper() == "SQLITE":
@@ -1659,34 +1656,31 @@ class SqliteEngine:
         sql = getattr(block, "rewritten_sql", None)
         if sql is None:
             sql = block.resolved_body
-        if "@@SQLMACRO:" not in sql:
+
+        calls = scan_sql_get_csv_list_calls(sql)
+        if not calls:
             return SqliteEngine._format_sql_literal(sql)
 
         parts: list[str] = []
         cursor = 0
-        for match in SqliteEngine._SQL_MACRO_TOKEN_RE.finditer(sql):
-            literal = sql[cursor : match.start()]
+        for call in calls:
+            literal = sql[cursor : call.start]
             if literal:
                 parts.append(SqliteEngine._format_sql_literal(literal))
 
-            call_index = int(match.group(1))
-            if call_index < 0 or call_index >= len(block.csv_generation_calls):
-                parts.append(SqliteEngine._format_sql_literal(match.group(0)))
-            else:
-                call = block.csv_generation_calls[call_index]
-                csv_path_expr = MacroState.to_py_expr(call.csv_path)
-                parts.append(
-                    CsvIO.sql_get_csv_list.render(csv_path_expr, repr(call.column_ref), repr(call.lead_in))
-                )
-
-            cursor = match.end()
+            csv_path_expr = MacroState.to_py_expr(call.csv_path)
+            expr = CsvIO.sql_get_csv_list.render(
+                csv_path_expr, repr(call.column_ref), repr(call.lead_in)
+            )
+            parts.append(expr)
+            if call.needs_closing_paren:
+                parts.append(SqliteEngine._format_sql_literal(")"))
+            cursor = call.end
 
         tail = sql[cursor:]
         if tail:
             parts.append(SqliteEngine._format_sql_literal(tail))
 
-        if not parts:
-            return SqliteEngine._format_sql_literal(sql)
         return " + ".join(parts)
 
     @staticmethod
@@ -2113,9 +2107,9 @@ def step_0047_sql_query(ctx) -> None:
     LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
     WHERE ats.data_domain='METROLOGY'
      AND      (ats.lot In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 2, 'ats.lot In') + """)""" + """ 
      AND      (ats.operation In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\CSR_Server_OIS_subplane_lotlist.csv', 3, 'ats.operation In') + """)""" + """ 
      AND      (ats.tester_id LIKE  'OIS%'
     ) 
      AND      t.test_name In ('SUBPLANEANGLEX'
@@ -2156,10 +2150,10 @@ def step_0048_sql_query(ctx) -> None:
     INNER JOIN ARIES_Views.AV_dia_Unit_Testing z8 ON z8.lao_start_ww = z2.lao_start_ww AND z8.obj_s_id = z2.obj_s_id AND z8.obj_mt_id = z2.obj_mt_id
     WHERE
                   (z0.lot In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'lot', 'z0.lot In') + """)""" + """ 
      AND      z0.tool_entity Like 'TGB%' 
      AND      (z0.operation In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a0_15507.tab', 'operation', 'z0.operation In') + """)""" + """ 
     /*END SQL*/
 
     """, output='yeuchuan_a2_15507.tab', reader=AriesReader(), header=['entity', 'bond_station', 'lot_2', 'visual_id_1'])
@@ -2392,7 +2386,7 @@ def step_0054_sqlite_query(ctx) -> None:
     [CSR_Server_OIS_subplane_output] a0
     WHERE
      NOT          (a0.[lot] In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)
+    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)""" + """
     """, output='yeuchuan_SQL_15507.tab', reader=SqliteReader(), inputs=['CSR_Server_OIS_subplane_output.csv'], header=['facility', 'lot', 'prodgroup3', 'DLA_operation', 'entity', 'bond_station', 'carrier_x', 'carrier_y', 'visual_id', 'sub_plane_x', 'sub_plane_y', 'lower_x_limit', 'upper_x_limit', 'lower_y_limit', 'upper_y_limit'])
 
 def step_0055_sql_query(ctx) -> None:
@@ -2413,7 +2407,7 @@ def step_0055_sql_query(ctx) -> None:
      AND      f0.qty1 > 0 
      AND      f0.src_erase_date Is Null  
      AND      (f0.lot In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """) 
+    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_SQL_15507.tab', 'lot', 'f0.lot In') + """)""" + """ 
     /*END SQL*/
 
     """, output='yeuchuan_a1_15507.tab', reader=MarsReader(), header=['lot_1', 'Current_operation', 'movedin', 'onrework', 'onhold', 'route', 'quantity'])

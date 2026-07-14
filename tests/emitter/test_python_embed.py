@@ -20,7 +20,7 @@ def _make_block(
         index=index, options=options, body=body, raw="", span=SourceSpan(None, 1, 1)
     )
     classified = ClassifiedBlock(parsed, kind, "test")
-    return ResolvedBlock(classified, options, body, (), None, 0)
+    return ResolvedBlock(classified, options, body, None, 0)
 
 
 def test_emit_block_embeds_python_body() -> None:

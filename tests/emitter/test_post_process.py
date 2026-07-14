@@ -17,7 +17,7 @@ def _dummy_resolved_block(index: int) -> ResolvedBlock:
         span=SourceSpan(None, 1, 1),
     )
     classified = ClassifiedBlock(parsed, Kind.SQL_QUERY, "")
-    return ResolvedBlock(classified, BlockOptions.from_pairs(()), "", (), None, 0)
+    return ResolvedBlock(classified, BlockOptions.from_pairs(()), "", None, 0)
 
 def test_post_process_comments():
     target = ReaderTarget(None, None, "node", None)
@@ -50,7 +50,6 @@ def test_post_process_comments():
     dp: Any = DispatchedProgram(
         analyzed=None,  # type: ignore
         dispatched=(block1, block2),
-        diagnostics=()
     )
     
     source = "def step_0001_sql_query(ctx):\n    pass\n\ndef step_0002_sql_query(ctx):\n    pass"

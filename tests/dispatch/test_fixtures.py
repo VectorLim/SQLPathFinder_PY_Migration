@@ -26,9 +26,9 @@ _SQL_BEARING = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 def _run_pipeline(fixtures: Path, file_name: str):
     text = (fixtures / file_name).read_text(encoding="utf-8", errors="replace")
-    parsed, pdiag = parse(text, source=fixtures / file_name)
-    classified, cdiag = classify(parsed)
-    resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
+    parsed = parse(text, source=fixtures / file_name)
+    classified = classify(parsed)
+    resolved = resolve(classified)
     analyzed = analyze(resolved)
     return dispatch(analyzed)
 
@@ -54,21 +54,6 @@ def test_dispatched_count_equals_sql_bearing_blocks(
         1 for b in program.analyzed.resolved.blocks if b.kind in _SQL_BEARING
     )
     assert len(program.dispatched) == sql_block_count
-
-
-# --- No new error diagnostics on clean fixtures ---
-
-
-@pytest.mark.parametrize(
-    "fixture_name",
-    ["script_short.txt", "script_another.txt"],
-)
-def test_no_error_diagnostics_on_clean_fixtures(
-    FIXTURES: Path, fixture_name: str
-) -> None:
-    program = _run_pipeline(FIXTURES, fixture_name)
-    stage4_errors = [d for d in program.diagnostics if d.severity == "error"]
-    assert not stage4_errors
 
 
 def test_sql_script_oasys_schema_substituted(FIXTURES: Path) -> None:

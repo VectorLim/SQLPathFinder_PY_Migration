@@ -6,7 +6,6 @@ from pathlib import PurePosixPath
 from types import MappingProxyType
 
 from vg2c.dataflow.models import (
-    CSVGenerationCall,
     AnalyzedProgram,
     ConsumerKind,
     ConsumerRecord,
@@ -14,7 +13,10 @@ from vg2c.dataflow.models import (
     ProducerRecord,
     ScopeRelation,
 )
-from vg2c.dataflow.sql_macro_expander import expand_sql_macros
+from vg2c.dataflow.sql_call_scanner import (
+    SqlGetCsvListCall,
+    scan_sql_get_csv_list_calls,
+)
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -28,25 +30,29 @@ from vg2c.operands import (
 )
 
 _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE)
+_SQL_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    expanded_blocks, calls_by_block = expand_sql_macros(list(resolved.blocks))
-    expanded_resolved = ResolvedProgram(
-        blocks=tuple(expanded_blocks),
-        scope_tree=resolved.scope_tree,
-    )
+    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]] = {}
+    for block in resolved.blocks:
+        if block.kind not in _SQL_SCANNED_KINDS:
+            continue
+        calls = tuple(scan_sql_get_csv_list_calls(block.resolved_body))
+        if calls:
+            calls_by_block[block.index] = calls
 
-    blocks = list(expanded_resolved.blocks)
-    scope_rel = _ScopeRelations(expanded_resolved.scope_tree)
+    blocks = list(resolved.blocks)
+    scope_rel = _ScopeRelations(resolved.scope_tree)
 
     edges: list[DataflowEdge] = []
     matched_producer_keys: set[tuple[int, str]] = set()
     consumers = _collect_consumers(blocks, calls_by_block)
 
+    explicit_producers = _collect_explicit_producers(blocks, scope_rel)
+    producers_by_path = _index_by_path(explicit_producers)
+
     for consumer in consumers:
-        explicit_producers = _collect_explicit_producers(blocks, scope_rel)
-        producers_by_path = _index_by_path(explicit_producers)
         producer = _choose_explicit_producer(consumer, producers_by_path)
         if producer is None:
             utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
@@ -71,12 +77,11 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
     producers_map = {k: tuple(v) for k, v in producers_by_path.items()}
     return AnalyzedProgram(
-        resolved=expanded_resolved,
+        resolved=resolved,
         producers=tuple(explicit_producers),
         producers_by_path=MappingProxyType(producers_map),
         consumers=tuple(consumers),
         edges=tuple(edges),
-        csv_generation_calls_by_block=calls_by_block,
     )
 
 
@@ -150,7 +155,7 @@ def _collect_external_utility_candidates(
 
 def _collect_consumers(
     blocks: list[ResolvedBlock],
-    calls_by_block: dict[int, tuple[CSVGenerationCall, ...]],
+    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]],
 ) -> list[ConsumerRecord]:
     consumers: list[ConsumerRecord] = []
     for block in blocks:
@@ -193,15 +198,14 @@ def _collect_consumers(
             )
 
         for call in calls_by_block.get(block.index, ()):
-            for csv_path in call.consumed_csv_paths():
-                consumers.append(
-                    ConsumerRecord(
-                        block_index=block.index,
-                        csv_path=_normalize_csv_path(csv_path),
-                        scope_id=block.scope_id,
-                        consumer_kind="sql-macro",
-                    )
+            consumers.append(
+                ConsumerRecord(
+                    block_index=block.index,
+                    csv_path=_normalize_csv_path(call.csv_path),
+                    scope_id=block.scope_id,
+                    consumer_kind="sql-macro",
                 )
+            )
     return consumers
 
 

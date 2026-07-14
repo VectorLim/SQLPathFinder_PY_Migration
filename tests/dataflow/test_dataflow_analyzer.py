@@ -32,7 +32,7 @@ def _block(
 
 
 def _analyze_blocks(blocks: list[ClassifiedBlock]):
-    resolved = resolve(blocks, diagnostics=[])
+    resolved = resolve(blocks)
     return analyze(resolved)
 
 
@@ -72,42 +72,6 @@ def test_sqlite_block_can_be_producer_and_consumer() -> None:
         for p in program.producers
     )
     assert any(c.csv_path == "a.csv" for c in program.consumers)
-
-
-def test_emits_order_violation_for_consumer_before_producer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "late.csv"}),
-            _block(1, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "late.csv"}),
-        ]
-    )
-    assert any(d.code == "dataflow-order-violation" for d in program.diagnostics)
-
-
-def test_external_utility_candidate_softens_missing_producer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(
-                0, Kind.FS_COPY, utilities='@EXEDIR@\\SPFCopy.bat "source.csv" "." "N"'
-            ),
-            _block(
-                1, Kind.MACRO_CONTROL, utilities='{ROWS-IN-FILE} "source.csv" "CNT" "N"'
-            ),
-        ]
-    )
-    assert any(
-        d.code == "dataflow-likely-external-producer" for d in program.diagnostics
-    )
-
-
-
-
-def test_unused_producer_emits_info() -> None:
-    program = _analyze_blocks(
-        [_block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "orphan.csv"})]
-    )
-    assert any(d.code == "dataflow-unused-output" for d in program.diagnostics)
-    assert any(p.csv_path == "orphan.csv" for p in program.unused_producers)
 
 
 def test_table_comma_split_patch_from_stage2() -> None:

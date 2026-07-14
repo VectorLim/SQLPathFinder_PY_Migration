@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
-from functools import partial
-
+from vg2c.dataflow.sql_call_scanner import scan_sql_get_csv_list_calls
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
@@ -21,8 +19,6 @@ class SqliteEngine(EmitterUtility):
 
     utility_name = "sqlite_engine"
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
-
-    _SQL_MACRO_TOKEN_RE = re.compile(r"@@SQLMACRO:(\d+)@@")
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -66,34 +62,31 @@ class SqliteEngine(EmitterUtility):
         sql = getattr(block, "rewritten_sql", None)
         if sql is None:
             sql = block.resolved_body
-        if "@@SQLMACRO:" not in sql:
+
+        calls = scan_sql_get_csv_list_calls(sql)
+        if not calls:
             return SqliteEngine._format_sql_literal(sql)
 
         parts: list[str] = []
         cursor = 0
-        for match in SqliteEngine._SQL_MACRO_TOKEN_RE.finditer(sql):
-            literal = sql[cursor : match.start()]
+        for call in calls:
+            literal = sql[cursor : call.start]
             if literal:
                 parts.append(SqliteEngine._format_sql_literal(literal))
 
-            call_index = int(match.group(1))
-            if call_index < 0 or call_index >= len(block.csv_generation_calls):
-                parts.append(SqliteEngine._format_sql_literal(match.group(0)))
-            else:
-                call = block.csv_generation_calls[call_index]
-                csv_path_expr = MacroState.to_py_expr(call.csv_path)
-                parts.append(
-                    CsvIO.sql_get_csv_list.render(csv_path_expr, repr(call.column_ref), repr(call.lead_in))
-                )
-
-            cursor = match.end()
+            csv_path_expr = MacroState.to_py_expr(call.csv_path)
+            expr = CsvIO.sql_get_csv_list.render(
+                csv_path_expr, repr(call.column_ref), repr(call.lead_in)
+            )
+            parts.append(expr)
+            if call.needs_closing_paren:
+                parts.append(SqliteEngine._format_sql_literal(")"))
+            cursor = call.end
 
         tail = sql[cursor:]
         if tail:
             parts.append(SqliteEngine._format_sql_literal(tail))
 
-        if not parts:
-            return SqliteEngine._format_sql_literal(sql)
         return " + ".join(parts)
 
     @staticmethod

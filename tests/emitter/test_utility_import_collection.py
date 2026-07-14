@@ -81,7 +81,7 @@ def _make_utility_block(
         span=SourceSpan(None, 1, 1),
     )
     classified = ClassifiedBlock(parsed, kind, "test")
-    return ResolvedBlock(classified, options, body, (), None, 0)
+    return ResolvedBlock(classified, options, body, None, 0)
 
 
 def test_emit_block_routes_email_utility_before_generic_fallback() -> None:

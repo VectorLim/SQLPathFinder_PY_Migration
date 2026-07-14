@@ -19,9 +19,9 @@ FIXTURE_NAMES = [
 
 def _run_pipeline(fixtures: Path, file_name: str):
     text = (fixtures / file_name).read_text(encoding="utf-8", errors="replace")
-    parsed, pdiag = parse(text, source=fixtures / file_name)
-    classified, cdiag = classify(parsed)
-    resolved = resolve(classified, diagnostics=[*pdiag, *cdiag])
+    parsed = parse(text, source=fixtures / file_name)
+    classified = classify(parsed)
+    resolved = resolve(classified)
     return analyze(resolved)
 
 
@@ -31,21 +31,6 @@ def test_pipeline_stage1_to_stage3_runs(FIXTURES: Path, fixture_name: str) -> No
     assert analyzed.resolved.scope_tree.kind == "program"
     assert len(analyzed.resolved.blocks) >= 1
     assert isinstance(analyzed.edges, tuple)
-
-
-@pytest.mark.parametrize(
-    "fixture_name",
-    [
-        "script_short.txt",
-        "script_another.txt",
-        "sql_script.txt",
-    ],
-)
-def test_no_error_diagnostics_on_clean_fixtures(
-    FIXTURES: Path, fixture_name: str
-) -> None:
-    analyzed = _run_pipeline(FIXTURES, fixture_name)
-    assert not [d for d in analyzed.diagnostics if d.severity == "error"]
 
 
 def test_edges_exist_on_cross_block_fixtures(FIXTURES: Path) -> None:
@@ -74,17 +59,8 @@ def test_sql_script_links_db_read_to_sql_macro_consumer(FIXTURES: Path) -> None:
     )
 
 
-def test_script_another_structural_boundary_shows_unused_output(FIXTURES: Path) -> None:
-    analyzed = _run_pipeline(FIXTURES, "script_another.txt")
-    assert any(d.code == "dataflow-unused-output" for d in analyzed.diagnostics)
-
-
 def test_actual_script_has_scope_and_external_signals(FIXTURES: Path) -> None:
     analyzed = _run_pipeline(FIXTURES, "actual_script.txt")
-    assert any(
-        d.code == "dataflow-likely-external-producer" for d in analyzed.diagnostics
-    )
-    assert any(d.code == "dataflow-unused-output" for d in analyzed.diagnostics)
     sql_macro_edges = [
         e for e in analyzed.edges if e.consumer.consumer_kind == "sql-macro"
     ]

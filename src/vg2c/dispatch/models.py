@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from vg2c.dataflow.models import AnalyzedProgram, CSVGenerationCall
+from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.frontend.models import copy_dataclass_fields
 from vg2c.resolver.models import ResolvedBlock
 
@@ -30,7 +30,6 @@ class DispatchedBlock(ResolvedBlock):
     reader_target: ReaderTarget
     rewritten_sql: str
     step_name: str
-    csv_generation_calls: tuple[CSVGenerationCall, ...]
     sql_filters: tuple[SQLFilter, ...] = ()
 
     def __init__(
@@ -41,7 +40,6 @@ class DispatchedBlock(ResolvedBlock):
         reader_target: ReaderTarget,
         rewritten_sql: str,
         step_name: str,
-        csv_generation_calls: tuple[CSVGenerationCall, ...],
         sql_filters: tuple[SQLFilter, ...] = (),
     ) -> None:
         copy_dataclass_fields(resolved, self, ResolvedBlock)
@@ -51,7 +49,6 @@ class DispatchedBlock(ResolvedBlock):
         object.__setattr__(self, "reader_target", reader_target)
         object.__setattr__(self, "rewritten_sql", rewritten_sql)
         object.__setattr__(self, "step_name", step_name)
-        object.__setattr__(self, "csv_generation_calls", csv_generation_calls)
         object.__setattr__(self, "sql_filters", sql_filters)
 
 
