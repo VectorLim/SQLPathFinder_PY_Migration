@@ -1,10 +1,10 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 1856): filters on a0.icmpcs
-# - step_0044_sql_query (Line 1984): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
-# - step_0047_sql_query (Line 2025): filters on ats.data_domain
-# - step_0050_sqlite_query (Line 2191): filters on Flag
-# - step_0055_sql_query (Line 2392): filters on f0.owner, f0.qty1, f0.terminated
-# - step_0056_sqlite_query (Line 2415): filters on Lot_MVIN_CURE
+# - step_0015_sqlite_query (Line 1897): filters on a0.icmpcs
+# - step_0044_sql_query (Line 2025): filters on c0.event_code, f0.facility, f0.history_deleted_flag, f0.load_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, p.latest_version
+# - step_0047_sql_query (Line 2066): filters on ats.data_domain
+# - step_0050_sqlite_query (Line 2232): filters on Flag
+# - step_0055_sql_query (Line 2433): filters on f0.owner, f0.qty1, f0.terminated
+# - step_0056_sqlite_query (Line 2456): filters on Lot_MVIN_CURE
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from datasyncx.readers.aries_reader import AriesReader
 from datasyncx.readers.mars_reader import MarsReader
 from email.message import EmailMessage
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Any, Callable
@@ -36,6 +37,46 @@ import shutil
 import smtplib
 import subprocess
 import time
+
+
+
+
+
+class Kind(str, Enum):
+    SQL_QUERY = "SQL_QUERY"
+    SQLITE_QUERY = "SQLITE_QUERY"
+    WRITE_FILE = "WRITE_FILE"
+    PYTHON_EMBED = "PYTHON_EMBED"
+    FS_COPY = "FS_COPY"
+    FS_DELETE = "FS_DELETE"
+    EXTERNAL_RUN = "EXTERNAL_RUN"
+    WAIT_FILE = "WAIT_FILE"
+    HTML_REPORT = "HTML_REPORT"
+    EMAIL = "EMAIL"
+    MACRO_CONTROL = "MACRO_CONTROL"
+    UNKNOWN = "UNKNOWN"
+
+    @property
+    def is_csv_producer(self) -> bool:
+        """Return True if this kind is an explicit CSV producer."""
+        return self in {
+            Kind.SQL_QUERY,
+            Kind.SQLITE_QUERY,
+            Kind.WRITE_FILE,
+            Kind.PYTHON_EMBED,
+        }
+
+    @property
+    def is_external_utility(self) -> bool:
+        """Return True if this kind represents an external utility/system command block."""
+        return self in {
+            Kind.EMAIL,
+            Kind.EXTERNAL_RUN,
+            Kind.FS_COPY,
+            Kind.FS_DELETE,
+            Kind.WAIT_FILE,
+        }
+
 
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
 

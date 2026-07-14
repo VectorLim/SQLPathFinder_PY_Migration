@@ -1,8 +1,11 @@
+import inspect
+
 from vg2c import logger
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmittedScript, IndentWriter
 from vg2c.emitter.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
+from vg2c import kind as kind_module
 
 log = logger.getLogger("vg2c.emitter")
 
@@ -22,7 +25,15 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Assemble embedded utility classes.
     utility_imports, utility_sources = assemble_all_utilities()
 
+    # Get kind.py source (strip all imports)
+    kind_source = "\n".join(
+        line
+        for line in inspect.getsource(kind_module).splitlines()
+        if not line.startswith(("import ", "from "))
+    )
+
     imports = set(utility_imports)
+    imports.add("from enum import Enum")
     imports.add("from datasyncx.readers.aries_reader import AriesReader")
     imports.add("from datasyncx.readers.mars_reader import MarsReader")
     imports.add("from vg2c.dispatch.dialects.sqlite import SqliteReader")
@@ -38,6 +49,10 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Imports
     for imp in sorted(imports):
         script_writer.write(imp)
+    script_writer.write("")
+
+    # Embedded kind module (near top so utilities can reference Kind)
+    script_writer.write_block(kind_source)
     script_writer.write("")
 
     # Embedded utilities
@@ -65,7 +80,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.pop_indent()
 
     source = script_writer.source()
-    
+
     # Run filter post-processing comments
     source = post_process_comments(source, dispatched, script_writer.step_lines)
 
@@ -79,48 +94,44 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
             f"[emit-syntax-error] <generated_script>:{e.lineno}:1: "
             f"Generated script has syntax error at line {e.lineno}: {e.msg}"
         )
-        return EmittedScript(
-            source=source, imports=tuple(imports)
-        )
+        return EmittedScript(source=source, imports=tuple(imports))
 
-    return EmittedScript(
-        source=source, imports=tuple(imports)
-    )
+    return EmittedScript(source=source, imports=tuple(imports))
 
 
 def post_process_comments(
-    source: str,
-    dispatched: DispatchedProgram,
-    step_lines: dict[str, int]
+    source: str, dispatched: DispatchedProgram, step_lines: dict[str, int]
 ) -> str:
     # Find all steps that have filters
     steps_with_filters = []
     for db in dispatched.dispatched:
         if db.sql_filters:
             steps_with_filters.append(db)
-            
+
     if not steps_with_filters:
         return source
-        
+
     # We will prepend comments.
     # To keep line numbers in the comments accurate, we need to sort steps by their original line number
     steps_with_filters.sort(key=lambda db: step_lines.get(db.step_name, 0))
-    
+
     # Prepend comment block:
     # 1 line for header
     # len(steps_with_filters) lines for the details
     # 1 line for blank line separator
     num_comment_lines = len(steps_with_filters) + 2
-    
+
     comment_lines = ["# SQL statements containing filters:"]
     for db in steps_with_filters:
         orig_line = step_lines.get(db.step_name, 1)
         final_line = orig_line + num_comment_lines
-        
+
         # Merge all attributes from all filters in this block
         attrs = sorted(list(set(attr for f in db.sql_filters for attr in f.attributes)))
         attrs_str = ", ".join(attrs)
-        comment_lines.append(f"# - {db.step_name} (Line {final_line}): filters on {attrs_str}")
-        
+        comment_lines.append(
+            f"# - {db.step_name} (Line {final_line}): filters on {attrs_str}"
+        )
+
     comments_block = "\n".join(comment_lines) + "\n\n"
     return comments_block + source
