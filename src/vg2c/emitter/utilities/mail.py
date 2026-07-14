@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any, NamedTuple
-
+from typing import Any
 
 from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import EmitterUtility
@@ -25,21 +23,11 @@ class MailService(EmitterUtility):
     utility_name = "email"
     handles = (Kind.EMAIL,)
 
-    SMTP_PASSWORD_ENV = "Lyc040513"
+    SMTP_PASSWORD = "Lyc040513"
 
     DEFAULT_SMTP_HOST = "smtpauth.intel.com"
     DEFAULT_SMTP_PORT = 587
     DEFAULT_FROM_ADDRESS = "yeu.chuan.lim@intel.com"
-
-    class _SMTPSettings(NamedTuple):
-        host: str
-        port: int
-        password: str
-        sender: str
-
-        @property
-        def uses_authentication(self) -> bool:
-            return bool(self.password)
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -56,7 +44,6 @@ class MailService(EmitterUtility):
         argv = cls._utility_argv(block)
         if not cls._is_mail_utility(argv):
             return None
-
         stmt = cls._emit_send(argv, block.resolved_body)
         if stmt is None:
             return ["pass  # TODO: unsupported email utility command"]
@@ -83,55 +70,23 @@ class MailService(EmitterUtility):
         return "[" + ", ".join(MacroState.to_py_expr(v) for v in values) + "]"
 
     @classmethod
-    def _smtp_settings(cls, from_addr: str | None = None) -> _SMTPSettings:
-
-        return cls._SMTPSettings(
-            host=cls.DEFAULT_SMTP_HOST,
-            port=cls.DEFAULT_SMTP_PORT,
-            password=cls.SMTP_PASSWORD_ENV,
-            sender=from_addr or cls.DEFAULT_FROM_ADDRESS,
-        )
-
-    @classmethod
-    def _send_via_smtp(cls, message: EmailMessage, settings: _SMTPSettings) -> None:
-        try:
-            with smtplib.SMTP(settings.host, settings.port) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.ehlo()
-                if settings.uses_authentication:
-                    smtp.login(cls.DEFAULT_FROM_ADDRESS, settings.password)
-                smtp.send_message(message)
-        except smtplib.SMTPAuthenticationError as exc:
-            raise RuntimeError(
-                "MailService: failed to send email via "
-                f"{settings.host}:{settings.port}. Error: {exc}"
-            ) from exc
-
-    @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
         payload = argv[1:]
+
         if len(payload) >= 5:
             attachments = cls._csv_items(payload[0])
             from_addr = strip_quotes(payload[1])
-            subject = payload[2]
-            body = (
-                payload[3]
-                if strip_quotes(payload[3])
-                else (body_fallback or payload[2])
-            )
-            to = payload[4]
+            body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
 
             kwargs: dict[str, Any] = {
-                "to": MacroState.to_py_expr(to),
-                "subject": MacroState.to_py_expr(subject),
+                "to": MacroState.to_py_expr(payload[4]),
+                "subject": MacroState.to_py_expr(payload[2]),
                 "body": MacroState.to_py_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
                 kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
-
             return cls.send.render(**kwargs)
 
         if len(payload) >= 3:
@@ -152,11 +107,11 @@ class MailService(EmitterUtility):
         attachments: list[str] | None = None,
         from_addr: str | None = None,
     ) -> None:
-        settings = self._smtp_settings(from_addr)
+        sender = from_addr or self.DEFAULT_FROM_ADDRESS
 
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = settings.sender
+        msg["From"] = sender
         msg["To"] = to
         msg.set_content(self._resolve_body(body))
 
@@ -170,7 +125,19 @@ class MailService(EmitterUtility):
                     filename=p.name,
                 )
 
-        self._send_via_smtp(msg, settings)
+        try:
+            with smtplib.SMTP(self.DEFAULT_SMTP_HOST, self.DEFAULT_SMTP_PORT) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                if self.SMTP_PASSWORD:
+                    smtp.login(self.DEFAULT_FROM_ADDRESS, self.SMTP_PASSWORD)
+                smtp.send_message(msg)
+        except smtplib.SMTPAuthenticationError as exc:
+            raise RuntimeError(
+                f"MailService: failed to send email via "
+                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. Error: {exc}"
+            ) from exc
 
     @staticmethod
     def _resolve_body(body: str) -> str:
