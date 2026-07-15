@@ -30,7 +30,7 @@ def _run_full_pipeline(fixture_name: str) -> str:
 
 def test_e2e_script_short(tmp_path, monkeypatch):
     """Translate script_short.txt, exec it, assert output CSV exists."""
-    source = _run_full_pipeline("maxlidheight.txt")
+    source = _run_full_pipeline("actual_script.txt")
     (Path.cwd() / "generated_script.py").write_text(source, encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)

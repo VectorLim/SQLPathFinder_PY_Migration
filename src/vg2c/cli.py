@@ -1,103 +1,159 @@
-"""vg2c CLI — translate VG2 scripts to Python.
+"""vg2c CLI — interactive batch translator.
 
-Usage:
-    vg2c <input> [<output>] [--strict]
+Detects .txt files in the target directory (defaults to the current working
+directory) and lets the user choose which ones to translate to Python.
 """
 
 from __future__ import annotations
 
-import argparse
-import logging
+import os
 import sys
+import traceback
 from pathlib import Path
 
 from vg2c.logger import Logger
-from vg2c.dataflow import analyze
-from vg2c.dispatch import dispatch
-from vg2c.emitter import emit
-from vg2c.frontend import classify, parse
-from vg2c.resolver import resolve
+from vg2c import translate
+
+_log = Logger.getLogger(__name__)
 
 
-class ErrorDetectingHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__()
-        self.has_errors = False
+def _pick_files(txt_files: list[Path]) -> list[Path]:
+    """Prompt the user to select files by index. Returns selected paths."""
+    print("\nDetected .txt files:")
+    for i, p in enumerate(txt_files, 1):
+        print(f"  [{i}] {p.name}")
+    print()
 
-    def emit(self, record: logging.LogRecord) -> None:
-        if record.levelno >= logging.ERROR:
-            self.has_errors = True
+    while True:
+        raw = input(
+            "Select files (* for all, or indexes separated by spaces): "
+        ).strip()
+        if not raw:
+            print("  No selection entered. Please try again.")
+            continue
 
+        if raw == "*":
+            return list(txt_files)
 
-def cmd_translate(args: argparse.Namespace) -> int:
-    # Initialize basic logging
-    Logger.basicConfig(level=Logger.INFO)
+        tokens = raw.split()
+        selected: list[Path] = []
+        seen: set[int] = set()
+        valid = True
 
-    # Attach error detector if strict mode is active
-    error_detector = ErrorDetectingHandler()
-    vg2c_logger = Logger.getLogger()
-    if args.strict:
-        vg2c_logger.addHandler(error_detector)
+        for token in tokens:
+            if not token.isdigit():
+                print(f"  Invalid input '{token}'. Use integers or '*'.")
+                valid = False
+                break
+            idx = int(token)
+            if idx < 1 or idx > len(txt_files):
+                print(f"  Index {idx} is out of range (1–{len(txt_files)}).")
+                valid = False
+                break
+            if idx in seen:
+                print(f"  Duplicate index {idx} — each file may only be selected once.")
+                valid = False
+                break
+            seen.add(idx)
+            selected.append(txt_files[idx - 1])
 
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"ERROR: input file not found: {input_path}", file=sys.stderr)
-        return 1
-
-    text = input_path.read_text(encoding="utf-8", errors="replace")
-
-    try:
-        parsed = parse(text, source=input_path)
-        classified = classify(parsed)
-        resolved = resolve(classified)
-        analyzed = analyze(resolved)
-        dispatched = dispatch(analyzed)
-        emitted = emit(dispatched)
-    finally:
-        if args.strict:
-            vg2c_logger.removeHandler(error_detector)
-
-    # Write output
-    if args.output:
-        out_path = Path(args.output)
-        if len(out_path.parts) == 1:
-            out_path = input_path.parent / out_path
-    else:
-        out_path = input_path.with_suffix(".py")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(emitted.source, encoding="utf-8")
-
-    # --strict: exit 1 if any error-severity logs occurred
-    if args.strict and error_detector.has_errors:
-        return 1
-    return 0
+        if valid and selected:
+            return selected
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="vg2c",
-        description="Translate VG2 pipeline scripts to Python.",
-    )
-    parser.add_argument("input", help="Path to the VG2 source file.")
-    parser.add_argument(
-        "output",
-        nargs="?",
-        help="Path to the output Python file. If omitted or specified as a bare name, it will follow the directory of the input file.",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Exit 1 if any error diagnostic is emitted.",
-    )
+_HELP = """\
+vg2c — interactive batch translator
 
-    return parser
+Usage:
+  vg2c [input_dir] [output_dir] [--help]
+
+  Scans input_dir for .txt files, prompts you to select which ones to
+  translate, and writes the resulting .py files to output_dir.
+
+Arguments:
+  input_dir   Directory containing .txt source files.
+              Relative paths are resolved from the current working directory.
+              Defaults to the current working directory.
+  output_dir  Directory for translated .py files.
+              Relative paths are resolved from the current working directory.
+              Defaults to the same directory as each source file.
+
+Selection syntax:
+  *        translate all files
+  1        translate file at index 1
+  1 3 5    translate files at indexes 1, 3, and 5
+
+Output:
+  A summary of successes and failures is printed at the end.
+"""
 
 
 def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-    sys.exit(cmd_translate(args))
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help", "-help"):
+        print(_HELP)
+        sys.exit(0)
+
+    Logger.basicConfig(level=Logger.INFO)
+
+    # Capture original cwd *before* any chdir so relative paths are
+    # always resolved from where the user actually launched the tool.
+    original_cwd = Path.cwd()
+
+    # --- input directory ---
+    if len(sys.argv) > 1:
+        work_dir = Path(sys.argv[1])
+        if not work_dir.is_absolute():
+            work_dir = (original_cwd / work_dir).resolve()
+        else:
+            work_dir = work_dir.resolve()
+        if not work_dir.is_dir():
+            print(f"ERROR: input directory '{work_dir}' not found.", file=sys.stderr)
+            sys.exit(1)
+        os.chdir(work_dir)
+    else:
+        work_dir = original_cwd
+
+    # --- output directory ---
+    out_dir: Path | None = None
+    if len(sys.argv) > 2:
+        out_dir = Path(sys.argv[2])
+        if not out_dir.is_absolute():
+            out_dir = (original_cwd / out_dir).resolve()
+        else:
+            out_dir = out_dir.resolve()
+
+    txt_files = sorted(work_dir.glob("*.txt"))
+
+    if not txt_files:
+        print(f"No .txt files found in {work_dir}")
+        sys.exit(0)
+
+    selected = _pick_files(txt_files)
+
+    succeeded: list[str] = []
+    failed: list[str] = []
+
+    for path in selected:
+        try:
+            out = translate(path, out_dir)
+            _log.info("OK  %s → %s", path.name, out)
+            succeeded.append(path.name)
+        except Exception:
+            _log.error(
+                "FAIL %s\n%s",
+                path.name,
+                traceback.format_exc().rstrip(),
+            )
+            failed.append(path.name)
+
+    print("\n--- Summary ---")
+    print(f"  Succeeded : {len(succeeded)}")
+    print(f"  Failed    : {len(failed)}")
+    if failed:
+        for name in failed:
+            print(f"    ✗ {name}")
+
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":
