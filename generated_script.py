@@ -1,12 +1,12 @@
 # SQL statements containing filters:
-# - step_0015_sqlite_query (Line 2056): filters on a0.icmpcs
-# - step_0043_sql_query (Line 2183): filters on f0.history_deleted_flag, f0.operation, f0.out_date, f0.owner
-# - step_0044_sql_query (Line 2202): filters on Transaction_Key, f0.history_deleted_flag, f0.owner, f5.history_deleted_flag
-# - step_0045_sqlite_query (Line 2235): filters on Cure_Movein_Flag
-# - step_0046_sql_query (Line 2261): filters on ats.data_domain, ats.operation, ctr.numeric_result, ctr.string_value, t.test_name
-# - step_0050_sql_query (Line 2315): filters on ats.data_domain, ats.operation
-# - step_0056_sqlite_query (Line 2372): filters on a0.rowid, lot, outlier_screen
-# - step_0057_sqlite_query (Line 2566): filters on FLAG, a0.rowid, lot
+# - step_0015_sqlite_query (Line 2178): filters on a0.icmpcs
+# - step_0043_sql_query (Line 2305): filters on f0.history_deleted_flag, f0.operation, f0.out_date, f0.owner
+# - step_0044_sql_query (Line 2324): filters on Transaction_Key, f0.history_deleted_flag, f0.owner, f5.history_deleted_flag
+# - step_0045_sqlite_query (Line 2357): filters on Cure_Movein_Flag
+# - step_0046_sql_query (Line 2383): filters on ats.data_domain, ats.operation, ctr.numeric_result, ctr.string_value, t.test_name
+# - step_0050_sql_query (Line 2437): filters on ats.data_domain, ats.operation
+# - step_0056_sqlite_query (Line 2494): filters on a0.rowid, lot, outlier_screen
+# - step_0057_sqlite_query (Line 2688): filters on FLAG, a0.rowid, lot
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datasyncx.readers.aries_reader import AriesReader
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 from typing import Any, Callable
 from typing import Any, Callable, ContextManager
+from typing import Any, ClassVar
 from typing import Any, ClassVar, TYPE_CHECKING
 from typing import Any, Iterator
 from typing import Iterator, Protocol
@@ -31,6 +33,7 @@ from vg2c.dispatch.dialects.sqlite import SqliteReader
 import csv
 import inspect
 import keyring
+import logging
 import os
 import pandas
 import pandas as pd
@@ -290,6 +293,125 @@ def normalize_macro_name(raw: str) -> str:
     if name.startswith("<<<") and name.endswith(">>>"):
         name = name[3:-3]
     return name.strip().upper()
+
+class Logger:
+    """Shared logger utility used by translator code and generated scripts."""
+
+    utility_name = "logger"
+
+    CRITICAL: ClassVar[int] = logging.CRITICAL
+    ERROR: ClassVar[int] = logging.ERROR
+    WARNING: ClassVar[int] = logging.WARNING
+    INFO: ClassVar[int] = logging.INFO
+    DEBUG: ClassVar[int] = logging.DEBUG
+    NOTSET: ClassVar[int] = logging.NOTSET
+
+    _logger_class_configured: ClassVar[bool] = False
+
+    class PrettyLogger(logging.Logger):
+        def table(
+            self,
+            rows: Sequence[Mapping[str, Any]] | Sequence[Sequence[Any]],
+            *,
+            headers: Sequence[str] | None = None,
+            title: str | None = None,
+            level: int = logging.INFO,
+        ) -> None:
+            self.log(
+                level,
+                Logger._format_table(rows, headers=headers, title=title),
+            )
+
+    @staticmethod
+    def _format_table(
+        rows: Sequence[Mapping[str, Any]] | Sequence[Sequence[Any]],
+        headers: Sequence[str] | None = None,
+        title: str | None = None,
+    ) -> str:
+        if not rows:
+            return f"{title}\n<empty table>" if title else "<empty table>"
+
+        first = rows[0]
+        body: list[list[str]] = []
+
+        if isinstance(first, Mapping):
+            cols = list(headers) if headers else []
+            if not cols:
+                for row in rows:
+                    if not isinstance(row, Mapping):
+                        raise TypeError("Mixed table row types are not supported.")
+                    for key in row:
+                        key_s = str(key)
+                        if key_s not in cols:
+                            cols.append(key_s)
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    raise TypeError("Mixed table row types are not supported.")
+                body.append([str(row.get(c, "")) for c in cols])
+        else:
+            cols = (
+                [str(h) for h in headers]
+                if headers
+                else [f"col_{i+1}" for i in range(max(len(r) for r in rows))]
+            )
+            for row in rows:
+                if isinstance(row, Mapping):
+                    raise TypeError("Mixed table row types are not supported.")
+                vals = [str(v) for v in row]
+                if len(vals) < len(cols):
+                    vals.extend([""] * (len(cols) - len(vals)))
+                body.append(vals)
+
+        widths = [len(c) for c in cols]
+        for row in body:
+            for i, value in enumerate(row):
+                widths[i] = max(widths[i], len(value))
+
+        border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+        header = (
+            "| " + " | ".join(cols[i].ljust(widths[i]) for i in range(len(cols))) + " |"
+        )
+        lines = [
+            "| " + " | ".join(row[i].ljust(widths[i]) for i in range(len(cols))) + " |"
+            for row in body
+        ]
+        out = [border, header, border, *lines, border]
+        return (title + "\n" if title else "") + "\n".join(out)
+
+    @classmethod
+    def _ensure_logger_class(cls) -> None:
+        if cls._logger_class_configured:
+            return
+        logging.setLoggerClass(cls.PrettyLogger)
+        cls._logger_class_configured = True
+
+    @classmethod
+    def basicConfig(
+        cls,
+        *,
+        level: int | str = logging.INFO,
+        format: str = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt: str = "%Y-%m-%d %H:%M:%S",
+    ) -> None:
+        cls._ensure_logger_class()
+        logging.basicConfig(level=level, format=format, datefmt=datefmt)
+
+    @classmethod
+    def getLogger(cls, name: str | None = None) -> PrettyLogger:
+        cls._ensure_logger_class()
+        return logging.getLogger(name)  # type: ignore[return-value]
+
+    @classmethod
+    def table(
+        cls,
+        rows: Sequence[Mapping[str, Any]] | Sequence[Sequence[Any]],
+        *,
+        headers: Sequence[str] | None = None,
+        title: str | None = None,
+        level: int = logging.INFO,
+        name: str | None = None,
+    ) -> None:
+        cls.getLogger(name).table(rows, headers=headers, title=title, level=level)
 
 class CrosstabUtility:
     utility_name = "crosstab"

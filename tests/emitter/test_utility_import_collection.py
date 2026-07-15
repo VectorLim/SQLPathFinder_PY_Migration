@@ -15,11 +15,7 @@ from vg2c.resolver.models import ResolvedBlock
 
 def test_scan_imports_collects_external_and_filters_vg2c() -> None:
     csv_io_path = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "vg2c"
-        / "utilities"
-        / "csv_io.py"
+        Path(__file__).resolve().parents[2] / "src" / "vg2c" / "utilities" / "csv_io.py"
     )
 
     imports, deps, helpers = _scan_imports_and_dependencies(

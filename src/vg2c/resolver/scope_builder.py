@@ -99,9 +99,7 @@ def _parse_children(
 
         if token in _SCOPE_TOKENS:
             payload = _SCOPE_TOKENS[token].from_block(block)
-            subtree, next_i = payload.build_scope(
-                blocks, i, state, _parse_children
-            )
+            subtree, next_i = payload.build_scope(blocks, i, state, _parse_children)
             children.append(subtree)
             i = next_i
             continue
@@ -116,9 +114,7 @@ def _parse_children(
         if token in _ORPHAN_TOKENS:
             code, message, payload_cls = _ORPHAN_TOKENS[token]
             loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
-            log.error(
-                f"[{code}] {loc} (block {block.index}): {message}"
-            )
+            log.error(f"[{code}] {loc} (block {block.index}): {message}")
             children.append(_leaf_node(state, block.index, payload_cls()))
             i += 1
             continue

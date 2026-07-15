@@ -33,9 +33,7 @@ def _log_msg(
     return f"[{code}] {loc}{block_info}: {message}"
 
 
-def parse(
-    text: str | bytes, source: Path | None = None
-) -> list[ParsedBlock]:
+def parse(text: str | bytes, source: Path | None = None) -> list[ParsedBlock]:
     normalized = _normalize_input(text)
 
     blocks: list[ParsedBlock] = []

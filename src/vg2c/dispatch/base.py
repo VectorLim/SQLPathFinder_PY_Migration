@@ -100,9 +100,7 @@ class DialectHandler(ABC):
         raise NotImplementedError
 
     @classmethod
-    def build_reader_target(
-        cls, block: ResolvedBlock
-    ) -> ReaderTarget:
+    def build_reader_target(cls, block: ResolvedBlock) -> ReaderTarget:
         """Build a ReaderTarget from a resolved block."""
         opts = block.resolved_options.lookup
 

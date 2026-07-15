@@ -219,7 +219,10 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
 
     ordered_names = topological_sort(utilities, dependency_edges)
     if "logger" in ordered_names:
-        ordered_names = ["logger", *(name for name in ordered_names if name != "logger")]
+        ordered_names = [
+            "logger",
+            *(name for name in ordered_names if name != "logger"),
+        ]
     else:
         log.warning(
             "Logger utility not registered; generated script will not embed Logger class."
