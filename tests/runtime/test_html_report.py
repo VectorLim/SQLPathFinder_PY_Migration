@@ -58,11 +58,11 @@ class CtxWithCsvIO(MockCtx):
 def test_html_report_css_synthesis():
     report = HtmlReport()
     template = (
-        "Type<\\>Key<\\>COL1\n"
-        "TYPE<\\>CSS\n"
-        "CSS<\\>test_style.css\n"
-        "FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>font-size:12<\\>font-weight:bold\n"
-        "FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-width:1px\n"
+        "Type<\\\\>Key<\\\\>COL1\n"
+        "TYPE<\\\\>CSS\n"
+        "CSS<\\\\>test_style.css\n"
+        "FORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>font-size:12<\\\\>font-weight:bold\n"
+        "FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-width:1px\n"
     )
     report.run(template=template)
 
@@ -92,12 +92,12 @@ def test_html_report_defer_and_render(tmp_path, monkeypatch):
     report.defer(
         id="REPORT1",
         template=(
-            "TYPE<\\>HTML\n"
-            f"INPUT-FILE<\\>{csv_file}\n"
-            "COLUMN-DATA<\\><\\>col1<\\>ce%<\\>other\n"
-            "COLUMN-HEADERS<\\><\\>Col 1<\\>CE Ratio<\\>Other Col\n"
-            "COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left\n"
-            "AT-TOP-OF-REPORT<\\><\\>Test Top Header\n"
+            "TYPE<\\\\>HTML\n"
+            f"INPUT-FILE<\\\\>{csv_file}\n"
+            "COLUMN-DATA<\\\\><\\\\>col1<\\\\>ce%<\\\\>other\n"
+            "COLUMN-HEADERS<\\\\><\\\\>Col 1<\\\\>CE Ratio<\\\\>Other Col\n"
+            "COLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left\n"
+            "AT-TOP-OF-REPORT<\\\\><\\\\>Test Top Header\n"
         ),
     )
 
@@ -142,7 +142,7 @@ def test_html_report_layout_link(tmp_path, monkeypatch):
 
     # Defer an empty report for replacement
     report.deferred_reports["REPORT1"] = {
-        "template": "INPUT-FILE<\\>nonexistent.csv\nCOLUMN-DATA<\\><\\>col1\n"
+        "template": "INPUT-FILE<\\\\>nonexistent.csv\nCOLUMN-DATA<\\\\><\\\\>col1\n"
     }
 
     ctx = MockCtx()
@@ -180,7 +180,7 @@ def test_html_report_layout_email_fallback(tmp_path, monkeypatch):
     template = ":FILE:email:self\n" "HTM:REPORT1\n"
 
     report.deferred_reports["REPORT1"] = {
-        "template": "OUTPUT-FILE<\\>my_output.htm\nINPUT-FILE<\\>nonexistent.csv\nCOLUMN-DATA<\\><\\>col1\n"
+        "template": "OUTPUT-FILE<\\\\>my_output.htm\nINPUT-FILE<\\\\>nonexistent.csv\nCOLUMN-DATA<\\\\><\\\\>col1\n"
     }
 
     ctx = MockCtx()
@@ -197,7 +197,7 @@ def test_html_report_fallback_output_uses_cached_parsed_payload(tmp_path, monkey
     report.instance = "1001"
     report.defer(
         id="R1",
-        template="OUTPUT-FILE<\\>CaseSensitive.HTM\nINPUT-FILE<\\>missing.csv\nCOLUMN-DATA<\\><\\>col1\n",
+        template="OUTPUT-FILE<\\\\>CaseSensitive.HTM\nINPUT-FILE<\\\\>missing.csv\nCOLUMN-DATA<\\\\><\\\\>col1\n",
     )
 
     # If layout re-parses template text directly, fallback would become report.html.
@@ -222,9 +222,9 @@ def test_html_report_render_uses_ctx_csv_io_iter(tmp_path, monkeypatch):
     report.defer(
         id="RCSV",
         template=(
-            f"INPUT-FILE<\\>{csv_file}\n"
-            "COLUMN-DATA<\\><\\>col1<\\>col2\n"
-            "COLUMN-HEADERS<\\><\\>C1<\\>C2\n"
+            f"INPUT-FILE<\\\\>{csv_file}\n"
+            "COLUMN-DATA<\\\\><\\\\>col1<\\\\>col2\n"
+            "COLUMN-HEADERS<\\\\><\\\\>C1<\\\\>C2\n"
         ),
     )
 
@@ -243,7 +243,7 @@ def test_html_report_layout_prefers_ctx_write_file(tmp_path, monkeypatch):
 
     report = HtmlReport()
     report.deferred_reports["REPORT1"] = {
-        "template": "INPUT-FILE<\\>missing.csv\nCOLUMN-DATA<\\><\\>col1\n"
+        "template": "INPUT-FILE<\\\\>missing.csv\nCOLUMN-DATA<\\\\><\\\\>col1\n"
     }
 
     ctx = MockCtx()
