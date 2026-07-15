@@ -49,8 +49,8 @@ def _int_expr(expr: str) -> str:
 def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
     """Render a single condition operand as a Python expression string."""
     # Local import to avoid circular dependency at module load time.
-    from vg2c.emitter.utilities._emit_helpers import normalize_macro_name
-    from vg2c.emitter.utilities.macro_state import MacroState
+    from vg2c.utilities._emit_helpers import normalize_macro_name
+    from vg2c.utilities.macro_state import MacroState
 
     value = operand.strip()
 

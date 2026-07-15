@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c.emitter.utilities._topo_sort import topological_sort
+from vg2c.utilities._topo_sort import topological_sort
 
 
 def test_topological_sort_linear_chain() -> None:

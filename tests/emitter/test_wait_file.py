@@ -9,13 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
-from vg2c.emitter.utilities.wait_file import WaitFile
+from vg2c.utilities.wait_file import WaitFile
 from vg2c.kind import Kind
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _opts(utilities: str = "") -> SimpleNamespace:
     return SimpleNamespace(lookup={"UTILITIES": utilities} if utilities else {})
@@ -30,7 +30,7 @@ def _block(utilities: str, kind: Kind = Kind.WAIT_FILE) -> SimpleNamespace:
 
 
 FIXTURE_UTILITIES = (
-    r'@EXEDIR@\WaitFile.va'
+    r"@EXEDIR@\WaitFile.va"
     r' "\\kmatshfs.intel.com\kmatanalysis$\MAOATM\KuAT\TCB\TimeDelta.csv"'
     r' "30"'
 )
@@ -39,6 +39,7 @@ FIXTURE_UTILITIES = (
 # ---------------------------------------------------------------------------
 # check()
 # ---------------------------------------------------------------------------
+
 
 class TestCheck:
     def test_waitfile_va_detected(self):
@@ -67,6 +68,7 @@ class TestCheck:
 # ---------------------------------------------------------------------------
 # emit_block()
 # ---------------------------------------------------------------------------
+
 
 class TestEmitBlock:
     def test_fixture_block_emits_poll_call(self):
@@ -103,6 +105,7 @@ class TestEmitBlock:
 # poll() runtime behaviour
 # ---------------------------------------------------------------------------
 
+
 class TestPollRuntime:
     def test_returns_true_when_file_exists_immediately(self, tmp_path):
         target = tmp_path / "ready.csv"
@@ -121,7 +124,9 @@ class TestPollRuntime:
             if call_count == 1:
                 target.touch()
 
-        with patch("vg2c.emitter.utilities.wait_file.time.sleep", side_effect=_fake_sleep):
+        with patch(
+            "vg2c.emitter.utilities.wait_file.time.sleep", side_effect=_fake_sleep
+        ):
             result = WaitFile().poll(target, timeout=60, interval=1)
 
         assert result is True
@@ -139,7 +144,10 @@ class TestPollRuntime:
             return _start if _calls[0] <= 1 else _start + 9999
 
         with (
-            patch("vg2c.emitter.utilities.wait_file.time.monotonic", side_effect=_fast_monotonic),
+            patch(
+                "vg2c.emitter.utilities.wait_file.time.monotonic",
+                side_effect=_fast_monotonic,
+            ),
             patch("vg2c.emitter.utilities.wait_file.time.sleep"),
         ):
             result = WaitFile().poll(target, timeout=30, interval=1)
@@ -156,20 +164,24 @@ class TestPollRuntime:
 # Registration
 # ---------------------------------------------------------------------------
 
+
 def test_waitfile_registered_in_utility_spec():
-    from vg2c.emitter.utilities._base import UtilitySpec
+    from vg2c.utilities._base import UtilitySpec
+
     assert "wait_file" in UtilitySpec._registry
     assert UtilitySpec._registry["wait_file"] is WaitFile
 
 
 def test_waitfile_registered_as_handler_for_wait_file_kind():
-    from vg2c.emitter.utilities._base import UtilitySpec
+    from vg2c.utilities._base import UtilitySpec
+
     assert UtilitySpec._emit_handlers.get(Kind.WAIT_FILE) is WaitFile
 
 
 # ---------------------------------------------------------------------------
 # Fixture-backed emit check (lines 188-195 of TimeDelta.txt)
 # ---------------------------------------------------------------------------
+
 
 def test_fixture_block_expected_emit_output():
     """Validate exact emitted statement for the TimeDelta.txt Step 4 block."""

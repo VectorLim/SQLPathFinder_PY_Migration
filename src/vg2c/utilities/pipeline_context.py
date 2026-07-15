@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable, Any, ContextManager
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.utilities._base import UtilitySpec
 
 
 class PipelineContext(UtilitySpec):

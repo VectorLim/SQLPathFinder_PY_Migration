@@ -13,7 +13,6 @@ from vg2c.dataflow.models import (
     ProducerRecord,
     ScopeRelation,
 )
-from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -31,6 +30,9 @@ _SQL_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
+    # Lazy import to avoid circular dependency: dataflow→utilities→emitter→dispatch→dataflow
+    from vg2c.utilities.csv_io import CsvIO
+
     calls_by_block: dict[int, tuple[CsvIO.SqlGetCsvListCall, ...]] = {}
     for block in resolved.blocks:
         if block.kind not in _SQL_SCANNED_KINDS:

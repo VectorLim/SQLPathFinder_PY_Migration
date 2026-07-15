@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from vg2c.emitter.utilities.csv_io import CsvIO
-from vg2c.emitter.utilities._base import EmitterUtility
-from vg2c.emitter.utilities.crosstab import CrosstabUtility
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities._emit_helpers import (
+from vg2c.utilities.csv_io import CsvIO
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities.crosstab import CrosstabUtility
+from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import (
     resolve_output_path,
     strip_quotes,
 )
@@ -147,7 +147,7 @@ class SqliteEngine(EmitterUtility):
         if crosstab:
             kwargs["crosstab"] = crosstab
 
-        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        from vg2c.utilities.pipeline_context import PipelineContext
 
         stmt = PipelineContext.run_query.render(**kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"

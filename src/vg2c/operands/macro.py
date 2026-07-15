@@ -98,8 +98,8 @@ class StartMacro:
         children: tuple[ScopeNode, ...],
     ) -> None:
         """Emit a CSV-backed or static macro scope using a single context manager."""
-        from vg2c.emitter.utilities.csv_io import CsvIO
-        from vg2c.emitter.utilities.macro_state import MacroState
+        from vg2c.utilities.csv_io import CsvIO
+        from vg2c.utilities.macro_state import MacroState
 
         if self.csv_path:
             row_expr = CsvIO.single_row.render(repr(self.csv_path))

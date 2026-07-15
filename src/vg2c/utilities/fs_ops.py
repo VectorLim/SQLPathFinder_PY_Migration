@@ -6,9 +6,9 @@ import shutil
 from pathlib import Path
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import EmitterUtility
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities._emit_helpers import (
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import (
     resolve_path,
     resolve_output_path,
     split_utility_command,
@@ -50,7 +50,8 @@ class FileSystemOps(EmitterUtility):
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        from vg2c.emitter.utilities.pipeline_context import PipelineContext
+        from vg2c.utilities.pipeline_context import PipelineContext
+
         stmt = PipelineContext.write_file.render(
             path=repr(resolve_output_path(block)),
             template=repr(block.resolved_body),

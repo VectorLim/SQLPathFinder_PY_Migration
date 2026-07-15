@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from vg2c.emitter.utilities.mail import MailService
+from vg2c.utilities.mail import MailService
 
 
 class _FakeSMTP:

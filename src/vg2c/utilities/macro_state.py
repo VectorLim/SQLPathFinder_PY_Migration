@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Iterator, Protocol
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import EmitterUtility
-from vg2c.emitter.utilities._emit_helpers import (
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities._emit_helpers import (
     normalize_macro_name,
     resolve_path,
     strip_quotes,
@@ -80,7 +80,7 @@ class MacroState(EmitterUtility):
         csv_path_expr = cls.to_py_expr(payload.csv_path)
         set_name = payload.var_name.upper()
 
-        from vg2c.emitter.utilities.csv_io import CsvIO
+        from vg2c.utilities.csv_io import CsvIO
 
         row_count_call = CsvIO.row_count.render(csv_path_expr)
         stmt = cls.set_named.render(repr(set_name), f"str({row_count_call})")

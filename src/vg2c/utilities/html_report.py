@@ -7,14 +7,10 @@ import re
 from typing import Any
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import EmitterUtility
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities._emit_helpers import resolve_path
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import resolve_path
 from vg2c.kind import Kind
-
-
-
-
 
 
 class HtmlReport(EmitterUtility):
@@ -61,48 +57,48 @@ class HtmlReport(EmitterUtility):
     </body>
     </html>
     """
-    
+
     # ---------------------------------------------------------------------------
     # CSS rule definitions used by _build_css
     # ---------------------------------------------------------------------------
     _CSS_RULES: list[dict[str, Any]] = [
-    {
-        "name": "COLUMN-BORDER",
-        "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
-        "extras": [
-            "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
-            "  table.tblin \n{\n     caption-side:top;\n}",
-        ],
-        "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
-    },
-    {
-        "name": "Column-Headers",
-        "template": "th, #colhdr\n{{\n{decls}\n}}",
-        "defaults": [
-            ("padding-top", "     padding-top:5px;"),
-            ("padding-bottom", "     padding-bottom:4px;"),
-        ],
-    },
-    {
-        "name": "Column-Data",
-        "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
-        "extras": ["  caption {padding-top:5px;}"],
-    },
-    {"name": "Column-Alt-Row", "template": "td.alt\n{{\n{decls}\n}}"},
-    {"name": "At-Top-of-Report", "template": "p.at-top-of-report\n{{\n{decls}\n}}"},
-    {
-        "name": "JQX-All-IChart-Text",
-        "template": (
-            ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text,"
-            " .jqx-chart-axis-description, .jqx-chart-title-text,"
-            " .jqx-chart-title-description {{\n{decls}\n}}"
-        ),
-        "defaults": [("fill", "     fill:black;")],
-    },
-    {"name": "At-Top-of-Col1", "template": "p.at-top-of-col1\n{{\n{decls}\n}}"},
-    {"name": "At-Top-of-Col2", "template": "p.at-top-of-col2\n{{\n{decls}\n}}"},
-    {"name": "At-Top-of-Col3", "template": "p.at-top-of-col3\n{{\n{decls}\n}}"},
-]
+        {
+            "name": "COLUMN-BORDER",
+            "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
+            "extras": [
+                "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
+                "  table.tblin \n{\n     caption-side:top;\n}",
+            ],
+            "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
+        },
+        {
+            "name": "Column-Headers",
+            "template": "th, #colhdr\n{{\n{decls}\n}}",
+            "defaults": [
+                ("padding-top", "     padding-top:5px;"),
+                ("padding-bottom", "     padding-bottom:4px;"),
+            ],
+        },
+        {
+            "name": "Column-Data",
+            "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
+            "extras": ["  caption {padding-top:5px;}"],
+        },
+        {"name": "Column-Alt-Row", "template": "td.alt\n{{\n{decls}\n}}"},
+        {"name": "At-Top-of-Report", "template": "p.at-top-of-report\n{{\n{decls}\n}}"},
+        {
+            "name": "JQX-All-IChart-Text",
+            "template": (
+                ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text,"
+                " .jqx-chart-axis-description, .jqx-chart-title-text,"
+                " .jqx-chart-title-description {{\n{decls}\n}}"
+            ),
+            "defaults": [("fill", "     fill:black;")],
+        },
+        {"name": "At-Top-of-Col1", "template": "p.at-top-of-col1\n{{\n{decls}\n}}"},
+        {"name": "At-Top-of-Col2", "template": "p.at-top-of-col2\n{{\n{decls}\n}}"},
+        {"name": "At-Top-of-Col3", "template": "p.at-top-of-col3\n{{\n{decls}\n}}"},
+    ]
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -141,7 +137,15 @@ class HtmlReport(EmitterUtility):
             return [cls.run.render(**kw)]
 
         if report_type == "HTML-LAYOUT":
-            kw = _kwargs(["OUTLOOK", "INSTANCE", "JSON-ONLY", "CHART-INSTANCE", "APP_SERVER_DEFAULT"])
+            kw = _kwargs(
+                [
+                    "OUTLOOK",
+                    "INSTANCE",
+                    "JSON-ONLY",
+                    "CHART-INSTANCE",
+                    "APP_SERVER_DEFAULT",
+                ]
+            )
             kw["template"] = repr(block.resolved_body)
             return [cls.layout.render("ctx", **kw)]
 
@@ -175,7 +179,9 @@ class HtmlReport(EmitterUtility):
             if len(parts) < 2:
                 continue
             key = parts[0].upper()
-            val_list = [p for p in (parts[2:] if parts[1] == "" else parts[1:]) if p != ""]
+            val_list = [
+                p for p in (parts[2:] if parts[1] == "" else parts[1:]) if p != ""
+            ]
             if not val_list:
                 options[key] = ""
             elif len(val_list) == 1:
@@ -271,9 +277,11 @@ class HtmlReport(EmitterUtility):
 
         html_content = re.sub(
             r"HTM:([A-Za-z0-9_]+)",
-            lambda m: self._render_report(m.group(1), ctx)
-            if m.group(1) in self.deferred_reports
-            else m.group(0),
+            lambda m: (
+                self._render_report(m.group(1), ctx)
+                if m.group(1) in self.deferred_reports
+                else m.group(0)
+            ),
             html_content,
         )
 
@@ -285,7 +293,9 @@ class HtmlReport(EmitterUtility):
             )
         elif css_decl:
             if "</head>" in html_content:
-                html_content = html_content.replace("</head>", f"{css_decl}\n</head>", 1)
+                html_content = html_content.replace(
+                    "</head>", f"{css_decl}\n</head>", 1
+                )
             else:
                 html_content = f"{css_decl}\n{html_content}"
 
@@ -389,6 +399,7 @@ class HtmlReport(EmitterUtility):
                 for row in ctx.csv_io.iter(str(csv_path))
             ]
         import csv
+
         with csv_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             return [
                 {k.lower(): v for k, v in row.items() if k}
@@ -456,7 +467,9 @@ class HtmlReport(EmitterUtility):
         table_content = "\n".join(lines)
         top_report = options.get("AT-TOP-OF-REPORT")
         if top_report:
-            table_content = f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
+            table_content = (
+                f'<p class="at-top-of-report">\n{top_report}</p>\n' + table_content
+            )
         return table_content
 
     # ------------------------------------------------------------------
@@ -470,7 +483,12 @@ class HtmlReport(EmitterUtility):
         for report in self.deferred_reports.values():
             rows, _ = self._ensure_parsed_payload(report)
             for parts in rows:
-                if parts and parts[0].upper() == "OUTPUT-FILE" and len(parts) >= 2 and parts[1]:
+                if (
+                    parts
+                    and parts[0].upper() == "OUTPUT-FILE"
+                    and len(parts) >= 2
+                    and parts[1]
+                ):
                     fallback_name = parts[1]
                     break
             else:

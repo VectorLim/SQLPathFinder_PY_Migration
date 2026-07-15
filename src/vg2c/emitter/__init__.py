@@ -3,7 +3,7 @@ import inspect
 from vg2c import logger
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.models import EmittedScript, IndentWriter
-from vg2c.emitter.utilities import assemble_all_utilities
+from vg2c.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
 from vg2c import kind as kind_module
 
@@ -19,11 +19,12 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     Returns:
         An EmittedScript containing the generated Python source.
     """
-    # Walk the scope tree and emit code
-    functions, run_body = walk_and_emit(dispatched)
-
-    # Assemble embedded utility classes.
+    # Load/register utility classes first so UtilitySpec dispatch handlers exist
+    # before walk_and_emit() visits leaf blocks.
     utility_imports, utility_sources = assemble_all_utilities()
+
+    # Walk the scope tree and emit code.
+    functions, run_body = walk_and_emit(dispatched)
 
     # Get kind.py source (strip all imports)
     kind_source = "\n".join(

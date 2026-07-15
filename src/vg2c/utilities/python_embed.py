@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vg2c.emitter.utilities._base import EmitterUtility
+from vg2c.utilities._base import EmitterUtility
 from vg2c.kind import Kind
 
 

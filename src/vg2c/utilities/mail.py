@@ -27,9 +27,9 @@ import keyring
 
 from vg2c.logger import getLogger
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import EmitterUtility
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities._emit_helpers import (
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import (
     split_utility_command,
     strip_quotes,
 )

@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.emitter.utilities.crosstab import CrosstabUtility
+from vg2c.utilities.crosstab import CrosstabUtility
 from vg2c.kind import Kind
 
 

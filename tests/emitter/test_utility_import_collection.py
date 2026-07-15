@@ -3,11 +3,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from vg2c.emitter.utilities import (
+from vg2c.utilities import (
     _scan_imports_and_dependencies,
     assemble_all_utilities,
 )
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.utilities._base import UtilitySpec
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock

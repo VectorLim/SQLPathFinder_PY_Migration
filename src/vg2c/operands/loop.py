@@ -61,7 +61,9 @@ class RunLoop:
         )
 
         if end_token != "END-LOOP":
-            loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            loc = (
+                f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            )
             log.error(
                 f"[unclosed-loop] {loc} (block {start_block.index}): "
                 "Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF."
@@ -105,7 +107,7 @@ class RunLoop:
         children: tuple[ScopeNode, ...],
     ) -> None:
         """Emit a chunked for-loop over the input CSV."""
-        from vg2c.emitter.utilities.csv_io import CsvIO
+        from vg2c.utilities.csv_io import CsvIO
 
         chunks_call = CsvIO.iter_chunks.render(
             repr(self.input_csv_path),

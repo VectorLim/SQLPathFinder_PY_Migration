@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from vg2c.emitter.utilities.python_embed import PythonEmbed
-from vg2c.emitter.utilities._base import UtilitySpec
+from vg2c.utilities.python_embed import PythonEmbed
+from vg2c.utilities._base import UtilitySpec
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
@@ -37,12 +37,7 @@ def test_emit_block_embeds_python_body() -> None:
 
 
 def test_emit_block_preserves_multiline_indentation() -> None:
-    code = (
-        "for i in range(10):\n"
-        "    print(i)\n"
-        "    if i > 5:\n"
-        "        break"
-    )
+    code = "for i in range(10):\n" "    print(i)\n" "    if i > 5:\n" "        break"
     block = _make_block(7, Kind.PYTHON_EMBED, code, csv="loop.py")
     result = UtilitySpec.dispatch_and_emit(block)
 

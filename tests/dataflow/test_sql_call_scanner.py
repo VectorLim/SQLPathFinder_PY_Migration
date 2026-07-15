@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.emitter.utilities.csv_io import CsvIO
+from vg2c.utilities.csv_io import CsvIO
 
 
 def test_column_by_name_parsed_as_string() -> None:

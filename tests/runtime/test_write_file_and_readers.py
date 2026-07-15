@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities.pipeline_context import PipelineContext
+from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities.pipeline_context import PipelineContext
 
 PIPELINE_CONTEXT_SNIPPET = PipelineContext.get_source()
 
@@ -37,7 +37,8 @@ def test_substitute_vars_take_priority_over_macro():
 
 
 def test_fs_ops_write_file_auto_mkdir(tmp_path):
-    from vg2c.emitter.utilities.fs_ops import FileSystemOps
+    from vg2c.utilities.fs_ops import FileSystemOps
+
     out = str(tmp_path / "a" / "b" / "c.txt")
     fs = FileSystemOps()
     fs.write_file(out, "x")

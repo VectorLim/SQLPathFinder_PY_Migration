@@ -7,7 +7,7 @@ import re
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
-from vg2c.emitter.utilities.html_report import HtmlReport
+from vg2c.utilities.html_report import HtmlReport
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
 
@@ -32,7 +32,8 @@ class MockMacro:
         return val
 
     def resolve_file_path(self, raw_path: str) -> Path:
-        from vg2c.emitter.utilities._emit_helpers import resolve_path
+        from vg2c.utilities._emit_helpers import resolve_path
+
         return resolve_path(self.substitute(raw_path))
 
 

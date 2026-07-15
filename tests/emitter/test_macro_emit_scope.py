@@ -24,9 +24,7 @@ def test_emit_scope_uses_scoped_rows_for_csv_macros():
     payload.emit_scope(writer, lambda _node: writer.write("pass"), (_leaf(),))
 
     source = writer.source()
-    assert (
-        "with ctx.macro.scope(ctx.csv_io.single_row('configsets.csv')):" in source
-    )
+    assert "with ctx.macro.scope(ctx.csv_io.single_row('configsets.csv')):" in source
     assert "for _ in" not in source
     assert "with ctx.macro.scope(__row):" not in source
 

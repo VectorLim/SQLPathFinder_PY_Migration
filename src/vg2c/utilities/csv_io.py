@@ -11,8 +11,8 @@ from typing import Any, Iterator
 import pandas
 
 from vg2c.emitter.models import emittable
-from vg2c.emitter.utilities._base import UtilitySpec
-from vg2c.emitter.utilities._emit_helpers import resolve_path
+from vg2c.utilities._base import UtilitySpec
+from vg2c.utilities._emit_helpers import resolve_path
 
 
 class CsvIO(UtilitySpec):

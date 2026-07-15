@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.utilities.csv_io import CsvIO
+from vg2c.utilities.csv_io import CsvIO
 
 
 def test_write_and_iter(tmp_path):
@@ -71,8 +71,6 @@ def test_write_raw_string(tmp_path):
     out = str(tmp_path / "raw.txt")
     csv_io.write(out, "line1\nline2\n")
     assert Path(out).read_text(encoding="utf-8") == "line1\nline2\n"
-
-
 
 
 def test_auto_mkdir(tmp_path):
@@ -163,6 +161,7 @@ def test_write_dataframe_fills_missing_columns(tmp_path):
 
 def _write_csv(path: Path, rows: list[list]) -> None:
     import csv
+
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)

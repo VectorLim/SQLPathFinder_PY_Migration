@@ -12,22 +12,37 @@ import inspect
 import sys
 from pathlib import Path
 
-from vg2c.emitter.utilities._base import EmitterUtility, UtilitySpec
-from vg2c.emitter.utilities._topo_sort import topological_sort
-from vg2c.emitter.utilities.crosstab import CrosstabUtility
-from vg2c.emitter.utilities.csv_io import CsvIO
+from vg2c.utilities._base import EmitterUtility, UtilitySpec
+from vg2c.utilities._topo_sort import topological_sort
 
-# EmitterUtility subclasses — import order = classifier check order:
-from vg2c.emitter.utilities.html_report import HtmlReport
-from vg2c.emitter.utilities.python_embed import PythonEmbed
-from vg2c.emitter.utilities.fs_ops import FileSystemOps
-from vg2c.emitter.utilities.macro_state import MacroState
-from vg2c.emitter.utilities.external import ExternalProcess
-from vg2c.emitter.utilities.sqlite_engine import SqliteEngine
-from vg2c.emitter.utilities.generic import UnknownUtility
-from vg2c.emitter.utilities.mail import MailService
-from vg2c.emitter.utilities.pipeline_context import PipelineContext
-from vg2c.emitter.utilities.wait_file import WaitFile
+# Concrete utility classes are imported lazily in assemble_all_utilities()
+# to avoid circular imports (utilities→emitter→dispatch→dataflow loop).
+# Only base classes are imported here.
+
+_CONCRETE_UTILS_LOADED = False
+
+
+def ensure_utility_checks_loaded() -> None:
+    """Import concrete utility modules once to register check/emit handlers."""
+
+    global _CONCRETE_UTILS_LOADED
+    if _CONCRETE_UTILS_LOADED:
+        return
+
+    from vg2c.utilities.crosstab import CrosstabUtility  # noqa: F401
+    from vg2c.utilities.csv_io import CsvIO  # noqa: F401
+    from vg2c.utilities.html_report import HtmlReport  # noqa: F401
+    from vg2c.utilities.python_embed import PythonEmbed  # noqa: F401
+    from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
+    from vg2c.utilities.macro_state import MacroState  # noqa: F401
+    from vg2c.utilities.external import ExternalProcess  # noqa: F401
+    from vg2c.utilities.sqlite_engine import SqliteEngine  # noqa: F401
+    from vg2c.utilities.generic import UnknownUtility  # noqa: F401
+    from vg2c.utilities.mail import MailService  # noqa: F401
+    from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401
+    from vg2c.utilities.wait_file import WaitFile  # noqa: F401
+
+    _CONCRETE_UTILS_LOADED = True
 
 
 def _alias_text(alias: ast.alias) -> str:
@@ -58,7 +73,7 @@ def _scan_imports_and_dependencies(
                     continue
 
                 if alias.name.startswith("vg2c."):
-                    if alias.name.startswith("vg2c.emitter.utilities._"):
+                    if alias.name.startswith("vg2c.utilities._"):
                         helper_modules.add(alias.name)
                     continue
 
@@ -72,7 +87,7 @@ def _scan_imports_and_dependencies(
                 if dep_name is not None and dep_name != current_name:
                     dependencies.add(dep_name)
 
-            if module.startswith("vg2c.emitter.utilities._"):
+            if module.startswith("vg2c.utilities._"):
                 helper_modules.add(module)
 
             if node.level != 0:
@@ -148,6 +163,13 @@ def _render_grouped_imports(import_lines: set[str]) -> list[str]:
 
 
 def assemble_all_utilities() -> tuple[list[str], list[str]]:
+    """Assemble all registered utilities for code emission.
+
+    Lazy-imports concrete utilities to avoid circular dependencies.
+    Called after emitter.models is available.
+    """
+    ensure_utility_checks_loaded()
+
     utilities = dict(UtilitySpec._registry)
     module_to_name = {cls.__module__: name for name, cls in utilities.items()}
 
@@ -200,6 +222,7 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
 
 
 __all__ = [
+    "ensure_utility_checks_loaded",
     "assemble_all_utilities",
     "EmitterUtility",
     "CrosstabUtility",

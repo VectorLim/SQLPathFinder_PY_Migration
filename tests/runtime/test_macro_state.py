@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.emitter.utilities.crosstab import CrosstabUtility
-from vg2c.emitter.utilities.macro_state import MacroState
+from vg2c.utilities.crosstab import CrosstabUtility
+from vg2c.utilities.macro_state import MacroState
 
 
 def test_set_and_get_named():

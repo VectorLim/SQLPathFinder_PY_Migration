@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vg2c import logger
-from vg2c.emitter.utilities import EmitterUtility
+from vg2c.utilities import EmitterUtility, ensure_utility_checks_loaded
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
@@ -15,6 +15,7 @@ log = logger.getLogger("vg2c.frontend.classifier")
 def classify(
     blocks: list[ParsedBlock],
 ) -> list[ClassifiedBlock]:
+    ensure_utility_checks_loaded()
     classified: list[ClassifiedBlock] = []
 
     for block in blocks:
