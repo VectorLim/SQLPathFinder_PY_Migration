@@ -8,7 +8,11 @@ version = "0.1.0"
 description = "Stepwise VG2 compiler migration"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "datasyncx==1.1.6",
+    "keyring==25.7.0",
+    "pandas==3.0.3"
+]
 
 [project.scripts]
 vg2c = "vg2c.cli:main"
@@ -29,3 +33,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyrefly]
+search-path = ["src"]
