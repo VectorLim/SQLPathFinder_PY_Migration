@@ -52,7 +52,9 @@ class StartMacro:
         )
 
         if end_token != "END-MACRO":
-            loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            loc = (
+                f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            )
             log.error(
                 f"[unclosed-macro] {loc} (block {start_block.index}): "
                 "Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF."

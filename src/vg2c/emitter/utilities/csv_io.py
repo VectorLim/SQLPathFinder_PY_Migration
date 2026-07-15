@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Iterator
 
 import pandas
@@ -17,6 +19,129 @@ class CsvIO(UtilitySpec):
     """Read and write CSV files relative to the runtime script directory."""
 
     utility_name = "csv_io"
+
+    _CALL_RE = re.compile(r"\bSQL_Get_CSV_List\s*\(", re.IGNORECASE)
+
+    # Detects an ``(<col> In `` wrap immediately preceding the call site -- an
+    # unmatched ``(`` that historically relied on macro expansion to close it.
+    _CALL_SITE_WRAP_RE = re.compile(
+        r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE
+    )
+
+    @dataclass(frozen=True, slots=True)
+    class SqlGetCsvListCall:
+        """A well-formed ``SQL_Get_CSV_List(csv_path, column_ref, lead_in)`` call."""
+
+        start: int
+        end: int
+        csv_path: str
+        column_ref: int | str
+        lead_in: str
+        needs_closing_paren: bool
+
+    @staticmethod
+    def scan_sql_get_csv_list_calls(body: str) -> list[CsvIO.SqlGetCsvListCall]:
+        """Return every well-formed ``SQL_Get_CSV_List(...)`` call in source order.
+
+        Malformed calls (wrong arg count, unbalanced parens) are skipped.
+        """
+        calls: list[CsvIO.SqlGetCsvListCall] = []
+        cursor = 0
+        while True:
+            match = CsvIO._CALL_RE.search(body, cursor)
+            if match is None:
+                break
+            open_paren = body.find("(", match.start())
+            if open_paren == -1:
+                break
+            close_paren = CsvIO._find_matching_paren(body, open_paren)
+            if close_paren == -1:
+                break
+            args = CsvIO._split_args(body[open_paren + 1 : close_paren])
+            next_cursor = close_paren + 1
+            if len(args) == 3:
+                calls.append(
+                    CsvIO.SqlGetCsvListCall(
+                        start=match.start(),
+                        end=next_cursor,
+                        csv_path=CsvIO._unquote(args[0]),
+                        column_ref=CsvIO._parse_column_ref(args[1]),
+                        lead_in=CsvIO._unquote(args[2]),
+                        needs_closing_paren=bool(
+                            CsvIO._CALL_SITE_WRAP_RE.search(body[: match.start()])
+                        ),
+                    )
+                )
+            cursor = next_cursor
+        return calls
+
+    @staticmethod
+    def _find_matching_paren(text: str, open_idx: int) -> int:
+        depth = 0
+        in_single = False
+        in_double = False
+        for i in range(open_idx, len(text)):
+            ch = text[i]
+            prev = text[i - 1] if i > 0 else ""
+            if ch == "'" and prev != "\\" and not in_double:
+                in_single = not in_single
+            elif ch == '"' and prev != "\\" and not in_single:
+                in_double = not in_double
+            elif not in_single and not in_double:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        return i
+        return -1
+
+    @staticmethod
+    def _split_args(args_text: str) -> list[str]:
+        args: list[str] = []
+        current: list[str] = []
+        depth = 0
+        in_single = False
+        in_double = False
+        for i, ch in enumerate(args_text):
+            prev = args_text[i - 1] if i > 0 else ""
+            if ch == "'" and prev != "\\" and not in_double:
+                in_single = not in_single
+                current.append(ch)
+                continue
+            if ch == '"' and prev != "\\" and not in_single:
+                in_double = not in_double
+                current.append(ch)
+                continue
+            if not in_single and not in_double:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")" and depth > 0:
+                    depth -= 1
+                elif ch == "," and depth == 0:
+                    args.append("".join(current).strip())
+                    current = []
+                    continue
+            current.append(ch)
+        if current:
+            args.append("".join(current).strip())
+        return args
+
+    @staticmethod
+    def _unquote(value: str) -> str:
+        stripped = value.strip()
+        if (
+            len(stripped) >= 2
+            and stripped[0] == stripped[-1]
+            and stripped[0] in {"'", '"'}
+        ):
+            return stripped[1:-1]
+        return stripped
+
+    @staticmethod
+    def _parse_column_ref(raw: str) -> int | str:
+        value = CsvIO._unquote(raw)
+        return int(value) if value.isdigit() else value
 
     # ------------------------------------------------------------------
     # Read

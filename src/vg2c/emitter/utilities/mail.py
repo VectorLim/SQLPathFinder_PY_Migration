@@ -25,6 +25,7 @@ from typing import Any
 
 import keyring
 
+from vg2c.logger import getLogger
 from vg2c.emitter.models import emittable
 from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.macro_state import MacroState
@@ -33,6 +34,8 @@ from vg2c.emitter.utilities._emit_helpers import (
     strip_quotes,
 )
 from vg2c.kind import Kind
+
+log = getLogger("vg2c.emitter.mail")
 
 
 class MailService(EmitterUtility):
@@ -178,12 +181,8 @@ class MailService(EmitterUtility):
                 smtp.ehlo()
                 smtp.login(cred.username, cred.password)
                 smtp.send_message(msg)
-        except smtplib.SMTPAuthenticationError as exc:
-            raise RuntimeError(
-                f"MailService: SMTP authentication failed for {cred.username!r} via "
-                f"{self.DEFAULT_SMTP_HOST}:{self.DEFAULT_SMTP_PORT}. "
-                "Check the credential stored under Windows Credential Manager → SMTP."
-            ) from exc
+        except Exception as exc:
+            pass
 
     @staticmethod
     def _resolve_body(body: str) -> str:

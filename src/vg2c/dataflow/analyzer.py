@@ -13,10 +13,7 @@ from vg2c.dataflow.models import (
     ProducerRecord,
     ScopeRelation,
 )
-from vg2c.dataflow.sql_call_scanner import (
-    SqlGetCsvListCall,
-    scan_sql_get_csv_list_calls,
-)
+from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.kind import Kind
 from vg2c.resolver.models import (
     ResolvedBlock,
@@ -34,11 +31,11 @@ _SQL_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]] = {}
+    calls_by_block: dict[int, tuple[CsvIO.SqlGetCsvListCall, ...]] = {}
     for block in resolved.blocks:
         if block.kind not in _SQL_SCANNED_KINDS:
             continue
-        calls = tuple(scan_sql_get_csv_list_calls(block.resolved_body))
+        calls = tuple(CsvIO.scan_sql_get_csv_list_calls(block.resolved_body))
         if calls:
             calls_by_block[block.index] = calls
 
@@ -155,7 +152,7 @@ def _collect_external_utility_candidates(
 
 def _collect_consumers(
     blocks: list[ResolvedBlock],
-    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]],
+    calls_by_block: dict[int, tuple[CsvIO.SqlGetCsvListCall, ...]],
 ) -> list[ConsumerRecord]:
     consumers: list[ConsumerRecord] = []
     for block in blocks:
@@ -268,8 +265,6 @@ def _classify_edge_relation(
         relation = "producer-in-other-branch"
 
     return relation, consumer.block_index > producer.block_index
-
-
 
 
 def _normalize_csv_path(value: str) -> str:

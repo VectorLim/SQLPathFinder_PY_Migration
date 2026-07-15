@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from vg2c.dataflow.sql_call_scanner import scan_sql_get_csv_list_calls
 from vg2c.emitter.utilities.csv_io import CsvIO
 from vg2c.emitter.utilities._base import EmitterUtility
 from vg2c.emitter.utilities.crosstab import CrosstabUtility
@@ -63,7 +62,7 @@ class SqliteEngine(EmitterUtility):
         if sql is None:
             sql = block.resolved_body
 
-        calls = scan_sql_get_csv_list_calls(sql)
+        calls = CsvIO.scan_sql_get_csv_list_calls(sql)
         if not calls:
             return SqliteEngine._format_sql_literal(sql)
 
@@ -149,6 +148,7 @@ class SqliteEngine(EmitterUtility):
             kwargs["crosstab"] = crosstab
 
         from vg2c.emitter.utilities.pipeline_context import PipelineContext
+
         stmt = PipelineContext.run_query.render(**kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]
