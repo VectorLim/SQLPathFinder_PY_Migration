@@ -6,7 +6,9 @@ directory) and lets the user choose which ones to translate to Python.
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -62,13 +64,12 @@ def _pick_files(txt_files: list[Path]) -> list[Path]:
 
 
 _HELP = """\
-VG2 Converter (vg2c)
+vg2c — interactive batch translator
 
 Usage:
-  vg2c [input_dir] [output_dir] [--help]
-
-  Scans input_dir for .txt files, prompts you to select which ones to
-  translate, and writes the resulting .py files to output_dir.
+  vg2c [input_dir] [output_dir]   translate .txt files
+  vg2c --build                    compile vg2c into a standalone .exe
+  vg2c --help                     show this message
 
 Arguments:
   input_dir   Directory containing .txt source files.
@@ -85,12 +86,56 @@ Selection syntax:
 
 Output:
   A summary of successes and failures is printed at the end.
+
+Build:
+  --build installs PyInstaller if needed and produces dist/vg2c.exe.
+  Run from the project root so PyInstaller can see the installed package.
 """
+
+
+def cmd_build() -> None:
+    """Compile vg2c into a standalone .exe using PyInstaller."""
+    # Install PyInstaller on demand
+    try:
+        import PyInstaller  # noqa: F401  # type: ignore[import]
+    except ImportError:
+        print("PyInstaller not found — installing...")
+        subprocess.check_call(
+            [
+                sys.executable, "-m", "pip", "install", "pyinstaller",
+                "-i", "https://pypi.org/simple",
+            ]
+        )
+
+    # Locate vg2c/cli.py via importlib so absolute path is always correct
+    spec = importlib.util.find_spec("vg2c.cli")
+    if spec is None or spec.origin is None:
+        print("ERROR: could not locate vg2c.cli — is the package installed?", file=sys.stderr)
+        sys.exit(1)
+
+    cli_path = Path(spec.origin)
+    print(f"Building from: {cli_path}")
+
+    subprocess.check_call(
+        [
+            sys.executable, "-m", "PyInstaller",
+            "--onefile",
+            "--name", "vg2c",
+            str(cli_path),
+        ]
+    )
+
+    exe = Path("dist") / "vg2c.exe"
+    print(f"\nBuild complete. Executable: {exe.resolve()}")
 
 
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help", "-help"):
         print(_HELP)
+        sys.exit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--build":
+        cmd_build()
         sys.exit(0)
 
     Logger.basicConfig(level=Logger.INFO)
