@@ -66,7 +66,7 @@ def _build_payload_lookup(
     mapping: dict[int, MacroControlPayload | None] = {}
 
     def visit(node: ScopeNode) -> None:
-        # Leaf payloads include ROWS-IN-FILE and orphan control tokens.
+        # Leaf payloads include orphan control tokens (END-MACRO, END-IF, etc.).
         if (
             node.kind == "leaf"
             and node.block_index is not None

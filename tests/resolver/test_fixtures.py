@@ -61,7 +61,7 @@ def test_actual_script_scope_and_macro_signals(FIXTURES: Path) -> None:
     assert max_scope_depth(program.scope_tree) >= 4
 
     start_macro_blocks = blocks_for_token(program.blocks, "START-MACRO")
-    rows_in_file_blocks = blocks_for_token(program.blocks, "ROWS-IN-FILE")
+    rows_in_file_blocks = [b for b in program.blocks if b.kind == Kind.ROWS_IN_FILE]
     if_then_blocks = blocks_for_token(program.blocks, "IF-THEN")
     else_blocks = blocks_for_token(program.blocks, "ELSE")
 
@@ -71,6 +71,5 @@ def test_actual_script_scope_and_macro_signals(FIXTURES: Path) -> None:
     assert else_blocks
 
     assert start_macro_blocks[0].control_payload is not None
-    assert rows_in_file_blocks[0].control_payload is not None
     assert if_then_blocks[0].control_payload is not None
     assert else_blocks[0].control_payload is not None

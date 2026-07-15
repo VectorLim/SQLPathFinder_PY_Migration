@@ -19,7 +19,6 @@ from vg2c.resolver.models import (
     ResolvedProgram,
 )
 from vg2c.operands import (
-    RowsInFile,
     RunLoop,
     ScopeNode,
     StartMacro,
@@ -179,9 +178,11 @@ def _collect_consumers(
         if isinstance(payload, StartMacro) and payload.csv_path:
             payload_csv_path = payload.csv_path
             consumer_kind = "start-macro"
-        elif isinstance(payload, RowsInFile) and payload.csv_path:
-            payload_csv_path = payload.csv_path
-            consumer_kind = "rows-in-file"
+        elif block.kind == Kind.ROWS_IN_FILE:
+            args = re.findall(r'"([^"]*)"', block.resolved_options.lookup.get("UTILITIES", ""))
+            if args:
+                payload_csv_path = args[0]
+                consumer_kind = "rows-in-file"
         elif isinstance(payload, RunLoop) and payload.input_csv_path:
             payload_csv_path = payload.input_csv_path
             consumer_kind = "run-loop"

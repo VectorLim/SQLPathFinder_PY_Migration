@@ -15,7 +15,6 @@ from vg2c.utilities._emit_helpers import (
     strip_quotes,
 )
 from vg2c.kind import Kind
-from vg2c.operands import RowsInFile
 
 
 class MacroState(EmitterUtility):
@@ -26,12 +25,16 @@ class MacroState(EmitterUtility):
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+    _MACRO_CONTROL_TOKEN_RE = re.compile(
+        r"^\s*\{(START-MACRO|END-MACRO|IF-THEN|ELSE|END-IF|RUN-LOOP|END-LOOP)\}",
+        re.IGNORECASE,
+    )
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
-        utilities = options.lookup.get("UTILITIES")
-        if utilities and utilities.lstrip().startswith("{"):
-            return Kind.MACRO_CONTROL, "/UTILITIES starts with {"
+        utilities = options.lookup.get("UTILITIES", "")
+        if MacroState._MACRO_CONTROL_TOKEN_RE.match(utilities):
+            return Kind.MACRO_CONTROL, "/UTILITIES is a macro control token"
         return None
 
     @classmethod
@@ -73,18 +76,7 @@ class MacroState(EmitterUtility):
 
     @classmethod
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
-        payload = block.control_payload
-        if not isinstance(payload, RowsInFile):
-            return "macro_control", ["pass"]
-
-        csv_path_expr = cls.to_py_expr(payload.csv_path)
-        set_name = payload.var_name.upper()
-
-        from vg2c.utilities.csv_io import CsvIO
-
-        row_count_call = CsvIO.row_count.render(csv_path_expr)
-        stmt = cls.set_named.render(repr(set_name), f"str({row_count_call})")
-        return "rows_in_file", [stmt]
+        return "macro_control", ["pass"]
 
     def __init__(self) -> None:
         self._stack: list[dict[str, str]] = [{}]

@@ -16,6 +16,7 @@ class Kind(str, Enum):
     HTML_REPORT = "HTML_REPORT"
     EMAIL = "EMAIL"
     MACRO_CONTROL = "MACRO_CONTROL"
+    ROWS_IN_FILE = "ROWS_IN_FILE"
     UNKNOWN = "UNKNOWN"
 
     @property

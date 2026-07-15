@@ -12,7 +12,6 @@ from vg2c.operands import (
     EndLoop,
     EndMacro,
     IfThen,
-    RowsInFile,
     RunLoop,
     ScopeNode,
     StartMacro,
@@ -102,13 +101,6 @@ def _parse_children(
             subtree, next_i = payload.build_scope(blocks, i, state, _parse_children)
             children.append(subtree)
             i = next_i
-            continue
-
-        if token == "ROWS-IN-FILE":
-            children.append(
-                _leaf_node(state, block.index, RowsInFile.from_block(block))
-            )
-            i += 1
             continue
 
         if token in _ORPHAN_TOKENS:

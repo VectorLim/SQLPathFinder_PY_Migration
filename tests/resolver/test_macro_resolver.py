@@ -19,7 +19,6 @@ from vg2c.operands import (
     EndLoop,
     EndMacro,
     IfThen,
-    RowsInFile,
     RunLoop,
     StartMacro,
 )
@@ -72,11 +71,6 @@ def _resolve_blocks(blocks: list[ClassifiedBlock]):
                 "op2": "NE",
                 "rhs2": "D",
             },
-        ),
-        (
-            '{ROWS-IN-FILE} "f.csv" "COUNT" "Y"',
-            RowsInFile,
-            {"csv_path": "f.csv", "var_name": "COUNT", "prompt_off": True},
         ),
         (
             '{RUN-LOOP} "in.csv" "chunk.csv" "123" "N"',
@@ -179,20 +173,21 @@ def test_missing_quoted_args_use_defaults() -> None:
 
 
 def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -> None:
+    import re
     classified = parse_classify_fixture(FIXTURES, "actual_script.txt")
     tree = build_scope_tree(classified)
     resolved = resolve_macros(classified, tree)
 
     start_macro = blocks_for_token(resolved, "START-MACRO")[0].control_payload
-    rows_in_file = blocks_for_token(resolved, "ROWS-IN-FILE")[0].control_payload
+    rows_in_file_block = next(b for b in resolved if b.kind is Kind.ROWS_IN_FILE)
     if_then = blocks_for_token(resolved, "IF-THEN")[0].control_payload
 
     assert isinstance(start_macro, StartMacro)
     assert start_macro.csv_path == "macrotmp.csv"
 
-    assert isinstance(rows_in_file, RowsInFile)
-    assert rows_in_file.csv_path == "ICMPCS_config.csv"
-    assert rows_in_file.var_name == "CONFIG"
+    rif_args = re.findall(r'"([^"]*)"', rows_in_file_block.resolved_options.lookup.get("UTILITIES", ""))
+    assert rif_args[0] == "ICMPCS_config.csv"
+    assert rif_args[1] == "CONFIG"
 
     assert isinstance(if_then, IfThen)
     assert if_then.lhs == "CONFIG"
