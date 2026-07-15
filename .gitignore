@@ -33,6 +33,7 @@ MANIFEST
 # ---------------------------
 *.manifest
 *.spec
+*.exe
 
 # ---------------------------
 # Installer logs
