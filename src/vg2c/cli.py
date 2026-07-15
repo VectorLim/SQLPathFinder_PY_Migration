@@ -62,7 +62,7 @@ def _pick_files(txt_files: list[Path]) -> list[Path]:
 
 
 _HELP = """\
-vg2c — interactive batch translator
+VG2 Converter (vg2c)
 
 Usage:
   vg2c [input_dir] [output_dir] [--help]
