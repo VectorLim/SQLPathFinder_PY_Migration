@@ -2,7 +2,8 @@ import inspect
 
 from vg2c import logger
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.models import EmittedScript, IndentWriter
+from vg2c.emitter.indent_writer import IndentWriter
+from vg2c.emitter.models import EmittedScript
 from vg2c.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
 from vg2c import kind as kind_module

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.emitter.models import IndentWriter
+from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.operands.base import ScopeNode
 from vg2c.operands.macro import StartMacro
 

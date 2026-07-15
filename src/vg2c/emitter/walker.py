@@ -4,7 +4,7 @@ from typing import Any
 
 from vg2c import logger
 from vg2c.dispatch.models import DispatchedProgram
-from vg2c.emitter.models import IndentWriter
+from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.utilities._base import UtilitySpec
 from vg2c.resolver.models import ResolvedBlock
 from vg2c.operands import ScopeNode

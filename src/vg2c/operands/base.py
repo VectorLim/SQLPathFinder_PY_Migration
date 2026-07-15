@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Literal, Mapping
 from vg2c.frontend.models import ClassifiedBlock, SourceSpan
 
 if TYPE_CHECKING:
-    from vg2c.emitter.models import IndentWriter
+    from vg2c.emitter.indent_writer import IndentWriter
     from vg2c.operands import MacroControlPayload
 
 

@@ -16,7 +16,7 @@ from vg2c.operands.base import (
 )
 
 if TYPE_CHECKING:
-    from vg2c.emitter.models import IndentWriter
+    from vg2c.emitter.indent_writer import IndentWriter
 
 log = logger.getLogger("vg2c.operands.macro")
 
