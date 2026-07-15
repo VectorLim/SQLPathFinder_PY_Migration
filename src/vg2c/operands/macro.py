@@ -97,28 +97,22 @@ class StartMacro:
         walk: Callable[[ScopeNode], None],
         children: tuple[ScopeNode, ...],
     ) -> None:
-        """Emit a row-iterating macro (for-loop + scope) or a static-vars macro (with-block)."""
+        """Emit a CSV-backed or static macro scope using a single context manager."""
         from vg2c.emitter.utilities.csv_io import CsvIO
         from vg2c.emitter.utilities.macro_state import MacroState
 
-        row_iter = bool(self.csv_path)
-        if row_iter:
-            iter_call = CsvIO.iter.render(repr(self.csv_path))
-            scope_call = MacroState.scope.render("__row")
-            writer.write(f"for __row in {iter_call}:")
-            writer.push_indent()
-            writer.write(f"with {scope_call}:")
-            writer.push_indent()
+        if self.csv_path:
+            row_expr = CsvIO.single_row.render(repr(self.csv_path))
+            scope_call = MacroState.scope.render(row_expr)
         else:
             scope_call = MacroState.scope.render()
-            writer.write(f"with {scope_call}:")
-            writer.push_indent()
+
+        writer.write(f"with {scope_call}:")
+        writer.push_indent()
 
         for child in children:
             walk(child)
 
-        if row_iter:
-            writer.pop_indent()
         writer.pop_indent()
 
 

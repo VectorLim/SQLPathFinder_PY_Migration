@@ -155,6 +155,18 @@ class CsvIO(UtilitySpec):
             reader = csv.DictReader(fh)
             yield from reader
 
+    @emittable
+    def single_row(self, name: str) -> dict[str, str]:
+        """Return exactly one data row from *name*; raise on 0 or >1 rows."""
+        rows = self.iter(name)
+        first = next(rows, None)
+        if first is None:
+            raise ValueError(f"CSV '{name}' must contain exactly 1 data row; found 0")
+        second = next(rows, None)
+        if second is not None:
+            raise ValueError(f"CSV '{name}' must contain exactly 1 data row; found >1")
+        return first
+
     def _read_column(self, path: str, column_ref: int | str) -> list[str]:
         """Read a column from a CSV file."""
         rows: list[str] = []

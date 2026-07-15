@@ -32,6 +32,33 @@ def test_row_count_missing_file():
     assert csv_io.row_count("nonexistent_file.csv") == 0
 
 
+def test_single_row_returns_only_data_row(tmp_path):
+    csv_io = CsvIO()
+    out = str(tmp_path / "one.csv")
+    csv_io.write(out, [{"a": "1", "b": "2"}])
+
+    row = csv_io.single_row(out)
+    assert row == {"a": "1", "b": "2"}
+
+
+def test_single_row_raises_on_zero_rows(tmp_path):
+    csv_io = CsvIO()
+    out = str(tmp_path / "zero.csv")
+    csv_io.write(out, [], header=["a", "b"])
+
+    with pytest.raises(ValueError, match="exactly 1 data row; found 0"):
+        csv_io.single_row(out)
+
+
+def test_single_row_raises_on_multiple_rows(tmp_path):
+    csv_io = CsvIO()
+    out = str(tmp_path / "many.csv")
+    csv_io.write(out, [{"a": "1"}, {"a": "2"}])
+
+    with pytest.raises(ValueError, match="exactly 1 data row; found >1"):
+        csv_io.single_row(out)
+
+
 def test_write_empty_list(tmp_path):
     csv_io = CsvIO()
     out = str(tmp_path / "empty.csv")
