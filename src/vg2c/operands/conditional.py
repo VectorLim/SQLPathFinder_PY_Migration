@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
 
 from vg2c.operands.base import (
@@ -20,7 +20,7 @@ from vg2c.operands.base import (
 if TYPE_CHECKING:
     from vg2c.emitter.indent_writer import IndentWriter
 
-log = logger.getLogger("vg2c.operands.conditional")
+log = Logger.getLogger("vg2c.operands.conditional")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +48,7 @@ class IfThen:
         lhs2 = args[4] if len(args) > 4 and args[4] else None
         op2 = args[5].upper() if len(args) > 5 and args[5] else None
         rhs2 = args[6] if len(args) > 6 and args[6] else None
-        return cls(
-            lhs=lhs, op=op, rhs=rhs, conj=conj, lhs2=lhs2, op2=op2, rhs2=rhs2
-        )
+        return cls(lhs=lhs, op=op, rhs=rhs, conj=conj, lhs2=lhs2, op2=op2, rhs2=rhs2)
 
     def build_scope(
         self,
@@ -116,7 +114,9 @@ class IfThen:
             end_index = blocks[i].index
             next_i = i + 1
         else:
-            loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            loc = (
+                f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+            )
             log.error(
                 f"[unclosed-if] {loc} (block {start_block.index}): "
                 "Found {IF-THEN} without a matching {END-IF}; implicitly closed at EOF."

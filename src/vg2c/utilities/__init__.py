@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+import logging
 import sys
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from vg2c.utilities._topo_sort import topological_sort
 # Only base classes are imported here.
 
 _CONCRETE_UTILS_LOADED = False
+log = logging.getLogger("vg2c.utilities")
 
 
 def ensure_utility_checks_loaded() -> None:
@@ -29,6 +31,7 @@ def ensure_utility_checks_loaded() -> None:
     if _CONCRETE_UTILS_LOADED:
         return
 
+    from vg2c.logger import Logger  # noqa: F401
     from vg2c.utilities.crosstab import CrosstabUtility  # noqa: F401
     from vg2c.utilities.csv_io import CsvIO  # noqa: F401
     from vg2c.utilities.html_report import HtmlReport  # noqa: F401
@@ -43,6 +46,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.wait_file import WaitFile  # noqa: F401
 
     _CONCRETE_UTILS_LOADED = True
+    log.debug("Loaded concrete utility modules for check/emit registration.")
 
 
 def _alias_text(alias: ast.alias) -> str:
@@ -214,6 +218,13 @@ def assemble_all_utilities() -> tuple[list[str], list[str]]:
     ]
 
     ordered_names = topological_sort(utilities, dependency_edges)
+    if "logger" in ordered_names:
+        ordered_names = ["logger", *(name for name in ordered_names if name != "logger")]
+    else:
+        log.warning(
+            "Logger utility not registered; generated script will not embed Logger class."
+        )
+
     sources = helper_sources + [utilities[name].get_source() for name in ordered_names]
     external_imports.update(helper_imports)
     imports = _render_grouped_imports(external_imports)

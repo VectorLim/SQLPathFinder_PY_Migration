@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
 from vg2c.kind import Kind
 from vg2c.operands import (
@@ -18,7 +18,7 @@ from vg2c.operands import (
     StartMacro,
 )
 
-log = logger.getLogger("vg2c.resolver.scope_builder")
+log = Logger.getLogger("vg2c.resolver.scope_builder")
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 

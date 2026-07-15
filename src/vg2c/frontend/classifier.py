@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.utilities import EmitterUtility, ensure_utility_checks_loaded
 from vg2c.frontend.models import (
     BlockOptions,
@@ -9,7 +9,7 @@ from vg2c.frontend.models import (
 )
 from vg2c.kind import Kind
 
-log = logger.getLogger("vg2c.frontend.classifier")
+log = Logger.getLogger("vg2c.frontend.classifier")
 
 
 def classify(

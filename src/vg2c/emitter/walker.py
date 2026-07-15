@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.utilities._base import UtilitySpec
@@ -11,7 +11,7 @@ from vg2c.operands import ScopeNode
 
 __all__ = ["walk_and_emit"]
 
-log = logger.getLogger("vg2c.emitter.walker")
+log = Logger.getLogger("vg2c.emitter.walker")
 
 
 def walk_and_emit(

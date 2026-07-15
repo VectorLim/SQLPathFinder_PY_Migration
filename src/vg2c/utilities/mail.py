@@ -25,7 +25,7 @@ from typing import Any
 
 import keyring
 
-from vg2c.logger import getLogger
+from vg2c.logger import Logger
 from vg2c.emitter.models import emittable
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities.macro_state import MacroState
@@ -35,7 +35,7 @@ from vg2c.utilities._emit_helpers import (
 )
 from vg2c.kind import Kind
 
-log = getLogger("vg2c.emitter.mail")
+log = Logger.getLogger("vg2c.emitter.mail")
 
 
 class MailService(EmitterUtility):

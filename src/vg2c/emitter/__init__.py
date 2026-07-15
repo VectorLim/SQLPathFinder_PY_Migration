@@ -1,6 +1,6 @@
 import inspect
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import EmittedScript
@@ -8,7 +8,7 @@ from vg2c.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
 from vg2c import kind as kind_module
 
-log = logger.getLogger("vg2c.emitter")
+log = Logger.getLogger("vg2c.emitter")
 
 
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
@@ -23,9 +23,15 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     # Load/register utility classes first so UtilitySpec dispatch handlers exist
     # before walk_and_emit() visits leaf blocks.
     utility_imports, utility_sources = assemble_all_utilities()
+    log.debug(
+        "Assembled %d utility sources and %d utility imports.",
+        len(utility_sources),
+        len(utility_imports),
+    )
 
     # Walk the scope tree and emit code.
     functions, run_body = walk_and_emit(dispatched)
+    log.debug("Walker emitted %d helper functions.", len(functions))
 
     # Get kind.py source (strip all imports)
     kind_source = "\n".join(

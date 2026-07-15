@@ -3,12 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.dispatch.models import ReaderTarget
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
 
-log = logger.getLogger("vg2c.dispatch.base")
+log = Logger.getLogger("vg2c.dispatch.base")
 
 
 class DialectHandler(ABC):

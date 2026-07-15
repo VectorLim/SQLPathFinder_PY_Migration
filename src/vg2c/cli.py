@@ -11,7 +11,7 @@ import logging
 import sys
 from pathlib import Path
 
-from vg2c import logger
+from vg2c.logger import Logger
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
@@ -31,11 +31,11 @@ class ErrorDetectingHandler(logging.Handler):
 
 def cmd_translate(args: argparse.Namespace) -> int:
     # Initialize basic logging
-    logger.basicConfig(level=logger.INFO)
+    Logger.basicConfig(level=Logger.INFO)
 
     # Attach error detector if strict mode is active
     error_detector = ErrorDetectingHandler()
-    vg2c_logger = logger.getLogger()
+    vg2c_logger = Logger.getLogger()
     if args.strict:
         vg2c_logger.addHandler(error_detector)
 

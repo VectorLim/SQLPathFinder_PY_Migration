@@ -18,7 +18,6 @@ def test_scan_imports_collects_external_and_filters_vg2c() -> None:
         Path(__file__).resolve().parents[2]
         / "src"
         / "vg2c"
-        / "emitter"
         / "utilities"
         / "csv_io.py"
     )
@@ -30,7 +29,7 @@ def test_scan_imports_collects_external_and_filters_vg2c() -> None:
     )
 
     assert deps == set()
-    assert "vg2c.emitter.utilities._base" in helpers
+    assert "vg2c.utilities._base" in helpers
     assert "import csv" in imports
     assert "from pathlib import Path" in imports
     assert "from typing import Any, Iterator" in imports
