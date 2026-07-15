@@ -174,6 +174,7 @@ def test_missing_quoted_args_use_defaults() -> None:
 
 def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -> None:
     import re
+
     classified = parse_classify_fixture(FIXTURES, "actual_script.txt")
     tree = build_scope_tree(classified)
     resolved = resolve_macros(classified, tree)
@@ -185,7 +186,9 @@ def test_actual_script_fixture_first_occurrence_payload_values(FIXTURES: Path) -
     assert isinstance(start_macro, StartMacro)
     assert start_macro.csv_path == "macrotmp.csv"
 
-    rif_args = re.findall(r'"([^"]*)"', rows_in_file_block.resolved_options.lookup.get("UTILITIES", ""))
+    rif_args = re.findall(
+        r'"([^"]*)"', rows_in_file_block.resolved_options.lookup.get("UTILITIES", "")
+    )
     assert rif_args[0] == "ICMPCS_config.csv"
     assert rif_args[1] == "CONFIG"
 

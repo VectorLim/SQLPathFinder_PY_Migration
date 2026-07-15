@@ -118,7 +118,9 @@ def test_unclosed_openers_emit_errors(
 
 def test_rows_in_file_stays_leaf() -> None:
     blocks = [
-        _block(0, Kind.ROWS_IN_FILE, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}),
+        _block(
+            0, Kind.ROWS_IN_FILE, {"UTILITIES": '{ROWS-IN-FILE} "a.csv" "COUNT" "N"'}
+        ),
         _block(1, Kind.EXTERNAL_RUN, {"UTILITIES": "after.bat"}),
     ]
     root = build_scope_tree(blocks)
