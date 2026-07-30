@@ -7,18 +7,29 @@ name = "vg2c"
 version = "0.1.0"
 description = "Stepwise VG2 compiler migration"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
-    "datasyncx==1.1.6",
+    "datasyncx",
     "keyring==25.7.0",
-    "pandas==3.0.3"
+    "pandas==3.0.3",
 ]
 
 [project.scripts]
 vg2c = "vg2c.cli:main"
 
+[tool.uv.sources]
+datasyncx = { git = "https://mfg-github.mfg.intel.com/intel-manufacturing/applications.manufacturing.analytics.atm.datasyncx", tag = "1.1.6" }
+
+[[tool.uv.index]]
+name = "tmg"
+url = "https://tmg-repo.mfg.intel.com/pypi-s3-prod/simple/"
+default = true
+
+[tool.uv]
+system-certs = true
+
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
