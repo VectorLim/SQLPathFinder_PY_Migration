@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import keyring
-
 from vg2c.logger import Logger
 from vg2c.emitter.models import emittable
 from vg2c.utilities._base import EmitterUtility
@@ -43,7 +42,6 @@ class MailService(EmitterUtility):
 
     utility_name = "email"
     handles = (Kind.EMAIL,)
-
     KEYRING_SERVICE = "SMTP"
     DEFAULT_SMTP_HOST = "smtpauth.intel.com"
     DEFAULT_SMTP_PORT = 587
