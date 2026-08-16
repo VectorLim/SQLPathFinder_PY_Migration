@@ -8,15 +8,12 @@ from vg2c import CompilationResult
 from vg2c.kind import Kind
 from vg2c.operands import ScopeNode as CompilerScopeNode
 from vg2c_ui.domain.models import (
-    CsvArtifactNode,
+    CsvArtifact,
     Diagnostic,
-    Position,
     ScopeNode,
     SourceSpan,
     StepNode,
     WorkflowDocument,
-    WorkflowEdge,
-    WorkflowLayout,
     WorkflowSidecar,
 )
 from vg2c_ui.services.python_document import parse_generated_python
@@ -31,6 +28,11 @@ def build_workflow(
     generated_python: str,
     sidecar: WorkflowSidecar | None = None,
 ) -> WorkflowDocument:
+    """Project compiler output into the script-editor document model.
+
+    The UI model deliberately contains semantic hierarchy and data-flow metadata,
+    but no canvas coordinates, graph edges, or other presentation state.
+    """
     parsed = parse_generated_python(generated_python)
     catalog = UtilityCatalog()
     source_hash = _hash(result.input_path.read_bytes())
@@ -39,7 +41,7 @@ def build_workflow(
     block_to_step: dict[int, str] = {}
     steps: list[StepNode] = []
 
-    parent_by_scope, scope_by_id, depth_by_scope = _scope_indexes(result.scope_tree)
+    parent_by_scope, scope_by_id = _scope_indexes(result.scope_tree)
     leaf_parent = {
         node.block_index: parent_by_scope.get(node.scope_id)
         for node in scope_by_id.values()
@@ -60,6 +62,9 @@ def build_workflow(
     outputs_by_block: dict[int, set[str]] = defaultdict(set)
     for producer in result.analyzed.producers:
         outputs_by_block[producer.block_index].add(producer.csv_path)
+    for edge in result.dataflow_edges:
+        if edge.producer is not None:
+            outputs_by_block[edge.producer.block_index].add(edge.producer.csv_path)
     for consumer in result.analyzed.consumers:
         inputs_by_block[consumer.block_index].add(consumer.csv_path)
 
@@ -77,10 +82,7 @@ def build_workflow(
             function.parameters[0].call_target if function.parameters else None,
             block.kind,
         )
-        read_only = (
-            block.kind in {Kind.PYTHON_EMBED, Kind.UNKNOWN}
-            or primary.utility.fallback
-        )
+        read_only = block.kind in {Kind.PYTHON_EMBED, Kind.UNKNOWN} or primary.utility.fallback
         parameters = []
         for parsed_parameter in function.parameters:
             method = catalog.resolve(parsed_parameter.call_target, block.kind)
@@ -113,8 +115,7 @@ def build_workflow(
                 description=(
                     function.description
                     if function.description != "No description provided"
-                    else primary.utility.method_description
-                    or primary.utility.description
+                    else primary.utility.method_description or primary.utility.description
                 ),
                 parameters=parameters,
                 csv_inputs=sorted(inputs_by_block[block.index]),
@@ -129,8 +130,7 @@ def build_workflow(
         )
 
     scopes = _build_scopes(result.scope_tree, parent_by_scope)
-    control_edges = _build_control_edges(result.scope_tree, block_to_step)
-    data_edges, artifacts = _build_data_edges(result, block_to_step)
+    artifacts = _build_artifacts(result, block_to_step)
     diagnostics = [
         Diagnostic(
             level=_diagnostic_level(item.level),
@@ -155,7 +155,7 @@ def build_workflow(
                 Diagnostic(
                     level="warning",
                     code="csv-input-missing-producer",
-                    message=f"{edge.csv_path} has no producer in this workflow.",
+                    message=f"{edge.csv_path} has no producer in this script.",
                     node_id=node_id,
                 )
             )
@@ -176,10 +176,7 @@ def build_workflow(
             Diagnostic(
                 level="warning",
                 code="output-changed",
-                message=(
-                    "Generated Python changed since the UI sidecar was saved; "
-                    "layout was retained."
-                ),
+                message="Generated Python changed since the UI state was saved.",
             )
         )
     if sidecar and sidecar.source_hash != source_hash:
@@ -188,15 +185,12 @@ def build_workflow(
                 level="warning",
                 code="source-changed",
                 message=(
-                    "VG2 source changed since the UI sidecar was saved; "
+                    "VG2 source changed since the UI state was saved; "
                     "unresolved overrides were not applied."
                 ),
             )
         )
 
-    layout = sidecar.layout if sidecar else _initial_layout(
-        steps, scopes, artifacts, depth_by_scope
-    )
     return WorkflowDocument(
         id=document_id,
         source_path=str(result.input_path),
@@ -207,29 +201,24 @@ def build_workflow(
         steps=sorted(steps, key=lambda item: item.block_index),
         scopes=scopes,
         artifacts=artifacts,
-        control_edges=control_edges,
-        data_edges=data_edges,
         diagnostics=diagnostics,
-        layout=layout,
         overrides=sidecar.overrides if sidecar else [],
     )
 
 
 def _scope_indexes(
     root: CompilerScopeNode,
-) -> tuple[dict[int, int | None], dict[int, CompilerScopeNode], dict[int, int]]:
+) -> tuple[dict[int, int | None], dict[int, CompilerScopeNode]]:
     parent_by_scope: dict[int, int | None] = {}
     scope_by_id: dict[int, CompilerScopeNode] = {}
-    depth_by_scope: dict[int, int] = {}
-    stack = [(root, None, 0)]
+    stack = [(root, None)]
     while stack:
-        node, parent, depth = stack.pop()
+        node, parent = stack.pop()
         parent_by_scope[node.scope_id] = parent
         scope_by_id[node.scope_id] = node
-        depth_by_scope[node.scope_id] = depth
         for child in reversed(node.children):
-            stack.append((child, node.scope_id, depth + 1))
-    return parent_by_scope, scope_by_id, depth_by_scope
+            stack.append((child, node.scope_id))
+    return parent_by_scope, scope_by_id
 
 
 def _scope_ui_id(
@@ -250,7 +239,7 @@ def _build_scopes(
         "loop": ("loop", "Loop"),
         "macro": ("loop", "Macro rows"),
     }
-    _, scope_by_id, _ = _scope_indexes(root)
+    _, scope_by_id = _scope_indexes(root)
     scopes: list[ScopeNode] = []
     for scope in scope_by_id.values():
         if scope.kind not in mapped:
@@ -270,144 +259,59 @@ def _build_scopes(
     return sorted(scopes, key=lambda item: (item.start_index, item.id))
 
 
-def _build_control_edges(
-    root: CompilerScopeNode, block_to_step: dict[int, str]
-) -> list[WorkflowEdge]:
-    edges: list[WorkflowEdge] = []
-
-    def entry(node: CompilerScopeNode) -> str | None:
-        if node.kind == "leaf":
-            return block_to_step.get(node.block_index or -1)
-        if node.kind == "program":
-            return next((value for child in node.children if (value := entry(child))), None)
-        return f"scope-{node.scope_id}"
-
-    def exits(node: CompilerScopeNode) -> list[str]:
-        if node.kind == "leaf":
-            item = block_to_step.get(node.block_index or -1)
-            return [item] if item else []
-        if node.kind == "if":
-            result: list[str] = []
-            for child in node.children:
-                result.extend(exits(child))
-            return result or [f"scope-{node.scope_id}"]
-        if node.kind in {"loop", "macro"}:
-            return [f"scope-{node.scope_id}"]
-        return exits(node.children[-1]) if node.children else [f"scope-{node.scope_id}"]
-
-    def add(source: str, target: str, label: str | None = None) -> None:
-        edge_id = f"control-{len(edges)}"
-        edges.append(
-            WorkflowEdge(id=edge_id, source=source, target=target, kind="control", label=label)
-        )
-
-    def visit(node: CompilerScopeNode) -> None:
-        visible_parent = None if node.kind == "program" else f"scope-{node.scope_id}"
-        if visible_parent:
-            for child in node.children:
-                target = entry(child)
-                if target:
-                    label = (
-                        "True"
-                        if child.kind == "if-branch"
-                        else "False"
-                        if child.kind == "else-branch"
-                        else None
-                    )
-                    add(visible_parent, target, label)
-        if node.kind != "if":
-            for previous, current in zip(node.children, node.children[1:], strict=False):
-                target = entry(current)
-                if target:
-                    for source in exits(previous):
-                        add(source, target)
-        for child in node.children:
-            visit(child)
-        if node.kind in {"loop", "macro"} and node.children:
-            for source in exits(node.children[-1]):
-                if source != visible_parent:
-                    add(source, visible_parent or "", "repeat")
-
-    visit(root)
-    unique: dict[tuple[str, str, str | None], WorkflowEdge] = {}
-    for edge in edges:
-        if edge.source and edge.target and edge.source != edge.target:
-            unique.setdefault((edge.source, edge.target, edge.label), edge)
-    return [
-        edge.model_copy(update={"id": f"control-{i}"})
-        for i, edge in enumerate(unique.values())
-    ]
-
-
-def _build_data_edges(
+def _build_artifacts(
     result: CompilationResult, block_to_step: dict[int, str]
-) -> tuple[list[WorkflowEdge], list[CsvArtifactNode]]:
-    artifacts: dict[str, CsvArtifactNode] = {}
-    edges: list[WorkflowEdge] = []
-    for index, edge in enumerate(result.dataflow_edges):
-        artifact_id = _stable_id("csv", edge.csv_path)
-        artifacts.setdefault(
-            artifact_id,
-            CsvArtifactNode(
-                id=artifact_id,
-                path=edge.csv_path,
-                label=Path(edge.csv_path).name,
-                conditional=edge.producer.is_conditional if edge.producer else False,
-                in_loop=edge.producer.is_in_loop if edge.producer else False,
-            ),
-        )
-        consumer_id = block_to_step.get(edge.consumer.block_index)
-        if consumer_id is None:
-            continue
-        producer_id = (
-            block_to_step.get(edge.producer.block_index) if edge.producer is not None else None
-        )
-        if producer_id:
-            edges.append(
-                WorkflowEdge(
-                    id=f"data-{index}-producer",
-                    source=producer_id,
-                    target=artifact_id,
-                    kind="data",
-                    label=edge.csv_path,
-                    dashed=True,
-                    valid=edge.order_ok,
-                    scope_relation=edge.scope_relation,
-                )
+) -> list[CsvArtifact]:
+    """Build compact file metadata without constructing diagram edges."""
+    producers_by_path: dict[str, list] = defaultdict(list)
+    producer_keys: set[tuple[int, str]] = set()
+    for producer in result.analyzed.producers:
+        key = (producer.block_index, producer.csv_path)
+        if key not in producer_keys:
+            producers_by_path[producer.csv_path].append(producer)
+            producer_keys.add(key)
+
+    consumers_by_path: dict[str, list] = defaultdict(list)
+    for consumer in result.analyzed.consumers:
+        consumers_by_path[consumer.csv_path].append(consumer)
+
+    validity_by_path: dict[str, list[bool]] = defaultdict(list)
+    for edge in result.dataflow_edges:
+        validity_by_path[edge.csv_path].append(edge.order_ok)
+        if edge.producer is not None:
+            key = (edge.producer.block_index, edge.producer.csv_path)
+            if key not in producer_keys:
+                producers_by_path[edge.producer.csv_path].append(edge.producer)
+                producer_keys.add(key)
+
+    paths = sorted({*producers_by_path.keys(), *consumers_by_path.keys()})
+    artifacts: list[CsvArtifact] = []
+    for path in paths:
+        producers = sorted(producers_by_path.get(path, []), key=lambda item: item.block_index)
+        consumers = sorted(consumers_by_path.get(path, ()), key=lambda item: item.block_index)
+        producer_ids = [
+            step_id
+            for producer in producers
+            if (step_id := block_to_step.get(producer.block_index)) is not None
+        ]
+        consumer_ids = [
+            step_id
+            for consumer in consumers
+            if (step_id := block_to_step.get(consumer.block_index)) is not None
+        ]
+        artifacts.append(
+            CsvArtifact(
+                id=_stable_id("csv", path),
+                path=path,
+                label=Path(path).name,
+                conditional=any(item.is_conditional for item in producers),
+                in_loop=any(item.is_in_loop for item in producers),
+                producer_step_ids=list(dict.fromkeys(producer_ids)),
+                consumer_step_ids=list(dict.fromkeys(consumer_ids)),
+                order_valid=all(validity_by_path[path]) if validity_by_path[path] else True,
             )
-        edges.append(
-            WorkflowEdge(
-                id=f"data-{index}-consumer",
-                source=artifact_id,
-                target=consumer_id,
-                kind="data",
-                label=edge.csv_path,
-                dashed=True,
-                valid=edge.order_ok,
-                scope_relation=edge.scope_relation,
-            )
         )
-    return edges, sorted(artifacts.values(), key=lambda item: item.path)
-
-
-def _initial_layout(
-    steps: list[StepNode],
-    scopes: list[ScopeNode],
-    artifacts: list[CsvArtifactNode],
-    depth_by_scope: dict[int, int],
-) -> WorkflowLayout:
-    positions: dict[str, Position] = {}
-    def order(item: StepNode | ScopeNode) -> tuple[int, str]:
-        return (item.block_index if isinstance(item, StepNode) else item.start_index, item.id)
-
-    ordered = sorted([*steps, *scopes], key=order)
-    for row, item in enumerate(ordered):
-        parent = item.parent_scope_id
-        depth = depth_by_scope.get(int(parent.split("-")[-1]), 0) if parent else 0
-        positions[item.id] = Position(x=80 + depth * 260, y=60 + row * 150)
-    for row, artifact in enumerate(artifacts):
-        positions[artifact.id] = Position(x=-260, y=60 + row * 120)
-    return WorkflowLayout(positions=positions)
+    return artifacts
 
 
 def _stable_id(prefix: str, value: str) -> str:

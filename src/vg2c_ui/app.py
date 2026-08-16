@@ -10,7 +10,7 @@ from vg2c_ui.services import DocumentStore
 
 
 def create_app(workspace: Path | None = None) -> FastAPI:
-    app = FastAPI(title="VG2 Visual Editor", version="1")
+    app = FastAPI(title="VG2 Script Editor", version="1")
     app.state.document_store = DocumentStore(workspace or Path.cwd())
     app.include_router(commands_router)
     app.include_router(documents_router)

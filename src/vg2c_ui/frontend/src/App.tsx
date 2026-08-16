@@ -1,17 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  MiniMap,
-  ReactFlow,
-  ReactFlowProvider,
-  applyNodeChanges,
-  type Edge,
-  type NodeChange,
-  type ReactFlowInstance,
-  type Viewport,
-} from '@xyflow/react'
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import {
   ApiError,
@@ -19,20 +6,18 @@ import {
   openWorkflow,
   previewCommands,
   previewCsv,
-  saveLayout,
   translateBatch,
 } from './api'
-import { editValue, emptyEdits, redo, undo, type EditState } from './editState'
+import { ContextSidebar } from './ContextSidebar'
 import {
-  ancestorScopeIds,
-  highlightRelated,
-  labelFor,
-  projectGraph,
-  toGraph,
-  type FlowNode,
-  type ScopeSummary,
-} from './graph'
-import { Inspector } from './Inspector'
+  declaredHeadersForPath,
+  deriveFileFlow,
+  headerCacheKey,
+  type HeaderInfo,
+} from './dataFlow'
+import { editValue, emptyEdits, redo, undo, type EditState } from './editState'
+import { baseName } from './operationLabels'
+import { ancestorScopeIds, ScriptTree } from './ScriptTree'
 import type {
   CommandBatch,
   CommandPreview,
@@ -40,19 +25,12 @@ import type {
   Diagnostic,
   ParameterDescriptor,
   WorkflowDocument,
-  WorkflowNode as WorkflowNodeModel,
 } from './types'
-import { WorkflowEdge } from './WorkflowEdge'
-import { WorkflowNavigator } from './WorkflowNavigator'
-import { WorkflowNode } from './WorkflowNode'
 
-type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'saved' | 'conflict' | 'error'
+type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'conflict' | 'error'
 
 interface TabState {
   document: WorkflowDocument
-  nodes: FlowNode[]
-  edges: Edge[]
-  viewport: Viewport
   selectedId: string | null
   status: TabStatus
   edits: EditState
@@ -61,23 +39,19 @@ interface TabState {
   expandedScopeIds: Set<string>
 }
 
-const nodeTypes = { workflow: WorkflowNode }
-const edgeTypes = { workflow: WorkflowEdge }
-
 function createTab(document: WorkflowDocument, previous?: TabState): TabState {
-  const graph = toGraph(document)
-  const positions = new Map(previous?.nodes.map((node) => [node.id, node.position]))
+  const itemIds = new Set([...document.steps, ...document.scopes].map((item) => item.id))
+  const scopeIds = new Set(document.scopes.map((scope) => scope.id))
   return {
     document,
-    nodes: graph.nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position })),
-    edges: graph.edges,
-    viewport: previous?.viewport ?? document.layout.viewport,
-    selectedId: previous?.selectedId ?? null,
+    selectedId: previous?.selectedId && itemIds.has(previous.selectedId) ? previous.selectedId : null,
     status: 'ready',
     edits: emptyEdits(),
     preview: null,
     csv: null,
-    expandedScopeIds: previous?.expandedScopeIds ?? new Set(),
+    expandedScopeIds: new Set(
+      [...(previous?.expandedScopeIds ?? [])].filter((id) => scopeIds.has(id)),
+    ),
   }
 }
 
@@ -90,7 +64,7 @@ function withEdits(tab: TabState, edits: EditState): TabState {
   }
 }
 
-function Editor() {
+export function App() {
   const [tabs, setTabs] = useState<TabState[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [sourceText, setSourceText] = useState('')
@@ -98,34 +72,11 @@ function Editor() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Enter one VG2 source path per line.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<Diagnostic[]>([])
-  const [flow, setFlow] = useState<ReactFlowInstance<FlowNode, Edge> | null>(null)
+  const [contextOpen, setContextOpen] = useState(false)
+  const [headerCache, setHeaderCache] = useState<Record<string, HeaderInfo>>({})
 
   const active = tabs.find((tab) => tab.document.id === activeId) ?? null
-  const graph = useMemo(() => {
-    if (!active) return { nodes: [], edges: [] }
-    const projected = projectGraph(
-      active.document,
-      active.nodes,
-      active.edges,
-      active.expandedScopeIds,
-      active.selectedId,
-    )
-    const highlighted = highlightRelated(projected.nodes, projected.edges, active.selectedId)
-    const query = search.trim().toLocaleLowerCase()
-    return {
-      nodes: highlighted.nodes.map((node) => ({
-        ...node,
-        hidden: Boolean(query) && !labelFor(node.data.item).toLocaleLowerCase().includes(query),
-      })),
-      edges: highlighted.edges,
-    }
-  }, [active, search])
-  const selectedNode = graph.nodes.find((node) => node.id === active?.selectedId)
-  const selected = selectedNode?.data.item ?? (active
-    ? [...active.document.steps, ...active.document.scopes, ...active.document.artifacts]
-        .find((item) => item.id === active.selectedId) ?? null
-    : null)
-  const selectedSummary = selectedNode?.data.summary as ScopeSummary | undefined
+  const documents = tabs.map((tab) => tab.document)
 
   function updateActive(update: (tab: TabState) => TabState) {
     setTabs((current) => current.map((tab) => tab.document.id === activeId ? update(tab) : tab))
@@ -138,22 +89,20 @@ function Editor() {
   }
 
   async function translate(paths?: string[]) {
-    const sourcePaths = paths ?? sourceText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+    const sourcePaths = paths ?? parseSourcePaths(sourceText)
     if (!sourcePaths.length) return
     setBusy(true)
     setMessage('Translating…')
     try {
       const response = await translateBatch(sourcePaths)
       setBatchDiagnostics(response.diagnostics)
-      setTabs((current) => {
-        const byId = new Map(current.map((tab) => [tab.document.id, tab]))
-        for (const document of response.documents) byId.set(document.id, createTab(document, byId.get(document.id)))
-        return [...byId.values()]
-      })
+      setTabs((current) => mergeDocuments(current, response.documents))
       if (response.documents.length) {
         setActiveId(response.documents[0].id)
-        setMessage(`${response.documents.length} workflow${response.documents.length === 1 ? '' : 's'} ready`)
-      } else setMessage('No workflows were translated.')
+        setMessage(`${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.`)
+      } else {
+        setMessage('No scripts were translated.')
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Translation failed')
     } finally {
@@ -162,21 +111,15 @@ function Editor() {
   }
 
   async function openExisting() {
-    const sourcePaths = sourceText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+    const sourcePaths = parseSourcePaths(sourceText)
     if (!sourcePaths.length) return
     setBusy(true)
-    setMessage('Opening generated workflows…')
+    setMessage('Opening generated scripts…')
     try {
-      const documents = await Promise.all(sourcePaths.map((path) => openWorkflow(path)))
-      setTabs((current) => {
-        const byId = new Map(current.map((tab) => [tab.document.id, tab]))
-        for (const document of documents) {
-          byId.set(document.id, createTab(document, byId.get(document.id)))
-        }
-        return [...byId.values()]
-      })
-      setActiveId(documents[0]?.id ?? null)
-      setMessage(`${documents.length} saved workflow${documents.length === 1 ? '' : 's'} opened`)
+      const documentsToOpen = await Promise.all(sourcePaths.map((path) => openWorkflow(path)))
+      setTabs((current) => mergeDocuments(current, documentsToOpen))
+      setActiveId(documentsToOpen[0]?.id ?? null)
+      setMessage(`${documentsToOpen.length} script${documentsToOpen.length === 1 ? '' : 's'} opened.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Open failed')
     } finally {
@@ -185,12 +128,7 @@ function Editor() {
   }
 
   function editParameter(parameter: ParameterDescriptor, value: unknown) {
-    updateActive((tab) => ({
-      ...tab,
-      edits: editValue(tab.edits, parameter.id, value),
-      preview: null,
-      status: 'dirty',
-    }))
+    updateActive((tab) => withEdits(tab, editValue(tab.edits, parameter.id, value)))
   }
 
   function commandBatch(tab: TabState): CommandBatch | null {
@@ -252,7 +190,12 @@ function Editor() {
     try {
       const csv = await previewCsv(active.document.source_path, path)
       updateActive((tab) => ({ ...tab, csv }))
+      setHeaderCache((current) => ({
+        ...current,
+        [headerCacheKey(active.document, path)]: { columns: csv.columns, source: 'detected' },
+      }))
     } catch (error) {
+      updateActive((tab) => ({ ...tab, csv: null }))
       setMessage(error instanceof Error ? error.message : 'CSV preview failed')
     }
   }
@@ -260,10 +203,7 @@ function Editor() {
   async function reloadActive() {
     if (!active) return
     try {
-      const document = await openWorkflow(
-        active.document.source_path,
-        active.document.output_path,
-      )
+      const document = await openWorkflow(active.document.source_path, active.document.output_path)
       replaceDocument(document)
       setMessage('Reloaded the externally changed document; local edits were cleared.')
     } catch (error) {
@@ -271,41 +211,7 @@ function Editor() {
     }
   }
 
-  async function persistLayout() {
-    if (!active) return
-    updateActive((tab) => ({ ...tab, status: 'saving' }))
-    const positions = Object.fromEntries(active.nodes.map((node) => [node.id, node.position]))
-    try {
-      await saveLayout(active.document, positions, active.viewport)
-      updateActive((tab) => ({
-        ...tab,
-        status: Object.keys(tab.edits.values).length ? 'dirty' : 'saved',
-      }))
-    } catch (error) {
-      handleMutationError(error)
-    }
-  }
-
-  useEffect(() => {
-    function shortcut(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey)) return
-      if (event.key.toLowerCase() === 'z') {
-        event.preventDefault()
-        updateActive((tab) => withEdits(tab, event.shiftKey ? redo(tab.edits) : undo(tab.edits)))
-      } else if (event.key.toLowerCase() === 'y') {
-        event.preventDefault()
-        updateActive((tab) => withEdits(tab, redo(tab.edits)))
-      } else if (event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        if (active?.preview?.valid) void persistEdits()
-        else void validateEdits()
-      }
-    }
-    window.addEventListener('keydown', shortcut)
-    return () => window.removeEventListener('keydown', shortcut)
-  })
-
-  function selectNode(id: string) {
+  function selectItem(id: string) {
     updateActive((tab) => ({
       ...tab,
       selectedId: id,
@@ -315,10 +221,6 @@ function Editor() {
         ...ancestorScopeIds(tab.document, id),
       ]),
     }))
-    window.setTimeout(
-      () => flow?.fitView({ nodes: [{ id }], duration: 220, padding: 0.8 }),
-      0,
-    )
   }
 
   function toggleScope(id: string, expanded?: boolean) {
@@ -329,100 +231,293 @@ function Editor() {
       else next.delete(id)
       return { ...tab, selectedId: id, csv: null, expandedScopeIds: next }
     })
-    window.setTimeout(() => flow?.fitView({ duration: 220, padding: 0.22 }), 0)
+  }
+
+  function setAllScopes(expanded: boolean) {
+    updateActive((tab) => ({
+      ...tab,
+      expandedScopeIds: expanded
+        ? new Set(tab.document.scopes.map((scope) => scope.id))
+        : new Set(),
+    }))
   }
 
   function closeTab(id: string) {
     setTabs((current) => {
+      const index = current.findIndex((tab) => tab.document.id === id)
       const remaining = current.filter((tab) => tab.document.id !== id)
-      if (id === activeId) setActiveId(remaining[0]?.document.id ?? null)
+      if (id === activeId) {
+        setActiveId(remaining[Math.min(index, remaining.length - 1)]?.document.id ?? null)
+      }
       return remaining
     })
   }
 
+  useEffect(() => {
+    function shortcut(event: KeyboardEvent) {
+      if (event.key === 'Escape' && contextOpen) {
+        setContextOpen(false)
+        return
+      }
+      if (!(event.ctrlKey || event.metaKey)) return
+      if ((event.target as HTMLElement | null)?.closest('.translate-box')) return
+      if (event.key.toLocaleLowerCase() === 'z') {
+        event.preventDefault()
+        updateActive((tab) => withEdits(tab, event.shiftKey ? redo(tab.edits) : undo(tab.edits)))
+      } else if (event.key.toLocaleLowerCase() === 'y') {
+        event.preventDefault()
+        updateActive((tab) => withEdits(tab, redo(tab.edits)))
+      } else if (event.key.toLocaleLowerCase() === 's') {
+        event.preventDefault()
+        if (active?.preview?.valid) void persistEdits()
+        else void validateEdits()
+      }
+    }
+    window.addEventListener('keydown', shortcut)
+    return () => window.removeEventListener('keydown', shortcut)
+  })
+
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    const flow = deriveFileFlow(active.document, documents)
+    const paths = [...flow.inputs, ...flow.outputs].map((artifact) => artifact.path)
+    const missing = [...new Set(paths)].filter((path) => {
+      if (declaredHeadersForPath(active.document, path, active.edits.values).length) return false
+      return !headerCache[headerCacheKey(active.document, path)]
+    })
+    if (!missing.length) return
+
+    setHeaderCache((current) => {
+      const next = { ...current }
+      for (const path of missing) {
+        next[headerCacheKey(active.document, path)] = { columns: [], source: 'loading' }
+      }
+      return next
+    })
+
+    void Promise.all(missing.map(async (path) => {
+      const key = headerCacheKey(active.document, path)
+      try {
+        const csv = await previewCsv(active.document.source_path, path)
+        if (!cancelled) {
+          setHeaderCache((current) => ({
+            ...current,
+            [key]: { columns: csv.columns, source: 'detected' },
+          }))
+        }
+      } catch {
+        if (!cancelled) {
+          setHeaderCache((current) => ({
+            ...current,
+            [key]: { columns: [], source: 'unknown' },
+          }))
+        }
+      }
+    }))
+    return () => { cancelled = true }
+  }, [activeId, active?.document, active?.edits.values, documents.length])
+
   const diagnostics = active ? [...active.document.diagnostics, ...batchDiagnostics] : batchDiagnostics
+  const editCount = active ? Object.keys(active.edits.values).length : 0
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand"><span>VG2</span> Visual Editor</div>
+        <div className="brand"><span>SQL</span>PathFinder</div>
         <div className="translate-box">
-          <textarea aria-label="VG2 source paths" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder={'workflows/report.txt\nworkflows/export.txt'} rows={2} />
+          <textarea
+            aria-label="VG2 source paths"
+            value={sourceText}
+            onChange={(event) => setSourceText(event.target.value)}
+            placeholder={'workflows/report.txt\nworkflows/export.txt'}
+            rows={2}
+          />
           <button type="button" onClick={() => void openExisting()} disabled={busy || !sourceText.trim()}>Open</button>
-          <button type="button" onClick={() => void translate()} disabled={busy || !sourceText.trim()}>{busy ? 'Working…' : 'Translate'}</button>
+          <button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourceText.trim()}>
+            {busy ? 'Working…' : 'Translate'}
+          </button>
         </div>
         <output className="status-message" aria-live="polite">{message}</output>
       </header>
 
-      <nav className="tabs" aria-label="Open workflows" role="tablist">
-        {tabs.map((tab) => (
+      <nav className="tabs" aria-label="Open translated files" role="tablist">
+        {tabs.map((tab, index) => (
           <div className={`tab${tab.document.id === activeId ? ' is-active' : ''}`} key={tab.document.id}>
-            <button type="button" role="tab" aria-selected={tab.document.id === activeId} onClick={() => setActiveId(tab.document.id)}>
-              {tab.document.source_path.split(/[\\/]/).at(-1)}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab.document.id === activeId}
+              aria-controls="script-workspace"
+              tabIndex={tab.document.id === activeId ? 0 : -1}
+              title={tab.document.output_path}
+              onClick={() => setActiveId(tab.document.id)}
+              onKeyDown={(event) => handleTabKeys(event, tabs, index, setActiveId)}
+            >
+              <span className="tab-name">{baseName(tab.document.output_path || tab.document.source_path)}</span>
               <span className={`tab-state tab-state--${tab.status}`} aria-hidden="true" />
               <span className="sr-only">{tab.status}</span>
             </button>
-            <button className="tab-close" type="button" onClick={() => closeTab(tab.document.id)} aria-label="Close tab">×</button>
+            <button
+              className="tab-close"
+              type="button"
+              tabIndex={tab.document.id === activeId ? 0 : -1}
+              onClick={() => closeTab(tab.document.id)}
+              aria-label={`Close ${baseName(tab.document.output_path)}`}
+            >×</button>
           </div>
         ))}
       </nav>
 
-      <section className="workspace">
-        <aside className="navigator" aria-label="Workflow navigator">
-          <label>Search workflow<input value={search} onChange={(event) => setSearch(event.target.value)} type="search" /></label>
-          {active ? <WorkflowNavigator
-            document={active.document}
-            search={search}
-            expandedScopes={active.expandedScopeIds}
-            onSelect={selectNode}
-            onToggleScope={toggleScope}
-          /> : <p className="empty-copy">Translated workflows appear here.</p>}
-        </aside>
+      <section className="workspace" id="script-workspace" role="tabpanel" aria-label="Translated script editor">
+        <section className="editor-pane" aria-label="Script editor">
+          <div className="editor-toolbar">
+            <label className="search-field">
+              <span className="sr-only">Search operations</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                type="search"
+                placeholder="Search operations…"
+                disabled={!active}
+              />
+            </label>
+            <div className="toolbar-group tree-controls" aria-label="Tree controls">
+              <button type="button" onClick={() => setAllScopes(true)} disabled={!active?.document.scopes.length}>Expand all</button>
+              <button type="button" onClick={() => setAllScopes(false)} disabled={!active?.document.scopes.length}>Collapse all</button>
+            </div>
+            <button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context">
+              File context
+            </button>
+          </div>
 
-        <section className="canvas" aria-label="Workflow canvas">
-          {active ? <ReactFlow<FlowNode, Edge>
-            key={active.document.id}
-            nodes={graph.nodes}
-            edges={graph.edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            defaultViewport={active.viewport}
-            onInit={setFlow}
-            onNodesChange={(changes: NodeChange<FlowNode>[]) => updateActive((tab) => ({ ...tab, nodes: applyNodeChanges(changes, tab.nodes) }))}
-            onNodeClick={(_, node) => {
-              if (node.data.summary) toggleScope(node.id)
-              else selectNode(node.id)
-            }}
-            onMoveEnd={(_, viewport) => updateActive((tab) => ({ ...tab, viewport }))}
-            minZoom={0.2}
-            maxZoom={2}
-            fitView
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-            <Controls position="bottom-left" />
-            <MiniMap pannable zoomable aria-label="Workflow minimap" />
-          </ReactFlow> : <div className="empty-state"><strong>No workflow open</strong><span>Translate a VG2 file to begin.</span></div>}
-          {active && <div className="canvas-actions">
-            <button type="button" onClick={() => updateActive((tab) => withEdits(tab, undo(tab.edits)))} disabled={!active.edits.history.length}>Undo</button>
-            <button type="button" onClick={() => updateActive((tab) => withEdits(tab, redo(tab.edits)))} disabled={!active.edits.future.length}>Redo</button>
-            <button type="button" onClick={() => void validateEdits()} disabled={!Object.keys(active.edits.values).length || active.status === 'validating'}>Preview changes</button>
-            <button type="button" onClick={() => void persistEdits()} disabled={!active.preview?.valid}>Apply changes</button>
-            <button type="button" onClick={() => void persistLayout()}>Save layout</button>
-            {active.status === 'conflict' && <button type="button" onClick={() => void reloadActive()}>Reload</button>}
-          </div>}
+          {active && (
+            <div className="change-toolbar" aria-label="Edit actions">
+              <div className="change-status">
+                <strong>{editCount ? `${editCount} unsaved change${editCount === 1 ? '' : 's'}` : 'No pending changes'}</strong>
+                <small>{statusCopy(active.status)}</small>
+              </div>
+              <div className="toolbar-group">
+                <button type="button" onClick={() => updateActive((tab) => withEdits(tab, undo(tab.edits)))} disabled={!active.edits.history.length}>Undo</button>
+                <button type="button" onClick={() => updateActive((tab) => withEdits(tab, redo(tab.edits)))} disabled={!active.edits.future.length}>Redo</button>
+                <button type="button" onClick={() => void validateEdits()} disabled={!editCount || active.status === 'validating'}>Preview changes</button>
+                <button className="primary-button" type="button" onClick={() => void persistEdits()} disabled={!active.preview?.valid || active.status === 'saving'}>Apply changes</button>
+                {active.status === 'conflict' && <button type="button" onClick={() => void reloadActive()}>Reload</button>}
+              </div>
+            </div>
+          )}
+
+          <div className="editor-scroll">
+            {active ? (
+              <ScriptTree
+                document={active.document}
+                search={search}
+                expandedScopes={active.expandedScopeIds}
+                selectedId={active.selectedId}
+                values={active.edits.values}
+                onSelect={selectItem}
+                onToggleScope={toggleScope}
+                onEdit={editParameter}
+              />
+            ) : (
+              <div className="empty-state">
+                <strong>No translated file open</strong>
+                <span>Open or translate a VG2 source file to begin.</span>
+              </div>
+            )}
+
+            {active?.preview && <ChangePreview preview={active.preview} />}
+
+            <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}>
+              <summary>Diagnostics <span>{diagnostics.length}</span></summary>
+              <div>
+                {diagnostics.length ? diagnostics.map((item, index) => (
+                  <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}>
+                    <strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}
+                  </p>
+                )) : <p className="empty-copy">No diagnostics.</p>}
+              </div>
+            </details>
+          </div>
         </section>
 
-        <Inspector item={selected as WorkflowNodeModel | null} summary={selectedSummary} values={active?.edits.values ?? {}} preview={active?.preview ?? null} csv={active?.csv ?? null} onEdit={editParameter} onPreviewCsv={(path) => void loadCsv(path)} />
+        <button
+          className={`context-backdrop${contextOpen ? ' is-open' : ''}`}
+          type="button"
+          aria-label="Close file context"
+          tabIndex={contextOpen ? 0 : -1}
+          onClick={() => setContextOpen(false)}
+        />
+        <ContextSidebar
+          document={active?.document ?? null}
+          documents={documents}
+          headerCache={headerCache}
+          values={active?.edits.values ?? {}}
+          csv={active?.csv ?? null}
+          open={contextOpen}
+          onClose={() => setContextOpen(false)}
+          onPreviewCsv={(path) => void loadCsv(path)}
+          onActivateDocument={(id) => {
+            setActiveId(id)
+            setContextOpen(false)
+          }}
+        />
       </section>
-
-      <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}>
-        <summary>Diagnostics <span>{diagnostics.length}</span></summary>
-        {diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p>No diagnostics.</p>}
-      </details>
     </main>
   )
 }
 
-export function App() {
-  return <ReactFlowProvider><Editor /></ReactFlowProvider>
+function ChangePreview({ preview }: { preview: CommandPreview }) {
+  return (
+    <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}>
+      <summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary>
+      <div>
+        {preview.issues.map((issue) => (
+          <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>
+        ))}
+        <pre>{preview.diff || 'No textual change.'}</pre>
+      </div>
+    </details>
+  )
+}
+
+function mergeDocuments(current: TabState[], documents: WorkflowDocument[]): TabState[] {
+  const byId = new Map(current.map((tab) => [tab.document.id, tab]))
+  for (const document of documents) byId.set(document.id, createTab(document, byId.get(document.id)))
+  return [...byId.values()]
+}
+
+function parseSourcePaths(sourceText: string): string[] {
+  return sourceText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+}
+
+function statusCopy(status: TabStatus): string {
+  if (status === 'dirty') return 'Preview before applying.'
+  if (status === 'validating') return 'Validating generated Python…'
+  if (status === 'valid') return 'Validation passed.'
+  if (status === 'invalid') return 'Validation found issues.'
+  if (status === 'saving') return 'Applying changes…'
+  if (status === 'conflict') return 'File changed externally; reload required.'
+  if (status === 'error') return 'The last update failed.'
+  return 'Select an operation to inspect or edit it.'
+}
+
+function handleTabKeys(
+  event: ReactKeyboardEvent<HTMLButtonElement>,
+  tabs: TabState[],
+  index: number,
+  setActiveId: (id: string) => void,
+) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  let nextIndex = index
+  if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = tabs.length - 1
+  const next = tabs[nextIndex]
+  if (!next) return
+  setActiveId(next.document.id)
+  const tabButtons = document.querySelectorAll<HTMLButtonElement>('.tab > button[role="tab"]')
+  tabButtons[nextIndex]?.focus()
 }
