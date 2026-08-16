@@ -1,14 +1,20 @@
 import inspect
 
-from vg2c.logger import Logger
+from vg2c import kind as kind_module
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import EmittedScript
-from vg2c.utilities import assemble_all_utilities
 from vg2c.emitter.walker import walk_and_emit
-from vg2c import kind as kind_module
+from vg2c.logger import Logger
+from vg2c.utilities import assemble_all_utilities
 
 log = Logger.getLogger("vg2c.emitter")
+
+DEPENDENCIES_END = "# <vg2c:dependencies:end>"
+STEPS_START = "# <vg2c:steps:start>"
+STEPS_END = "# <vg2c:steps:end>"
+WORKFLOW_START = "# <vg2c:workflow:start>"
+WORKFLOW_END = "# <vg2c:workflow:end>"
 
 
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
@@ -69,16 +75,22 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         script_writer.write("")
 
     # Helper functions
+    script_writer.write(DEPENDENCIES_END)
+    script_writer.write(STEPS_START)
     for func_code in functions:
         script_writer.write_block(func_code)
         script_writer.write("")
+    script_writer.write(STEPS_END)
+    script_writer.write("")
 
     # Main entry point
+    script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
     script_writer.write("ctx = PipelineContext()")
     script_writer.write_block(run_body)
     script_writer.pop_indent()
+    script_writer.write(WORKFLOW_END)
 
     # CLI hook
     script_writer.write("")
@@ -120,7 +132,7 @@ def post_process_comments(
         return source
 
     # We will prepend comments.
-    # To keep line numbers in the comments accurate, we need to sort steps by their original line number
+    # Sort by original line so prepended comment offsets stay accurate.
     steps_with_filters.sort(key=lambda db: step_lines.get(db.step_name, 0))
 
     # Prepend comment block:

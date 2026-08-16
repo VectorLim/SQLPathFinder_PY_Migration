@@ -14,11 +14,27 @@ dependencies = [
     "pandas==3.0.3"
 ]
 
+[project.optional-dependencies]
+ui = [
+    "fastapi>=0.116,<1",
+    "pydantic>=2.11,<3",
+    "uvicorn>=0.35,<1",
+]
+dev = [
+    "pytest>=8.4,<10",
+    "ruff>=0.12,<1",
+]
+
 [project.scripts]
 vg2c = "vg2c.cli:main"
+vg2c-ui = "vg2c_ui.__main__:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+vg2c_ui = ["static/*", "static/assets/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

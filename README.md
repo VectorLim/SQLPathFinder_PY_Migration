@@ -90,3 +90,41 @@ python -m vg2c path/to/inputs path/to/outputs
 # Build standalone executable with PyInstaller
 python -m vg2c --build
 ```
+
+### Visual editor (Stages 1–7)
+
+Install the optional local-app dependencies and frontend packages:
+
+```powershell
+python -m pip install -e ".[ui]"
+Set-Location src/vg2c_ui/frontend
+npm install
+```
+
+For development, run the API and Vite in separate terminals from the repository root:
+
+```powershell
+vg2c-ui .
+npm --prefix src/vg2c_ui/frontend run dev
+```
+
+For a single local server, build the frontend once, then start `vg2c-ui`:
+
+```powershell
+npm --prefix src/vg2c_ui/frontend run build
+vg2c-ui .
+```
+
+The server only accepts source/output paths within the workspace passed to `vg2c-ui`.
+The production frontend is included in the Python package, so Node is only needed
+when changing the React source. Utility names, parameters, annotations, defaults,
+return types, and documentation come from the compiler utility registry. Unknown
+utilities use a generic read-only card.
+
+Edits follow an explicit preview/apply flow with undo/redo, full-Python validation,
+revision conflict checks, and atomic writes. CSV previews are workspace-confined and
+bounded. The `/api/commands` endpoints expose the same constrained operation model
+to automation; they do not accept arbitrary replacement Python.
+
+Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an existing
+generated workflow and retain previously applied visual-editor values.

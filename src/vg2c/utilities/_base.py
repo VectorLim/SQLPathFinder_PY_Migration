@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import inspect
 import re
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from vg2c.kind import Kind
@@ -84,6 +84,24 @@ class UtilitySpec(ABC):
 
         source = inspect.getsource(cls)
         return _strip_embed_artifacts(source, cls.__name__)
+
+    @classmethod
+    def registered(cls) -> tuple[type[UtilitySpec], ...]:
+        """Return loaded utilities in deterministic registration order."""
+
+        return tuple(cls._registry.values())
+
+    @classmethod
+    def for_name(cls, name: str) -> type[UtilitySpec] | None:
+        """Return the loaded utility registered under *name*."""
+
+        return cls._registry.get(name)
+
+    @classmethod
+    def for_kind(cls, kind: Kind) -> type[UtilitySpec] | None:
+        """Return the loaded emitter for *kind*, falling back to UNKNOWN."""
+
+        return cls._emit_handlers.get(kind) or cls._emit_handlers.get(Kind.UNKNOWN)
 
     @staticmethod
     def emit_block(block: Any) -> list[str] | tuple[str, list[str]] | None:
