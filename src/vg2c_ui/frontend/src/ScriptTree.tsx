@@ -1,11 +1,15 @@
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useMemo, type KeyboardEvent, type ReactNode } from 'react'
 
+import { analyzeDependencies, diagnosticsForOperation } from './dependencyValidation'
 import { OperationEditor } from './OperationEditor'
 import { formatOperationLabel, formatScopeLabel } from './operationLabels'
+import type { SqlMetadataProvider } from './sql/metadata'
+import { effectiveStepFiles } from './sql/operation'
 import type { ParameterDescriptor, ScopeNode, ScriptItem, StepNode, WorkflowDocument } from './types'
 
 interface ScriptTreeProps {
   document: WorkflowDocument
+  documents?: WorkflowDocument[]
   search: string
   expandedScopes: Set<string>
   selectedId: string | null
@@ -13,10 +17,12 @@ interface ScriptTreeProps {
   onSelect: (id: string) => void
   onToggleScope: (id: string, expanded?: boolean) => void
   onEdit: (parameter: ParameterDescriptor, value: unknown) => void
+  sqlMetadataProvider?: SqlMetadataProvider
 }
 
 export function ScriptTree({
   document,
+  documents = [document],
   search,
   expandedScopes,
   selectedId,
@@ -24,10 +30,11 @@ export function ScriptTree({
   onSelect,
   onToggleScope,
   onEdit,
+  sqlMetadataProvider,
 }: ScriptTreeProps) {
   const children = childIndex(document)
   const query = search.trim().toLocaleLowerCase()
-  const visibleIds = query ? searchVisibility(document, query) : null
+  const visibleIds = query ? searchVisibility(document, query, values) : null
   const searchExpanded = query ? ancestorSet(document, visibleIds ?? new Set()) : new Set<string>()
   const effectiveExpanded = new Set([...expandedScopes, ...searchExpanded])
   const roots = children.get('root') ?? []
@@ -35,6 +42,9 @@ export function ScriptTree({
     ? ancestorScopeIds(document, selectedId).every((id) => effectiveExpanded.has(id))
     : false
   const focusableId = selectedVisible ? selectedId : roots[0]?.id ?? null
+  const dependencyAnalysis = useMemo(() => analyzeDependencies(document, (
+    documents.some((item) => item.id === document.id) ? documents : [...documents, document]
+  ).map((item) => ({ document: item, values: item.id === document.id ? values : {} }))), [document, documents, values])
 
   function render(items: ScriptItem[], depth: number): ReactNode {
     return items.map((item) => {
@@ -43,9 +53,13 @@ export function ScriptTree({
       const expanded = isScope && effectiveExpanded.has(item.id)
       const selected = selectedId === item.id
       const parentId = item.parent_scope_id ?? ''
+      const operationDiagnostics = item.node_kind === 'step'
+        ? diagnosticsForOperation(dependencyAnalysis, item.id)
+        : []
+      const hasError = operationDiagnostics.some((diagnostic) => diagnostic.severity === 'error')
 
       return (
-        <li className={`tree-node${selected ? ' is-selected' : ''}`} key={item.id} role="none">
+        <li className={`tree-node${selected ? ' is-selected' : ''}${hasError ? ' has-error' : ''}`} key={item.id} role="none">
           <button
             type="button"
             className="tree-row"
@@ -53,6 +67,7 @@ export function ScriptTree({
             aria-level={depth + 1}
             aria-selected={selected}
             aria-expanded={isScope ? expanded : undefined}
+            aria-invalid={hasError || undefined}
             tabIndex={item.id === focusableId ? 0 : -1}
             data-tree-item
             data-tree-id={item.id}
@@ -66,17 +81,24 @@ export function ScriptTree({
             <span className={`tree-toggle${isScope ? '' : ' tree-toggle--step'}`} aria-hidden="true">
               {isScope ? <span className="chevron">›</span> : item.block_index + 1}
             </span>
-            <TreeLabel item={item} />
-            {item.node_kind === 'step' && (
+            <TreeLabel item={item} values={values} />
+            {item.node_kind === 'step' && hasError && <span className="operation-warning" aria-label="Dependency error">!</span>}
+            {item.node_kind === 'step' && !hasError && (
               <span className={`operation-state operation-state--${item.validation_state}`} aria-hidden="true" />
             )}
           </button>
 
           {item.node_kind === 'step' && selected && (
-            <OperationEditor step={item} values={values} onEdit={onEdit} />
+            <OperationEditor
+              step={item}
+              values={values}
+              diagnostics={operationDiagnostics}
+              onEdit={onEdit}
+              sqlMetadataProvider={sqlMetadataProvider}
+            />
           )}
 
-          {isScope && selected && <ScopeSummary scope={item} document={document} />}
+          {isScope && selected && <ScopeSummary scope={item} document={document} values={values} />}
 
           {isScope && (
             <div className={`tree-branch${expanded ? ' is-open' : ''}`} aria-hidden={!expanded}>
@@ -104,7 +126,7 @@ export function ScriptTree({
   )
 }
 
-function TreeLabel({ item }: { item: ScriptItem }) {
+function TreeLabel({ item, values }: { item: ScriptItem; values: Record<string, unknown> }) {
   if (item.node_kind !== 'step') {
     return (
       <span className="tree-label">
@@ -113,7 +135,7 @@ function TreeLabel({ item }: { item: ScriptItem }) {
       </span>
     )
   }
-  const label = formatOperationLabel(item)
+  const label = formatOperationLabel(item, values)
   return (
     <span className="tree-label">
       <strong>{label.primary}</strong>
@@ -122,10 +144,18 @@ function TreeLabel({ item }: { item: ScriptItem }) {
   )
 }
 
-function ScopeSummary({ scope, document }: { scope: ScopeNode; document: WorkflowDocument }) {
+function ScopeSummary({
+  scope,
+  document,
+  values,
+}: {
+  scope: ScopeNode
+  document: WorkflowDocument
+  values: Record<string, unknown>
+}) {
   const nested = nestedSteps(document, scope.id)
-  const inputs = unique(nested.flatMap((step) => step.csv_inputs))
-  const outputs = unique(nested.flatMap((step) => step.csv_outputs))
+  const inputs = unique(nested.flatMap((step) => effectiveStepFiles(step, values).inputs))
+  const outputs = unique(nested.flatMap((step) => effectiveStepFiles(step, values).outputs))
   return (
     <section className="scope-summary" aria-label={`${formatScopeLabel(scope)} summary`}>
       <span>{nested.length} nested operation{nested.length === 1 ? '' : 's'}</span>
@@ -157,11 +187,15 @@ export function ancestorScopeIds(document: WorkflowDocument, itemId: string): st
   return result
 }
 
-function searchVisibility(document: WorkflowDocument, query: string): Set<string> {
+function searchVisibility(
+  document: WorkflowDocument,
+  query: string,
+  values: Record<string, unknown>,
+): Set<string> {
   const result = new Set<string>()
   for (const item of [...document.scopes, ...document.steps]) {
     const text = item.node_kind === 'step'
-      ? [formatOperationLabel(item).primary, formatOperationLabel(item).secondary, item.description, item.display_label]
+      ? [formatOperationLabel(item, values).primary, formatOperationLabel(item, values).secondary, item.description, item.display_label]
         .filter(Boolean).join(' ')
       : formatScopeLabel(item)
     if (text.toLocaleLowerCase().includes(query)) {

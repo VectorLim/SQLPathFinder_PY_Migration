@@ -115,10 +115,24 @@ function DataFlowSection({
   onPreviewCsv: (path: string) => void
   onActivateDocument: (id: string) => void
 }) {
-  const flow = deriveFileFlow(document, documents)
+  const flow = deriveFileFlow(document, documents, values)
   return (
     <div className="data-flow">
       <p className="context-help">Dependencies are resolved from the translated files currently open in this editor.</p>
+
+      {flow.diagnostics.length > 0 && (
+        <section className="flow-group dependency-issues" aria-label="Dependency issues">
+          <h3>Dependency issues<span>{flow.diagnostics.length}</span></h3>
+          <div className="flow-list">
+            {flow.diagnostics.map((diagnostic) => (
+              <article className="dependency-issue" key={`${diagnostic.code}-${diagnostic.operationId}-${diagnostic.artifact}`}>
+                <strong>{diagnostic.code.replaceAll('_', ' ')}</strong>
+                <span>{diagnostic.message}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <FlowGroup title="Required inputs" count={flow.inputs.length} empty="No external file inputs detected.">
         {flow.inputs.map((artifact) => (
@@ -129,6 +143,7 @@ function DataFlowSection({
             header={displayHeaderInfo(document, artifact.path, headerCache, values)}
             csv={csv}
             onPreviewCsv={onPreviewCsv}
+            invalid={flow.diagnostics.some((diagnostic) => artifactKey(diagnostic.artifact) === artifactKey(artifact.path))}
           />
         ))}
       </FlowGroup>
@@ -151,6 +166,7 @@ function DataFlowSection({
             header={displayHeaderInfo(document, artifact.path, headerCache, values)}
             csv={csv}
             onPreviewCsv={onPreviewCsv}
+            invalid={flow.diagnostics.some((diagnostic) => artifactKey(diagnostic.artifact) === artifactKey(artifact.path))}
           />
         ))}
       </FlowGroup>
@@ -179,16 +195,17 @@ function FlowGroup({ title, count, empty, children }: {
   )
 }
 
-function ArtifactRow({ artifact, direction, header, csv, onPreviewCsv }: {
+function ArtifactRow({ artifact, direction, header, csv, onPreviewCsv, invalid = false }: {
   artifact: CsvArtifact
   direction: 'input' | 'output'
   header: HeaderInfo
   csv: CsvPreview | null
   onPreviewCsv: (path: string) => void
+  invalid?: boolean
 }) {
   const selectedPreview = csv && artifactKey(csv.path) === artifactKey(artifact.path) ? csv : null
   return (
-    <article className="artifact-row">
+    <article className={`artifact-row${invalid ? ' artifact-row--invalid' : ''}`}>
       <div className="artifact-row__top">
         <span className={`flow-icon flow-icon--${direction}`} aria-hidden="true">{direction === 'input' ? '↓' : '↑'}</span>
         <div className="artifact-name">
@@ -201,6 +218,7 @@ function ArtifactRow({ artifact, direction, header, csv, onPreviewCsv }: {
         {artifact.conditional && <span>conditional</span>}
         {artifact.in_loop && <span>loop output</span>}
         {!artifact.order_valid && <span className="warning-chip">order warning</span>}
+        {invalid && <span className="error-chip">dependency error</span>}
       </div>
       <HeaderSummary info={header} />
       {selectedPreview && <CsvTable preview={selectedPreview} />}

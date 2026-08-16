@@ -1,14 +1,38 @@
+import type { DependencyDiagnostic } from './dependencyValidation'
 import { formatOperationLabel } from './operationLabels'
+import { isSqlOperation } from './sql/operation'
+import type { SqlMetadataProvider } from './sql/metadata'
+import { SqlOperationEditor } from './sql/components/SqlOperationEditor'
 import type { ParameterDescriptor, StepNode } from './types'
 
 interface OperationEditorProps {
   step: StepNode
   values: Record<string, unknown>
+  diagnostics?: DependencyDiagnostic[]
   onEdit: (parameter: ParameterDescriptor, value: unknown) => void
+  sqlMetadataProvider?: SqlMetadataProvider
 }
 
-export function OperationEditor({ step, values, onEdit }: OperationEditorProps) {
-  const label = formatOperationLabel(step)
+export function OperationEditor({
+  step,
+  values,
+  diagnostics = [],
+  onEdit,
+  sqlMetadataProvider,
+}: OperationEditorProps) {
+  if (isSqlOperation(step)) {
+    return (
+      <SqlOperationEditor
+        step={step}
+        values={values}
+        diagnostics={diagnostics}
+        onEdit={onEdit}
+        metadataProvider={sqlMetadataProvider}
+      />
+    )
+  }
+
+  const label = formatOperationLabel(step, values)
   const editableCount = step.parameters.filter((parameter) => parameter.editable && !step.read_only).length
 
   return (
@@ -25,6 +49,14 @@ export function OperationEditor({ step, values, onEdit }: OperationEditorProps) 
       </header>
 
       {step.description && <p className="operation-description">{step.description}</p>}
+
+      {diagnostics.length > 0 && (
+        <div className="operation-diagnostics" role="alert">
+          {diagnostics.map((diagnostic) => (
+            <p key={`${diagnostic.code}-${diagnostic.artifact}`}><strong>{diagnostic.code.replaceAll('_', ' ')}</strong><span>{diagnostic.message}</span></p>
+          ))}
+        </div>
+      )}
 
       <div className="parameter-grid">
         {step.parameters.length ? step.parameters.map((parameter) => (

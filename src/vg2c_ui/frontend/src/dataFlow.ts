@@ -1,4 +1,11 @@
+import {
+  analyzeDependencies,
+  artifactKey,
+  type DependencyDiagnostic,
+  type DocumentDependencyState,
+} from './dependencyValidation'
 import { baseName } from './operationLabels'
+import { effectiveStepFiles } from './sql/operation'
 import type { CsvArtifact, StepNode, WorkflowDocument } from './types'
 
 export type HeaderSource = 'declared' | 'detected' | 'unknown' | 'loading'
@@ -20,21 +27,25 @@ export interface FileFlow {
   outputs: CsvArtifact[]
   upstream: FileDependency[]
   downstream: FileDependency[]
+  diagnostics: DependencyDiagnostic[]
 }
 
 export function deriveFileFlow(
   active: WorkflowDocument,
   documents: WorkflowDocument[],
+  values: Record<string, unknown> = {},
 ): FileFlow {
-  const inputs = active.artifacts.filter(isExternalInput)
-  const outputs = active.artifacts.filter((artifact) => artifact.producer_step_ids.length > 0)
+  const states = dependencyStates(active, documents, values)
+  const analysis = analyzeDependencies(active, states)
+  const inputs = analysis.artifacts.filter(isExternalInput)
+  const outputs = analysis.artifacts.filter((artifact) => artifact.producer_step_ids.length > 0)
   const inputKeys = new Set(inputs.map((artifact) => artifactKey(artifact.path)))
   const outputKeys = new Set(outputs.map((artifact) => artifactKey(artifact.path)))
 
   const upstream = documents
     .filter((document) => document.id !== active.id)
     .flatMap((document) => {
-      const paths = document.artifacts
+      const paths = analyzeDependencies(document, states).artifacts
         .filter((artifact) => artifact.producer_step_ids.length > 0 && inputKeys.has(artifactKey(artifact.path)))
         .map((artifact) => artifact.path)
       return paths.length ? [dependency(document, paths)] : []
@@ -43,13 +54,13 @@ export function deriveFileFlow(
   const downstream = documents
     .filter((document) => document.id !== active.id)
     .flatMap((document) => {
-      const paths = document.artifacts
+      const paths = analyzeDependencies(document, states).artifacts
         .filter((artifact) => isExternalInput(artifact) && outputKeys.has(artifactKey(artifact.path)))
         .map((artifact) => artifact.path)
       return paths.length ? [dependency(document, paths)] : []
     })
 
-  return { inputs, outputs, upstream, downstream }
+  return { inputs, outputs, upstream, downstream, diagnostics: analysis.diagnostics }
 }
 
 export function headerCacheKey(document: WorkflowDocument, path: string): string {
@@ -63,7 +74,8 @@ export function declaredHeadersForPath(
 ): string[] {
   const key = artifactKey(path)
   const relatedSteps = document.steps.filter((step) => (
-    [...step.csv_inputs, ...step.csv_outputs].some((candidate) => artifactKey(candidate) === key)
+    [...effectiveStepFiles(step, editedValues).inputs, ...effectiveStepFiles(step, editedValues).outputs]
+      .some((candidate) => artifactKey(candidate) === key)
   ))
   for (const step of relatedSteps) {
     const header = headerFromStep(step, editedValues)
@@ -83,8 +95,15 @@ export function displayHeaderInfo(
   return cache[headerCacheKey(document, path)] ?? { columns: [], source: 'unknown' }
 }
 
-export function artifactKey(path: string): string {
-  return path.trim().replaceAll('\\', '/').replace(/^\.\//, '').toLocaleLowerCase()
+export { artifactKey }
+
+function dependencyStates(
+  active: WorkflowDocument,
+  documents: WorkflowDocument[],
+  values: Record<string, unknown>,
+): DocumentDependencyState[] {
+  const included = documents.some((document) => document.id === active.id) ? documents : [...documents, active]
+  return included.map((document) => ({ document, values: document.id === active.id ? values : {} }))
 }
 
 function isExternalInput(artifact: CsvArtifact): boolean {

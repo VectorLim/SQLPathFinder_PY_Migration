@@ -1,3 +1,4 @@
+import { effectiveParameterValue, effectiveStepFiles } from './sql/operation'
 import type { ScopeNode, StepNode } from './types'
 
 export interface OperationLabel {
@@ -32,21 +33,25 @@ const SECONDARY_PARAMETER_NAMES = [
   'name',
 ]
 
-export function formatOperationLabel(step: StepNode): OperationLabel {
+export function formatOperationLabel(
+  step: StepNode,
+  values: Record<string, unknown> = {},
+): OperationLabel {
   const primary = KIND_LABELS[step.functional_kind] ?? humanize(step.functional_kind)
-  const output = concisePaths(step.csv_outputs, 'output', 'outputs')
+  const files = effectiveStepFiles(step, values)
+  const output = concisePaths(files.outputs, 'output', 'outputs')
   if (output) return { primary, secondary: output }
 
   const identifyingParameter = SECONDARY_PARAMETER_NAMES
     .map((name) => step.parameters.find((parameter) => parameter.name.toLocaleLowerCase() === name))
     .find((parameter) => parameter !== undefined)
-  const value = identifyingParameter?.value
+  const value = identifyingParameter ? effectiveParameterValue(identifyingParameter, values) : null
   if (identifyingParameter && typeof value === 'string' && value.trim()) {
     const label = humanize(identifyingParameter.name).toLocaleLowerCase()
     return { primary, secondary: `${label}: “${shorten(value.trim(), 54)}”` }
   }
 
-  const input = concisePaths(step.csv_inputs, 'source', 'sources')
+  const input = concisePaths(files.inputs, 'source', 'sources')
   if (input) return { primary, secondary: input }
 
   const fallback = step.display_label.trim()
