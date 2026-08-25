@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 
 from vg2c_ui.domain.models import WorkflowDocument
 from vg2c_ui.domain.semantic_models import (
@@ -31,39 +31,47 @@ class SqlModelService(Protocol):
     def add_selection(self, sql_text: str, expression: str) -> SqlTransformResult: ...
 
     def update_selection(
-        self, sql_text: str, ref: SqlEntityRef, patch: SelectionPatch
+        self, sql_text: str, parsed_id: str, patch: SelectionPatch
     ) -> SqlTransformResult: ...
 
-    def remove_selection(self, sql_text: str, ref: SqlEntityRef) -> SqlTransformResult: ...
+    def remove_selection(self, sql_text: str, parsed_id: str) -> SqlTransformResult: ...
+
+    def move_selection(
+        self, sql_text: str, parsed_id: str, direction: Literal[-1, 1]
+    ) -> SqlTransformResult: ...
 
     def reorder_selection(
-        self, sql_text: str, ref: SqlEntityRef, target_index: int
+        self, sql_text: str, parsed_id: str, target_index: int
     ) -> SqlTransformResult: ...
 
     def add_filter(self, sql_text: str, patch: PredicatePatch) -> SqlTransformResult: ...
 
     def update_filter(
-        self, sql_text: str, ref: SqlEntityRef, patch: PredicatePatch
+        self, sql_text: str, parsed_id: str, patch: PredicatePatch
     ) -> SqlTransformResult: ...
 
-    def remove_filter(self, sql_text: str, ref: SqlEntityRef) -> SqlTransformResult: ...
+    def remove_filter(self, sql_text: str, parsed_id: str) -> SqlTransformResult: ...
 
     def add_join(
         self, sql_text: str, patch: JoinPatch, predicate: PredicatePatch
     ) -> SqlTransformResult: ...
 
     def update_join(
-        self, sql_text: str, ref: SqlEntityRef, patch: JoinPatch
+        self, sql_text: str, parsed_id: str, patch: JoinPatch
     ) -> SqlTransformResult: ...
 
     def update_join_predicate(
-        self, sql_text: str, ref: SqlEntityRef, patch: PredicatePatch
+        self, sql_text: str, parsed_id: str, patch: PredicatePatch
     ) -> SqlTransformResult: ...
 
-    def remove_join(self, sql_text: str, ref: SqlEntityRef) -> SqlTransformResult: ...
+    def remove_join_predicate(
+        self, sql_text: str, parsed_id: str
+    ) -> SqlTransformResult: ...
+
+    def remove_join(self, sql_text: str, parsed_id: str) -> SqlTransformResult: ...
 
     def update_source(
-        self, sql_text: str, ref: SqlEntityRef, source: str
+        self, sql_text: str, parsed_id: str, source: str
     ) -> SqlTransformResult: ...
 
 
@@ -106,8 +114,20 @@ class MetadataService(Protocol):
         self, context: SqlMetadataContext, expression: str
     ) -> Sequence[SqlFilterValueOption]: ...
 
-    async def schema(self, context: SqlMetadataContext, source: str) -> SqlSchemaInfo | None: ...
+    async def schema(
+        self, context: SqlMetadataContext, source: str
+    ) -> SqlSchemaInfo | None: ...
 
 
 class SqlEntityResolver(Protocol):
-    def resolve(self, model: SqlEditableModel, ref: SqlEntityRef) -> SqlEntityResolution: ...
+    def resolve(
+        self,
+        model: SqlEditableModel,
+        ref: SqlEntityRef,
+        *,
+        document_id: str,
+        step_id: str,
+        sql_parameter_id: str,
+        document_revision: int,
+        output_hash: str,
+    ) -> SqlEntityResolution: ...

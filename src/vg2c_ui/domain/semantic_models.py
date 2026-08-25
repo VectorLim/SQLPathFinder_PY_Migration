@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic.json_schema import SkipJsonSchema
 
 from vg2c_ui.domain.models import WorkflowDocument
 
@@ -10,6 +11,24 @@ SEMANTIC_SCHEMA_VERSION = 1
 
 SqlEntityKind = Literal['selection', 'filter', 'join', 'join_predicate', 'source']
 WorkflowEntityKind = Literal['document', 'step', 'parameter', 'artifact']
+
+
+class _Unset:
+    __slots__ = ()
+
+
+_UNSET = _Unset()
+OmissibleString = str | SkipJsonSchema[_Unset]
+
+
+class _PatchModel(BaseModel):
+    """Serialize only explicitly supplied patch fields."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_serializer(mode='plain')
+    def _serialize_patch(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.model_fields_set}
 
 
 class WorkflowEntityRef(BaseModel):
@@ -149,21 +168,21 @@ class SqlTransformResult(BaseModel):
     model: SqlEditableModel
 
 
-class SelectionPatch(BaseModel):
-    expression: str | None = None
+class SelectionPatch(_PatchModel):
+    expression: OmissibleString = Field(default_factory=lambda: _UNSET)
     alias: str | None = None
 
 
-class PredicatePatch(BaseModel):
-    left: str | None = None
-    operator: str | None = None
-    right: str | None = None
+class PredicatePatch(_PatchModel):
+    left: OmissibleString = Field(default_factory=lambda: _UNSET)
+    operator: OmissibleString = Field(default_factory=lambda: _UNSET)
+    right: OmissibleString = Field(default_factory=lambda: _UNSET)
     connector: SqlLogicalConnector | None = None
 
 
-class JoinPatch(BaseModel):
-    join_type: str | None = None
-    source: str | None = None
+class JoinPatch(_PatchModel):
+    join_type: OmissibleString = Field(default_factory=lambda: _UNSET)
+    source: OmissibleString = Field(default_factory=lambda: _UNSET)
 
 
 class SqlEntityResolution(BaseModel):

@@ -129,3 +129,33 @@ export interface SqlEditableModel {
   where_body_span: SqlSpan | null
   from_clause_span: SqlSpan | null
 }
+
+export interface SqlTransformResult {
+  sql: string
+  model: SqlEditableModel
+}
+
+// Omitted patch fields preserve their current value. Null is reserved for
+// values that can be explicitly cleared by the backend semantic service.
+export interface SelectionPatch {
+  expression?: string
+  alias?: string | null
+}
+
+export interface PredicatePatch {
+  left?: string
+  operator?: string
+  right?: string
+  connector?: SqlLogicalConnector | null
+}
+
+export interface JoinPatch {
+  join_type?: string
+  source?: string
+}
+
+export interface SqlEntityResolution {
+  status: 'resolved' | 'not_found' | 'ambiguous' | 'stale'
+  ref: SqlEntityRef | null
+  reason: string | null
+}
