@@ -135,6 +135,12 @@ dmypy.json
 .ruff_cache/
 
 # ---------------------------
+# Frontend dependencies / build output
+# ---------------------------
+node_modules/
+*.tsbuildinfo
+
+# ---------------------------
 # Type stubs
 # ---------------------------
 cython_debug/

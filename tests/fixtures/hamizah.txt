@@ -1,0 +1,1832 @@
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212903
+/CSV=yeuchuan_a0_5547.tab
+/HEADERS=test_lot,from_to,tcb_lot
+/INSTANCE=5547
+/PROMPT-TEXT=Step 2-1.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          f0.lot AS test_lot
+         ,f5.from_to AS from_to
+         ,f5.from_to_lot AS tcb_lot
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_LotTxnHist f5 ON f5.lot = f0.lot AND f5.operation = f0.operation AND f5.prevout_date = f0.prevout_date AND NVL(f5.history_deleted_flag,'N') = 'N'
+ AND      f5.from_to = 'F' 
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.lot In ('7626F034') 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212903
+/CSV=yeuchuan_a1_5547.tab
+/HEADERS=lot_1,entity,prodgroup3
+/INSTANCE=5547
+/PROMPT-TEXT=Step 2-1.1-a1. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          f0.lot AS lot_1
+         ,f4.entity AS entity
+         ,p.prodgroup3 AS prodgroup3
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+LEFT JOIN @[]@F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
+LEFT JOIN @[]@F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      (f0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5547.tab", tcb_lot, "f0.lot In") 
+ AND      f0.operation In ('1204'
+,'2511') 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212903
+/CSV=input.csv
+/TABLE=yeuchuan_a0_5547.tab,yeuchuan_a1_5547.tab
+/HEADERS=test_lot,tcb_lot,entity,prodgroup3
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,test_lot(c),from_to(c),tcb_lot(c),lot_1(c),entity(c),prodgroup3(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([lot_1]);
+
+SELECT /*L0*/  DISTINCT 
+          a0.[test_lot] AS [test_lot]
+         ,a0.[tcb_lot] AS [tcb_lot]
+         ,a1.[entity] AS [entity]
+         ,a1.[prodgroup3] AS [prodgroup3]
+FROM 
+           [yeuchuan_a0_5547] a0
+ INNER JOIN [yeuchuan_a1_5547] a1
+  ON a0.[tcb_lot] = a1.[lot_1]
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20260810212903
+/CSV=yeuchuan_SQL_5547.tab
+/TABLE=input.csv
+/HEADERS=entity,prodgroup3
+/INSTANCE=5547
+/PROMPT-TEXT=Step 3-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/ 
+          a0.[entity] AS [entity]
+         ,a0.[prodgroup3] AS [prodgroup3]
+FROM 
+[input] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212903
+/CSV=yeuchuan_a1_5547.tab
+/HEADERS=lot,out_date,prodgroup3_1,entity_1,attribute_operation,wtb
+/INSTANCE=5547
+/PROMPT-TEXT=Step 3-1.2-a1. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          lot AS lot
+         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+         ,prodgroup3_1 AS prodgroup3_1
+         ,entity_1 AS entity_1
+         ,Count (Distinct attribute_operation) AS attribute_operation
+         ,Replace(Replace(Replace(Replace(Replace(Replace(wtb,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS wtb
+FROM
+(
+SELECT 
+          lot AS lot
+         ,out_date AS out_date
+         ,prodgroup3_1 AS prodgroup3_1
+         ,entity_1 AS entity_1
+         ,attribute_operation AS attribute_operation
+         ,wtb AS wtb
+FROM
+(
+SELECT  
+          f0.lot AS lot
+         ,f0.out_date AS out_date
+         ,p.prodgroup3 AS prodgroup3_1
+         ,f4.entity AS entity_1
+         ,f12.operation AS attribute_operation
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 1225 AND la.src_erase_date IS NULL AND rownum <= 1) AS wtb
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+LEFT JOIN @[]@F_LotAttribute f12 ON f9.lot = f12.lot
+LEFT JOIN @[]@F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
+ AND      (f4.entity In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", entity, "f4.entity In") 
+LEFT JOIN @[]@F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation In ('2511'
+,'1204') 
+ AND      (p.prodgroup3 In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", prodgroup3, "p.prodgroup3 In") 
+ AND      f0.out_date >= TRUNC(SYSDATE) - 30 
+ AND      f12.operation In ('2303'
+,'2511'
+,'1204') 
+-- Tail A
+)
+WHERE
+              wtb = 'N' 
+)
+GROUP BY 
+          lot
+         ,out_date
+         ,prodgroup3_1
+         ,entity_1
+         ,wtb
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212903
+/CSV=input_all.csv
+/TABLE=yeuchuan_SQL_5547.tab,yeuchuan_a1_5547.tab
+/SORT=[entity] ASC,[prodgroup3] ASC,[lot] ASC
+/HEADERS=entity,prodgroup3,lot,out_date,attribute_operation
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,entity(c),prodgroup3(c),lot(c),out_date(d),prodgroup3_1(c),entity_1(c),attribute_operation(n),wtb(x)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([prodgroup3_1],[entity_1]);
+
+SELECT /*L0*/ 
+          sql.[entity] AS [entity]
+         ,sql.[prodgroup3] AS [prodgroup3]
+         ,a1.[lot] AS [lot]
+         ,a1.[out_date] AS [out_date]
+         ,a1.[attribute_operation] AS [attribute_operation]
+FROM 
+           [yeuchuan_SQL_5547] sql
+ LEFT OUTER JOIN [yeuchuan_a1_5547] a1
+  ON sql.[prodgroup3] = a1.[prodgroup3_1] 
+ AND a1.[entity_1] = sql.[entity] 
+ORDER BY
+           [entity] Asc
+          ,[prodgroup3] Asc
+          ,[lot] Asc
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212904
+/CSV=flag_lot.csv
+/TABLE=input_all.csv,input.csv
+/HEADERS=entity_1,prodgroup3_1,lot,out_date,sbl,attribute_operation,rank,lot_in_scope
+/INSTANCE=5547
+/PROMPT-TEXT=Step 4-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [input] ([tcb_lot],[test_lot]);
+
+SELECT /*L3*/  DISTINCT 
+          [entity_1] AS [entity_1]
+         ,[prodgroup3_1] AS [prodgroup3_1]
+         ,[lot] AS [lot]
+         ,[out_date] AS [out_date]
+         ,[sbl] AS [sbl]
+         ,[attribute_operation] AS [attribute_operation]
+         ,[rank] AS [rank]
+         ,[lot_in_scope] AS [lot_in_scope]
+FROM
+(
+SELECT /*L2*/ 
+          [test_lot] AS [test_lot]
+         ,[tcb_lot] AS [tcb_lot]
+         ,[entity] AS [entity]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[entity_1] AS [entity_1]
+         ,[prodgroup3_1] AS [prodgroup3_1]
+         ,[lot] AS [lot]
+         ,[out_date] AS [out_date]
+         ,[sbl] AS [sbl]
+         ,[attribute_operation] AS [attribute_operation]
+         ,[rank] AS [rank]
+         ,CASE WHEN  (abs([rank] - (MAX(CASE WHEN [sbl] = 1 THEN [rank]  END) OVER (PARTITION BY  [entity_1] ,  [prodgroup3_1] )))) <6  THEN 1 ELSE 0 END AS [lot_in_scope]
+FROM
+(
+SELECT /*L1*/ 
+          [test_lot] AS [test_lot]
+         ,[tcb_lot] AS [tcb_lot]
+         ,[entity] AS [entity]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[entity_1] AS [entity_1]
+         ,[prodgroup3_1] AS [prodgroup3_1]
+         ,[lot] AS [lot]
+         ,[out_date] AS [out_date]
+         ,[sbl] AS [sbl]
+         ,[attribute_operation] AS [attribute_operation]
+         ,[rank] AS [rank]
+FROM
+(
+SELECT /*L0*/  
+          a0.[test_lot] AS [test_lot]
+         ,a0.[tcb_lot] AS [tcb_lot]
+         ,a0.[entity] AS [entity]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a1.[entity] AS [entity_1]
+         ,a1.[prodgroup3] AS [prodgroup3_1]
+         ,a1.[lot] AS [lot]
+         ,a1.[out_date] AS [out_date]
+         ,CASE WHEN  a1.[lot] == a0.[tcb_lot]  THEN 1  WHEN a1.[lot] == a0.[test_lot]  THEN 1   ELSE 0 END AS [sbl]
+         ,a1.[attribute_operation] AS [attribute_operation]
+         ,RANK () OVER (PARTITION BY   a1.[entity] ,   a1.[prodgroup3] ORDER BY  a1.[out_date]  ASC) AS [rank]
+FROM 
+           [input_all] a1
+ LEFT OUTER JOIN [input] a0
+  ON a0.[tcb_lot] Like a1.[lot] 
+ OR a0.[test_lot] = a1.[lot] 
+) t /*L0*/
+) t /*L1*/
+) t /*L2*/
+WHERE
+              [lot_in_scope] = 1 
+ORDER BY
+           [entity_1] Asc
+          ,[prodgroup3_1] Asc
+          ,[lot] Asc
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212904
+/CSV=yeuchuan_a0_5547.tab
+/HEADERS=tcb_op,lot,out_date,TCB_Link,Subs,prodgroup3,wtb,product
+/INSTANCE=5547
+/PROMPT-TEXT=Step 5-1.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          tcb_op AS tcb_op
+         ,lot AS lot
+         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+         ,Replace(Replace(Replace(Replace(Replace(Replace(TCB_Link,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS TCB_Link
+         ,Replace(Replace(Replace(Replace(Replace(Replace(Subs,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Subs
+         ,prodgroup3 AS prodgroup3
+         ,Replace(Replace(Replace(Replace(Replace(Replace(wtb,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS wtb
+         ,product AS product
+FROM
+(
+SELECT  
+          f0.operation AS tcb_op
+         ,f0.lot AS lot
+         ,f0.out_date AS out_date
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 6244 AND la.src_erase_date IS NULL AND rownum <= 1) AS TCB_Link
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5001 AND la.src_erase_date IS NULL AND rownum <= 1) AS Subs
+         ,p.prodgroup3 AS prodgroup3
+         ,(SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 1225 AND la.src_erase_date IS NULL AND rownum <= 1) AS wtb
+         ,f0.product AS product
+FROM 
+@[]@F_LotHist f0
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation In ('1204'
+,'2511') 
+ AND      (f0.lot In 
+SQL_Get_CSV_List(".\flag_lot.csv", "3", "f0.lot In") 
+-- Tail A
+)
+WHERE
+              wtb = 'N' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212904
+/CSV=yeuchuan_a1_5547.tab
+/HEADERS=int_op,product_1
+/INSTANCE=5547
+/PROMPT-TEXT=Step 5-1.1-a1. Fetching MARS Data
+/RECORD=Prod_Route_Oper_Entity@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          f2.operation AS int_op
+         ,pr.product AS product_1
+FROM 
+     @[]@F_ProductRoute pr
+    ,@[]@F_RouteOper f2
+WHERE 
+              pr.src_erase_date IS NULL
+ AND      f2.facility = pr.facility
+ AND      f2.route = pr.route
+ AND      f2.src_erase_date IS NULL
+ AND      pr.facility In ('A15') 
+ AND      (pr.product In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5547.tab", product, "pr.product In") 
+ AND      f2.operation In ('1990'
+,'2303') 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212904
+/CSV=lotlist_route.csv
+/TABLE=yeuchuan_a0_5547.tab,yeuchuan_a1_5547.tab
+/SORT=[lot] ASC
+/HEADERS=tcb_op,lot,out_date,TCB_Link,Subs,prodgroup3,wtb,int_op
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,tcb_op(c),lot(c),out_date(d),TCB_Link(x),Subs(x),prodgroup3(c),wtb(x),product(c),int_op(c),product_1(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([product_1]);
+
+SELECT /*L0*/  DISTINCT 
+          a0.[tcb_op] AS [tcb_op]
+         ,a0.[lot] AS [lot]
+         ,a0.[out_date] AS [out_date]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[TCB_Link],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [TCB_Link]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[Subs],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [Subs]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[wtb],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [wtb]
+         ,a1.[int_op] AS [int_op]
+FROM 
+           [yeuchuan_a0_5547] a0
+ LEFT OUTER JOIN [yeuchuan_a1_5547] a1
+  ON a0.[product] = a1.[product_1] 
+ORDER BY
+           [lot] Asc
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20260810212904
+/CSV=yeuchuan_SQL_5547.tab
+/TABLE=lotlist_route.csv
+/HEADERS=prodgroup3_2
+/INSTANCE=5547
+/PROMPT-TEXT=Step 6-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a2.[prodgroup3] AS [prodgroup3_2]
+FROM 
+[lotlist_route] a2
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212904
+/CSV=yeuchuan_a0_5547.tab
+/HEADERS=test_op,prodgroup3,oper_short_desc,oper_long_desc
+/INSTANCE=5547
+/PROMPT-TEXT=Step 6-1.2-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          f0.operation AS test_op
+         ,p.prodgroup3 AS prodgroup3
+         ,f1.oper_short_desc AS oper_short_desc
+         ,Replace(Replace(Replace(Replace(Replace(Replace(f1.oper_long_desc,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS oper_long_desc
+FROM 
+@[]@F_LotHist f0
+INNER JOIN @[]@F_Operation f1 ON f1.operation = f0.operation AND f1.facility = f0.facility AND f1.operation_version = f0.operation_version
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      (p.prodgroup3 In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", prodgroup3_2, "p.prodgroup3 In") 
+ AND      f0.out_date >= TRUNC(SYSDATE) - 90 
+ AND      (f1.oper_short_desc LIKE  'CPBI%'
+OR f1.oper_short_desc LIKE 'CRC%'
+OR f1.oper_short_desc LIKE 'HCS%'
+OR f1.oper_short_desc LIKE 'HDMX%'
+OR f1.oper_short_desc LIKE 'MPS%'
+) 
+ AND      f0.lot Like '8_______' 
+ AND      f0.lot Not Like '%K' 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212904
+/CSV=test_op.csv
+/TABLE=yeuchuan_SQL_5547.tab,yeuchuan_a0_5547.tab
+/HEADERS=test_op,prodgroup3_2,prodgroup3,oper_short_desc,oper_long_desc
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,test_op(c),prodgroup3_2(c),prodgroup3(c),oper_short_desc(c),oper_long_desc(x)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [yeuchuan_a0_5547] ([prodgroup3]);
+
+SELECT /*L0*/ 
+          a0.[test_op] AS [test_op]
+         ,sql.[prodgroup3_2] AS [prodgroup3_2]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[oper_short_desc] AS [oper_short_desc]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a0.[oper_long_desc],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [oper_long_desc]
+FROM 
+           [yeuchuan_SQL_5547] sql
+ LEFT OUTER JOIN [yeuchuan_a0_5547] a0
+  ON sql.[prodgroup3_2] = a0.[prodgroup3]
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212904
+/CSV=lotlist.csv
+/TABLE=lotlist_route.csv
+/HEADERS=tcb_op,lot,out_date,tcb_link,subs,prodgroup3,int_op
+/INSTANCE=5547
+/PROMPT-TEXT=Step 7-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/ 
+          a0.[tcb_op] AS [tcb_op]
+         ,a0.[lot] AS [lot]
+         ,a0.[out_date] AS [out_date]
+         ,a0.[tcb_link] AS [tcb_link]
+         ,a0.[subs] AS [subs]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[int_op] AS [int_op]
+FROM 
+[lotlist_route] a0
+WHERE
+              a0.[int_op] Not In ('2303')
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212904
+/CSV=lotlist_int.csv
+/TABLE=lotlist_route.csv
+/HEADERS=tcb_op,lot,out_date,tcb_link,subs,prodgroup3,int_op
+/INSTANCE=5547
+/PROMPT-TEXT=Step 8-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/ 
+          a0.[tcb_op] AS [tcb_op]
+         ,a0.[lot] AS [lot]
+         ,a0.[out_date] AS [out_date]
+         ,a0.[tcb_link] AS [tcb_link]
+         ,a0.[subs] AS [subs]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[int_op] AS [int_op]
+FROM 
+[lotlist_route] a0
+WHERE
+              a0.[int_op] In ('2303')
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={RUN-LOOP} "lotlist.csv" "flag_lot.csv" "1" "N"
+/PROMPT-TEXT=Step 9-1. Loop through a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "flag_lot.csv" "Y"
+/PROMPT-TEXT=Step 9-2. Start Macro Processing
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_SQL_5547.tab
+/TABLE=flag_lot.csv
+/HEADERS=tcb_out_date,tcb_link,tcb_lot,prodgroup3,tcb_op
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a2.[out_date] AS [tcb_out_date]
+         ,a2.[tcb_link] AS [tcb_link]
+         ,a2.[lot] AS [tcb_lot]
+         ,a2.[prodgroup3] AS [prodgroup3]
+         ,a2.[tcb_op] AS [tcb_op]
+FROM 
+[flag_lot] a2
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a1_5547.tab
+/CTROW=facility,Bonder,visual_id,lot_1,tray_or_carrier_id,carrier_x,carrier_y,complevel_1,link_id
+/CTVALUE=BONDSTAGE
+/CTHEADER=test_name
+/CTARRAY=a1,5547
+/HEADERS=facility,Bonder,BONDSTAGE,test_name,visual_id,lot_1,tray_or_carrier_id,carrier_x,carrier_y,complevel_1,link_id
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a1. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          facility AS facility
+         ,Bonder AS Bonder
+         ,Max(BONDSTAGE) AS BONDSTAGE
+         ,test_name AS test_name
+         ,visual_id AS visual_id
+         ,lot_1 AS lot_1
+         ,tray_or_carrier_id AS tray_or_carrier_id
+         ,carrier_x AS carrier_x
+         ,carrier_y AS carrier_y
+         ,complevel_1 AS complevel_1
+         ,link_id AS link_id
+FROM
+(
+SELECT  
+          ats.facility AS facility
+         ,dt.test_head_id AS Bonder
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS BONDSTAGE
+         ,t.test_name AS test_name
+         ,di.visual_id AS visual_id
+         ,ats.lot AS lot_1
+         ,dt.testing_session_tray_id AS tray_or_carrier_id
+         ,dt.carrier_x AS carrier_x
+         ,dt.carrier_y AS carrier_y
+         ,ctr.complevel_1 AS complevel_1
+         ,ats.link_id AS link_id
+FROM 
+A_Testing_Session ats
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      (ats.operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_op, "ats.operation In") 
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab->5", tcb_lot, "ats.lot In") 
+ AND      ctr.complevel_1 Like 'U_' 
+)
+GROUP BY 
+          facility
+         ,Bonder
+         ,test_name
+         ,visual_id
+         ,lot_1
+         ,tray_or_carrier_id
+         ,carrier_x
+         ,carrier_y
+         ,complevel_1
+         ,link_id
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a4_5547.tab
+/HEADERS=test_lot_lot,visual_id_1
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a4. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          u0.lotnum AS test_lot_lot
+         ,u0.visualid AS visual_id_1
+FROM 
+A_Ube_Unit_Hist2 u0
+WHERE 1=1
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab->999", visual_id, "u0.visualid In") 
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\test_op.csv", "1", "u0.ws_operation In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a3_5547.tab
+/HEADERS=test_op,test_lot,lot_latest_test_end_date,visual_id_2,interface_bin,functional_bin
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a3. Fetching ARIES Data
+/RECORD=Sort_or_Test_Dice_or_Unit_Results@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT /*+  use_nl (dt) use_nl (di) */ DISTINCT 
+          v0.operation AS test_op
+         ,v0.lot AS test_lot
+         ,To_Char(lao.lao_test_end_date_time,'yyyy-mm-dd hh24:mi:ss') AS lot_latest_test_end_date
+         ,di.visual_id AS visual_id_2
+         ,dt.interface_bin AS interface_bin
+         ,dt.functional_bin AS functional_bin
+FROM 
+A_Testing_Session v0
+INNER JOIN A_Lot_At_Operation lao ON v0.lot = lao.lot AND v0.operation = lao.Operation AND v0.facility = lao.facility
+INNER JOIN A_Device_Testing dt ON v0.lao_start_ww + 0 = dt.lao_start_ww AND v0.ts_id + 0 = dt.ts_id
+LEFT JOIN A_Device_Item di ON dt.di_id = di.di_id
+WHERE 1=1
+ AND      v0.valid_flag = 'Y' 
+ AND      dt.within_lao_latest_flag = 'Y' 
+ AND      (v0.operation In 
+SQL_Get_CSV_List(".\test_op.csv", "1", "v0.operation In") 
+ AND      (v0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a4_5547.tab->10", test_lot_lot, "v0.lot In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a0_5547.tab
+/HEADERS=visual_id_3,fab_wafer,fab_lot,x_location,y_location,die
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a0. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          u0.visualid AS visual_id_3
+         ,u0.fab_wafer_num AS fab_wafer
+         ,u0.fab_lot_num AS fab_lot
+         ,u0.x_location AS x_location
+         ,u0.y_location AS y_location
+         ,u1.attr_value AS die
+FROM 
+A_Ube_Unit_Hist2 u0
+INNER JOIN A_Ube_Unit_Hist2_Attr u1 ON u0.creation_ww = u1.creation_ww AND u0.unit_hist_key = u1.unit_hist_key AND u0.facility = u1.facility
+ AND      u1.attr_name = 'MD_POSITION' 
+WHERE 1=1
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_lot, "u0.lotnum In") 
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_op, "u0.ws_operation In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a6_5547.tab
+/HEADERS=visual_id_4,sub_id,supplier_ID,supplier_panel,supplier_panel_X,suppler_panel_Y,lot_2
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a6. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          u0.visualid AS visual_id_4
+         ,ua0.minor_id AS sub_id
+         ,u1.attr_value AS supplier_ID
+         ,SUBSTR(    ua0.minor_id ,9,2) AS supplier_panel
+         ,SUBSTR(     ua0.minor_id ,13,2) AS supplier_panel_X
+         ,SUBSTR(    ua0.minor_id ,15,2) AS suppler_panel_Y
+         ,u0.lotnum AS lot_2
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'MINOR_ID' THEN uuha.attr_value END) MINOR_ID
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5547.tab->999", visual_id_3, "u0.visualid In") 
+ AND      u0.ws_operation = '0614' 
+AND uuha.attr_name IN ('dummy'
+,'MINOR_ID'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+INNER JOIN A_Ube_Unit_Hist2_Attr u1 ON u0.creation_ww = u1.creation_ww AND u0.unit_hist_key = u1.unit_hist_key AND u0.facility = u1.facility
+ AND      u1.attr_name = 'VENDOR_ID' 
+WHERE 1=1
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5547.tab->999", visual_id_3, "u0.visualid In") 
+ AND      u0.ws_operation = '0614' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a5_5547.tab
+/HEADERS=visual_id_5,btv,btv_tiltx,btv_tilty,bumpcope_vacuum,caw_vacuum,ctv,ctv_angle,ctv_b4,ctv_b5,ctv_r,ctv_shape,ctv_sign,ctv_tiltx,rbtv,rbtv_tiltx,rbtv_tilty,rctv,rctv_tiltx,rctv_tilty,die_position
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a5. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          u0.visualid AS visual_id_5
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV=([^\|]*).*','\1') end AS btv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV_TILTX=([^\|]*).*','\1') end AS btv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV_TILTY=([^\|]*).*','\1') end AS btv_tilty
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BUMPCOPE_VACUUM=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BUMPCOPE_VACUUM=([^\|]*).*','\1') end AS bumpcope_vacuum
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CAW_VACUUM=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CAW_VACUUM=([^\|]*).*','\1') end AS caw_vacuum
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV=([^\|]*).*','\1') end AS ctv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_ANGLE=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_ANGLE=([^\|]*).*','\1') end AS ctv_angle
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_B4=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_B4=([^\|]*).*','\1') end AS ctv_b4
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_B5=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_B5=([^\|]*).*','\1') end AS ctv_b5
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_R=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_R=([^\|]*).*','\1') end AS ctv_r
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_SHAPE=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_SHAPE=([^\|]*).*','\1') end AS ctv_shape
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_SIGN=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_SIGN=([^\|]*).*','\1') end AS ctv_sign
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_TILTX=([^\|]*).*','\1') end AS ctv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV=([^\|]*).*','\1') end AS rbtv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV_TILTX=([^\|]*).*','\1') end AS rbtv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV_TILTY=([^\|]*).*','\1') end AS rbtv_tilty
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV=([^\|]*).*','\1') end AS rctv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV_TILTX=([^\|]*).*','\1') end AS rctv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV_TILTY=([^\|]*).*','\1') end AS rctv_tilty
+         ,ua0.DIE_POSITION AS die_position
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'DIE_POSITION' THEN uuha.attr_value END) DIE_POSITION
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      u0.ws_operation = '9999' 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+AND uuha.attr_name IN ('dummy'
+,'DIE_POSITION'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'TCB_DFF_DATA' THEN '|' || DBMS_LOB.substr(uuha.attr_value,3000) END) TCB_DFF_DATA
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr_clob uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      u0.ws_operation = '9999' 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+AND uuha.attr_name IN ('dummy'
+,'TCB_DFF_DATA'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua01 ON u0.creation_ww = ua01.creation_ww AND u0.unit_hist_key = ua01.unit_hist_key AND u0.facility = ua01.facility
+WHERE 1=1
+ AND      u0.ws_operation = '9999' 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.[A15_PROD_21.].MARS
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212905
+/CSV=yeuchuan_a7_5547.tab
+/HEADERS=sli_num,lot
+/INSTANCE=5547
+/PROMPT-TEXT=Step 9-3.2-a7. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          Replace(Replace(Replace(Replace(Replace(Replace((SELECT la.attribute_value FROM @[]@F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5002 AND la.src_erase_date IS NULL AND rownum <= 1),',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS sli_num
+         ,f0.lot AS lot
+FROM 
+@[]@F_LotHist f0
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      (f0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab", lot_2, "f0.lot In") 
+ AND      f0.operation = '0614' 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212905
+/CSV=data.csv
+/TABLE=yeuchuan_SQL_5547.tab,yeuchuan_a1_5547.tab,yeuchuan_a4_5547.tab,yeuchuan_a3_5547.tab,yeuchuan_a0_5547.tab,yeuchuan_a6_5547.tab,yeuchuan_a5_5547.tab,yeuchuan_a7_5547.tab
+/HEADERS=facility,tcb_out_date,tcb_link,Bonder,tcb_lot,CrossTab->[[a1,5547;:N]],visual_id,tray_or_carrier_id,carrier_x,carrier_y,test_op,test_lot,lot_latest_test_end_date,complevel_1,sub_id,supplier_ID,supplier_panel,supplier_panel_X,suppler_panel_Y,prodgroup3,sli_num,fab_wafer,fab_lot,x_location,y_location,die,interface_bin,functional_bin,btv,btv_tiltx,btv_tilty,bumpcope_vacuum,caw_vacuum,ctv,ctv_angle,ctv_b4,ctv_b5,ctv_r,ctv_shape,ctv_sign,ctv_tiltx,rbtv,rbtv_tiltx,rbtv_tilty,rctv,rctv_tiltx,rctv_tilty
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,facility(c),tcb_out_date(c),tcb_link(c),Bonder(c),tcb_lot(c),visual_id(c),lot_1(c),tray_or_carrier_id(c),carrier_x(n),carrier_y(n),test_op(c),test_lot(c),lot_latest_test_end_date(d),complevel_1(c),visual_id_4(c),sub_id(c),supplier_ID(c),supplier_panel(c),supplier_panel_X(c),suppler_panel_Y(c),prodgroup3(c),sli_num(x),visual_id_5(c),test_lot_lot(c),visual_id_1(c),visual_id_2(c),visual_id_3(c),fab_wafer(c),fab_lot(c),x_location(n),y_location(n),die(c),link_id(c),interface_bin(n),functional_bin(n),tcb_op(c),btv(c),btv_tiltx(c),btv_tilty(c),bumpcope_vacuum(c),caw_vacuum(c),ctv(c),ctv_angle(c),ctv_b4(c),ctv_b5(c),ctv_r(c),ctv_shape(c),ctv_sign(c),ctv_tiltx(c),rbtv(c),rbtv_tiltx(c),rbtv_tilty(c),rctv(c),rctv_tiltx(c),rctv_tilty(c),die_position(c),lot(c),lot_2(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([visual_id],[lot_1],[complevel_1]);
+DROP INDEX IF EXISTS IdxA4;
+Create Index IF NOT EXISTS IdxA4 ON [yeuchuan_a4_5547] ([visual_id_1]);
+DROP INDEX IF EXISTS IdxA3;
+Create Index IF NOT EXISTS IdxA3 ON [yeuchuan_a3_5547] ([visual_id_2]);
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [yeuchuan_a0_5547] ([visual_id_3],[die]);
+DROP INDEX IF EXISTS IdxA6;
+Create Index IF NOT EXISTS IdxA6 ON [yeuchuan_a6_5547] ([visual_id_4],[sub_id],[lot_2]);
+DROP INDEX IF EXISTS IdxA5;
+Create Index IF NOT EXISTS IdxA5 ON [yeuchuan_a5_5547] ([visual_id_5],[die_position]);
+DROP INDEX IF EXISTS IdxA7;
+Create Index IF NOT EXISTS IdxA7 ON [yeuchuan_a7_5547] ([lot]);
+
+SELECT /*L0*/  DISTINCT 
+          a1.[facility] AS [facility]
+         ,sql.[tcb_out_date] AS [tcb_out_date]
+         ,sql.[tcb_link] AS [tcb_link]
+         ,a1.[Bonder] AS [Bonder]
+         ,sql.[tcb_lot] AS [tcb_lot]
+         ,CrossTab->[[a1,5547;:Y]]
+         ,a1.[visual_id] AS [visual_id]
+         ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,a1.[carrier_x] AS [carrier_x]
+         ,a1.[carrier_y] AS [carrier_y]
+         ,a3.[test_op] AS [test_op]
+         ,a3.[test_lot] AS [test_lot]
+         ,a3.[lot_latest_test_end_date] AS [lot_latest_test_end_date]
+         ,a1.[complevel_1] AS [complevel_1]
+         ,a6.[sub_id] AS [sub_id]
+         ,a6.[supplier_ID] AS [supplier_ID]
+         ,a6.[supplier_panel] AS [supplier_panel]
+         ,a6.[supplier_panel_X] AS [supplier_panel_X]
+         ,a6.[suppler_panel_Y] AS [suppler_panel_Y]
+         ,sql.[prodgroup3] AS [prodgroup3]
+         ,Replace(Replace(Replace(Replace(Replace(Replace(a7.[sli_num],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [sli_num]
+         ,a0.[fab_wafer] AS [fab_wafer]
+         ,a0.[fab_lot] AS [fab_lot]
+         ,a0.[x_location] AS [x_location]
+         ,a0.[y_location] AS [y_location]
+         ,a0.[die] AS [die]
+         ,a3.[interface_bin] AS [interface_bin]
+         ,a3.[functional_bin] AS [functional_bin]
+         ,a5.[btv] AS [btv]
+         ,a5.[btv_tiltx] AS [btv_tiltx]
+         ,a5.[btv_tilty] AS [btv_tilty]
+         ,a5.[bumpcope_vacuum] AS [bumpcope_vacuum]
+         ,a5.[caw_vacuum] AS [caw_vacuum]
+         ,a5.[ctv] AS [ctv]
+         ,a5.[ctv_angle] AS [ctv_angle]
+         ,a5.[ctv_b4] AS [ctv_b4]
+         ,a5.[ctv_b5] AS [ctv_b5]
+         ,a5.[ctv_r] AS [ctv_r]
+         ,a5.[ctv_shape] AS [ctv_shape]
+         ,a5.[ctv_sign] AS [ctv_sign]
+         ,a5.[ctv_tiltx] AS [ctv_tiltx]
+         ,a5.[rbtv] AS [rbtv]
+         ,a5.[rbtv_tiltx] AS [rbtv_tiltx]
+         ,a5.[rbtv_tilty] AS [rbtv_tilty]
+         ,a5.[rctv] AS [rctv]
+         ,a5.[rctv_tiltx] AS [rctv_tiltx]
+         ,a5.[rctv_tilty] AS [rctv_tilty]
+FROM 
+           [yeuchuan_SQL_5547] sql
+ LEFT OUTER JOIN [yeuchuan_a1_5547] a1
+  ON sql.[tcb_lot] = a1.[lot_1] 
+ LEFT OUTER JOIN [yeuchuan_a4_5547] a4
+  ON a4.[visual_id_1] = a1.[visual_id] 
+ LEFT OUTER JOIN [yeuchuan_a3_5547] a3
+  ON a3.[visual_id_2] = a1.[visual_id] 
+ LEFT OUTER JOIN [yeuchuan_a0_5547] a0
+  ON a1.[visual_id] = a0.[visual_id_3] 
+ AND a1.[complevel_1] = a0.[die] 
+ LEFT OUTER JOIN [yeuchuan_a6_5547] a6
+  ON a0.[visual_id_3] = a6.[visual_id_4] 
+ LEFT OUTER JOIN [yeuchuan_a5_5547] a5
+  ON a5.[visual_id_5] = a6.[sub_id] 
+ AND a1.[complevel_1] = a5.[die_position] 
+ LEFT OUTER JOIN [yeuchuan_a7_5547] a7
+  ON a6.[lot_2] = a7.[lot]
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SmartAppend.va "complete_data.csv" "data.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
+/PROMPT-TEXT=Step 9-4. Smart-Append Data
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={END-LOOP}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={RUN-LOOP} "lotlist_int.csv" "flag_int_lot.csv" "1" "N"
+/PROMPT-TEXT=Step 10-1. Loop through a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "flag_int_lot.csv" "Y"
+/PROMPT-TEXT=Step 10-2. Start Macro Processing
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_SQL_5547.tab
+/TABLE=flag_int_lot.csv
+/HEADERS=tcb_out_date,tcb_link,tcb_op,int_op,tcb_lot,prodgroup3
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/  DISTINCT 
+          a7.[out_date] AS [tcb_out_date]
+         ,a7.[tcb_link] AS [tcb_link]
+         ,a7.[tcb_op] AS [tcb_op]
+         ,a7.[int_op] AS [int_op]
+         ,a7.[lot] AS [tcb_lot]
+         ,a7.[prodgroup3] AS [prodgroup3]
+FROM 
+[flag_int_lot] a7
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a1_5547.tab
+/CTROW=facility,Bonder,visual_id,lot_1,tray_or_carrier_id,carrier_x,carrier_y,complevel_1,link_id
+/CTVALUE=BONDSTAGE
+/CTHEADER=test_name
+/CTARRAY=a1,5547
+/HEADERS=facility,Bonder,BONDSTAGE,test_name,visual_id,lot_1,tray_or_carrier_id,carrier_x,carrier_y,complevel_1,link_id
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a1. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          facility AS facility
+         ,Bonder AS Bonder
+         ,Max(BONDSTAGE) AS BONDSTAGE
+         ,test_name AS test_name
+         ,visual_id AS visual_id
+         ,lot_1 AS lot_1
+         ,tray_or_carrier_id AS tray_or_carrier_id
+         ,carrier_x AS carrier_x
+         ,carrier_y AS carrier_y
+         ,complevel_1 AS complevel_1
+         ,link_id AS link_id
+FROM
+(
+SELECT  
+          ats.facility AS facility
+         ,dt.test_head_id AS Bonder
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS BONDSTAGE
+         ,t.test_name AS test_name
+         ,di.visual_id AS visual_id
+         ,ats.lot AS lot_1
+         ,dt.testing_session_tray_id AS tray_or_carrier_id
+         ,dt.carrier_x AS carrier_x
+         ,dt.carrier_y AS carrier_y
+         ,ctr.complevel_1 AS complevel_1
+         ,ats.link_id AS link_id
+FROM 
+A_Testing_Session ats
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      (ats.operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_op, "ats.operation In") 
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab->5", tcb_lot, "ats.lot In") 
+ AND      ctr.complevel_1 Like 'U_' 
+)
+GROUP BY 
+          facility
+         ,Bonder
+         ,test_name
+         ,visual_id
+         ,lot_1
+         ,tray_or_carrier_id
+         ,carrier_x
+         ,carrier_y
+         ,complevel_1
+         ,link_id
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a2_5547.tab
+/HEADERS=visual_id_3,fab_wafer,fab_lot,y_location,x_location,md_position_stack,lot_2
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a2. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          u0.visualid AS visual_id_3
+         ,u0.fab_wafer_num AS fab_wafer
+         ,u0.fab_lot_num AS fab_lot
+         ,u0.y_location AS y_location
+         ,u0.x_location AS x_location
+         ,u0.md_position AS md_position_stack
+         ,u0.lotnum AS lot_2
+FROM 
+A_Ube_Unit_Hist2 u0
+WHERE 1=1
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_lot, "u0.lotnum In") 
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", tcb_op, "u0.ws_operation In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a0_5547.tab
+/HEADERS=ngpoi_op,interposer_lot,interposer_id,patch_id
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a0. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          u0.ws_operation AS ngpoi_op
+         ,u0.lotnum AS interposer_lot
+         ,u0.visualid AS interposer_id
+         ,ua0.patch_id AS patch_id
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'PATCH_ID' THEN uuha.attr_value END) PATCH_ID
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", int_op, "u0.ws_operation In") 
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab->999", lot_1, "u0.lotnum In") 
+AND uuha.attr_name IN ('dummy'
+,'PATCH_ID'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+WHERE 1=1
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_5547.tab", int_op, "u0.ws_operation In") 
+ AND      (ua0.patch_id In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab", visual_id, "ua0.patch_id In") 
+ AND      (u0.lotnum In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab->999", lot_1, "u0.lotnum In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a6_5547.tab
+/HEADERS=visual_id_4,sub_id,supplier_id,supplier_panel,supplier_panel_X,supplier_panel_Y
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a6. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          visual_id_4 AS visual_id_4
+         ,sub_id AS sub_id
+         ,supplier_id AS supplier_id
+         ,supplier_panel AS supplier_panel
+         ,SUBSTR(     sub_id ,13,2) AS supplier_panel_X
+         ,SUBSTR(    sub_id ,15,2) AS supplier_panel_Y
+FROM
+(
+SELECT  
+          u0.visualid AS visual_id_4
+         ,ua0.minor_id AS sub_id
+         ,u1.attr_value AS supplier_id
+         ,SUBSTR(     ua0.minor_id ,9,2) AS supplier_panel
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'MINOR_ID' THEN uuha.attr_value END) MINOR_ID
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab->999", visual_id, "u0.visualid In") 
+ AND      u0.ws_operation = '0614' 
+AND uuha.attr_name IN ('dummy'
+,'MINOR_ID'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+INNER JOIN A_Ube_Unit_Hist2_Attr u1 ON u0.creation_ww = u1.creation_ww AND u0.unit_hist_key = u1.unit_hist_key AND u0.facility = u1.facility
+ AND      u1.attr_name = 'VENDOR_ID' 
+WHERE 1=1
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a1_5547.tab->999", visual_id, "u0.visualid In") 
+ AND      u0.ws_operation = '0614' 
+)
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a5_5547.tab
+/HEADERS=sli_num,visual_id_5,btv,btv_tiltx,btv_tilty,bumpcope_vacuum,caw_vacuum,ctv,ctv_angle,ctv_b4,ctv_b5,ctv_r,ctv_shape,ctv_sign,ctv_tiltx,ctv_tilty,rbtv,rbtv_tiltx,rbtv_tilty,rctv,rctv_tiltx,rctv_tilty,die_position
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a5. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          ua0.sli_num AS sli_num
+         ,u0.visualid AS visual_id_5
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV=([^\|]*).*','\1') end AS btv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV_TILTX=([^\|]*).*','\1') end AS btv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BTV_TILTY=([^\|]*).*','\1') end AS btv_tilty
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|BUMPCOPE_VACUUM=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|BUMPCOPE_VACUUM=([^\|]*).*','\1') end AS bumpcope_vacuum
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CAW_VACUUM=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CAW_VACUUM=([^\|]*).*','\1') end AS caw_vacuum
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV=([^\|]*).*','\1') end AS ctv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_ANGLE=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_ANGLE=([^\|]*).*','\1') end AS ctv_angle
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_B4=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_B4=([^\|]*).*','\1') end AS ctv_b4
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_B5=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_B5=([^\|]*).*','\1') end AS ctv_b5
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_R=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_R=([^\|]*).*','\1') end AS ctv_r
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_SHAPE=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_SHAPE=([^\|]*).*','\1') end AS ctv_shape
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_SIGN=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_SIGN=([^\|]*).*','\1') end AS ctv_sign
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_TILTX=([^\|]*).*','\1') end AS ctv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|CTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|CTV_TILTY=([^\|]*).*','\1') end AS ctv_tilty
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV=([^\|]*).*','\1') end AS rbtv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV_TILTX=([^\|]*).*','\1') end AS rbtv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RBTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RBTV_TILTY=([^\|]*).*','\1') end AS rbtv_tilty
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV=([^\|]*).*','\1') end AS rctv
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV_TILTX=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV_TILTX=([^\|]*).*','\1') end AS rctv_tiltx
+         ,case when instr('|'||ua01.TCB_DFF_DATA, '|RCTV_TILTY=')>=1 then regexp_replace(ua01.TCB_DFF_DATA,'.*\|RCTV_TILTY=([^\|]*).*','\1') end AS rctv_tilty
+         ,ua0.DIE_POSITION AS die_position
+FROM 
+A_Ube_Unit_Hist2 u0
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'SLI_NUM' THEN uuha.attr_value END) SLI_NUM
+,MAX(CASE WHEN uuha.attr_name = 'DIE_POSITION' THEN uuha.attr_value END) DIE_POSITION
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      u0.ws_operation In ('9999') 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+AND uuha.attr_name IN ('dummy'
+,'SLI_NUM'
+,'DIE_POSITION'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua0 ON u0.creation_ww = ua0.creation_ww AND u0.unit_hist_key = ua0.unit_hist_key AND u0.facility = ua0.facility
+LEFT JOIN (SELECT u0.creation_ww, u0.facility, u0.unit_hist_key
+,MAX(CASE WHEN uuha.attr_name = 'TCB_DFF_DATA' THEN '|' || DBMS_LOB.substr(uuha.attr_value,3000) END) TCB_DFF_DATA
+FROM a_ube_unit_hist2 u0, a_ube_unit_hist2_attr_clob uuha
+WHERE u0.creation_ww = uuha.creation_ww AND u0.unit_hist_key = uuha.unit_hist_key AND u0.facility = uuha.facility
+ AND      u0.ws_operation In ('9999') 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+AND uuha.attr_name IN ('dummy'
+,'TCB_DFF_DATA'
+)
+GROUP BY u0.creation_ww, u0.unit_hist_key,u0.facility)  ua01 ON u0.creation_ww = ua01.creation_ww AND u0.unit_hist_key = ua01.unit_hist_key AND u0.facility = ua01.facility
+WHERE 1=1
+ AND      u0.ws_operation In ('9999') 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a6_5547.tab->999", sub_id, "u0.visualid In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a4_5547.tab
+/HEADERS=test_lot_lot,visual_id_1
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a4. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          u0.lotnum AS test_lot_lot
+         ,u0.visualid AS visual_id_1
+FROM 
+A_Ube_Unit_Hist2 u0
+WHERE 1=1
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a0_5547.tab->999", interposer_id, "u0.visualid In") 
+ AND      (u0.ws_operation In 
+SQL_Get_CSV_List(".\test_op.csv", "1", "u0.ws_operation In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=KM.ARIES
+/UN=//
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20260810212906
+/CSV=yeuchuan_a3_5547.tab
+/HEADERS=interface_bin,functional_bin,test_op,test_lot,lot_latest_test_end_date,visual_id_2
+/INSTANCE=5547
+/PROMPT-TEXT=Step 10-3.2-a3. Fetching ARIES Data
+/RECORD=Sort_or_Test_Dice_or_Unit_Results@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT /*+  use_nl (dt) use_nl (di) */ DISTINCT 
+          dt.interface_bin AS interface_bin
+         ,dt.functional_bin AS functional_bin
+         ,v0.operation AS test_op
+         ,v0.lot AS test_lot
+         ,To_Char(lao.lao_test_end_date_time,'yyyy-mm-dd hh24:mi:ss') AS lot_latest_test_end_date
+         ,di.visual_id AS visual_id_2
+FROM 
+A_Testing_Session v0
+INNER JOIN A_Lot_At_Operation lao ON v0.lot = lao.lot AND v0.operation = lao.Operation AND v0.facility = lao.facility
+INNER JOIN A_Device_Testing dt ON v0.lao_start_ww + 0 = dt.lao_start_ww AND v0.ts_id + 0 = dt.ts_id
+LEFT JOIN A_Device_Item di ON dt.di_id = di.di_id
+WHERE 1=1
+ AND      v0.valid_flag = 'Y' 
+ AND      dt.within_lao_latest_flag = 'Y' 
+ AND      (v0.operation In 
+SQL_Get_CSV_List(".\test_op.csv", "1", "v0.operation In") 
+ AND      (v0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a4_5547.tab->10", test_lot_lot, "v0.lot In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20260810212906
+/CSV=data.csv
+/TABLE=yeuchuan_SQL_5547.tab,yeuchuan_a1_5547.tab,yeuchuan_a2_5547.tab,yeuchuan_a0_5547.tab,yeuchuan_a6_5547.tab,yeuchuan_a5_5547.tab,yeuchuan_a4_5547.tab,yeuchuan_a3_5547.tab
+/HEADERS=facility,tcb_out_date,tcb_link,Bonder,CrossTab->[[a1,5547;:N]],interface_bin,functional_bin,visual_id,tray_or_carrier_id,carrier_x,carrier_y,test_op,test_lot,lot_latest_test_end_date,complevel_1,sub_id,supplier_id,supplier_panel,supplier_panel_X,supplier_panel_Y,sli_num,fab_wafer,fab_lot,y_location,x_location,md_position_stack,ngpoi_op,interposer_id,tcb_op,tcb_lot,prodgroup3,btv,btv_tiltx,btv_tilty,bumpcope_vacuum,caw_vacuum,ctv,ctv_angle,ctv_b4,ctv_b5,ctv_r,ctv_shape,ctv_sign,ctv_tiltx,ctv_tilty,rbtv,rbtv_tiltx,rbtv_tilty,rctv,rctv_tiltx,rctv_tilty
+/DELETE=*Instance*
+/INSTANCE=5547
+/SQLITE_DT=,facility(c),tcb_out_date(c),tcb_link(c),Bonder(c),interface_bin(n),functional_bin(n),visual_id(c),lot_1(c),tray_or_carrier_id(c),carrier_x(n),carrier_y(n),test_op(c),test_lot(c),lot_latest_test_end_date(d),complevel_1(c),visual_id_4(c),sub_id(c),supplier_id(c),supplier_panel(c),supplier_panel_X(c),supplier_panel_Y(c),sli_num(c),visual_id_5(c),test_lot_lot(c),visual_id_1(c),visual_id_2(c),visual_id_3(c),fab_wafer(c),fab_lot(c),y_location(n),x_location(n),md_position_stack(c),ngpoi_op(c),interposer_lot(c),interposer_id(c),patch_id(c),link_id(c),tcb_op(c),int_op(c),tcb_lot(c),lot_2(c),prodgroup3(c),btv(c),btv_tiltx(c),btv_tilty(c),bumpcope_vacuum(c),caw_vacuum(c),ctv(c),ctv_angle(c),ctv_b4(c),ctv_b5(c),ctv_r(c),ctv_shape(c),ctv_sign(c),ctv_tiltx(c),ctv_tilty(c),rbtv(c),rbtv_tiltx(c),rbtv_tilty(c),rctv(c),rctv_tiltx(c),rctv_tilty(c),die_position(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([visual_id],[lot_1],[complevel_1]);
+DROP INDEX IF EXISTS IdxA2;
+Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_5547] ([visual_id_3],[lot_2],[md_position_stack]);
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [yeuchuan_a0_5547] ([patch_id],[interposer_id]);
+DROP INDEX IF EXISTS IdxA6;
+Create Index IF NOT EXISTS IdxA6 ON [yeuchuan_a6_5547] ([visual_id_4],[sub_id]);
+DROP INDEX IF EXISTS IdxA5;
+Create Index IF NOT EXISTS IdxA5 ON [yeuchuan_a5_5547] ([visual_id_5],[die_position]);
+DROP INDEX IF EXISTS IdxA4;
+Create Index IF NOT EXISTS IdxA4 ON [yeuchuan_a4_5547] ([visual_id_1]);
+DROP INDEX IF EXISTS IdxA3;
+Create Index IF NOT EXISTS IdxA3 ON [yeuchuan_a3_5547] ([visual_id_2]);
+
+SELECT /*L0*/  DISTINCT 
+          a1.[facility] AS [facility]
+         ,sql.[tcb_out_date] AS [tcb_out_date]
+         ,sql.[tcb_link] AS [tcb_link]
+         ,a1.[Bonder] AS [Bonder]
+         ,CrossTab->[[a1,5547;:Y]]
+         ,a3.[interface_bin] AS [interface_bin]
+         ,a3.[functional_bin] AS [functional_bin]
+         ,a1.[visual_id] AS [visual_id]
+         ,a1.[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,a1.[carrier_x] AS [carrier_x]
+         ,a1.[carrier_y] AS [carrier_y]
+         ,a3.[test_op] AS [test_op]
+         ,a3.[test_lot] AS [test_lot]
+         ,a3.[lot_latest_test_end_date] AS [lot_latest_test_end_date]
+         ,a1.[complevel_1] AS [complevel_1]
+         ,a6.[sub_id] AS [sub_id]
+         ,a6.[supplier_id] AS [supplier_id]
+         ,a6.[supplier_panel] AS [supplier_panel]
+         ,a6.[supplier_panel_X] AS [supplier_panel_X]
+         ,a6.[supplier_panel_Y] AS [supplier_panel_Y]
+         ,a5.[sli_num] AS [sli_num]
+         ,a2.[fab_wafer] AS [fab_wafer]
+         ,a2.[fab_lot] AS [fab_lot]
+         ,a2.[y_location] AS [y_location]
+         ,a2.[x_location] AS [x_location]
+         ,a2.[md_position_stack] AS [md_position_stack]
+         ,a0.[ngpoi_op] AS [ngpoi_op]
+         ,a0.[interposer_id] AS [interposer_id]
+         ,sql.[tcb_op] AS [tcb_op]
+         ,sql.[tcb_lot] AS [tcb_lot]
+         ,sql.[prodgroup3] AS [prodgroup3]
+         ,a5.[btv] AS [btv]
+         ,a5.[btv_tiltx] AS [btv_tiltx]
+         ,a5.[btv_tilty] AS [btv_tilty]
+         ,a5.[bumpcope_vacuum] AS [bumpcope_vacuum]
+         ,a5.[caw_vacuum] AS [caw_vacuum]
+         ,a5.[ctv] AS [ctv]
+         ,a5.[ctv_angle] AS [ctv_angle]
+         ,a5.[ctv_b4] AS [ctv_b4]
+         ,a5.[ctv_b5] AS [ctv_b5]
+         ,a5.[ctv_r] AS [ctv_r]
+         ,a5.[ctv_shape] AS [ctv_shape]
+         ,a5.[ctv_sign] AS [ctv_sign]
+         ,a5.[ctv_tiltx] AS [ctv_tiltx]
+         ,a5.[ctv_tilty] AS [ctv_tilty]
+         ,a5.[rbtv] AS [rbtv]
+         ,a5.[rbtv_tiltx] AS [rbtv_tiltx]
+         ,a5.[rbtv_tilty] AS [rbtv_tilty]
+         ,a5.[rctv] AS [rctv]
+         ,a5.[rctv_tiltx] AS [rctv_tiltx]
+         ,a5.[rctv_tilty] AS [rctv_tilty]
+FROM 
+           [yeuchuan_SQL_5547] sql
+ LEFT OUTER JOIN [yeuchuan_a1_5547] a1
+  ON sql.[tcb_lot] = a1.[lot_1] 
+ LEFT OUTER JOIN [yeuchuan_a2_5547] a2
+  ON a1.[visual_id] = a2.[visual_id_3] 
+ AND sql.[tcb_lot] = a2.[lot_2] 
+ AND a2.[md_position_stack] = a1.[complevel_1] 
+ LEFT OUTER JOIN [yeuchuan_a0_5547] a0
+  ON a0.[patch_id] = a1.[visual_id] 
+ LEFT OUTER JOIN [yeuchuan_a6_5547] a6
+  ON a6.[visual_id_4] = a1.[visual_id] 
+ LEFT OUTER JOIN [yeuchuan_a5_5547] a5
+  ON a5.[visual_id_5] = a6.[sub_id] 
+ AND a1.[complevel_1] = a5.[die_position] 
+ LEFT OUTER JOIN [yeuchuan_a4_5547] a4
+  ON a4.[visual_id_1] = a0.[interposer_id] 
+ LEFT OUTER JOIN [yeuchuan_a3_5547] a3
+  ON a3.[visual_id_2] = a4.[visual_id_1]
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SmartAppend.va "complete_data_int.csv" "data.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
+/PROMPT-TEXT=Step 10-4. Smart-Append Data
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=5547
+/OUTLOOK=N
+/UTILITIES={END-LOOP}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=5547
+/PROMPT-TEXT=Step 11. jsl
+/CSV=MyInput.txt
+</OPTIONS>
+
+dt = Current Data Table();
+
+// Get all column references
+all_cols = dt << Get Column Names();
+
+// Create list to store columns to delete
+cols_to_delete = {};
+
+// Check each column
+for(i = 1, i <= N Items(all_cols), i++,
+    col_ref = Column(dt, all_cols[i]);
+    values = col_ref << Get Values();
+    
+    // If all values are missing, add to deletion list
+    if(N Missing(values) == N Rows(dt),
+        Insert Into(cols_to_delete, all_cols[i]);
+    );
+);
+
+// Delete all empty columns at once
+if(N Items(cols_to_delete) > 0,
+    dt << Delete Columns(cols_to_delete);
+);
+
+
+dt<<new column("Flagged", numeric, formula(If(
+	:functional_bin == 3410, 1,
+	Is Missing( :functional_bin ), 2,
+	0
+)));
+
+dt<<new column("Status", character, formula(If(
+	:functional_bin == 3410, "Bin3410",
+	Is Missing( :functional_bin ), "Not Tested",
+	:interface_bin == 1, "Pass",
+	"Other Bin"
+)));
