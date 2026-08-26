@@ -40,7 +40,7 @@ $env:no_proxy = "mfg-github.mfg.intel.com,tmg-repo.mfg.intel.com"
 Install `vg2c` and its dependencies into the project virtual environment:
 
 ```powershell
-uv sync
+py -m uv sync
 ```
 
 Verify the installation:
