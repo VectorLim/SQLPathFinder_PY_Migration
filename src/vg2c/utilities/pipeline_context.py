@@ -6,6 +6,7 @@ from typing import Callable, Any, ContextManager
 
 from vg2c.emitter.models import emittable
 from vg2c.utilities._base import UtilitySpec
+from vg2c.utilities.oracle_client import OracleClient
 
 
 class PipelineContext(UtilitySpec):
@@ -60,7 +61,10 @@ class PipelineContext(UtilitySpec):
         self.fs_ops.write_file(path, content)
 
     def _read_datasyncx(self, sql: str, reader: Any):
-        result = reader.read(site="KM", query=sql)
+        try:
+            result = reader.read(site="KM", query=sql)
+        finally:
+            OracleClient.log_active_client()
         result.columns = [col.lower() for col in result.columns]
         return result
 
