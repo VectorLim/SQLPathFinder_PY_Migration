@@ -78,7 +78,8 @@ Test-Path "$env:DATASYNCX_INSTANT_CLIENT_DIR\oci.dll"
 Do not set `ORACLE_HOME` or change the machine-wide `PATH` for this setup.
 These variables affect only the current PowerShell session; remove them (or
 set `DATASYNCX_ORACLE_CLIENT` to `home`) and start a new Python process to use
-the existing full-client configuration again. See
+the existing full-client configuration again. After the first Oracle read, the
+terminal reports the loaded client and source. See
 [the detailed Oracle client guide](docs/oracle_instant_client.md) for platform
 limitations and troubleshooting.
 

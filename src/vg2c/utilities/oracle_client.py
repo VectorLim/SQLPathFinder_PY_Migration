@@ -13,6 +13,8 @@ class OracleClient(UtilitySpec):
     """Select an Oracle client before DataSyncX opens its first connection."""
 
     utility_name = "oracle_client"
+    _reported_client = False
+    _selected_instant_client: Path | None = None
 
     @classmethod
     def configure(cls) -> str | None:
@@ -46,7 +48,34 @@ class OracleClient(UtilitySpec):
             oracledb.defaults.config_dir = str(network_dir)
         os.environ.pop("ORACLE_HOME", None)
         cls._prepend_path(client_dir)
+        cls._selected_instant_client = client_dir
         return str(client_dir)
+
+    @classmethod
+    def log_active_client(cls) -> None:
+        """Print the initialized Oracle client once for terminal diagnostics."""
+
+        if cls._reported_client:
+            return
+
+        import oracledb
+
+        if oracledb.is_thin_mode():
+            return
+
+        try:
+            version = ".".join(str(part) for part in oracledb.clientversion())
+        except oracledb.Error:
+            return
+        source = (
+            f"Instant Client ({cls._selected_instant_client})"
+            if cls._selected_instant_client
+            else f"ORACLE_HOME ({os.getenv('ORACLE_HOME', 'PATH')})"
+        )
+        print("\n" + "=" * 72)
+        print(f" Oracle client: {version} | mode=thick | source={source}")
+        print("=" * 72)
+        cls._reported_client = True
 
     @staticmethod
     def _find_instant_client() -> Path:

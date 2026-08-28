@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -41,3 +42,33 @@ def test_instant_client_reports_missing_library(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="containing oci.dll"):
         OracleClient.configure()
+
+
+def test_active_client_is_logged_once(monkeypatch, capsys, tmp_path):
+    class FakeOracleDb:
+        @staticmethod
+        def is_thin_mode():
+            return False
+
+        @staticmethod
+        def clientversion():
+            return (23, 26, 0, 0, 0)
+
+    monkeypatch.setitem(sys.modules, "oracledb", FakeOracleDb)
+    monkeypatch.setattr(OracleClient, "_reported_client", False)
+    monkeypatch.setattr(
+        OracleClient, "_selected_instant_client", tmp_path / "instantclient_23_26"
+    )
+
+    OracleClient.log_active_client()
+    OracleClient.log_active_client()
+
+    assert capsys.readouterr().out == (
+        "\n"
+        + "=" * 72
+        + "\n"
+        + f" Oracle client: 23.26.0.0.0 | mode=thick | source=Instant Client "
+        + f"({tmp_path / 'instantclient_23_26'})\n"
+        + "=" * 72
+        + "\n"
+    )
