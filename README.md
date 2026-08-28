@@ -49,6 +49,39 @@ Verify the installation:
 uv run vg2c --help
 ```
 
+## Oracle Instant Client (optional DataSyncX setup)
+
+Use this only when generated workflows need DataSyncX to query Oracle and a
+full Oracle Client is not the selected client. Download the **Basic** package
+for **Microsoft Windows (x64)** from Oracle's [Instant Client download page](https://www.oracle.com/database/technologies/instant-client/downloads.html).
+Unzip its inner `instantclient_*` folder to a stable location, for example:
+
+```text
+C:\Oracle\instantclient_23_26\oci.dll
+```
+
+Do not use the Downloads directory as the runtime location. The Basic package
+is sufficient for Python/DataSyncX; SQL*Plus and SDK packages are optional.
+Ask the database team for the required Oracle Net files (`tnsnames.ora` and,
+when needed, `sqlnet.ora`) and store them separately, for example in
+`C:\Oracle\network\admin`.
+
+For one PowerShell session, opt a generated workflow into Instant Client:
+
+```powershell
+$env:DATASYNCX_ORACLE_CLIENT = 'instant'
+$env:DATASYNCX_INSTANT_CLIENT_DIR = 'C:\Oracle\instantclient_23_26'
+$env:DATASYNCX_ORACLE_NET_CONFIG_DIR = 'C:\Oracle\network\admin'
+Test-Path "$env:DATASYNCX_INSTANT_CLIENT_DIR\oci.dll"
+```
+
+Do not set `ORACLE_HOME` or change the machine-wide `PATH` for this setup.
+These variables affect only the current PowerShell session; remove them (or
+set `DATASYNCX_ORACLE_CLIENT` to `home`) and start a new Python process to use
+the existing full-client configuration again. See
+[the detailed Oracle client guide](docs/oracle_instant_client.md) for platform
+limitations and troubleshooting.
+
 ## CLI Usage
 
 Run the interactive CLI from the project root:

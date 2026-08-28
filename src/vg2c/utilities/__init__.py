@@ -39,6 +39,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
     from vg2c.utilities.rows_in_file import RowsInFile  # noqa: F401
     from vg2c.utilities.macro_state import MacroState  # noqa: F401
+    from vg2c.utilities.oracle_client import OracleClient  # noqa: F401
     from vg2c.utilities.external import ExternalProcess  # noqa: F401
     from vg2c.utilities.sqlite_engine import SqliteEngine  # noqa: F401
     from vg2c.utilities.generic import UnknownUtility  # noqa: F401
@@ -247,6 +248,7 @@ __all__ = [
     "UnknownUtility",
     "HtmlReport",
     "MacroState",
+    "OracleClient",
     "MailService",
     "PipelineContext",
     "SqliteEngine",

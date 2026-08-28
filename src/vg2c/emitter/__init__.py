@@ -87,6 +87,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
+    script_writer.write("OracleClient.configure()")
     script_writer.write("ctx = PipelineContext()")
     script_writer.write_block(run_body)
     script_writer.pop_indent()
