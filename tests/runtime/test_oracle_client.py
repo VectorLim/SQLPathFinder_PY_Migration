@@ -1,74 +1,56 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import pytest
-
 from vg2c.utilities.oracle_client import OracleClient
 
 
-def test_home_mode_leaves_existing_setup_untouched(monkeypatch):
-    monkeypatch.delenv("DATASYNCX_ORACLE_CLIENT", raising=False)
-    monkeypatch.setenv("ORACLE_HOME", "C:/Oracle/full-client")
+def test_configure_accepts_a_full_client_with_oracle_net_files(monkeypatch, tmp_path):
+    oracle_home = tmp_path / "client_k64"
+    (oracle_home / "bin").mkdir(parents=True)
+    (oracle_home / "bin" / "oci.dll").touch()
+    network_dir = oracle_home / "network" / "admin"
+    network_dir.mkdir(parents=True)
+    for filename in ("tnsnames.ora", "sqlnet.ora"):
+        (network_dir / filename).touch()
+    monkeypatch.setenv("ORACLE_HOME", str(oracle_home))
 
-    assert OracleClient.configure() is None
-    assert "ORACLE_HOME" in __import__("os").environ
-
-
-def test_instant_client_is_selected_before_datasyncx_initialization(monkeypatch, tmp_path):
-    client_dir = tmp_path / "instantclient_19_17"
-    client_dir.mkdir()
-    (client_dir / "oci.dll").touch()
-    network_dir = tmp_path / "network"
-    network_dir.mkdir()
-    monkeypatch.setattr("vg2c.utilities.oracle_client.sys.platform", "win32")
-    monkeypatch.setenv("DATASYNCX_ORACLE_CLIENT", "instant")
-    monkeypatch.setenv("DATASYNCX_INSTANT_CLIENT_DIR", str(client_dir))
-    monkeypatch.setenv("DATASYNCX_ORACLE_NET_CONFIG_DIR", str(network_dir))
-    monkeypatch.setenv("ORACLE_HOME", "C:/Oracle/full-client")
-    monkeypatch.setenv("PATH", "C:/other")
-
-    assert OracleClient.configure() == str(client_dir.resolve())
-    assert "ORACLE_HOME" not in __import__("os").environ
-    assert __import__("os").environ["TNS_ADMIN"] == str(network_dir.resolve())
-    assert __import__("os").environ["PATH"].split(";")[0] == str(client_dir.resolve())
+    assert OracleClient.configure() == str(oracle_home)
 
 
-def test_instant_client_reports_missing_library(monkeypatch, tmp_path):
-    monkeypatch.setattr("vg2c.utilities.oracle_client.sys.platform", "win32")
-    monkeypatch.setenv("DATASYNCX_ORACLE_CLIENT", "instant")
-    monkeypatch.setenv("DATASYNCX_INSTANT_CLIENT_DIR", str(tmp_path))
+def test_configure_requires_oracle_home(monkeypatch):
+    monkeypatch.delenv("ORACLE_HOME", raising=False)
 
-    with pytest.raises(RuntimeError, match="containing oci.dll"):
+    try:
         OracleClient.configure()
+    except RuntimeError as error:
+        assert "ORACLE_HOME is not configured" in str(error)
+    else:
+        raise AssertionError("Expected ORACLE_HOME validation to fail")
 
 
-def test_active_client_is_logged_once(monkeypatch, capsys, tmp_path):
-    class FakeOracleDb:
-        @staticmethod
-        def is_thin_mode():
-            return False
+def test_configure_rejects_an_invalid_oracle_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("ORACLE_HOME", str(tmp_path))
 
-        @staticmethod
-        def clientversion():
-            return (23, 26, 0, 0, 0)
+    try:
+        OracleClient.configure()
+    except RuntimeError as error:
+        assert "bin\\oci.dll" in str(error)
+    else:
+        raise AssertionError("Expected ORACLE_HOME validation to fail")
 
-    monkeypatch.setitem(sys.modules, "oracledb", FakeOracleDb)
-    monkeypatch.setattr(OracleClient, "_reported_client", False)
-    monkeypatch.setattr(
-        OracleClient, "_selected_instant_client", tmp_path / "instantclient_23_26"
-    )
 
-    OracleClient.log_active_client()
-    OracleClient.log_active_client()
+def test_configure_explains_how_to_restore_missing_network_files(monkeypatch, tmp_path):
+    oracle_home = tmp_path / "client_k64"
+    (oracle_home / "bin").mkdir(parents=True)
+    (oracle_home / "bin" / "oci.dll").touch()
+    monkeypatch.setenv("ORACLE_HOME", str(oracle_home))
 
-    assert capsys.readouterr().out == (
-        "\n"
-        + "=" * 72
-        + "\n"
-        + f" Oracle client: 23.26.0.0.0 | mode=thick | source=Instant Client "
-        + f"({tmp_path / 'instantclient_23_26'})\n"
-        + "=" * 72
-        + "\n"
-    )
+    try:
+        OracleClient.configure()
+    except RuntimeError as error:
+        message = str(error)
+        assert "tnsnames.ora" in message
+        assert "sqlnet.ora" in message
+        assert "C:\\Oracle\\network" in message
+        assert str(oracle_home / "network" / "admin") in message
+    else:
+        raise AssertionError("Expected Oracle Net validation to fail")

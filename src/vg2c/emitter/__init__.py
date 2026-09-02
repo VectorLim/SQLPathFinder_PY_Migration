@@ -48,9 +48,12 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
 
     imports = set(utility_imports)
     imports.add("from enum import Enum")
-    imports.add("from datasyncx.readers.aries_reader import AriesReader")
-    imports.add("from datasyncx.readers.mars_reader import MarsReader")
     imports.add("from vg2c.dispatch.dialects.sqlite import SqliteReader")
+    reader_imports = {
+        "from datasyncx import OracleReader",
+        "from datasyncx.readers.aries_reader import AriesReader",
+        "from datasyncx.readers.mars_reader import MarsReader",
+    }
 
     # Assemble the final script
     script_writer = IndentWriter()
@@ -74,6 +77,12 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         script_writer.write_block(utility_source)
         script_writer.write("")
 
+    # Validate the supported Oracle setup before importing DataSyncX readers.
+    script_writer.write("OracleClient.configure()")
+    for imp in sorted(reader_imports):
+        script_writer.write(imp)
+    script_writer.write("")
+
     # Helper functions
     script_writer.write(DEPENDENCIES_END)
     script_writer.write(STEPS_START)
@@ -87,7 +96,6 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
-    script_writer.write("OracleClient.configure()")
     script_writer.write("ctx = PipelineContext()")
     script_writer.write_block(run_body)
     script_writer.pop_indent()
