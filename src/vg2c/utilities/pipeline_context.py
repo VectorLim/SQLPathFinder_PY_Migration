@@ -80,7 +80,9 @@ class PipelineContext(UtilitySpec):
         sql = self.macro.substitute(sql)
         # precedence: explicit override > script default (ctx.macro "NODE") > global env setting > legacy default
         effective_node = (
-            node or self.macro.named("NODE") or os.environ.get("VG2C_DEFAULT_NODE", "KM")
+            node
+            or self.macro.named("NODE")
+            or os.environ.get("VG2C_DEFAULT_NODE", "KM")
         )
 
         if hasattr(reader, "execute"):

@@ -47,6 +47,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.mail import MailService  # noqa: F401
     from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401
     from vg2c.utilities.wait_file import WaitFile  # noqa: F401
+
     # SqliteReader is a plain project-local class, not a Kind handler -- it must be
     # a registered UtilitySpec so it gets embedded (not live-imported) like every
     # other project-local class, matching Aries/Mars/Oracle reader parity.
@@ -100,9 +101,7 @@ def _find_promotable_function_imports(
     return promotable
 
 
-def _strip_import_lines(
-    source: str, nodes: list[ast.Import | ast.ImportFrom]
-) -> str:
+def _strip_import_lines(source: str, nodes: list[ast.Import | ast.ImportFrom]) -> str:
     """Replace each import statement's source lines with a no-op ``pass``."""
     lines = source.splitlines(keepends=True)
     for node in nodes:
@@ -169,7 +168,10 @@ def _scan_imports_and_dependencies(
     for node in tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _classify_import(
-                node, current_name=current_name, module_to_name=module_to_name, info=info
+                node,
+                current_name=current_name,
+                module_to_name=module_to_name,
+                info=info,
             )
 
     # Imports nested inside methods/functions are resolved the same way as
@@ -182,7 +184,9 @@ def _scan_imports_and_dependencies(
             node, current_name=current_name, module_to_name=module_to_name, info=info
         )
 
-    info.cleaned_source = _strip_import_lines(source, promotable) if promotable else source
+    info.cleaned_source = (
+        _strip_import_lines(source, promotable) if promotable else source
+    )
     return info
 
 
@@ -284,14 +288,18 @@ def assemble_all_utilities(
             current_name=name,
             module_to_name=module_to_name,
         )
-        dependency_edges[name].update(dep for dep in info.dependencies if dep in utilities)
+        dependency_edges[name].update(
+            dep for dep in info.dependencies if dep in utilities
+        )
         per_utility_imports[name] = info.external_imports
         per_utility_helpers[name] = info.helper_modules
         cleaned_sources[name] = info.cleaned_source
 
     if required_kinds is not None:
         root_names = {
-            name for name, cls in utilities.items() if getattr(cls, "always_include", False)
+            name
+            for name, cls in utilities.items()
+            if getattr(cls, "always_include", False)
         }
         for kind in required_kinds:
             handler = UtilitySpec.for_kind(kind)
