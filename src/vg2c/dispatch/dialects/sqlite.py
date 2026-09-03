@@ -19,4 +19,3 @@ class SqliteDialect(DialectHandler):
     def substitute(cls, body: str) -> str:
         # No schema substitution for SQLite
         return body
-
