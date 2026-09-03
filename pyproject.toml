@@ -7,11 +7,12 @@ name = "vg2c"
 version = "0.1.0"
 description = "Stepwise VG2 compiler migration"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 dependencies = [
     "datasyncx",
     "keyring==25.7.0",
     "pandas==3.0.3",
+    "uv",
 ]
 
 [project.optional-dependencies]
