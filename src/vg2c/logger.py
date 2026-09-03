@@ -11,6 +11,7 @@ class Logger(UtilitySpec):
     """Shared logger utility used by translator code and generated scripts."""
 
     utility_name = "logger"
+    always_include = True
 
     CRITICAL: ClassVar[int] = logging.CRITICAL
     ERROR: ClassVar[int] = logging.ERROR

@@ -13,6 +13,7 @@ class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
+    always_include = True
 
     def __init__(self) -> None:
         registry = getattr(type(self), "_registry", None)

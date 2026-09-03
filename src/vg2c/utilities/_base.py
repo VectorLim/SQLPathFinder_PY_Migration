@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import re
 from abc import ABC, abstractmethod
@@ -15,6 +16,14 @@ __all__ = ["EmitterUtility", "UtilitySpec"]
 
 
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
+
+
+def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return node
+    return None
 
 
 def _strip_embed_artifacts(source: str, class_name: str) -> str:
@@ -47,6 +56,9 @@ class UtilitySpec(ABC):
 
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
+    # Forced-in regardless of which block Kinds the workflow uses (e.g. PipelineContext/Logger
+    # are referenced unconditionally by every generated script).
+    always_include: ClassVar[bool] = False
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
     _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
 
@@ -77,10 +89,23 @@ class UtilitySpec(ABC):
             UtilitySpec._emit_handlers[handled_kind] = cls
 
     @classmethod
-    def get_source(cls) -> str:
+    def get_source(cls, source_override: str | None = None) -> str:
+        """Return this utility's embeddable source.
+
+        ``source_override``, when given, is a whole-file source string (already
+        cleaned of promoted inline imports -- see ``utilities/__init__.py``) to
+        extract this class's definition from instead of live ``inspect.getsource``.
+        """
         custom = getattr(cls, "__vg2c_source__", None)
         if custom is not None:
             return str(custom).rstrip()
+
+        if source_override is not None:
+            node = _find_class_def(source_override, cls.__name__)
+            if node is not None:
+                segment = ast.get_source_segment(source_override, node)
+                if segment is not None:
+                    return _strip_embed_artifacts(segment, cls.__name__)
 
         source = inspect.getsource(cls)
         return _strip_embed_artifacts(source, cls.__name__)

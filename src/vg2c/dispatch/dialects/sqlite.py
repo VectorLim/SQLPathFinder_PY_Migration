@@ -8,12 +8,15 @@ from pathlib import Path
 import pandas as pd
 
 from vg2c.dispatch.base import DialectHandler
+from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.crosstab import CrosstabUtility
 from vg2c.kind import Kind
 
 
-class SqliteReader:
+class SqliteReader(UtilitySpec):
     """Run SQL joins over CSV files using in-memory SQLite."""
+
+    utility_name = "sqlite_reader"
 
     STMT_SPLIT_RE = re.compile(
         r"(?:'[^']*'|\"[^\"]*\"|\[[^\]]*\]|`[^`]*`|[^;])+",
