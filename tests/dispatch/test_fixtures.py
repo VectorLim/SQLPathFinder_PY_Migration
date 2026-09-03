@@ -116,3 +116,29 @@ def test_actual_script_record_names_present(FIXTURES: Path) -> None:
         if d.reader_target.record_name
     }
     assert "WIP_Lot_History_v2" in record_names or "AT_Metrology" in record_names
+
+
+# --- /NODE site extraction (ReaderTarget.site) ---
+
+
+def test_script_another_site_is_km(FIXTURES: Path) -> None:
+    """/NODE=KM.[A15_PROD_21.].MARS -> site "KM"."""
+    program = _run_pipeline(FIXTURES, "script_another.txt")
+    mars_blocks = [d for d in program.dispatched if d.reader_cls is MarsReader]
+    assert mars_blocks
+    assert all(d.reader_target.site == "KM" for d in mars_blocks)
+
+
+def test_sql_script_site_is_km_across_dialects(FIXTURES: Path) -> None:
+    """/NODE=KM.[...].MARS and /NODE=KM.OASYS both resolve to site "KM"."""
+    program = _run_pipeline(FIXTURES, "sql_script.txt")
+    non_sqlite = [d for d in program.dispatched if d.reader_cls is not SqliteReader]
+    assert non_sqlite
+    assert all(d.reader_target.site == "KM" for d in non_sqlite)
+
+
+def test_actual_script_macro_placeholder_node_has_no_site(FIXTURES: Path) -> None:
+    """/NODE=<<<MARS>>> / <<<ARIES>>> carry no literal site at compile time."""
+    program = _run_pipeline(FIXTURES, "actual_script.txt")
+    assert program.dispatched
+    assert all(d.reader_target.site == "" for d in program.dispatched)

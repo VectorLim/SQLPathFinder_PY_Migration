@@ -17,6 +17,14 @@ WORKFLOW_START = "# <vg2c:workflow:start>"
 WORKFLOW_END = "# <vg2c:workflow:end>"
 
 
+def _first_literal_site(dispatched: DispatchedProgram) -> str:
+    """Return the first block's literal /NODE site (e.g. "KM"), or "" if none is known."""
+    for block in dispatched.dispatched:
+        if block.reader_target.site:
+            return block.reader_target.site
+    return ""
+
+
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5 entry point: emit a Python script from DispatchedProgram.
 
@@ -88,6 +96,9 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
     script_writer.write("ctx = PipelineContext()")
+    default_site = _first_literal_site(dispatched)
+    if default_site:
+        script_writer.write(f'ctx.macro.set_named("NODE", {default_site!r})')
     script_writer.write_block(run_body)
     script_writer.pop_indent()
     script_writer.write(WORKFLOW_END)

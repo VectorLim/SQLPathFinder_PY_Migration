@@ -76,6 +76,9 @@ def test_run_query_reads_datasyncx_and_lowercases_columns():
         def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
             return sql.replace("<<<X>>>", "42")
 
+        def named(self, name: str) -> str:
+            return ""
+
     class FakeCsvIo:
         def write(self, output: str, result, header=None) -> None:
             captured["output"] = output
@@ -98,10 +101,106 @@ def test_run_query_reads_datasyncx_and_lowercases_columns():
     assert captured["result"].columns == ["col_a", "col_b"]
 
 
+def test_run_query_explicit_node_overrides_everything():
+    calls: list[tuple[str, str]] = []
+
+    class FakeResult:
+        columns = ["COL_A"]
+
+    class FakeReader:
+        def read(self, site: str, query: str):
+            calls.append((site, query))
+            return FakeResult()
+
+    class FakeMacro:
+        def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
+            return sql
+
+        def named(self, name: str) -> str:
+            return "PG"  # script default; explicit kwarg below must win
+
+    class FakeCsvIo:
+        def write(self, output: str, result, header=None) -> None:
+            pass
+
+    ctx = object.__new__(PipelineContext)
+    ctx.macro = FakeMacro()
+    ctx.csv_io = FakeCsvIo()
+    ctx.run_query("select 1", "out.csv", FakeReader(), node="KM")
+
+    assert calls == [("KM", "select 1")]
+
+
+def test_run_query_uses_macro_node_when_no_explicit_override():
+    calls: list[tuple[str, str]] = []
+
+    class FakeResult:
+        columns = ["COL_A"]
+
+    class FakeReader:
+        def read(self, site: str, query: str):
+            calls.append((site, query))
+            return FakeResult()
+
+    class FakeMacro:
+        def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
+            return sql
+
+        def named(self, name: str) -> str:
+            assert name == "NODE"
+            return "PG"
+
+    class FakeCsvIo:
+        def write(self, output: str, result, header=None) -> None:
+            pass
+
+    ctx = object.__new__(PipelineContext)
+    ctx.macro = FakeMacro()
+    ctx.csv_io = FakeCsvIo()
+    ctx.run_query("select 1", "out.csv", FakeReader())
+
+    assert calls == [("PG", "select 1")]
+
+
+def test_run_query_falls_back_to_env_var_default(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    class FakeResult:
+        columns = ["COL_A"]
+
+    class FakeReader:
+        def read(self, site: str, query: str):
+            calls.append((site, query))
+            return FakeResult()
+
+    class FakeMacro:
+        def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
+            return sql
+
+        def named(self, name: str) -> str:
+            return ""
+
+    class FakeCsvIo:
+        def write(self, output: str, result, header=None) -> None:
+            pass
+
+    monkeypatch.setenv("VG2C_DEFAULT_NODE", "XX")
+
+    ctx = object.__new__(PipelineContext)
+    ctx.macro = FakeMacro()
+    ctx.csv_io = FakeCsvIo()
+    ctx.run_query("select 1", "out.csv", FakeReader())
+
+    assert calls == [("XX", "select 1")]
+
+
 def test_run_query_requires_reader_behavior():
     class FakeMacro:
         def substitute(self, sql: str, vars: dict[str, str] | None = None) -> str:
             return sql
+
+        def named(self, name: str) -> str:
+            return ""
 
     ctx = object.__new__(PipelineContext)
     ctx.macro = FakeMacro()

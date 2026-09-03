@@ -14,6 +14,7 @@ class ReaderTarget:
     record_version: str | None
     node: str
     instance: str | None
+    site: str = ""  # leading literal site token of `node` (e.g. "KM"), "" if unresolvable
 
 
 @dataclass(frozen=True, slots=True)

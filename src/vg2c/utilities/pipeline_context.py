@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Callable, Any, ContextManager
 
 from vg2c.emitter.models import emittable
@@ -59,8 +60,8 @@ class PipelineContext(UtilitySpec):
         content = self.macro.substitute(template, vars=vars)
         self.fs_ops.write_file(path, content)
 
-    def _read_datasyncx(self, sql: str, reader: Any):
-        result = reader.read(site="KM", query=sql)
+    def _read_datasyncx(self, sql: str, reader: Any, node: str):
+        result = reader.read(site=node, query=sql)
         result.columns = [col.lower() for col in result.columns]
         return result
 
@@ -73,13 +74,18 @@ class PipelineContext(UtilitySpec):
         inputs: list[str] | None = None,
         header: list[str] | None = None,
         crosstab: dict | None = None,
+        node: str | None = None,
     ):
         sql = self.macro.substitute(sql)
+        # precedence: explicit override > script default (ctx.macro "NODE") > global env setting > legacy default
+        effective_node = (
+            node or self.macro.named("NODE") or os.environ.get("VG2C_DEFAULT_NODE", "KM")
+        )
 
         if hasattr(reader, "execute"):
             result = reader.execute(sql, inputs or [])
         else:
-            result = self._read_datasyncx(sql, reader)
+            result = self._read_datasyncx(sql, reader, effective_node)
 
         if crosstab:
             result = self.crosstab.apply(
