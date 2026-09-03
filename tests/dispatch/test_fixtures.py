@@ -7,7 +7,7 @@ import pytest
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from datasyncx import AriesReader, MarsReader, OracleReader
-from vg2c.dispatch.dialects.sqlite import SqliteReader
+from vg2c.utilities.sqlite_reader import SqliteReader
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
 

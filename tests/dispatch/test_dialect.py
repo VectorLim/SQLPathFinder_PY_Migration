@@ -6,8 +6,9 @@ from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.dialects.aries import AriesDialect
 from vg2c.dispatch.dialects.mars import MarsDialect
 from vg2c.dispatch.dialects.oasys import OasysDialect
-from vg2c.dispatch.dialects.sqlite import SqliteDialect, SqliteReader
+from vg2c.dispatch.dialects.sqlite import SqliteDialect
 from vg2c.kind import Kind
+from vg2c.utilities.sqlite_reader import SqliteReader
 
 
 @pytest.mark.parametrize(

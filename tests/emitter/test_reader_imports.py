@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from vg2c.dispatch.dialects.sqlite import SqliteReader
 from vg2c.emitter import _reader_import_or_root, _resolve_reader_imports_and_roots
+from vg2c.utilities.sqlite_reader import SqliteReader
 
 
 class _FakeBlock:

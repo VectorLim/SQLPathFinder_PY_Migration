@@ -46,12 +46,8 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.generic import UnknownUtility  # noqa: F401
     from vg2c.utilities.mail import MailService  # noqa: F401
     from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401
+    from vg2c.utilities.sqlite_reader import SqliteReader  # noqa: F401
     from vg2c.utilities.wait_file import WaitFile  # noqa: F401
-
-    # SqliteReader is a plain project-local class, not a Kind handler -- it must be
-    # a registered UtilitySpec so it gets embedded (not live-imported) like every
-    # other project-local class, matching Aries/Mars/Oracle reader parity.
-    from vg2c.dispatch.dialects.sqlite import SqliteReader  # noqa: F401
 
     _CONCRETE_UTILS_LOADED = True
     log.debug("Loaded concrete utility modules for check/emit registration.")
