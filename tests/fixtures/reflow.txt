@@ -1,0 +1,265 @@
+<OPTIONS>
+/NODE=PG.[A12_PROD_0.].MARS
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a0_30714.tab
+/HEADERS=facility,site_work_week_,operation,prodgroup3_,lot_,owner,out_date
+/INSTANCE=30714
+/PROMPT-TEXT=Step 1.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          f0.facility AS facility
+         ,c0.ww AS site_work_week_
+         ,f0.operation AS operation
+         ,p.prodgroup3 AS prodgroup3_
+         ,f0.lot AS lot_
+         ,f0.owner AS owner
+         ,To_Char(f0.out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+FROM 
+@[]@F_LotHist f0
+INNER JOIN @[]@F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation = '0265' 
+ AND      f0.out_date >= TRUNC(SYSDATE) - 120 
+ AND      f0.movedout_txn = 'MVOU' 
+ AND      f0.owner Not In ('TEST') 
+-- Tail A
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=PG.ARIES
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/CSV=yeuchuan_a1_30714.tab
+/HEADERS=site_work_week,prodgroup3,lot,visual_id,image_name,image_full_path_RAW,rank,rank_,maxrank_,filter_,image_full_path,numeric_value,numeric_value_max
+/INSTANCE=30714
+/PROMPT-TEXT=Step 1.1-a1. Fetching ARIES Data
+/RECORD=AT_TDX_NXR@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,Max(image_name) AS image_name
+         ,Max(image_full_path_RAW) AS image_full_path_RAW
+         ,rank AS rank
+         ,rank_ AS rank_
+         ,maxrank_ AS maxrank_
+         ,filter_ AS filter_
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,end_date AS end_date
+         ,image_name AS image_name
+         ,image_full_path_RAW AS image_full_path_RAW
+         ,rank AS rank
+         ,rank_ AS rank_
+         ,maxrank_ AS maxrank_
+         ,filter_ AS filter_
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,end_date AS end_date
+         ,image_name AS image_name
+         ,image_full_path_RAW AS image_full_path_RAW
+         ,rank AS rank
+         ,rank_ AS rank_
+         ,maxrank_ AS maxrank_
+         ,CASE WHEN    maxrank_ =  rank_ THEN 1 ELSE 0 END AS filter_
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,end_date AS end_date
+         ,image_name AS image_name
+         ,image_full_path_RAW AS image_full_path_RAW
+         ,rank AS rank
+         ,rank_ AS rank_
+         ,MAX ( rank_ ) OVER (PARTITION BY  visual_id  ) AS maxrank_
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,end_date AS end_date
+         ,image_name AS image_name
+         ,image_full_path_RAW AS image_full_path_RAW
+         ,rank AS rank
+         ,CASE WHEN  image_name like '%S0%' THEN  rank +1 ELSE  rank END AS rank_
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT 
+          site_work_week AS site_work_week
+         ,prodgroup3 AS prodgroup3
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,end_date AS end_date
+         ,image_name AS image_name
+         ,image_full_path_RAW AS image_full_path_RAW
+         ,
+CAST ( SUBSTR( image_name , (INSTR( image_name ,'_V',1,1)+2) , (CASE WHEN  image_name  like '%S0%' THEN INSTR( image_name ,'S0',1,1) ELSE INSTR( image_name ,'.JPG',1,1) END) - (INSTR( image_name ,'_V',1,1)+2)  ) 
+ AS NUMERIC) AS rank
+         ,image_full_path AS image_full_path
+         ,numeric_value AS numeric_value
+         ,numeric_value_max AS numeric_value_max
+FROM
+(
+SELECT  
+          nxr0.lao_start_ww AS site_work_week
+         ,mp.prodgroup3 AS prodgroup3
+         ,nxr0.lot AS lot
+         ,nxr2.visual_id AS visual_id
+         ,nxr0.processing_end_time AS end_date
+         ,nxr4.string_value AS image_name
+         ,CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END AS image_full_path_RAW
+         ,CASE WHEN   SUBSTR( nxr0.lot ,1,1) = '4'   THEN SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,1,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\DFM_IMAGE',1,1))-1)||'.CR.INTEL.COM'||SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\',3,1)),100) 
+
+
+WHEN   SUBSTR( nxr0.lot ,1,1) = '8'   THEN SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,1,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\DFM_IMAGE',1,1))-1)||'.CD.INTEL.COM'||SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\',3,1)),100) 
+
+
+
+WHEN   SUBSTR( nxr0.lot ,1,1) = 'M'   THEN SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,1,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\DFM_IMAGE',1,1))-1)||'.PNG.INTEL.COM'||SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\',3,1)),100) 
+
+
+
+WHEN   SUBSTR( nxr0.lot ,1,1) = 'D'   THEN SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,1,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\DFM_IMAGE',1,1))-1)||'.CH.INTEL.COM'||SUBSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,(INSTR( CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END ,'\',3,1)),100) 
+
+
+
+ELSE CASE WHEN nxr4.string_value IS NOT NULL THEN '\\' || nxr0.image_filer_address || '\' || nxr0.image_relative_path || nxr4.string_value ELSE NULL END  END AS image_full_path
+         ,nxr3.numeric_value AS numeric_value
+         ,MAX ( nxr3.numeric_value ) OVER (PARTITION BY  nxr2.visual_id  ) AS numeric_value_max
+FROM 
+ARIES_VIEWS.AV_NXR_SESSION nxr0
+LEFT JOIN A_MARS_Lot ml ON nxr0.lot=ml.lot
+LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND mp.facility =nxr0.facility
+INNER JOIN ARIES_VIEWS.AV_NXR_MEDIA_TESTING nxr1 ON nxr1.lao_start_ww = nxr0.lao_start_ww AND nxr1.obj_s_id = nxr0.obj_s_id
+INNER JOIN ARIES_VIEWS.AV_NXR_UNIT_TESTING nxr2 ON nxr2.lao_start_ww = nxr1.lao_start_ww AND nxr2.obj_s_id = nxr1.obj_s_id AND nxr2.obj_mt_id = nxr1.obj_mt_id
+LEFT JOIN ARIES_VIEWS.AV_NXR_DEVICEDATA nxr4 ON nxr4.lao_start_ww = nxr2.lao_start_ww AND nxr4.obj_s_id = nxr2.obj_s_id AND nxr4.obj_mt_id = nxr2.obj_mt_id AND nxr4.obj_ut_id = nxr2.obj_ut_id AND nxr4.parameter='IMAGENAME'
+LEFT JOIN ARIES_VIEWS.AV_NXR_DEVICEDATA nxr3 ON nxr3.lao_start_ww = nxr2.lao_start_ww AND nxr3.obj_s_id = nxr2.obj_s_id AND nxr3.obj_mt_id = nxr2.obj_mt_id AND nxr3.obj_ut_id = nxr2.obj_ut_id
+WHERE
+              (nxr0.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_30714.tab", lot_, "nxr0.lot In") 
+ AND      nxr0.operation = '0265' 
+ AND      nxr3.parameter In ('GREATESTVOIDAREA'
+,'TOTALVOIDAREA') 
+ AND      nxr3.numeric_value < 0.005 
+)
+)
+)
+)
+)
+WHERE
+              filter_ = 1 
+)
+GROUP BY 
+          site_work_week
+         ,prodgroup3
+         ,lot
+         ,visual_id
+         ,rank
+         ,rank_
+         ,maxrank_
+         ,filter_
+         ,image_full_path
+         ,numeric_value
+         ,numeric_value_max
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/CSV=XRAY_results_batch.csv
+/TABLE=yeuchuan_a0_30714.tab,yeuchuan_a1_30714.tab
+/HEADERS=facility,site_work_week,prodgroup3,lot,owner,out_date,visual_id,image_name,image_full_path_RAW,rank_,maxrank_,filter_,image_full_path,numeric_value,numeric_value_max
+/DELETE=*Instance*
+/INSTANCE=30714
+/SQLITE_DT=,facility(c),site_work_week_(n),operation(c),prodgroup3_(c),lot_(c),site_work_week(n),prodgroup3(c),lot(c),owner(c),out_date(d),visual_id(c),image_name(c),image_full_path_RAW(c),rank(n),rank_(n),maxrank_(n),filter_(n),image_full_path(c),numeric_value(n),numeric_value_max(n)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_30714] ([lot]);
+
+SELECT /*L0*/  DISTINCT 
+          a0.[facility] AS [facility]
+         ,a1.[site_work_week] AS [site_work_week]
+         ,a1.[prodgroup3] AS [prodgroup3]
+         ,a1.[lot] AS [lot]
+         ,a0.[owner] AS [owner]
+         ,a0.[out_date] AS [out_date]
+         ,a1.[visual_id] AS [visual_id]
+         ,a1.[image_name] AS [image_name]
+         ,a1.[image_full_path_RAW] AS [image_full_path_RAW]
+         ,a1.[rank_] AS [rank_]
+         ,a1.[maxrank_] AS [maxrank_]
+         ,a1.[filter_] AS [filter_]
+         ,a1.[image_full_path] AS [image_full_path]
+         ,a1.[numeric_value] AS [numeric_value]
+         ,a1.[numeric_value_max] AS [numeric_value_max]
+FROM 
+           [yeuchuan_a0_30714] a0
+ RIGHT OUTER JOIN [yeuchuan_a1_30714] a1
+  ON a0.[lot_] = a1.[lot]

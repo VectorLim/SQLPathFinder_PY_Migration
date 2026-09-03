@@ -324,7 +324,7 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand"><span>SQL</span>PathFinder</div>
+        <div className="brand"><span>PYTHON</span>PathFinder</div>
         <div className="translate-box">
           <textarea
             aria-label="VG2 source paths"
