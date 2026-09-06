@@ -51,25 +51,6 @@ class ArtifactRole:
 
 
 @dataclass(frozen=True, slots=True)
-class OperationSpec:
-    """Non-inferable semantic metadata attached directly to an emittable method."""
-
-    capabilities: tuple[str, ...] = ()
-    parameter_capabilities: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    artifact_roles: tuple[tuple[str, ArtifactRole], ...] = ()
-    supported_mutations: tuple[str, ...] = ("set-parameter",)
-
-    def capabilities_for_parameter(self, parameter_name: str) -> tuple[str, ...]:
-        return next(
-            (caps for name, caps in self.parameter_capabilities if name == parameter_name),
-            (),
-        )
-
-    def artifact_role(self, parameter_name: str) -> ArtifactRole | None:
-        return next((role for name, role in self.artifact_roles if name == parameter_name), None)
-
-
-@dataclass(frozen=True, slots=True)
 class ParameterDefinition:
     name: str
     position: int | None
@@ -228,37 +209,27 @@ class StepEmission:
     invocations: tuple[_RelativeInvocation, ...]
 
 
-def operation_spec(
-    *,
-    capabilities: tuple[str, ...] = (),
-    parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
-    artifact_roles: dict[str, ArtifactRole] | None = None,
-    supported_mutations: tuple[str, ...] = ("set-parameter",),
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Attach only semantics that cannot be inferred from the Python signature."""
-    spec = OperationSpec(
-        capabilities=tuple(capabilities),
-        parameter_capabilities=tuple(
-            (name, tuple(values)) for name, values in (parameter_capabilities or {}).items()
-        ),
-        artifact_roles=tuple((artifact_roles or {}).items()),
-        supported_mutations=tuple(supported_mutations),
-    )
-
-    def decorate(func: Callable[P, R]) -> Callable[P, R]:
-        func.__vg2c_operation_spec__ = spec
-        return func
-
-    return decorate
-
-
-class emittable(Generic[P, R]):
+class EmittableOperation(Generic[P, R]):
     """Descriptor that renders utility calls and records their semantic arguments."""
 
-    def __init__(self, func: Callable[P, R]) -> None:
+    def __init__(
+        self,
+        func: Callable[P, R],
+        *,
+        capabilities: tuple[str, ...] = (),
+        parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
+        artifact_roles: dict[str, ArtifactRole] | None = None,
+        supported_mutations: tuple[str, ...] = ("set-parameter",),
+    ) -> None:
         self.func = func
         self.__name__ = func.__name__
         self.__doc__ = func.__doc__
+        self.capabilities = tuple(capabilities)
+        self.parameter_capabilities = tuple(
+            (name, tuple(values)) for name, values in (parameter_capabilities or {}).items()
+        )
+        self.artifact_roles = tuple((artifact_roles or {}).items())
+        self.supported_mutations = tuple(supported_mutations)
 
     @overload
     def __get__(self, instance: None, owner: Any) -> EmittableMethod[P, R]: ...
@@ -272,7 +243,7 @@ class emittable(Generic[P, R]):
         return BoundEmittableMethod(self, instance, owner)
 
     def definition(self, owner: Any) -> UtilityOperationDefinition:
-        return _operation_definition(owner, self.func)
+        return _operation_definition(owner, self)
 
     @staticmethod
     def render_method_call(
@@ -330,8 +301,45 @@ class emittable(Generic[P, R]):
         return RenderedCall(source, definition, tuple(rendered_arguments))
 
 
+@overload
+def emittable(func: Callable[P, R], /) -> EmittableOperation[P, R]: ...
+
+
+@overload
+def emittable(
+    *,
+    capabilities: tuple[str, ...] = (),
+    parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
+    artifact_roles: dict[str, ArtifactRole] | None = None,
+    supported_mutations: tuple[str, ...] = ("set-parameter",),
+) -> Callable[[Callable[P, R]], EmittableOperation[P, R]]: ...
+
+
+def emittable(
+    func: Callable[P, R] | None = None,
+    /,
+    *,
+    capabilities: tuple[str, ...] = (),
+    parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
+    artifact_roles: dict[str, ArtifactRole] | None = None,
+    supported_mutations: tuple[str, ...] = ("set-parameter",),
+) -> EmittableOperation[P, R] | Callable[[Callable[P, R]], EmittableOperation[P, R]]:
+    """Declare an emitted operation and any non-inferable semantic metadata."""
+
+    def decorate(target: Callable[P, R]) -> EmittableOperation[P, R]:
+        return EmittableOperation(
+            target,
+            capabilities=capabilities,
+            parameter_capabilities=parameter_capabilities,
+            artifact_roles=artifact_roles,
+            supported_mutations=supported_mutations,
+        )
+
+    return decorate(func) if func is not None else decorate
+
+
 class EmittableMethod(Generic[P, R]):
-    def __init__(self, descriptor: emittable[P, R], owner: Any) -> None:
+    def __init__(self, descriptor: EmittableOperation[P, R], owner: Any) -> None:
         self.descriptor = descriptor
         self.func = descriptor.func
         self.owner = owner
@@ -340,13 +348,13 @@ class EmittableMethod(Generic[P, R]):
         return self.func(instance, *args, **kwargs)
 
     def render(self, *args: Any, **kwargs: Any) -> RenderedCall:
-        return emittable.render_method_call(
+        return EmittableOperation.render_method_call(
             self.descriptor.definition(self.owner), args=args, kwargs=kwargs
         )
 
 
 class BoundEmittableMethod(Generic[P, R]):
-    def __init__(self, descriptor: emittable[P, R], instance: Any, owner: Any) -> None:
+    def __init__(self, descriptor: EmittableOperation[P, R], instance: Any, owner: Any) -> None:
         self.descriptor = descriptor
         self.func = descriptor.func
         self.instance = instance
@@ -356,7 +364,7 @@ class BoundEmittableMethod(Generic[P, R]):
         return self.func(self.instance, *args, **kwargs)
 
     def render(self, *args: Any, **kwargs: Any) -> RenderedCall:
-        return emittable.render_method_call(
+        return EmittableOperation.render_method_call(
             self.descriptor.definition(self.owner), args=args, kwargs=kwargs
         )
 
@@ -558,7 +566,10 @@ def _value_metadata(value: Any) -> dict[str, Any]:
     }
 
 
-def _operation_definition(owner: Any, func: Callable[..., Any]) -> UtilityOperationDefinition:
+def _operation_definition(
+    owner: Any, operation: EmittableOperation[P, R]
+) -> UtilityOperationDefinition:
+    func = operation.func
     utility_name = getattr(owner, "utility_name", owner.__name__.lower())
     signature = inspect.signature(func)
     parameters: list[ParameterDefinition] = []
@@ -589,7 +600,6 @@ def _operation_definition(owner: Any, func: Callable[..., Any]) -> UtilityOperat
                 choices=choices,
             )
         )
-    spec = getattr(func, "__vg2c_operation_spec__", OperationSpec())
     class_doc = inspect.cleandoc(owner.__doc__) if owner.__doc__ else ""
     return UtilityOperationDefinition(
         id=f"{utility_name}.{func.__name__}",
@@ -602,10 +612,10 @@ def _operation_definition(owner: Any, func: Callable[..., Any]) -> UtilityOperat
         method_description=inspect.getdoc(func),
         return_type=_annotation(signature.return_annotation),
         parameters=tuple(parameters),
-        capabilities=spec.capabilities,
-        parameter_capabilities=spec.parameter_capabilities,
-        artifact_roles=spec.artifact_roles,
-        supported_mutations=spec.supported_mutations,
+        capabilities=operation.capabilities,
+        parameter_capabilities=operation.parameter_capabilities,
+        artifact_roles=operation.artifact_roles,
+        supported_mutations=operation.supported_mutations,
     )
 
 
@@ -648,12 +658,12 @@ __all__ = [
     "BoundEmittableMethod",
     "CodeExpr",
     "EditorType",
+    "EmittableOperation",
     "EmittableMethod",
     "EmittedInvocation",
     "EmittedParameter",
     "EmittedScript",
     "EmittedStep",
-    "OperationSpec",
     "ParameterDefinition",
     "RenderedCall",
     "SourceRange",
@@ -662,5 +672,4 @@ __all__ = [
     "build_step_emission",
     "emittable",
     "finalize_steps",
-    "operation_spec",
 ]

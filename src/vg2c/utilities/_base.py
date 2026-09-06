@@ -7,10 +7,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from vg2c.emitter.models import (
+    EmittableOperation,
     StepEmission,
     UtilityOperationDefinition,
     build_step_emission,
-    emittable,
 )
 from vg2c.kind import Kind
 
@@ -23,7 +23,7 @@ __all__ = ["EmitterUtility", "UtilitySpec"]
 
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
 _EMBED_ONLY_ASSIGNMENTS = {"handles", "check_priority"}
-_EMBED_ONLY_DECORATORS = {"emittable", "operation_spec"}
+_EMBED_ONLY_DECORATORS = {"emittable"}
 
 
 def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
@@ -162,7 +162,7 @@ class UtilitySpec(ABC):
         for utility in cls.registered():
             for name in utility.__dict__:
                 raw = inspect.getattr_static(utility, name, None)
-                if isinstance(raw, emittable):
+                if isinstance(raw, EmittableOperation):
                     definitions.append(raw.definition(utility))
         return tuple(definitions)
 
@@ -174,7 +174,7 @@ class UtilitySpec(ABC):
         if utility is None:
             return None
         raw = inspect.getattr_static(utility, method_name, None)
-        return raw.definition(utility) if isinstance(raw, emittable) else None
+        return raw.definition(utility) if isinstance(raw, EmittableOperation) else None
 
     @staticmethod
     def emit_block(block: Any) -> list[str] | tuple[str, list[str]] | None:
