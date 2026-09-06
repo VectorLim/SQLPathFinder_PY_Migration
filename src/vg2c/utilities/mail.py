@@ -24,15 +24,16 @@ from pathlib import Path
 from typing import Any
 
 import keyring
+
+from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.kind import Kind
 from vg2c.logger import Logger
-from vg2c.emitter.models import emittable
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities.macro_state import MacroState
 from vg2c.utilities._emit_helpers import (
     split_utility_command,
     strip_quotes,
 )
-from vg2c.kind import Kind
+from vg2c.utilities.macro_state import MacroState
 
 log = Logger.getLogger("vg2c.emitter.mail")
 
@@ -46,10 +47,6 @@ class MailService(EmitterUtility):
     DEFAULT_SMTP_HOST = "smtpauth.intel.com"
     DEFAULT_SMTP_PORT = 587
 
-    # ------------------------------------------------------------------
-    # Credential retrieval
-    # ------------------------------------------------------------------
-
     @classmethod
     def _load_credential(cls) -> keyring.credentials.Credential:
         cred = keyring.get_credential(cls.KEYRING_SERVICE, None)
@@ -61,10 +58,6 @@ class MailService(EmitterUtility):
             )
         return cred
 
-    # ------------------------------------------------------------------
-    # Stage-1 classification
-    # ------------------------------------------------------------------
-
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
         text = options.lookup.get("UTILITIES", "")
@@ -73,10 +66,6 @@ class MailService(EmitterUtility):
         if MailService._is_mail_utility(split_utility_command(text)):
             return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
         return None
-
-    # ------------------------------------------------------------------
-    # Emission
-    # ------------------------------------------------------------------
 
     @classmethod
     def emit_block(cls, block: Any) -> list[str] | None:
@@ -104,8 +93,8 @@ class MailService(EmitterUtility):
         return [p.strip() for p in strip_quotes(value).split(",") if p.strip()]
 
     @staticmethod
-    def _list_expr(values: list[str]) -> str:
-        return "[" + ", ".join(MacroState.to_py_expr(v) for v in values) + "]"
+    def _list_expr(values: list[str]) -> CodeExpr:
+        return MacroState.list_code_expr(values)
 
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
@@ -114,35 +103,27 @@ class MailService(EmitterUtility):
         if len(payload) >= 5:
             attachments = cls._csv_items(payload[0])
             from_addr = strip_quotes(payload[1])
-            body = (
-                payload[3]
-                if strip_quotes(payload[3])
-                else (body_fallback or payload[2])
-            )
+            body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
 
             kwargs: dict[str, Any] = {
-                "to": MacroState.to_py_expr(payload[4]),
-                "subject": MacroState.to_py_expr(payload[2]),
-                "body": MacroState.to_py_expr(body),
+                "to": MacroState.to_code_expr(payload[4]),
+                "subject": MacroState.to_code_expr(payload[2]),
+                "body": MacroState.to_code_expr(body),
             }
             if attachments:
                 kwargs["attachments"] = cls._list_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = MacroState.to_py_expr(from_addr)
+                kwargs["from_addr"] = MacroState.to_code_expr(from_addr)
             return cls.send.render(**kwargs)
 
         if len(payload) >= 3:
             return cls.send.render(
-                to=MacroState.to_py_expr(payload[0]),
-                subject=MacroState.to_py_expr(payload[1]),
-                body=MacroState.to_py_expr(payload[2]),
+                to=MacroState.to_code_expr(payload[0]),
+                subject=MacroState.to_code_expr(payload[1]),
+                body=MacroState.to_code_expr(payload[2]),
             )
 
         return None
-
-    # ------------------------------------------------------------------
-    # Runtime send (emittable)
-    # ------------------------------------------------------------------
 
     @emittable
     def send(
@@ -179,8 +160,13 @@ class MailService(EmitterUtility):
                 smtp.ehlo()
                 smtp.login(cred.username, cred.password)
                 smtp.send_message(msg)
-        except Exception as exc:
-            pass
+        except smtplib.SMTPAuthenticationError as exc:
+            raise RuntimeError(
+                "SMTP authentication failed. Check the SMTP credential stored in "
+                "Windows Credential Manager."
+            ) from exc
+        except (smtplib.SMTPException, OSError) as exc:
+            raise RuntimeError(f"SMTP send failed: {exc}") from exc
 
     @staticmethod
     def _resolve_body(body: str) -> str:

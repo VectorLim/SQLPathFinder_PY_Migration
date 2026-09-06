@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
-from datasyncx import AriesReader
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.kind import Kind
 
 
 class AriesDialect(DialectHandler):
     """Handler for Oracle ARIES dialect."""
 
-    reader_cls = AriesReader
+    reader = ReaderSpec(module="datasyncx", name="AriesReader")
     kind = Kind.SQL_QUERY
 
     @classmethod
@@ -20,5 +20,4 @@ class AriesDialect(DialectHandler):
 
     @classmethod
     def substitute(cls, body: str) -> str:
-        # No schema substitution for ARIES
         return body

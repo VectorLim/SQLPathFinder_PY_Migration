@@ -2,56 +2,47 @@ from __future__ import annotations
 
 import pytest
 
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.emitter import _reader_import_or_root, _resolve_reader_imports_and_roots
-from vg2c.utilities.sqlite_reader import SqliteReader
 
 
 class _FakeBlock:
-    def __init__(self, reader_cls: type) -> None:
-        self.reader_cls = reader_cls
-
-
-class _FakeThirdPartyReader:
-    """Stand-in for a datasyncx reader class."""
-
-
-_FakeThirdPartyReader.__module__ = "datasyncx.readers.fake_reader"
-
-
-class _FakeLocalReader:
-    """A vg2c-local reader that was never registered as a UtilitySpec."""
+    def __init__(self, reader: ReaderSpec) -> None:
+        self.reader = reader
 
 
 def test_sqlite_only_yields_no_import_and_embeds_reader() -> None:
-    imports, roots = _resolve_reader_imports_and_roots((_FakeBlock(SqliteReader),))
+    sqlite = ReaderSpec(
+        module="vg2c.utilities.sqlite_reader",
+        name="SqliteReader",
+        utility_name="sqlite_reader",
+    )
+    imports, roots = _resolve_reader_imports_and_roots((_FakeBlock(sqlite),))
 
     assert imports == set()
     assert roots == {"sqlite_reader"}
 
 
 def test_third_party_reader_yields_plain_import() -> None:
-    imports, roots = _resolve_reader_imports_and_roots(
-        (_FakeBlock(_FakeThirdPartyReader),)
-    )
+    reader = ReaderSpec(module="datasyncx.readers.fake_reader", name="FakeReader")
+    imports, roots = _resolve_reader_imports_and_roots((_FakeBlock(reader),))
 
-    assert imports == {
-        "from datasyncx.readers.fake_reader import _FakeThirdPartyReader"
-    }
+    assert imports == {"from datasyncx.readers.fake_reader import FakeReader"}
     assert roots == set()
 
 
 def test_both_readers_together_produce_both_without_duplicates() -> None:
+    sqlite = ReaderSpec(
+        module="vg2c.utilities.sqlite_reader",
+        name="SqliteReader",
+        utility_name="sqlite_reader",
+    )
+    external = ReaderSpec(module="datasyncx.readers.fake_reader", name="FakeReader")
     imports, roots = _resolve_reader_imports_and_roots(
-        (
-            _FakeBlock(SqliteReader),
-            _FakeBlock(_FakeThirdPartyReader),
-            _FakeBlock(_FakeThirdPartyReader),
-        )
+        (_FakeBlock(sqlite), _FakeBlock(external), _FakeBlock(external))
     )
 
-    assert imports == {
-        "from datasyncx.readers.fake_reader import _FakeThirdPartyReader"
-    }
+    assert imports == {"from datasyncx.readers.fake_reader import FakeReader"}
     assert roots == {"sqlite_reader"}
 
 
@@ -63,7 +54,7 @@ def test_no_dispatched_blocks_yields_nothing() -> None:
 
 
 def test_unregistered_local_reader_raises_clear_diagnostic() -> None:
-    _FakeLocalReader.__module__ = "vg2c.dispatch.dialects.fake"
+    reader = ReaderSpec(module="vg2c.dispatch.dialects.fake", name="FakeReader")
 
-    with pytest.raises(ValueError, match="not a registered UtilitySpec"):
-        _reader_import_or_root(_FakeLocalReader)
+    with pytest.raises(ValueError, match="has no utility_name"):
+        _reader_import_or_root(reader)

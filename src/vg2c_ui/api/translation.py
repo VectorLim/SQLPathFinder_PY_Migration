@@ -1,22 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field
+from pathlib import Path
 
-from vg2c_ui.domain.models import Diagnostic, WorkflowDocument
+from fastapi import APIRouter, Request
+
+from vg2c_ui.api.models import (
+    BatchTranslationRequest,
+    BatchTranslationResponse,
+    DiagnosticView,
+    DocumentView,
+)
 from vg2c_ui.services.document_store import DocumentStore
 
 router = APIRouter(prefix="/api/translations", tags=["translations"])
-
-
-class BatchTranslationRequest(BaseModel):
-    source_paths: list[str] = Field(min_length=1, max_length=100)
-    out_dir: str | None = None
-
-
-class BatchTranslationResponse(BaseModel):
-    documents: list[WorkflowDocument]
-    diagnostics: list[Diagnostic]
 
 
 @router.post("/batch", response_model=BatchTranslationResponse)
@@ -24,14 +20,19 @@ def translate_batch(
     payload: BatchTranslationRequest, request: Request
 ) -> BatchTranslationResponse:
     store: DocumentStore = request.app.state.document_store
-    documents: list[WorkflowDocument] = []
-    diagnostics: list[Diagnostic] = []
+    documents: list[DocumentView] = []
+    diagnostics: list[DiagnosticView] = []
     for source_path in payload.source_paths:
         try:
-            documents.append(store.translate_document(source_path, payload.out_dir))
+            output_path = (
+                str(Path(payload.out_dir) / Path(source_path).with_suffix(".py").name)
+                if payload.out_dir
+                else None
+            )
+            documents.append(store.translate(source_path, output_path).view)
         except (OSError, ValueError) as exc:
             diagnostics.append(
-                Diagnostic(
+                DiagnosticView(
                     level="error",
                     code="translation-failed",
                     message=f"{source_path}: {exc}",

@@ -1,20 +1,20 @@
-"""CLI tests for `vg2c`."""
+"""CLI tests for the interactive batch translator."""
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
-def _run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _run_cli(
+    args: list[str], *, selection: str = "1\n", cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     cmd = [sys.executable, "-m", "vg2c.cli", *args]
     env = os.environ.copy()
     existing = env.get("PYTHONPATH", "")
@@ -22,72 +22,83 @@ def _run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPr
     if existing:
         base_paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(base_paths)
-    return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True, env=env)
-
-
-def test_translate_happy_path_writes_file(tmp_path):
-    out_file = tmp_path / "translated.py"
-    proc = _run_cli(
-        [str(FIXTURES / "actual_script.txt"), str(out_file)]
+    return subprocess.run(
+        cmd,
+        cwd=cwd or ROOT,
+        capture_output=True,
+        text=True,
+        input=selection,
+        env=env,
     )
+
+
+def _copy_script(directory: Path, name: str = "script_short.txt") -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / name
+    shutil.copy(FIXTURES / "script_short.txt", target)
+    return target
+
+
+def test_translate_selected_file_to_output_directory(tmp_path):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    _copy_script(input_dir)
+
+    proc = _run_cli([str(input_dir), str(output_dir)])
+
     assert proc.returncode == 0, proc.stderr
+    out_file = output_dir / "script_short.py"
     assert out_file.exists()
     text = out_file.read_text(encoding="utf-8")
     assert "def run() -> None:" in text
-    assert "vg2c_runtime" not in text
     assert "ctx = PipelineContext()" in text
 
 
-def test_translate_no_output_path_defaults_to_py(tmp_path):
-    input_file = tmp_path / "script_short.txt"
-    shutil.copy(FIXTURES / "script_short.txt", input_file)
-    
-    proc = _run_cli([str(input_file)])
+def test_translate_defaults_output_to_input_directory(tmp_path):
+    input_dir = tmp_path / "input"
+    _copy_script(input_dir)
+
+    proc = _run_cli([str(input_dir)])
+
     assert proc.returncode == 0, proc.stderr
-    
-    out_file = tmp_path / "script_short.py"
-    assert out_file.exists()
-    text = out_file.read_text(encoding="utf-8")
-    assert "def run() -> None:" in text
+    assert (input_dir / "script_short.py").exists()
 
 
-def test_translate_output_name_only_follows_input_directory(tmp_path):
-    subdir = tmp_path / "subdir"
-    subdir.mkdir()
-    input_file = subdir / "script_short.txt"
-    shutil.copy(FIXTURES / "script_short.txt", input_file)
-    
-    proc = _run_cli([str(input_file), "my_output.py"])
+def test_translate_all_selected_files(tmp_path):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    _copy_script(input_dir, "a.txt")
+    _copy_script(input_dir, "b.txt")
+
+    proc = _run_cli([str(input_dir), str(output_dir)], selection="*\n")
+
     assert proc.returncode == 0, proc.stderr
-    
-    out_file = subdir / "my_output.py"
-    assert out_file.exists()
-    text = out_file.read_text(encoding="utf-8")
-    assert "def run() -> None:" in text
+    assert (output_dir / "a.py").exists()
+    assert (output_dir / "b.py").exists()
 
 
-def test_translate_missing_input_returns_error(tmp_path):
-    proc = _run_cli([str(tmp_path / "missing.vg2")])
+def test_missing_input_directory_returns_error(tmp_path):
+    missing = tmp_path / "missing"
+    proc = _run_cli([str(missing)])
+
     assert proc.returncode == 1
-    assert "input file not found" in proc.stderr.lower()
+    assert "input directory" in proc.stderr.lower()
+    assert "not found" in proc.stderr.lower()
 
 
-def test_translate_strict_flag_returns_nonzero_on_error(tmp_path):
-    # malformed options/body to induce at least one parse/classify error diagnostic
-    bad = tmp_path / "bad_script.txt"
-    bad.write_text("<OPTIONS>\n/CSV=x.csv\n", encoding="utf-8")
+def test_empty_input_directory_exits_cleanly(tmp_path):
+    input_dir = tmp_path / "empty"
+    input_dir.mkdir()
 
-    out_file = tmp_path / "bad.py"
-    proc = _run_cli([str(bad), str(out_file), "--strict"])
-    assert proc.returncode == 1
+    proc = _run_cli([str(input_dir)])
+
+    assert proc.returncode == 0
+    assert "No .txt files found" in proc.stdout
 
 
-def test_translate_diagnostics_to_stderr(tmp_path):
-    # Use a tiny malformed input to trigger diagnostic formatting.
-    bad = tmp_path / "bad2.txt"
-    bad.write_text("{IF-THEN}\n", encoding="utf-8")
-    
-    # We output to bad2.py, but expect diagnostics on stderr
-    proc = _run_cli([str(bad)])
-    assert proc.stderr is not None
+def test_help_documents_batch_directory_interface():
+    proc = _run_cli(["--help"], selection="")
 
+    assert proc.returncode == 0
+    assert "vg2c [input_dir] [output_dir]" in proc.stdout
+    assert "translate .txt files" in proc.stdout

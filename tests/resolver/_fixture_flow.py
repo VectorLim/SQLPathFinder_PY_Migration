@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from vg2c.frontend import classify, parse
 from vg2c.frontend.models import ClassifiedBlock
 from vg2c.kind import Kind
+from vg2c.operands import ScopeNode
 from vg2c.resolver import resolve
 from vg2c.resolver.models import ResolvedBlock, ResolvedProgram
-from vg2c.operands import ScopeNode
 
 TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 

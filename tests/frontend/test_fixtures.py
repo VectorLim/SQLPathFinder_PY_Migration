@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from vg2c.frontend import parse, classify
+
+from vg2c.frontend import classify, parse
 from vg2c.kind import Kind
 
 
@@ -9,8 +10,7 @@ def _parse_and_classify(fixtures_dir: Path, name: str) -> list:
     path = fixtures_dir / name
     text = path.read_text(encoding="utf-8", errors="replace")
     blocks = parse(text, source=path)
-    classified = classify(blocks)
-    return classified
+    return classify(blocks)
 
 
 def test_script_short_expectations(FIXTURES: Path) -> None:
@@ -33,7 +33,6 @@ def test_script_another_expectations(FIXTURES: Path) -> None:
         Kind.EXTERNAL_RUN,
     ]
 
-    # Preserve expected utility payload signature for Run_Python_Script
     assert (
         classified[2].options.lookup.get("UTILITIES")
         == '@EXEDIR@\\Run_Python_Script.va "lich.py" "" "N" "atd_atm.hadoop" "Python-v3"'
@@ -50,19 +49,21 @@ def test_sql_script_expectations(FIXTURES: Path) -> None:
         Kind.SQLITE_QUERY,
     ]
 
-    # Expected table-list handling in SQLite block
     sqlite_block = classified[2]
-    assert sqlite_block.options.lookup.get("TABLE") == "yeuchuan_a0_29397.tab,yeuchuan_a1_29397.tab"
+    assert (
+        sqlite_block.options.lookup.get("TABLE")
+        == "yeuchuan_a0_29397.tab,yeuchuan_a1_29397.tab"
+    )
 
 
 def test_actual_script_expectations(FIXTURES: Path) -> None:
     classified = _parse_and_classify(FIXTURES, "actual_script.txt")
 
-    # Assert specific kinds exist
     kinds = {b.kind for b in classified}
     expected_kinds = {
         Kind.HTML_REPORT,
         Kind.MACRO_CONTROL,
+        Kind.ROWS_IN_FILE,
         Kind.FS_DELETE,
         Kind.FS_COPY,
         Kind.EXTERNAL_RUN,
@@ -70,14 +71,14 @@ def test_actual_script_expectations(FIXTURES: Path) -> None:
         Kind.SQLITE_QUERY,
         Kind.SQL_QUERY,
     }
-    for ek in expected_kinds:
-        assert ek in kinds, f"Expected {ek} in classified kinds, but it was missing."
+    for expected in expected_kinds:
+        assert expected in kinds, (
+            f"Expected {expected} in classified kinds, but it was missing."
+        )
 
-    # No UNKNOWN blocks
     unknown_blocks = [b for b in classified if b.kind is Kind.UNKNOWN]
     assert not unknown_blocks, f"Expected no UNKNOWN blocks, got: {unknown_blocks}"
 
-    # Macro control token coverage for critical branch tokens
     macro_utils = [
         b.options.lookup.get("UTILITIES", "")
         for b in classified
@@ -89,21 +90,18 @@ def test_actual_script_expectations(FIXTURES: Path) -> None:
         "{IF-THEN}",
         "{ELSE}",
         "{END-IF}",
-        "{ROWS-IN-FILE}",
     ]
     for token in critical_tokens:
-        assert any(
-            v.lstrip().startswith(token) for v in macro_utils
-        ), f"Missing macro control token coverage for: {token}"
+        assert any(v.lstrip().startswith(token) for v in macro_utils), (
+            f"Missing macro control token coverage for: {token}"
+        )
 
 
 def test_oasys_and_aries_expectations(FIXTURES: Path) -> None:
-    # oasys.txt -> SQL_QUERY
     classified_oasys = _parse_and_classify(FIXTURES, "oasys.txt")
     assert len(classified_oasys) == 1
     assert classified_oasys[0].kind is Kind.SQL_QUERY
 
-    # aries_simple.txt -> SQL_QUERY
     classified_aries = _parse_and_classify(FIXTURES, "aries_simple.txt")
     assert len(classified_aries) == 1
     assert classified_aries[0].kind is Kind.SQL_QUERY

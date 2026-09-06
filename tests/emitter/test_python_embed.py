@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from vg2c.utilities.python_embed import PythonEmbed
-from vg2c.utilities._base import UtilitySpec
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
+from vg2c.utilities._base import UtilitySpec
 
 
 def _make_block(
@@ -26,34 +25,27 @@ def _make_block(
 def test_emit_block_embeds_python_body() -> None:
     code = "import os\nprint(os.getcwd())"
     block = _make_block(3, Kind.PYTHON_EMBED, code, csv="script.py")
-    result = UtilitySpec.dispatch_and_emit(block)
+    emission = UtilitySpec.dispatch_and_emit(block)
 
-    assert result is not None
-    func_source, call_site = result
-    assert "def step_0003_python_embed(ctx)" in func_source
-    assert "import os" in func_source
-    assert "print(os.getcwd())" in func_source
-    assert call_site == "step_0003_python_embed(ctx)"
+    assert "def step_0003_python_embed(ctx)" in emission.source
+    assert "import os" in emission.source
+    assert "print(os.getcwd())" in emission.source
+    assert emission.call_site == "step_0003_python_embed(ctx)"
 
 
 def test_emit_block_preserves_multiline_indentation() -> None:
     code = "for i in range(10):\n" "    print(i)\n" "    if i > 5:\n" "        break"
     block = _make_block(7, Kind.PYTHON_EMBED, code, csv="loop.py")
-    result = UtilitySpec.dispatch_and_emit(block)
+    emission = UtilitySpec.dispatch_and_emit(block)
 
-    assert result is not None
-    func_source, _ = result
-    # Body lines should appear indented under the def
-    assert "    for i in range(10):" in func_source
-    assert "        print(i)" in func_source
-    assert "            break" in func_source
+    assert "    for i in range(10):" in emission.source
+    assert "        print(i)" in emission.source
+    assert "            break" in emission.source
 
 
 def test_emit_block_empty_body() -> None:
     block = _make_block(1, Kind.PYTHON_EMBED, "", csv="empty.py")
-    result = UtilitySpec.dispatch_and_emit(block)
+    emission = UtilitySpec.dispatch_and_emit(block)
 
-    assert result is not None
-    func_source, call_site = result
-    assert "def step_0001_python_embed(ctx)" in func_source
-    assert call_site == "step_0001_python_embed(ctx)"
+    assert "def step_0001_python_embed(ctx)" in emission.source
+    assert emission.call_site == "step_0001_python_embed(ctx)"

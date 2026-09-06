@@ -4,20 +4,18 @@ import ast
 import sys
 from pathlib import Path
 
+from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
+from vg2c.kind import Kind
+from vg2c.resolver.models import ResolvedBlock
 from vg2c.utilities import (
     _scan_imports_and_dependencies,
     assemble_all_utilities,
 )
 from vg2c.utilities._base import UtilitySpec
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
-from vg2c.kind import Kind
-from vg2c.resolver.models import ResolvedBlock
 
 
 def test_scan_imports_collects_external_and_filters_vg2c() -> None:
-    csv_io_path = (
-        Path(__file__).resolve().parents[2] / "src" / "vg2c" / "utilities" / "csv_io.py"
-    )
+    csv_io_path = Path(__file__).resolve().parents[2] / "src" / "vg2c" / "utilities" / "csv_io.py"
 
     info = _scan_imports_and_dependencies(
         csv_io_path,
@@ -29,7 +27,8 @@ def test_scan_imports_collects_external_and_filters_vg2c() -> None:
     assert "vg2c.utilities._base" in info.helper_modules
     assert "import csv" in info.external_imports
     assert "from pathlib import Path" in info.external_imports
-    assert "from typing import Any, Iterator" in info.external_imports
+    assert "from typing import Any" in info.external_imports
+    assert "from collections.abc import Iterator" in info.external_imports
     assert "import pandas" in info.external_imports
     assert all("vg2c." not in line for line in info.external_imports)
 
@@ -51,21 +50,16 @@ def test_nested_unconditional_import_is_promoted_and_stripped(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    info = _scan_imports_and_dependencies(
-        module_path, current_name="sample", module_to_name={}
-    )
+    info = _scan_imports_and_dependencies(module_path, current_name="sample", module_to_name={})
 
-    # unconditional nested import: promoted to module-level and stripped from the body
     assert "from pathlib import Path" in info.external_imports
     assert "from pathlib import Path" not in info.cleaned_source
     assert "pass" in info.cleaned_source
-
-    # conditional/optional import inside try/except: left untouched, not promoted
     assert "import ujson as json" in info.cleaned_source
     assert "except ImportError" in info.cleaned_source
     assert "import ujson as json" not in info.external_imports
 
-    ast.parse(info.cleaned_source)  # still valid Python after stripping
+    ast.parse(info.cleaned_source)
 
 
 def test_assemble_all_utilities_imports_are_deduped_and_grouped() -> None:
@@ -117,25 +111,25 @@ def _make_utility_block(
 def test_emit_block_routes_email_utility_before_generic_fallback() -> None:
     block = _make_utility_block(
         8,
-        '@EXEDIR@\\SQLPathFinder_Email.va "report.csv" "self" "Subject" "body.txt" "user@example.com" "" "" "N" "N"',
+        '@EXEDIR@\\SQLPathFinder_Email.va "report.csv" "self" "Subject" '
+        '"body.txt" "user@example.com" "" "" "N" "N"',
     )
 
-    func_source, call_site = UtilitySpec.dispatch_and_emit(block)
+    emission = UtilitySpec.dispatch_and_emit(block)
 
-    assert "def step_0008_email(ctx)" in func_source
-    assert (
-        "ctx.email.send(to='user@example.com', subject='Subject', body='body.txt', attachments=['report.csv'])"
-        in func_source
+    assert "def step_0008_email(ctx)" in emission.source
+    expected = (
+        "ctx.email.send(to='user@example.com', subject='Subject', body='body.txt', "
+        "attachments=['report.csv'])"
     )
-    assert call_site == "step_0008_email(ctx)"
+    assert expected in emission.source
+    assert emission.call_site == "step_0008_email(ctx)"
 
 
 def test_emit_block_keeps_unknown_utility_fallback() -> None:
-    block = _make_utility_block(
-        9, '@EXEDIR@\\SomeOtherUtility.va "x"', kind=Kind.UNKNOWN
-    )
+    block = _make_utility_block(9, '@EXEDIR@\\SomeOtherUtility.va "x"', kind=Kind.UNKNOWN)
 
-    func_source, call_site = UtilitySpec.dispatch_and_emit(block)
+    emission = UtilitySpec.dispatch_and_emit(block)
 
-    assert "utility command not classified" in func_source
-    assert call_site == "step_0009_utility(ctx)"
+    assert "utility command not classified" in emission.source
+    assert emission.call_site == "step_0009_utility(ctx)"

@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from vg2c.dispatch.filter_detector import detect_filters
+
 
 def test_detect_filters_joins_vs_real():
     sql = """

@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import re
 
-from vg2c.emitter.models import (
-    emittable,
-)  # noqa: F401 – triggers @emittable registration
+from vg2c.emitter.models import CodeExpr
+from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import split_utility_command, strip_quotes
-from vg2c.kind import Kind
 
 
 class RowsInFile(EmitterUtility):
@@ -37,15 +35,15 @@ class RowsInFile(EmitterUtility):
 
     @classmethod
     def emit_block(cls, block) -> tuple[str, list[str]] | None:
-        from vg2c.utilities.macro_state import MacroState
         from vg2c.utilities.csv_io import CsvIO
+        from vg2c.utilities.macro_state import MacroState
 
         utilities = block.resolved_options.lookup.get("UTILITIES", "")
         argv = split_utility_command(utilities)
         # argv[0] = '{ROWS-IN-FILE}', argv[1] = csv_path, argv[2] = var_name
-        csv_path_expr = MacroState.to_py_expr(argv[1] if len(argv) > 1 else None)
+        csv_path_expr = MacroState.to_code_expr(argv[1] if len(argv) > 1 else None)
         var_name = strip_quotes(argv[2]).upper() if len(argv) > 2 else ""
 
         row_count_call = CsvIO.row_count.render(csv_path_expr)
-        stmt = MacroState.set_named.render(repr(var_name), f"str({row_count_call})")
+        stmt = MacroState.set_named.render(var_name, CodeExpr(f"str({row_count_call})"))
         return "rows_in_file", [stmt]

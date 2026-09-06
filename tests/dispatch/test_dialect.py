@@ -3,23 +3,26 @@ from __future__ import annotations
 import pytest
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.dispatch.dialects.aries import AriesDialect
-from vg2c.dispatch.dialects.mars import MarsDialect
-from vg2c.dispatch.dialects.oasys import OasysDialect
-from vg2c.dispatch.dialects.sqlite import SqliteDialect
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.kind import Kind
-from vg2c.utilities.sqlite_reader import SqliteReader
 
 
 @pytest.mark.parametrize(
     "kind, expected",
     [
         (Kind.SQL_QUERY, None),
-        (Kind.SQLITE_QUERY, SqliteReader),
+        (
+            Kind.SQLITE_QUERY,
+            ReaderSpec(
+                module="vg2c.utilities.sqlite_reader",
+                name="SqliteReader",
+                utility_name="sqlite_reader",
+            ),
+        ),
     ],
 )
-def test_resolve_reader_cls_sql_bearing(kind: Kind, expected: type | None) -> None:
-    assert DialectHandler.resolve_reader_cls(kind) is expected
+def test_resolve_reader_sql_bearing(kind: Kind, expected: ReaderSpec | None) -> None:
+    assert DialectHandler.resolve_reader(kind) == expected
 
 
 @pytest.mark.parametrize(
@@ -32,12 +35,8 @@ def test_resolve_reader_cls_sql_bearing(kind: Kind, expected: type | None) -> No
         Kind.UNKNOWN,
     ],
 )
-def test_resolve_reader_cls_non_sql_returns_none(kind: Kind) -> None:
-    assert DialectHandler.resolve_reader_cls(kind) is None
-
-
-def test_resolve_reader_cls_for_sqlite_kind() -> None:
-    assert DialectHandler.resolve_reader_cls(Kind.SQLITE_QUERY) is SqliteReader
+def test_resolve_reader_non_sql_returns_none(kind: Kind) -> None:
+    assert DialectHandler.resolve_reader(kind) is None
 
 
 def test_sql_bearing_kinds_coverage() -> None:
@@ -47,20 +46,14 @@ def test_sql_bearing_kinds_coverage() -> None:
     assert Kind.WRITE_FILE not in sql_bearing_kinds
 
 
-# --- derive_from_signals fallback ---
-
-
 def test_derive_from_signals_sqlite_by_engine() -> None:
-    assert (
-        DialectHandler.derive_reader_cls_from_signals(
-            node=".\\", engine="SQLite", oledb="SQLite"
-        )
-        is SqliteReader
+    reader = DialectHandler.derive_reader_from_signals(
+        node=".\\", engine="SQLite", oledb="SQLite"
     )
+    assert reader is not None
+    assert reader.name == "SqliteReader"
+    assert reader.utility_name == "sqlite_reader"
 
 
 def test_derive_from_signals_no_signals_returns_none() -> None:
-    assert (
-        DialectHandler.derive_reader_cls_from_signals(node="", engine="", oledb="")
-        is None
-    )
+    assert DialectHandler.derive_reader_from_signals(node="", engine="", oledb="") is None
