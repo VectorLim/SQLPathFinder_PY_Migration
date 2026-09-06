@@ -3,8 +3,8 @@ from __future__ import annotations
 from vg2c.frontend.models import (
     ClassifiedBlock,
 )
-from vg2c.resolver.models import ResolvedBlock
 from vg2c.operands import MacroControlPayload, ScopeNode
+from vg2c.resolver.models import ResolvedBlock
 
 
 def resolve_macros(

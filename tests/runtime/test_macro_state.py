@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from vg2c.utilities.crosstab import CrosstabUtility
 from vg2c.utilities.macro_state import MacroState
 

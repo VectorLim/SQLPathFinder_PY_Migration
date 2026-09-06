@@ -1,27 +1,24 @@
 from __future__ import annotations
 
-import ast
 import logging
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
 
 from vg2c.dataflow import analyze
-from vg2c.dataflow.models import AnalyzedProgram, DataflowEdge
+from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dispatch
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter import emit
+from vg2c.emitter.models import EmittedScript
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
-from vg2c.resolver.models import ResolvedBlock, ResolvedProgram
+from vg2c.resolver.models import ResolvedProgram
 
 _DIAGNOSTIC_RE = re.compile(
     r"^\[(?P<code>[^]]+)]\s+(?P<location>.+?:\d+:\d+)"
     r"(?:\s+\(block\s+\d+\))?:\s+(?P<message>.*)$"
 )
-_STEP_NAME_RE = re.compile(r"^step_(?P<index>\d+)_")
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,25 +31,14 @@ class CompilationDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class CompilationResult:
+    """Authoritative result of the complete compiler semantic chain."""
+
     input_path: Path
-    generated_python: str
     resolved: ResolvedProgram
     analyzed: AnalyzedProgram
     dispatched: DispatchedProgram
+    emitted: EmittedScript
     diagnostics: tuple[CompilationDiagnostic, ...]
-    function_to_block: Mapping[str, ResolvedBlock]
-
-    @property
-    def resolved_blocks(self) -> tuple[ResolvedBlock, ...]:
-        return self.resolved.blocks
-
-    @property
-    def scope_tree(self):
-        return self.resolved.scope_tree
-
-    @property
-    def dataflow_edges(self) -> tuple[DataflowEdge, ...]:
-        return self.analyzed.edges
 
 
 class _DiagnosticHandler(logging.Handler):
@@ -90,23 +76,13 @@ def compile_document(input_path: Path) -> CompilationResult:
     finally:
         compiler_logger.removeHandler(handler)
 
-    blocks_by_index = {block.index: block for block in resolved.blocks}
-    function_to_block: dict[str, ResolvedBlock] = {}
-    for node in ast.parse(emitted.source).body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        match = _STEP_NAME_RE.match(node.name)
-        if match and (block := blocks_by_index.get(int(match.group("index")))):
-            function_to_block[node.name] = block
-
     return CompilationResult(
         input_path=input_path.resolve(),
-        generated_python=emitted.source,
         resolved=resolved,
         analyzed=analyzed,
         dispatched=dispatched,
+        emitted=emitted,
         diagnostics=tuple(handler.items),
-        function_to_block=MappingProxyType(function_to_block),
     )
 
 

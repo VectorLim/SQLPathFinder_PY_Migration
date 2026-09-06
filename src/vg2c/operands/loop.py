@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
-
+from vg2c.logger import Logger
 from vg2c.operands.base import (
     ParseChildrenFn,
     ScopeIdSource,
@@ -110,8 +110,8 @@ class RunLoop:
         from vg2c.utilities.csv_io import CsvIO
 
         chunks_call = CsvIO.iter_chunks.render(
-            repr(self.input_csv_path),
-            repr(self.chunk_csv_path),
+            self.input_csv_path,
+            self.chunk_csv_path,
             int(self.chunk_size),
         )
         writer.write(f"for __chunk_path in {chunks_call}:")

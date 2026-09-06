@@ -2,27 +2,31 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import PurePosixPath
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from vg2c.dataflow.models import (
     AnalyzedProgram,
-    ConsumerKind,
     ConsumerRecord,
     DataflowEdge,
     ProducerRecord,
     ScopeRelation,
 )
 from vg2c.kind import Kind
-from vg2c.resolver.models import (
-    ResolvedBlock,
-    ResolvedProgram,
-)
 from vg2c.operands import (
     RunLoop,
     ScopeNode,
     StartMacro,
 )
+from vg2c.resolver.models import (
+    ResolvedBlock,
+    ResolvedProgram,
+)
+
+if TYPE_CHECKING:
+    from vg2c.utilities.csv_io import CsvIO
 
 _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE)
 _SQL_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
@@ -42,50 +46,63 @@ def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
 
     blocks = list(resolved.blocks)
     scope_rel = _ScopeRelations(resolved.scope_tree)
-
-    edges: list[DataflowEdge] = []
-    matched_producer_keys: set[tuple[int, str]] = set()
     consumers = _collect_consumers(blocks, calls_by_block)
-
     explicit_producers = _collect_explicit_producers(blocks, scope_rel)
-    producers_by_path = _index_by_path(explicit_producers)
+    external_candidates = _collect_external_utility_candidates(blocks, scope_rel)
+    return analyze_records(
+        resolved,
+        producers=explicit_producers,
+        consumers=consumers,
+        external_candidates=external_candidates,
+    )
 
-    for consumer in consumers:
+
+def analyze_records(
+    resolved: ResolvedProgram,
+    *,
+    producers: Iterable[ProducerRecord],
+    consumers: Iterable[ConsumerRecord],
+    external_candidates: Iterable[ProducerRecord] = (),
+) -> AnalyzedProgram:
+    """Rebuild dataflow edges from authoritative records using the normal analyzer rules."""
+    explicit_producers = list(producers)
+    consumer_records = list(consumers)
+    external_records = list(external_candidates)
+    scope_rel = _ScopeRelations(resolved.scope_tree)
+    producers_by_path = _index_by_path(explicit_producers)
+    edges: list[DataflowEdge] = []
+
+    for consumer in consumer_records:
         producer = _choose_explicit_producer(consumer, producers_by_path)
         if producer is None:
-            utility_candidates = _collect_external_utility_candidates(blocks, scope_rel)
-            external = _choose_external_candidate(consumer, utility_candidates)
-            if external is not None:
-                producer = external
+            producer = _choose_external_candidate(consumer, external_records)
 
         scope_relation, order_ok = _classify_edge_relation(
             producer, consumer, scope_rel
         )
-        edge = DataflowEdge(
-            csv_path=consumer.csv_path,
-            producer=producer,
-            consumer=consumer,
-            scope_relation=scope_relation,
-            order_ok=order_ok,
+        edges.append(
+            DataflowEdge(
+                csv_path=consumer.csv_path,
+                producer=producer,
+                consumer=consumer,
+                scope_relation=scope_relation,
+                order_ok=order_ok,
+            )
         )
-        edges.append(edge)
-
-        if producer is not None:
-            matched_producer_keys.add((producer.block_index, producer.csv_path))
 
     producers_map = {k: tuple(v) for k, v in producers_by_path.items()}
     return AnalyzedProgram(
         resolved=resolved,
         producers=tuple(explicit_producers),
         producers_by_path=MappingProxyType(producers_map),
-        consumers=tuple(consumers),
+        consumers=tuple(consumer_records),
         edges=tuple(edges),
     )
 
 
 def _collect_explicit_producers(
     blocks: list[ResolvedBlock],
-    scope_rel: "_ScopeRelations",
+    scope_rel: _ScopeRelations,
 ) -> list[ProducerRecord]:
     producers: list[ProducerRecord] = []
     for block in blocks:
@@ -126,7 +143,7 @@ def _collect_explicit_producers(
 
 def _collect_external_utility_candidates(
     blocks: list[ResolvedBlock],
-    scope_rel: "_ScopeRelations",
+    scope_rel: _ScopeRelations,
 ) -> list[ProducerRecord]:
     candidates: list[ProducerRecord] = []
     for block in blocks:
@@ -179,7 +196,9 @@ def _collect_consumers(
             payload_csv_path = payload.csv_path
             consumer_kind = "start-macro"
         elif block.kind == Kind.ROWS_IN_FILE:
-            args = re.findall(r'"([^"]*)"', block.resolved_options.lookup.get("UTILITIES", ""))
+            args = re.findall(
+                r'"([^"]*)"', block.resolved_options.lookup.get("UTILITIES", "")
+            )
             if args:
                 payload_csv_path = args[0]
                 consumer_kind = "rows-in-file"
@@ -249,7 +268,7 @@ def _choose_external_candidate(
 def _classify_edge_relation(
     producer: ProducerRecord | None,
     consumer: ConsumerRecord,
-    scope_rel: "_ScopeRelations",
+    scope_rel: _ScopeRelations,
 ) -> tuple[ScopeRelation, bool]:
     if producer is None:
         return "no-producer", True

@@ -20,10 +20,9 @@ class OracleClient(UtilitySpec):
     def configure(cls) -> str | None:
         """Prepare the current process for the configured DataSyncX Oracle client.
 
-        Set ``DATASYNCX_ORACLE_CLIENT=instant`` to opt in.  The normal
+        Set ``DATASYNCX_ORACLE_CLIENT=instant`` to opt in. The normal
         ORACLE_HOME-based setup remains untouched when it is unset or ``home``.
         """
-
         mode = os.getenv("DATASYNCX_ORACLE_CLIENT", "home").strip().lower()
         if mode in {"", "home"}:
             return None
@@ -54,7 +53,6 @@ class OracleClient(UtilitySpec):
     @classmethod
     def log_active_client(cls) -> None:
         """Print the initialized Oracle client once for terminal diagnostics."""
-
         if cls._reported_client:
             return
 
@@ -83,9 +81,8 @@ class OracleClient(UtilitySpec):
             os.getenv("DATASYNCX_INSTANT_CLIENT_DIR")
             or os.getenv("ORACLE_INSTANT_CLIENT_DIR")
         )
-        candidates = (
-            [configured] if configured else os.getenv("PATH", "").split(os.pathsep)
-        )
+        separator = ";" if sys.platform == "win32" else os.pathsep
+        candidates = [configured] if configured else os.getenv("PATH", "").split(separator)
         for candidate in candidates:
             if not candidate:
                 continue
@@ -95,8 +92,7 @@ class OracleClient(UtilitySpec):
 
         raise RuntimeError(
             "Oracle Instant Client was requested but no usable directory was "
-            "found. "
-            "Set DATASYNCX_INSTANT_CLIENT_DIR to the directory containing "
+            "found. Set DATASYNCX_INSTANT_CLIENT_DIR to the directory containing "
             "oci.dll."
         )
 
@@ -111,8 +107,7 @@ class OracleClient(UtilitySpec):
         if configured and not network_dir.is_dir():
             raise RuntimeError(
                 "DATASYNCX_ORACLE_NET_CONFIG_DIR does not exist or is not a "
-                "directory: "
-                f"{network_dir}"
+                f"directory: {network_dir}"
             )
         if network_dir.is_dir():
             network_dir = network_dir.resolve()
@@ -122,10 +117,9 @@ class OracleClient(UtilitySpec):
 
     @staticmethod
     def _prepend_path(client_dir: Path) -> None:
-        entries = [
-            entry for entry in os.getenv("PATH", "").split(os.pathsep) if entry
-        ]
+        separator = ";" if sys.platform == "win32" else os.pathsep
+        entries = [entry for entry in os.getenv("PATH", "").split(separator) if entry]
         selected = str(client_dir)
-        os.environ["PATH"] = os.pathsep.join(
+        os.environ["PATH"] = separator.join(
             [selected, *(entry for entry in entries if Path(entry) != client_dir)]
         )

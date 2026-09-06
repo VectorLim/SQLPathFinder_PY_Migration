@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import CodeExpr, emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import resolve_path
@@ -140,16 +140,16 @@ tr th {{ background-color:#f5f5f5; }}
             return None
         method_name, keys, needs_template = entry
 
-        kwargs: dict[str, str] = {}
+        kwargs: dict[str, object] = {}
         for key in keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = MacroState.to_py_expr(val)
+                kwargs[key.lower().replace("-", "_")] = MacroState.to_code_expr(val)
         if needs_template:
-            kwargs["template"] = repr(block.resolved_body)
+            kwargs["template"] = block.resolved_body
 
         method = getattr(cls, method_name)
-        args = ("ctx",) if method_name == "layout" else ()
+        args = (CodeExpr("ctx"),) if method_name == "layout" else ()
         return [method.render(*args, **kwargs)]
 
     # ------------------------------------------------------------------
@@ -259,9 +259,7 @@ tr th {{ background-color:#f5f5f5; }}
             else:
                 body = f"{css_decl}\n{body}"
 
-        filename = self._resolve_output_filename(
-            directives.get("FILE", "report.html"), instance
-        )
+        filename = self._resolve_output_filename(directives.get("FILE", "report.html"), instance)
         if ctx and hasattr(ctx, "macro"):
             filename = ctx.macro.substitute(filename)
         if ctx and hasattr(ctx, "write_file"):

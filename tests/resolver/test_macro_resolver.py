@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.resolver._fixture_flow import (
+    blocks_for_token,
+    parse_classify_fixture,
+)
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
@@ -12,7 +16,6 @@ from vg2c.frontend.models import (
     SourceSpan,
 )
 from vg2c.kind import Kind
-from vg2c.resolver.macro_resolver import resolve_macros
 from vg2c.operands import (
     Else,
     EndIf,
@@ -22,12 +25,8 @@ from vg2c.operands import (
     RunLoop,
     StartMacro,
 )
+from vg2c.resolver.macro_resolver import resolve_macros
 from vg2c.resolver.scope_builder import build_scope_tree
-
-from tests.resolver._fixture_flow import (
-    blocks_for_token,
-    parse_classify_fixture,
-)
 
 
 def _block(

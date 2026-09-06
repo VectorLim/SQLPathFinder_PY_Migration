@@ -36,17 +36,17 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.logger import Logger  # noqa: F401
     from vg2c.utilities.crosstab import CrosstabUtility  # noqa: F401
     from vg2c.utilities.csv_io import CsvIO  # noqa: F401
-    from vg2c.utilities.html_report import HtmlReport  # noqa: F401
-    from vg2c.utilities.python_embed import PythonEmbed  # noqa: F401
-    from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
-    from vg2c.utilities.rows_in_file import RowsInFile  # noqa: F401
-    from vg2c.utilities.macro_state import MacroState  # noqa: F401
-    from vg2c.utilities.oracle_client import OracleClient  # noqa: F401
     from vg2c.utilities.external import ExternalProcess  # noqa: F401
-    from vg2c.utilities.sqlite_engine import SqliteEngine  # noqa: F401
+    from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
     from vg2c.utilities.generic import UnknownUtility  # noqa: F401
+    from vg2c.utilities.html_report import HtmlReport  # noqa: F401
+    from vg2c.utilities.macro_state import MacroState  # noqa: F401
     from vg2c.utilities.mail import MailService  # noqa: F401
+    from vg2c.utilities.oracle_client import OracleClient  # noqa: F401
     from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401
+    from vg2c.utilities.python_embed import PythonEmbed  # noqa: F401
+    from vg2c.utilities.rows_in_file import RowsInFile  # noqa: F401
+    from vg2c.utilities.sqlite_engine import SqliteEngine  # noqa: F401
     from vg2c.utilities.sqlite_reader import SqliteReader  # noqa: F401
     from vg2c.utilities.wait_file import WaitFile  # noqa: F401
 
@@ -177,13 +177,9 @@ def _scan_imports_and_dependencies(
     # they must never survive verbatim inside an embedded method body.
     promotable = _find_promotable_function_imports(tree)
     for node in promotable:
-        _classify_import(
-            node, current_name=current_name, module_to_name=module_to_name, info=info
-        )
+        _classify_import(node, current_name=current_name, module_to_name=module_to_name, info=info)
 
-    info.cleaned_source = (
-        _strip_import_lines(source, promotable) if promotable else source
-    )
+    info.cleaned_source = _strip_import_lines(source, promotable) if promotable else source
     return info
 
 
@@ -193,9 +189,7 @@ def _extract_module_body(source: str) -> str:
     chunks: list[str] = []
     for node in tree.body:
         if isinstance(node, ast.Assign):
-            target_names = {
-                target.id for target in node.targets if isinstance(target, ast.Name)
-            }
+            target_names = {target.id for target in node.targets if isinstance(target, ast.Name)}
             if "__all__" in target_names:
                 continue
 
@@ -265,8 +259,8 @@ def assemble_all_utilities(
             Logger) plus whichever utility ``UtilitySpec.for_kind()`` maps each
             kind to are embedded, following the existing dependency graph.
         extra_root_names: additional ``utility_name``s to force-include, e.g. a
-            project-local reader class (such as SqliteReader) referenced by a
-            dispatched block's ``reader_cls``.
+            project-local reader utility (such as SqliteReader) selected by
+            dispatch metadata.
     """
     ensure_utility_checks_loaded()
 
@@ -285,18 +279,14 @@ def assemble_all_utilities(
             current_name=name,
             module_to_name=module_to_name,
         )
-        dependency_edges[name].update(
-            dep for dep in info.dependencies if dep in utilities
-        )
+        dependency_edges[name].update(dep for dep in info.dependencies if dep in utilities)
         per_utility_imports[name] = info.external_imports
         per_utility_helpers[name] = info.helper_modules
         cleaned_sources[name] = info.cleaned_source
 
     if required_kinds is not None:
         root_names = {
-            name
-            for name, cls in utilities.items()
-            if getattr(cls, "always_include", False)
+            name for name, cls in utilities.items() if getattr(cls, "always_include", False)
         }
         for kind in required_kinds:
             handler = UtilitySpec.for_kind(kind)
@@ -347,9 +337,7 @@ def assemble_all_utilities(
         {name: object() for name in helper_modules_used},
         helper_edges,
     )
-    helper_sources = [
-        helper_bodies[name] for name in helper_order if helper_bodies[name]
-    ]
+    helper_sources = [helper_bodies[name] for name in helper_order if helper_bodies[name]]
 
     ordered_names = topological_sort(utilities, dependency_edges)
     if "logger" in ordered_names:
@@ -358,9 +346,7 @@ def assemble_all_utilities(
             *(name for name in ordered_names if name != "logger"),
         ]
     elif required_kinds is None:
-        log.warning(
-            "Logger utility not registered; generated script will not embed Logger class."
-        )
+        log.warning("Logger utility not registered; generated script will not embed Logger class.")
 
     sources = helper_sources + [
         utilities[name].get_source(source_override=cleaned_sources.get(name))

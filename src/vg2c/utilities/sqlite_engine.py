@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from vg2c.utilities.csv_io import CsvIO
+from vg2c.emitter.models import CodeExpr
+from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities.crosstab import CrosstabUtility
-from vg2c.utilities.macro_state import MacroState
 from vg2c.utilities._emit_helpers import (
     resolve_output_path,
     strip_quotes,
 )
-from vg2c.kind import Kind
+from vg2c.utilities.crosstab import CrosstabUtility
+from vg2c.utilities.csv_io import CsvIO
+from vg2c.utilities.macro_state import MacroState
 
 
 class SqliteEngine(EmitterUtility):
@@ -32,10 +33,7 @@ class SqliteEngine(EmitterUtility):
         if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
             return None
 
-        if any(
-            SqliteEngine._node_matches(node, token)
-            for token in ("MARS", "OASYS", "ARIES")
-        ):
+        if any(SqliteEngine._node_matches(node, token) for token in ("MARS", "OASYS", "ARIES")):
             return (
                 Kind.SQL_QUERY,
                 "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
@@ -45,11 +43,7 @@ class SqliteEngine(EmitterUtility):
     @staticmethod
     def _node_matches(node_value: str, token: str) -> bool:
         node = node_value.upper().strip()
-        return (
-            node.endswith(token)
-            or node.endswith(f".{token}")
-            or f"<<<{token}>>>" in node
-        )
+        return node.endswith(token) or node.endswith(f".{token}") or f"<<<{token}>>>" in node
 
     @staticmethod
     def _format_sql_literal(sql: str) -> str:
@@ -57,14 +51,14 @@ class SqliteEngine(EmitterUtility):
         return f'"""{escaped}"""'
 
     @staticmethod
-    def _extract_sql_text(block) -> str:
+    def _extract_sql_text(block) -> CodeExpr:
         sql = getattr(block, "rewritten_sql", None)
         if sql is None:
             sql = block.resolved_body
 
         calls = CsvIO.scan_sql_get_csv_list_calls(sql)
         if not calls:
-            return SqliteEngine._format_sql_literal(sql)
+            return CodeExpr(SqliteEngine._format_sql_literal(sql), sql)
 
         parts: list[str] = []
         cursor = 0
@@ -73,10 +67,8 @@ class SqliteEngine(EmitterUtility):
             if literal:
                 parts.append(SqliteEngine._format_sql_literal(literal))
 
-            csv_path_expr = MacroState.to_py_expr(call.csv_path)
-            expr = CsvIO.sql_get_csv_list.render(
-                csv_path_expr, repr(call.column_ref), repr(call.lead_in)
-            )
+            csv_path_expr = MacroState.to_code_expr(call.csv_path)
+            expr = CsvIO.sql_get_csv_list.render(csv_path_expr, call.column_ref, call.lead_in)
             parts.append(expr)
             if call.needs_closing_paren:
                 parts.append(SqliteEngine._format_sql_literal(")"))
@@ -86,7 +78,7 @@ class SqliteEngine(EmitterUtility):
         if tail:
             parts.append(SqliteEngine._format_sql_literal(tail))
 
-        return " + ".join(parts)
+        return CodeExpr(" + ".join(parts))
 
     @staticmethod
     def _extract_table_inputs(block) -> list[str]:
@@ -125,20 +117,20 @@ class SqliteEngine(EmitterUtility):
     ) -> tuple[str, list[str]]:
         sql = cls._extract_sql_text(block)
         output = resolve_output_path(block)
-        reader_cls = getattr(block, "reader_cls", None)
-        if reader_cls is None:
+        reader = getattr(block, "reader", None)
+        if reader is None:
             raise ValueError("SQL emission requires dispatch metadata")
         crosstab = CrosstabUtility.extract_options(block)
         header = None if crosstab else cls._extract_header(block)
 
         reader_kwargs = getattr(block, "reader_kwargs", {})
-        reader_kwargs_items = [f"{k}={repr(v)}" for k, v in reader_kwargs.items()]
-        inst_expr = f"{reader_cls.__name__}({', '.join(reader_kwargs_items)})"
+        reader_kwargs_items = [f"{key}={value!r}" for key, value in reader_kwargs.items()]
+        inst_expr = f"{reader.name}({', '.join(reader_kwargs_items)})"
 
         kwargs: dict[str, object] = {
             "sql": sql,
-            "output": repr(output),
-            "reader": inst_expr,
+            "output": output,
+            "reader": CodeExpr(inst_expr),
         }
         if sqlite:
             kwargs["inputs"] = cls._extract_table_inputs(block)
