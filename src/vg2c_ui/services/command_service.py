@@ -84,7 +84,6 @@ class CommandService:
                 source_hash=prepared.document.source_hash,
                 output_hash=output_hash,
                 revision=revision,
-                layout=prepared.document.layout,
                 overrides=prepared.overrides,
             ),
         )

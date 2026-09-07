@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -18,19 +19,53 @@ def test_scan_imports_collects_external_and_filters_vg2c() -> None:
         Path(__file__).resolve().parents[2] / "src" / "vg2c" / "utilities" / "csv_io.py"
     )
 
-    imports, deps, helpers = _scan_imports_and_dependencies(
+    info = _scan_imports_and_dependencies(
         csv_io_path,
         current_name="csv_io",
         module_to_name={},
     )
 
-    assert deps == set()
-    assert "vg2c.utilities._base" in helpers
-    assert "import csv" in imports
-    assert "from pathlib import Path" in imports
-    assert "from typing import Any, Iterator" in imports
-    assert "import pandas" in imports
-    assert all("vg2c." not in line for line in imports)
+    assert info.dependencies == set()
+    assert "vg2c.utilities._base" in info.helper_modules
+    assert "import csv" in info.external_imports
+    assert "from pathlib import Path" in info.external_imports
+    assert "from typing import Any, Iterator" in info.external_imports
+    assert "import pandas" in info.external_imports
+    assert all("vg2c." not in line for line in info.external_imports)
+
+
+def test_nested_unconditional_import_is_promoted_and_stripped(tmp_path) -> None:
+    module_path = tmp_path / "sample_utility.py"
+    module_path.write_text(
+        "class Sample:\n"
+        "    def build(self):\n"
+        "        from pathlib import Path\n"
+        "        return Path('.')\n"
+        "\n"
+        "    def optional(self):\n"
+        "        try:\n"
+        "            import ujson as json\n"
+        "        except ImportError:\n"
+        "            import json\n"
+        "        return json\n",
+        encoding="utf-8",
+    )
+
+    info = _scan_imports_and_dependencies(
+        module_path, current_name="sample", module_to_name={}
+    )
+
+    # unconditional nested import: promoted to module-level and stripped from the body
+    assert "from pathlib import Path" in info.external_imports
+    assert "from pathlib import Path" not in info.cleaned_source
+    assert "pass" in info.cleaned_source
+
+    # conditional/optional import inside try/except: left untouched, not promoted
+    assert "import ujson as json" in info.cleaned_source
+    assert "except ImportError" in info.cleaned_source
+    assert "import ujson as json" not in info.external_imports
+
+    ast.parse(info.cleaned_source)  # still valid Python after stripping
 
 
 def test_assemble_all_utilities_imports_are_deduped_and_grouped() -> None:

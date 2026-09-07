@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
@@ -114,8 +115,21 @@ class DialectHandler(ABC):
             record_version=record_version,
             node=node,
             instance=instance,
+            site=cls._extract_site(node),
         )
         return target
+
+    _SITE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)(?:\.|$)")
+
+    @classmethod
+    def _extract_site(cls, node: str) -> str:
+        """Extract the literal leading site token from /NODE (e.g. "KM" from "KM.ARIES").
+
+        Returns "" for local paths (".\\"), macro placeholders ("<<<MARS>>>"), or an
+        empty node -- i.e. whenever no site is known at compile time.
+        """
+        match = cls._SITE_RE.match(node)
+        return match.group(1) if match else ""
 
     @staticmethod
     def _parse_record(

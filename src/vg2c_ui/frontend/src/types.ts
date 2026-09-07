@@ -1,12 +1,7 @@
-export type NodeKind = 'step' | 'if' | 'branch' | 'loop' | 'csv-artifact'
-
-export interface Position {
-  x: number
-  y: number
-}
-
-export interface Viewport extends Position {
-  zoom: number
+export interface SourceSpan {
+  file: string | null
+  start_line: number
+  end_line: number
 }
 
 export interface ParameterDescriptor {
@@ -41,6 +36,7 @@ export interface StepNode {
   node_kind: 'step'
   function_name: string
   block_index: number
+  source_span: SourceSpan
   functional_kind: string
   display_label: string
   icon_key: string
@@ -66,27 +62,18 @@ export interface ScopeNode {
   parent_scope_id: string | null
 }
 
-export interface CsvArtifactNode {
+export interface CsvArtifact {
   id: string
-  node_kind: 'csv-artifact'
   path: string
   label: string
   conditional: boolean
   in_loop: boolean
+  producer_step_ids: string[]
+  consumer_step_ids: string[]
+  order_valid: boolean
 }
 
-export type WorkflowNode = StepNode | ScopeNode | CsvArtifactNode
-
-export interface WorkflowEdge {
-  id: string
-  source: string
-  target: string
-  kind: 'control' | 'data'
-  label: string | null
-  dashed: boolean
-  valid: boolean
-  scope_relation: string | null
-}
+export type ScriptItem = StepNode | ScopeNode
 
 export interface Diagnostic {
   level: 'info' | 'warning' | 'error'
@@ -106,14 +93,8 @@ export interface WorkflowDocument {
   revision: number
   steps: StepNode[]
   scopes: ScopeNode[]
-  artifacts: CsvArtifactNode[]
-  control_edges: WorkflowEdge[]
-  data_edges: WorkflowEdge[]
+  artifacts: CsvArtifact[]
   diagnostics: Diagnostic[]
-  layout: {
-    positions: Record<string, Position>
-    viewport: Viewport
-  }
   overrides: Array<{ step_id: string; parameter_id: string; value: unknown }>
 }
 

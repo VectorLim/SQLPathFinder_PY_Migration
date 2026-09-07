@@ -71,24 +71,17 @@ class ScopeNode(BaseModel):
     parent_scope_id: str | None = None
 
 
-class CsvArtifactNode(BaseModel):
+class CsvArtifact(BaseModel):
+    """File-level CSV metadata used by the contextual data-flow inspector."""
+
     id: str
-    node_kind: Literal["csv-artifact"] = "csv-artifact"
     path: str
     label: str
     conditional: bool = False
     in_loop: bool = False
-
-
-class WorkflowEdge(BaseModel):
-    id: str
-    source: str
-    target: str
-    kind: Literal["control", "data"]
-    label: str | None = None
-    dashed: bool = False
-    valid: bool = True
-    scope_relation: str | None = None
+    producer_step_ids: list[str] = Field(default_factory=list)
+    consumer_step_ids: list[str] = Field(default_factory=list)
+    order_valid: bool = True
 
 
 class Diagnostic(BaseModel):
@@ -97,22 +90,6 @@ class Diagnostic(BaseModel):
     message: str
     location: str | None = None
     node_id: str | None = None
-
-
-class Position(BaseModel):
-    x: float
-    y: float
-
-
-class Viewport(BaseModel):
-    x: float = 0
-    y: float = 0
-    zoom: float = 1
-
-
-class WorkflowLayout(BaseModel):
-    positions: dict[str, Position] = Field(default_factory=dict)
-    viewport: Viewport = Field(default_factory=Viewport)
 
 
 class WorkflowOverride(BaseModel):
@@ -131,20 +108,18 @@ class WorkflowDocument(BaseModel):
     revision: int = 1
     steps: list[StepNode]
     scopes: list[ScopeNode]
-    artifacts: list[CsvArtifactNode]
-    control_edges: list[WorkflowEdge]
-    data_edges: list[WorkflowEdge]
+    artifacts: list[CsvArtifact]
     diagnostics: list[Diagnostic]
-    layout: WorkflowLayout = Field(default_factory=WorkflowLayout)
     overrides: list[WorkflowOverride] = Field(default_factory=list)
 
 
 class WorkflowSidecar(BaseModel):
+    """Persistent editor state that is independent of any presentation layout."""
+
     schema_version: int = SCHEMA_VERSION
     source_hash: str
     output_hash: str
     revision: int = 1
-    layout: WorkflowLayout = Field(default_factory=WorkflowLayout)
     overrides: list[WorkflowOverride] = Field(default_factory=list)
 
 
@@ -192,14 +167,13 @@ class CsvPreview(BaseModel):
 
 
 __all__ = [
-    "CsvArtifactNode",
-    "CsvPreview",
     "CommandBatch",
     "CommandPreview",
     "CommandResult",
+    "CsvArtifact",
+    "CsvPreview",
     "Diagnostic",
     "ParameterDescriptor",
-    "Position",
     "SCHEMA_VERSION",
     "ScopeNode",
     "SourceSpan",
@@ -207,10 +181,7 @@ __all__ = [
     "SetParameterCommand",
     "UtilityDescriptor",
     "ValidationIssue",
-    "Viewport",
     "WorkflowDocument",
-    "WorkflowEdge",
-    "WorkflowLayout",
     "WorkflowOverride",
     "WorkflowSidecar",
 ]

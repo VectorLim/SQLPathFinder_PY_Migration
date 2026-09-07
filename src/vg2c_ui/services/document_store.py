@@ -39,8 +39,7 @@ class DocumentStore:
             if output.is_file()
             else result.generated_python
         )
-        sidecar = self._read_sidecar(output)
-        return build_workflow(result, output, generated, sidecar)
+        return build_workflow(result, output, generated, self._read_sidecar(output))
 
     def translate_document(
         self, source_path: str | Path, out_dir: str | Path | None = None
@@ -59,25 +58,10 @@ class DocumentStore:
                 source_hash=document.source_hash,
                 output_hash=document.output_hash,
                 revision=document.revision,
-                layout=document.layout,
                 overrides=document.overrides,
             ),
         )
         return document
-
-    def save_layout(self, document: WorkflowDocument) -> None:
-        output = self.resolve(document.output_path)
-        current = self._read_sidecar(output)
-        write_sidecar(
-            output,
-            WorkflowSidecar(
-                source_hash=document.source_hash,
-                output_hash=document.output_hash,
-                revision=current.revision if current else document.revision,
-                layout=document.layout,
-                overrides=current.overrides if current else document.overrides,
-            ),
-        )
 
     def preview_commands(self, batch: CommandBatch) -> CommandPreview:
         return self._commands.preview(batch)

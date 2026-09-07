@@ -44,3 +44,25 @@ def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     ]
     assert offsets == sorted(offsets)
     assert output == source.with_suffix(".py")
+
+
+def test_emitted_script_seeds_node_default_from_literal_site(tmp_path):
+    source = tmp_path / "script.txt"
+    source.write_text((FIXTURES / "reflow.txt").read_text(encoding="utf-8"))
+
+    output = translate(source)
+    generated = output.read_text(encoding="utf-8")
+
+    ctx_line = generated.index("ctx = PipelineContext()")
+    node_line = generated.index('ctx.macro.set_named("NODE", \'PG\')')
+    assert node_line > ctx_line
+
+
+def test_emitted_script_omits_node_default_when_no_literal_site(tmp_path):
+    source = tmp_path / "script.txt"
+    source.write_text((FIXTURES / "script_short.txt").read_text(encoding="utf-8"))
+
+    output = translate(source)
+    generated = output.read_text(encoding="utf-8")
+
+    assert 'ctx.macro.set_named("NODE"' not in generated

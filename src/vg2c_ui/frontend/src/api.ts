@@ -4,7 +4,6 @@ import type {
   CommandPreview,
   CommandResult,
   CsvPreview,
-  Viewport,
   WorkflowDocument,
 } from './types'
 
@@ -64,27 +63,4 @@ export async function previewCsv(sourcePath: string, csvPath: string): Promise<C
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source_path: sourcePath, csv_path: csvPath }),
   }))
-}
-
-export async function saveLayout(
-  document: WorkflowDocument,
-  positions: Record<string, { x: number; y: number }>,
-  viewport: Viewport,
-): Promise<void> {
-  const response = await fetch('/api/documents/layout', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source_path: document.source_path,
-      output_path: document.output_path,
-      source_hash: document.source_hash,
-      output_hash: document.output_hash,
-      revision: document.revision,
-      layout: { positions, viewport },
-    }),
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: response.statusText }))
-    throw new ApiError(body.detail ?? response.statusText, response.status)
-  }
 }

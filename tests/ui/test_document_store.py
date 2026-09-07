@@ -7,35 +7,37 @@ from vg2c_ui.app import create_app
 from vg2c_ui.domain.models import CommandBatch, SetParameterCommand
 from vg2c_ui.services.command_service import DocumentConflict
 from vg2c_ui.services.document_store import DocumentStore, PathOutsideWorkspace
+from vg2c_ui.services.sidecar import read_sidecar
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 
 
-def test_app_exposes_document_and_batch_translation_endpoints(tmp_path):
+def test_app_exposes_script_editor_endpoints_without_layout_api(tmp_path):
     paths = set(create_app(tmp_path).openapi()["paths"])
 
     assert "/api/documents/open" in paths
-    assert "/api/documents/layout" in paths
     assert "/api/translations/batch" in paths
+    assert "/api/commands/get-workflow" in paths
     assert "/api/commands/preview-diff" in paths
     assert "/api/commands/apply-changes" in paths
     assert "/api/commands/preview-csv" in paths
+    assert "/api/documents/layout" not in paths
 
 
-def test_layout_round_trip_does_not_modify_generated_python(tmp_path):
+def test_translation_sidecar_contains_only_editor_state(tmp_path):
     source = tmp_path / "script_short.txt"
     copyfile(FIXTURES / "script_short.txt", source)
     store = DocumentStore(tmp_path)
+
     document = store.translate_document(source)
     output = source.with_suffix(".py")
-    before = output.read_bytes()
+    sidecar = read_sidecar(output)
 
-    document.layout.viewport.zoom = 1.5
-    store.save_layout(document)
-    reopened = store.open_document(source, output)
-
-    assert output.read_bytes() == before
-    assert reopened.layout.viewport.zoom == 1.5
+    assert output.is_file()
+    assert sidecar is not None
+    assert sidecar.source_hash == document.source_hash
+    assert sidecar.output_hash == document.output_hash
+    assert "layout" not in sidecar.model_dump()
 
 
 def test_store_rejects_paths_outside_workspace(tmp_path):
@@ -67,7 +69,7 @@ def test_parameter_changes_are_previewed_then_applied_atomically(tmp_path):
             SetParameterCommand(
                 step_id=step.id,
                 parameter_id=parameter.id,
-                value="edited by visual editor",
+                value="edited by script editor",
             )
         ],
     )
@@ -75,14 +77,14 @@ def test_parameter_changes_are_previewed_then_applied_atomically(tmp_path):
     preview = store.preview_commands(batch)
 
     assert preview.valid
-    assert "edited by visual editor" in preview.diff
+    assert "edited by script editor" in preview.diff
     assert Path(document.output_path).read_bytes() == before
 
     result = store.apply_commands(batch)
 
     assert result.document.revision == document.revision + 1
     assert result.document.output_hash != document.output_hash
-    assert "edited by visual editor" in Path(document.output_path).read_text(encoding="utf-8")
+    assert "edited by script editor" in Path(document.output_path).read_text(encoding="utf-8")
     reopened = store.open_document(source, document.output_path)
     reopened_parameter = next(
         item
@@ -90,7 +92,7 @@ def test_parameter_changes_are_previewed_then_applied_atomically(tmp_path):
         for item in reopened_step.parameters
         if item.id == parameter.id
     )
-    assert reopened_parameter.value == "edited by visual editor"
+    assert reopened_parameter.value == "edited by script editor"
     with pytest.raises(DocumentConflict):
         store.preview_commands(batch)
 
