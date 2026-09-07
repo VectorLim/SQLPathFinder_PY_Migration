@@ -11,8 +11,9 @@
     "generate:contracts": "python ../../../scripts/generate_frontend_contracts.py",
     "check:contracts": "python ../../../scripts/generate_frontend_contracts.py --check",
     "typecheck": "tsc -b",
-    "test:state": "node --experimental-strip-types src/workspaceState.test.ts",
-    "test": "npm run check:contracts && npm run typecheck && npm run test:state",
+    "test:state": "node --experimental-strip-types src/workspaceState.test.ts && node --experimental-strip-types src/workspaceMerge.test.ts",
+    "test:ui": "node --experimental-strip-types src/fileSelection.test.ts && node --experimental-strip-types src/notifications.test.ts && node --experimental-strip-types src/responsive.test.ts",
+    "test": "npm run check:contracts && npm run typecheck && npm run test:state && npm run test:ui",
     "build": "npm run check:contracts && tsc -b && vite build"
   },
   "dependencies": {
