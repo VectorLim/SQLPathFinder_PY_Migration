@@ -1,0 +1,60 @@
+.sql-operation-editor {
+  container-type: inline-size;
+  max-width: 100%;
+}
+
+.sql-file-refs {
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
+.sql-add-panel,
+.sql-filter-stack,
+.sql-filter-card,
+.sql-section,
+.sql-row {
+  max-width: 100%;
+  min-width: 0;
+}
+
+@container (max-width: 760px) {
+  .sql-operation-editor {
+    --sql-field-w: min(248px, calc(100cqw - 86px));
+    --sql-gap: 10px;
+  }
+  .sql-file-refs { grid-template-columns: minmax(0, 1fr); }
+  .sql-selection { grid-template-columns: 28px var(--sql-field-w) 32px; row-gap: 8px; }
+  .sql-selection > .sql-expression-control { grid-column: 2; grid-row: 1; }
+  .sql-selection > .sql-as { grid-column: 2; grid-row: 2; }
+  .sql-selection > .sql-field--alias { grid-column: 2; grid-row: 3; }
+  .sql-selection > .sql-remove { grid-column: 3; grid-row: 1; }
+  .sql-join-heading { grid-template-columns: 24px minmax(0, 88px) 32px; justify-content: center; }
+  .sql-join-heading .sql-join-word { display: none; }
+  .sql-join-heading .sql-field--join-source { grid-column: 2 / 3; grid-row: 2; }
+  .sql-join-predicate { grid-template-columns: 42px var(--sql-field-w) 32px; row-gap: 8px; justify-content: center; }
+  .sql-join-predicate > .sql-expression-control:first-of-type { grid-column: 2; grid-row: 1; }
+  .sql-join-predicate > .sql-operator-control { grid-column: 2; grid-row: 2; justify-self: center; }
+  .sql-join-predicate > .sql-expression-control:last-of-type { grid-column: 2; grid-row: 3; }
+  .sql-join-predicate > .sql-remove { grid-column: 3; grid-row: 1; }
+  .sql-join-predicate > .sql-connector--join { grid-column: 1; grid-row: 1; }
+  .sql-add-join-keys { grid-template-columns: minmax(0, 1fr); }
+  .sql-attribute-menu { width: min(440px, calc(100cqw - 18px)); }
+}
+
+@container (max-width: 620px) {
+  .sql-filter-section { padding-top: 14px; }
+  .sql-filter-stack { width: 100%; }
+  .sql-filter-card { width: min(100%, 390px); padding: 13px 14px 14px; border-radius: 13px; }
+  .sql-filter-rule { grid-template-columns: minmax(0, 1fr); gap: 11px; }
+  .sql-filter-control--operator { width: min(100%, 220px); }
+  .sql-filter-logic { width: min(100%, 230px); height: 38px; gap: 8px; }
+  .sql-filter-card__actions { justify-content: stretch; }
+  .sql-filter-card__actions button { flex: 1 1 0; }
+  .sql-add-panel { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .sql-add-panel__row { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container (max-width: 430px) {
+  .sql-operation-editor { --sql-field-w: min(236px, calc(100cqw - 72px)); }
+  .sql-source-chip { max-width: 74px; }
+  .sql-attribute-menu { width: calc(100cqw - 12px); }
+}
