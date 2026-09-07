@@ -9,9 +9,9 @@ import {
   previewChanges,
   previewCsv,
   projectWorkspace,
-  translateBatch,
 } from './api'
 import type {
+  DocumentView,
   ParameterView,
   SqlActionRequest,
   SqlModelView,
@@ -33,16 +33,13 @@ export function useWorkspace() {
   const mutationCounter = useRef(0)
   stateRef.current = state
 
-  const translate = useCallback(async (sourcePaths: string[]) => {
-    const response = await translateBatch(sourcePaths)
-    dispatch({ type: 'merge-documents', documents: response.documents, activateFirst: true })
-    return response
-  }, [])
-
-  const open = useCallback(async (sourcePaths: string[]) => {
-    const documents = await Promise.all(sourcePaths.map((path) => openDocument(path)))
-    dispatch({ type: 'merge-documents', documents, activateFirst: true })
-    return documents
+  const mergeDocuments = useCallback((documents: DocumentView[]) => {
+    dispatch({
+      type: 'merge-documents',
+      documents,
+      activateFirst: true,
+      preserveDirty: true,
+    })
   }, [])
 
   const reload = useCallback(async (tabId: string) => {
@@ -192,8 +189,7 @@ export function useWorkspace() {
     state,
     active: activeTab(state),
     dispatch,
-    translate,
-    open,
+    mergeDocuments,
     reload,
     edit,
     validate,
