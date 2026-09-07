@@ -6,7 +6,7 @@ from vg2c.utilities import assemble_all_utilities
 
 def test_sqlite_only_kind_embeds_sqlite_reader_and_excludes_unused() -> None:
     # SqliteReader is a reader class, not Kind-mapped -- emitter forces it in via
-    # extra_root_names, derived from the dispatched block's reader_cls.
+    # extra_root_names, derived from the dispatched block's reader metadata.
     _, sources = assemble_all_utilities(
         required_kinds=frozenset({Kind.SQLITE_QUERY}),
         extra_root_names=frozenset({"sqlite_reader"}),

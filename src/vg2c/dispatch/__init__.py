@@ -5,6 +5,7 @@ from vg2c.dispatch.filter_detector import detect_filters
 from vg2c.dispatch.models import (
     DispatchedBlock,
     DispatchedProgram,
+    ReaderSpec,
     ReaderTarget,
 )
 from vg2c.kind import Kind
@@ -14,6 +15,7 @@ __all__ = [
     "DispatchedBlock",
     "DispatchedProgram",
     "DialectHandler",
+    "ReaderSpec",
     "ReaderTarget",
 ]
 
@@ -21,19 +23,10 @@ __all__ = [
 def dispatch(
     analyzed: AnalyzedProgram,
 ) -> DispatchedProgram:
-    """Stage 4 entry point: resolve dialects, substitute schemas, build reader targets.
-
-    Args:
-        analyzed: Output from Stage 3 ``analyze()``.
-
-    Returns:
-        A ``DispatchedProgram`` wrapping *analyzed* and adding per-SQL-block
-        dispatch metadata.
-    """
+    """Stage 4 entry point: resolve dialects, substitute schemas, and bind readers."""
     dispatched: list[DispatchedBlock] = []
 
     for block in analyzed.resolved.blocks:
-        # --- Step 1: resolve handler ---
         opts = block.resolved_options.lookup
 
         if block.kind is Kind.SQL_QUERY:
@@ -53,15 +46,11 @@ def dispatch(
             )
 
         if handler is None:
-            continue  # Non-SQL block; no DispatchedBlock emitted
+            continue
 
-        # --- Step 4: schema substitution ---
         rewritten_sql = handler.substitute(body=block.resolved_body)
-
-        # --- Step 6: reader target ---
         reader_target = handler.build_reader_target(block)
 
-        # Detect SQL filters
         sqlite = block.kind is Kind.SQLITE_QUERY
         suffix = "sqlite_query" if sqlite else "sql_query"
         step_name = f"step_{block.index:04d}_{suffix}"
@@ -70,7 +59,7 @@ def dispatch(
         dispatched.append(
             DispatchedBlock(
                 resolved=block,
-                reader_cls=handler.reader_cls,
+                reader=handler.reader,
                 reader_kwargs=handler.reader_kwargs,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,

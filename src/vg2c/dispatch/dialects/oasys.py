@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.kind import Kind
-from datasyncx import OracleReader
-from functools import partial
 
 
 class OasysDialect(DialectHandler):
     """Handler for Oracle OASYS dialect."""
 
-    reader_cls = OracleReader
+    reader = ReaderSpec(module="datasyncx", name="OracleReader")
     reader_kwargs = {"database": "OASYS"}
     kind = Kind.SQL_QUERY
 

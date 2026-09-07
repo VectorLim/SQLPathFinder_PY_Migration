@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
-
+from vg2c.logger import Logger
 from vg2c.operands.base import (
     _OPERATOR_TABLE,
     ParseChildrenFn,

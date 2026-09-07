@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
-from typing import Callable, Any, ContextManager
+from collections.abc import Callable
+from typing import Any
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import ArtifactRole, emittable
 from vg2c.utilities._base import UtilitySpec
+from vg2c.utilities.oracle_client import OracleClient
 
 
 class PipelineContext(UtilitySpec):
@@ -47,7 +49,8 @@ class PipelineContext(UtilitySpec):
         method = getattr(utility_instance, method_func.__name__, None)
         if method is None:
             raise AttributeError(
-                f"Method '{method_func.__name__}' not found in utility '{utility_cls.utility_name}'."
+                f"Method '{method_func.__name__}' not found in utility "
+                f"'{utility_cls.utility_name}'."
             )
         return method
 
@@ -62,14 +65,23 @@ class PipelineContext(UtilitySpec):
         self.fs_ops.write_file(path, content)
 
     def _read_datasyncx(self, sql: str, reader: Any, node: str):
-        result = reader.read(site=node, query=sql)
+        try:
+            result = reader.read(site=node, query=sql)
+        finally:
+            OracleClient.log_active_client()
         result.columns = [col.lower() for col in result.columns]
         return result
 
-    @emittable
+    @emittable(
+        parameter_capabilities={"sql": ("structured-sql",)},
+        artifact_roles={
+            "output": ArtifactRole("output"),
+            "inputs": ArtifactRole("input", many=True),
+        },
+    )
     def run_query(
         self,
-        sql,
+        sql: str,
         output: str,
         reader: Any,
         inputs: list[str] | None = None,
@@ -78,11 +90,8 @@ class PipelineContext(UtilitySpec):
         node: str | None = None,
     ):
         sql = self.macro.substitute(sql)
-        # precedence: explicit override > script default (ctx.macro "NODE") > global env setting > legacy default
         effective_node = (
-            node
-            or self.macro.named("NODE")
-            or os.environ.get("VG2C_DEFAULT_NODE", "KM")
+            node or self.macro.named("NODE") or os.environ.get("VG2C_DEFAULT_NODE", "KM")
         )
 
         if hasattr(reader, "execute"):

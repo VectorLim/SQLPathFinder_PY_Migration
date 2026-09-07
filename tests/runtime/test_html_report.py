@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 import re
+from pathlib import Path
 
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
-from vg2c.utilities.html_report import HtmlReport
 from vg2c.frontend import classify, parse
 from vg2c.resolver import resolve
+from vg2c.utilities.html_report import HtmlReport
 
 
 class MockCtx:
@@ -45,8 +45,7 @@ class SpyCsvIO:
         self.calls.append(name)
         with Path(name).open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
-            for row in reader:
-                yield row
+            yield from reader
 
 
 class CtxWithCsvIO(MockCtx):
@@ -115,14 +114,8 @@ def test_html_report_defer_and_render(tmp_path, monkeypatch):
     assert "&nbsp;" in rendered  # formats empty string
 
     # Check alternating row classes
-    assert (
-        '<td class="tblin" style="vertical-align:middle;text-align:left;">Val1</td>'
-        in rendered
-    )
-    assert (
-        '<td class="alt" style="vertical-align:middle;text-align:left;">Val3</td>'
-        in rendered
-    )
+    assert '<td class="tblin" style="vertical-align:middle;text-align:left;">Val1</td>' in rendered
+    assert '<td class="alt" style="vertical-align:middle;text-align:left;">Val3</td>' in rendered
 
 
 def test_html_report_layout_link(tmp_path, monkeypatch):
@@ -177,10 +170,14 @@ def test_html_report_layout_email_fallback(tmp_path, monkeypatch):
     report = HtmlReport()
     report.instance = "9999"
 
-    template = ":FILE:email:self\n" "HTM:REPORT1\n"
+    template = ":FILE:email:self\nHTM:REPORT1\n"
 
     report.deferred_reports["REPORT1"] = {
-        "template": "OUTPUT-FILE<\\\\>my_output.htm\nINPUT-FILE<\\\\>nonexistent.csv\nCOLUMN-DATA<\\\\><\\\\>col1\n"
+        "template": (
+            "OUTPUT-FILE<\\\\>my_output.htm\n"
+            "INPUT-FILE<\\\\>nonexistent.csv\n"
+            "COLUMN-DATA<\\\\><\\\\>col1\n"
+        )
     }
 
     ctx = MockCtx()

@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vg2c.kind import Kind
-
 from tests.resolver._fixture_flow import (
     all_scope_nodes,
     blocks_for_token,
     max_scope_depth,
     resolve_fixture,
 )
+from vg2c.kind import Kind
 
 
 def test_script_short_exact_single_leaf_contract(FIXTURES: Path) -> None:

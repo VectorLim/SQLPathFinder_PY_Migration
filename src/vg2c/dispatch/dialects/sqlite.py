@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from vg2c.dispatch.base import DialectHandler
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.kind import Kind
-from vg2c.utilities.sqlite_reader import SqliteReader
 
 
 class SqliteDialect(DialectHandler):
     """Handler for SQLite dialect."""
 
-    reader_cls = SqliteReader
+    reader = ReaderSpec(
+        module="vg2c.utilities.sqlite_reader",
+        name="SqliteReader",
+        utility_name="sqlite_reader",
+    )
     kind = Kind.SQLITE_QUERY
 
     @classmethod
@@ -17,5 +21,4 @@ class SqliteDialect(DialectHandler):
 
     @classmethod
     def substitute(cls, body: str) -> str:
-        # No schema substitution for SQLite
         return body

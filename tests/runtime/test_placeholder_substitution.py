@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit

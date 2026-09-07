@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import csv
+import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-import re
-from typing import Any, Iterator
+from typing import Any
 
 import pandas
 

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from email.message import EmailMessage
 import smtplib
-from typing import Any
+from email.message import EmailMessage
 
 import pytest
 
@@ -52,7 +51,7 @@ class FakeCredential:
 @pytest.fixture(autouse=True)
 def mock_keyring(monkeypatch) -> None:
     monkeypatch.setattr(
-        "vg2c.emitter.utilities.mail.keyring.get_credential",
+        "vg2c.utilities.mail.keyring.get_credential",
         lambda service, username: FakeCredential("yeu.chuan.lim@intel.com", "svc-pass"),
     )
 
@@ -65,7 +64,7 @@ def test_mail_service_uses_fixed_smtp_target(monkeypatch) -> None:
     _FakeSMTP.login_calls = []
     _FakeSMTP.send_error = None
 
-    monkeypatch.setattr("vg2c.emitter.utilities.mail.smtplib.SMTP", _FakeSMTP)
+    monkeypatch.setattr("vg2c.utilities.mail.smtplib.SMTP", _FakeSMTP)
 
     MailService().send(to="user@example.com", subject="Hello", body="Body")
 
@@ -86,10 +85,9 @@ def test_mail_service_keeps_outlook_host_and_port_fixed(monkeypatch) -> None:
     _FakeSMTP.login_calls = []
     _FakeSMTP.send_error = None
 
-    # Even if environment variables are set, host and port remain DEFAULT_SMTP_HOST/PORT
     monkeypatch.setenv("VG2C_SMTP_HOST", "smtp.internal.local")
     monkeypatch.setenv("VG2C_SMTP_PORT", "2525")
-    monkeypatch.setattr("vg2c.emitter.utilities.mail.smtplib.SMTP", _FakeSMTP)
+    monkeypatch.setattr("vg2c.utilities.mail.smtplib.SMTP", _FakeSMTP)
 
     MailService().send(to="user@example.com", subject="Hello", body="Body")
 
@@ -107,7 +105,7 @@ def test_mail_service_logs_in_when_smtp_credentials_set(monkeypatch) -> None:
     _FakeSMTP.login_calls = []
     _FakeSMTP.send_error = None
 
-    monkeypatch.setattr("vg2c.emitter.utilities.mail.smtplib.SMTP", _FakeSMTP)
+    monkeypatch.setattr("vg2c.utilities.mail.smtplib.SMTP", _FakeSMTP)
 
     MailService().send(to="user@example.com", subject="Hello", body="Body")
 
@@ -121,16 +119,12 @@ def test_mail_service_auth_required_error_is_actionable(monkeypatch) -> None:
     _FakeSMTP.starttls_calls = 0
     _FakeSMTP.ehlo_calls = 0
     _FakeSMTP.login_calls = []
-    # Make sure we use SMTPAuthenticationError to trigger custom handling in send_via_smtp
     _FakeSMTP.send_error = smtplib.SMTPAuthenticationError(
         530, "Authentication required"
     )
 
-    monkeypatch.setattr("vg2c.emitter.utilities.mail.smtplib.SMTP", _FakeSMTP)
+    monkeypatch.setattr("vg2c.utilities.mail.smtplib.SMTP", _FakeSMTP)
 
-    try:
+    with pytest.raises(RuntimeError, match="SMTP authentication failed") as exc_info:
         MailService().send(to="user@example.com", subject="Hello", body="Body")
-        assert False, "Expected RuntimeError"
-    except RuntimeError as exc:
-        assert "SMTP authentication failed" in str(exc)
-        assert "SMTP" in str(exc)
+    assert "SMTP" in str(exc_info.value)

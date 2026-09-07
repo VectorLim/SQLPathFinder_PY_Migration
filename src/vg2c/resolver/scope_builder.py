@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
 from vg2c.kind import Kind
+from vg2c.logger import Logger
 from vg2c.operands import (
     Else,
     EndIf,
@@ -114,7 +114,8 @@ def _parse_children(
         if token is not None:
             loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
             log.warning(
-                f"[unknown-macro-control] {loc} (block {block.index}): Unknown macro control token {{{token}}}; treated as leaf."
+                f"[unknown-macro-control] {loc} (block {block.index}): "
+                f"Unknown macro control token {{{token}}}; treated as leaf."
             )
             children.append(_leaf_node(state, block.index))
             i += 1

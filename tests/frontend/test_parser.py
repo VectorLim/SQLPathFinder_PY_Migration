@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+
 from vg2c.frontend import parse
 
 
 def test_splits_two_blocks_on_separator() -> None:
-    text = """<OPTIONS>\n/A=1\n</OPTIONS>\nbody1\n<---- New Query ---->\n<OPTIONS>\n/B=2\n</OPTIONS>\nbody2\n"""
+    text = (
+        "<OPTIONS>\n/A=1\n</OPTIONS>\nbody1\n<---- New Query ---->\n"
+        "<OPTIONS>\n/B=2\n</OPTIONS>\nbody2\n"
+    )
     blocks = parse(text)
 
     assert len(blocks) == 2
@@ -15,7 +19,10 @@ def test_splits_two_blocks_on_separator() -> None:
 
 
 def test_separator_allows_surrounding_whitespace() -> None:
-    text = """<OPTIONS>\n/A=1\n</OPTIONS>\nleft\n   <----   New Query   ---->   \n<OPTIONS>\n/B=2\n</OPTIONS>\nright\n"""
+    text = (
+        "<OPTIONS>\n/A=1\n</OPTIONS>\nleft\n   <----   New Query   ---->   \n"
+        "<OPTIONS>\n/B=2\n</OPTIONS>\nright\n"
+    )
     blocks = parse(text)
 
     assert len(blocks) == 2
