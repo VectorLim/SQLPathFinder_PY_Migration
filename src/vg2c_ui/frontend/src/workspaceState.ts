@@ -39,7 +39,7 @@ export interface WorkspaceState {
 }
 
 export type WorkspaceAction =
-  | { type: 'merge-documents'; documents: DocumentView[]; activateFirst?: boolean }
+  | { type: 'merge-documents'; documents: DocumentView[]; activateFirst?: boolean; preserveDirty?: boolean }
   | { type: 'activate'; tabId: string | null }
   | { type: 'close'; tabId: string }
   | { type: 'select'; tabId: string; itemId: string | null }
@@ -64,16 +64,21 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     let nextInstanceId = state.nextInstanceId
     for (const document of action.documents) {
       const previous = byId.get(document.id)
+      if (previous && action.preserveDirty && hasUnsavedChanges(previous)) continue
       const instanceId = previous?.instanceId ?? nextInstanceId++
       byId.set(document.id, createTab(document, previous, instanceId))
     }
     const tabs = [...byId.values()]
+    const firstMergeable = action.documents.find((document) => {
+      const previous = state.tabs.find((tab) => tab.document.id === document.id)
+      return !(previous && action.preserveDirty && hasUnsavedChanges(previous))
+    })
     return {
       ...state,
       tabs,
       nextInstanceId,
-      activeId: action.activateFirst && action.documents.length
-        ? action.documents[0].id
+      activeId: action.activateFirst && firstMergeable
+        ? firstMergeable.id
         : state.activeId && tabs.some((tab) => tab.document.id === state.activeId)
           ? state.activeId
           : tabs[0]?.document.id ?? null,
@@ -196,6 +201,10 @@ function createTab(document: DocumentView, previous: TabState | undefined, insta
     csvArtifactPath: null,
     csvRequestId: null,
   }
+}
+
+function hasUnsavedChanges(tab: TabState): boolean {
+  return Object.keys(tab.edits.values).length > 0
 }
 
 function emptyEdits(): EditState {
