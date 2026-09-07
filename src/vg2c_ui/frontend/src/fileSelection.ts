@@ -35,7 +35,7 @@ export async function prepareSourceFiles(files: readonly SourceFileLike[]): Prom
       })
       continue
     }
-    const key = file.name.casefold?.() ?? file.name.toLowerCase()
+    const key = file.name.toLowerCase()
     if (names.has(key)) {
       rejected.push({ name: file.name, message: 'Duplicate file name in selection.' })
       continue
