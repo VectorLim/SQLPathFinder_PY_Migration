@@ -9,6 +9,7 @@ import type {
   SqlActionResponse,
   SqlModelRequest,
   SqlModelView,
+  TranslationFileRequest,
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
 } from './contracts.generated'
@@ -33,8 +34,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function translateBatch(sourcePaths: string[]): Promise<BatchTranslationResponse> {
-  return post('/api/translations/batch', { source_paths: sourcePaths, out_dir: null })
+export function translateBatch(files: TranslationFileRequest[]): Promise<BatchTranslationResponse> {
+  return post('/api/translations/batch', { files })
 }
 
 export function openDocument(sourcePath: string, outputPath?: string): Promise<DocumentView> {
