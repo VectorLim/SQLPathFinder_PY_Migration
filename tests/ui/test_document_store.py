@@ -9,6 +9,7 @@ from vg2c_ui.api.models import (
     ChangeBatch,
     DocumentView,
     ParameterChangeRequest,
+    TranslationFileRequest,
 )
 from vg2c_ui.api.translation import translate_batch
 from vg2c_ui.app import create_app
@@ -48,6 +49,12 @@ def _batch(document: DocumentView, parameter_id: str, value: str) -> ChangeBatch
     )
 
 
+def _request(store: DocumentStore):
+    return SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(document_store=store))
+    )
+
+
 def test_api_exposes_only_current_transport_routes(tmp_path):
     paths = set(create_app(tmp_path).openapi()["paths"])
     assert "/api/documents/open" in paths
@@ -67,23 +74,61 @@ def test_translation_starts_without_editor_sidecar(tmp_path):
     assert read_sidecar(Path(opened.view.output_path)) is None
 
 
-def test_batch_translation_resolves_out_dir_to_output_files(tmp_path):
-    source = _copy_fixture(tmp_path)
-    store = DocumentStore(tmp_path)
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(document_store=store))
-    )
+def test_batch_translation_stages_browser_files_and_returns_per_file_results(tmp_path):
+    content = (FIXTURES / "script_short.txt").read_text(encoding="utf-8")
     response = translate_batch(
         BatchTranslationRequest(
-            source_paths=[source.name],
-            out_dir="generated",
+            files=[
+                TranslationFileRequest(name="first.txt", content=content),
+                TranslationFileRequest(name="second.vg2", content=content),
+            ]
         ),
-        request,
+        _request(DocumentStore(tmp_path)),
     )
-    assert not response.diagnostics
-    assert response.documents[0].output_path == str(
-        (tmp_path / "generated" / "script_short.py").resolve()
+
+    assert [item.status for item in response.results] == ["success", "success"]
+    assert [item.file_name for item in response.results] == ["first.txt", "second.vg2"]
+    assert all(item.document is not None for item in response.results)
+    for item in response.results:
+        assert item.document is not None
+        source = Path(item.document.source_path)
+        assert source.is_file()
+        assert ".vg2c-ui" in source.parts
+        assert Path(item.document.output_path).is_file()
+
+
+def test_batch_translation_failure_does_not_cancel_remaining_files(tmp_path):
+    content = (FIXTURES / "script_short.txt").read_text(encoding="utf-8")
+    response = translate_batch(
+        BatchTranslationRequest(
+            files=[
+                TranslationFileRequest(name="before.txt", content=content),
+                TranslationFileRequest(name="unsupported.csv", content=content),
+                TranslationFileRequest(name="after.txt", content=content),
+            ]
+        ),
+        _request(DocumentStore(tmp_path)),
     )
+
+    assert [item.status for item in response.results] == ["success", "error", "success"]
+    assert response.results[1].document is None
+    assert response.results[1].diagnostics[0].code == "translation-failed"
+    assert "Unsupported VG2 source file type" in response.results[1].diagnostics[0].message
+    assert response.results[2].document is not None
+
+
+def test_batch_translation_reports_multiple_failures_independently(tmp_path):
+    response = translate_batch(
+        BatchTranslationRequest(
+            files=[
+                TranslationFileRequest(name="one.csv", content="x"),
+                TranslationFileRequest(name="two.json", content="x"),
+            ]
+        ),
+        _request(DocumentStore(tmp_path)),
+    )
+    assert [item.status for item in response.results] == ["error", "error"]
+    assert all(len(item.diagnostics) == 1 for item in response.results)
 
 
 def test_store_rejects_paths_outside_workspace(tmp_path):
