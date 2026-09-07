@@ -152,14 +152,24 @@ export interface CsvPreviewRequest {
   csv_path: string
 }
 
+export interface TranslationFileRequest {
+  name: string
+  content: string
+}
+
 export interface BatchTranslationRequest {
-  source_paths: Array<string>
-  out_dir: string | null
+  files: Array<TranslationFileRequest>
+}
+
+export interface TranslationOutcomeView {
+  file_name: string
+  status: 'success' | 'error'
+  document: DocumentView | null
+  diagnostics: Array<DiagnosticView>
 }
 
 export interface BatchTranslationResponse {
-  documents: Array<DocumentView>
-  diagnostics: Array<DiagnosticView>
+  results: Array<TranslationOutcomeView>
 }
 
 export interface WorkspaceDocumentRequest {
