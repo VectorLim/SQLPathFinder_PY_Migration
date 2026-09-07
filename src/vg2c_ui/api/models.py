@@ -159,14 +159,24 @@ class CsvPreviewRequest(BaseModel):
     csv_path: str
 
 
+class TranslationFileRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    content: str
+
+
 class BatchTranslationRequest(BaseModel):
-    source_paths: list[str] = Field(min_length=1, max_length=100)
-    out_dir: str | None = None
+    files: list[TranslationFileRequest] = Field(min_length=1, max_length=100)
+
+
+class TranslationOutcomeView(BaseModel):
+    file_name: str
+    status: Literal["success", "error"]
+    document: DocumentView | None = None
+    diagnostics: list[DiagnosticView] = Field(default_factory=list)
 
 
 class BatchTranslationResponse(BaseModel):
-    documents: list[DocumentView]
-    diagnostics: list[DiagnosticView]
+    results: list[TranslationOutcomeView]
 
 
 class WorkspaceDocumentRequest(BaseModel):
@@ -319,7 +329,9 @@ CONTRACT_MODELS = (
     CsvPreviewView,
     DocumentReference,
     CsvPreviewRequest,
+    TranslationFileRequest,
     BatchTranslationRequest,
+    TranslationOutcomeView,
     BatchTranslationResponse,
     WorkspaceDocumentRequest,
     WorkspaceProjectionRequest,
