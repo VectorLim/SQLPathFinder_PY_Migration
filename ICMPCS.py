@@ -7,7 +7,6 @@
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
 
-
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -41,8 +40,6 @@ import smtplib
 import sqlite3
 import subprocess
 import sys
-
-
 
 
 class Kind(str, Enum):
@@ -82,7 +79,9 @@ class Kind(str, Enum):
             Kind.WAIT_FILE,
         }
 
+
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
+
 
 def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
     tree = ast.parse(source)
@@ -90,6 +89,7 @@ def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
         if isinstance(node, ast.ClassDef) and node.name == class_name:
             return node
     return None
+
 
 def _strip_embed_artifacts(source: str, class_name: str) -> str:
     lines = source.split("\n")
@@ -114,6 +114,7 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
     ]
 
     return "\n".join(lines).rstrip()
+
 
 class UtilitySpec(ABC):
     """Base contract for all embeddable utilities."""
@@ -242,6 +243,7 @@ class UtilitySpec(ABC):
                     return wrapped
         return "", ""
 
+
 class EmitterUtility(UtilitySpec):
     """Utility that participates in Stage 1 classification and block emission."""
 
@@ -269,11 +271,13 @@ class EmitterUtility(UtilitySpec):
     def iter_checks(cls) -> tuple[type[EmitterUtility], ...]:
         return tuple(cls._check_handlers)
 
+
 def strip_quotes(value: str) -> str:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
 
 def split_utility_command(text: str) -> list[str]:
     text = text.strip()
@@ -284,6 +288,7 @@ def split_utility_command(text: str) -> list[str]:
     lexer.whitespace_split = True
     lexer.commenters = ""
     return list(lexer)
+
 
 def resolve_output_path(block: Any) -> str:
     csv_value = block.resolved_options.lookup.get("CSV")
@@ -298,6 +303,7 @@ def resolve_output_path(block: Any) -> str:
 
     suffix = "txt" if block.kind in {Kind.WRITE_FILE, Kind.PYTHON_EMBED} else "csv"
     return f"step_{block.index:04d}.{suffix}"
+
 
 def resolve_path(name: str | Path, *, for_write: bool = False) -> Path:
     path = Path(name)
@@ -327,11 +333,13 @@ def resolve_path(name: str | Path, *, for_write: bool = False) -> Path:
         return base_path
     return base_path
 
+
 def normalize_macro_name(raw: str) -> str:
     name = raw.strip()
     if name.startswith("<<<") and name.endswith(">>>"):
         name = name[3:-3]
     return name.strip().upper()
+
 
 class Logger:
     """Shared logger utility used by translator code and generated scripts."""
@@ -453,6 +461,7 @@ class Logger:
     ) -> None:
         cls.getLogger(name).table(rows, headers=headers, title=title, level=level)
 
+
 class CrosstabUtility:
     utility_name = "crosstab"
     TOKEN = "CrossTab->[["
@@ -564,6 +573,7 @@ class CrosstabUtility:
         )
         result.columns = [str(col).lower() for col in result.columns]
         return result
+
 
 class CsvIO:
     """Read and write CSV files relative to the runtime script directory."""
@@ -836,7 +846,13 @@ class CsvIO:
 
         if isinstance(content, pandas.DataFrame):
             if header is not None:
-                content = content.reindex(columns=header)
+                columns = {
+                    str(column).casefold(): column for column in content.columns
+                }
+                content = content.reindex(
+                    columns=[columns.get(column.casefold(), column) for column in header]
+                )
+                content.columns = header
             content.to_csv(path, index=False, encoding="utf-8")
             return
 
@@ -875,6 +891,7 @@ class CsvIO:
                     if rows[0] == header:
                         rows = rows[1:]
                 writer_plain.writerows(rows)
+
 
 class MacroState:
     """Stack of variable frames; lookups walk top-to-bottom."""
@@ -1008,6 +1025,7 @@ class MacroState:
             yield
         finally:
             self.pop_frame()
+
 
 class MailService:
     """Send email. Credentials are read from Windows Credential Manager (service: SMTP)."""
@@ -1159,6 +1177,7 @@ class MailService:
             return path.read_text(encoding="utf-8", errors="replace")
         return body
 
+
 class ExternalProcess:
     """Execute generic shell command or script block."""
 
@@ -1237,6 +1256,7 @@ class ExternalProcess:
             shell=use_shell,
         )
         return result.returncode
+
 
 class HtmlReport:
     """Utility for generating HTML report files."""
@@ -1691,6 +1711,7 @@ tr th {{ background-color:#f5f5f5; }}
         base = fallback.lower()
         return f"{instance_id}_{base}" if instance_id else base
 
+
 class OracleClient:
     """Select an Oracle client before DataSyncX opens its first connection."""
 
@@ -1711,8 +1732,7 @@ class OracleClient:
             return None
         if mode != "instant":
             raise RuntimeError(
-                "DATASYNCX_ORACLE_CLIENT must be 'home' or 'instant', "
-                f"not {mode!r}."
+                "DATASYNCX_ORACLE_CLIENT must be 'home' or 'instant', " f"not {mode!r}."
             )
         if sys.platform != "win32":
             raise RuntimeError(
@@ -1761,9 +1781,8 @@ class OracleClient:
 
     @staticmethod
     def _find_instant_client() -> Path:
-        configured = (
-            os.getenv("DATASYNCX_INSTANT_CLIENT_DIR")
-            or os.getenv("ORACLE_INSTANT_CLIENT_DIR")
+        configured = os.getenv("DATASYNCX_INSTANT_CLIENT_DIR") or os.getenv(
+            "ORACLE_INSTANT_CLIENT_DIR"
         )
         candidates = (
             [configured] if configured else os.getenv("PATH", "").split(os.pathsep)
@@ -1804,13 +1823,12 @@ class OracleClient:
 
     @staticmethod
     def _prepend_path(client_dir: Path) -> None:
-        entries = [
-            entry for entry in os.getenv("PATH", "").split(os.pathsep) if entry
-        ]
+        entries = [entry for entry in os.getenv("PATH", "").split(os.pathsep) if entry]
         selected = str(client_dir)
         os.environ["PATH"] = os.pathsep.join(
             [selected, *(entry for entry in entries if Path(entry) != client_dir)]
         )
+
 
 class PipelineContext:
     """Single runtime context object for generated scripts."""
@@ -1906,6 +1924,7 @@ class PipelineContext:
 
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)
+
 
 class FileSystemOps:
 
@@ -2033,6 +2052,7 @@ class FileSystemOps:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(content, encoding="utf-8")
 
+
 class RowsInFile:
     """Count rows in a CSV file and store the count in a named macro variable.
 
@@ -2069,6 +2089,7 @@ class RowsInFile:
         row_count_call = CsvIO.row_count.render(csv_path_expr)
         stmt = MacroState.set_named.render(repr(var_name), f"str({row_count_call})")
         return "rows_in_file", [stmt]
+
 
 class SmartAppend:
     """Append CSV data while preserving one destination header."""
@@ -2117,6 +2138,7 @@ class SmartAppend:
                 if write_header:
                     writer.writerow(header)
                 writer.writerows(reader)
+
 
 class SqliteEngine:
     """Emit query calls for external and SQLite readers."""
@@ -2257,6 +2279,7 @@ class SqliteEngine:
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]
 
+
 class SqliteReader:
     """Run SQL joins over CSV files using in-memory SQLite."""
 
@@ -2374,43 +2397,92 @@ class SqliteReader:
         data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
         return pd.DataFrame(data)
 
+
 # <vg2c:dependencies:end>
 # <vg2c:steps:start>
 def step_0000_html_report(ctx) -> None:
-    ctx.html_report.run(instance='22697', prompt_text='Step 1-1. create revision footer', app_server_default='atd_atm.hadoop', template='\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8\nTYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nFORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle\nFORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>')
+    ctx.html_report.run(
+        instance="22697",
+        prompt_text="Step 1-1. create revision footer",
+        app_server_default="atd_atm.hadoop",
+        template="\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8\nTYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nFORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle\nFORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>\nFORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle\nFORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>",
+    )
+
 
 def step_0001_html_report(ctx) -> None:
-    ctx.html_report.layout(ctx, outlook='N', instance='22697', json_only='N', chart_instance='3450', app_server_default='atd_atm.hadoop', template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:revision.htm\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:Y\n:RR:NO\n:B:Y\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:revision\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><i><font face="arial" size="2.66666666666667" color="silver"><script filename><br>- <changes made></font></i>\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>')
+    ctx.html_report.layout(
+        ctx,
+        outlook="N",
+        instance="22697",
+        json_only="N",
+        chart_instance="3450",
+        app_server_default="atd_atm.hadoop",
+        template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:revision.htm\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:Y\n:RR:NO\n:B:Y\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:revision\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><i><font face="arial" size="2.66666666666667" color="silver"><script filename><br>- <changes made></font></i>\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>',
+    )
+
 
 def step_0002_html_report(ctx) -> None:
-    ctx.html_report.delete(instance='22697')
+    ctx.html_report.delete(instance="22697")
+
 
 def step_0003_write_file(ctx) -> None:
-    ctx.write_file(path='macrotmp.csv', template='\nSfolder,underDEV,useCSR,useMMS\nICMPCS_CWFNCO_CSR_IAM,N,Y,Y')
+    ctx.write_file(
+        path="macrotmp.csv",
+        template="\nSfolder,underDEV,useCSR,useMMS\nICMPCS_CWFNCO_CSR_IAM,N,Y,Y",
+    )
+
 
 def step_0004_write_file(ctx) -> None:
-    ctx.write_file(path='getcsrsu.bat', template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe')
+    ctx.write_file(
+        path="getcsrsu.bat",
+        template='\n@echo off\nset PriCSR="\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset SecCSR="\\\\KMATSHFS.intel.com\\KMATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\Patrol\\*.___"\nset BakCSR="\\\\SHUser-ProdAT.intel.com\\SHProdATUser$\\%username%\\Patrol\\*.___"\ncopy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .\nren setsiteparam.___ setsiteparam.exe',
+    )
+
 
 def step_0005_external(ctx) -> None:
-    ctx.external.run(argv=['getcsrsu.bat'])
+    ctx.external.run(argv=["getcsrsu.bat"])
+
 
 def step_0007_external(ctx) -> None:
-    ctx.external.run(argv=['setsiteparam.exe', 'KM', ctx.macro.named('SFOLDER'), ctx.macro.named('UNDERDEV'), ctx.macro.named('USECSR'), ctx.macro.named('USEMMS')])
+    ctx.external.run(
+        argv=[
+            "setsiteparam.exe",
+            "KM",
+            ctx.macro.named("SFOLDER"),
+            ctx.macro.named("UNDERDEV"),
+            ctx.macro.named("USECSR"),
+            ctx.macro.named("USEMMS"),
+        ]
+    )
+
 
 def step_0008_write_file(ctx) -> None:
-    ctx.write_file(path='TT', template='\nSST Rev3g')
+    ctx.write_file(path="TT", template="\nSST Rev3g")
+
 
 def step_0010_fs_delete(ctx) -> None:
-    ctx.fs_ops.delete(paths=['macrotmp.csv', 'getcsrsu.bat', 'setsiteparam.exe', 'csrsu.txt'])
+    ctx.fs_ops.delete(
+        paths=["macrotmp.csv", "getcsrsu.bat", "setsiteparam.exe", "csrsu.txt"]
+    )
+
 
 def step_0012_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
+    ctx.macro.set_named("CONFIG", str(ctx.csv_io.row_count("ICMPCS_config.csv")))
+
 
 def step_0014_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\Config', body='')
+    ctx.email.send(
+        to="yeu.chuan.lim@intel.com",
+        subject="Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\"
+        + ctx.macro.named("SFOLDER")
+        + "\\KM\\Config",
+        body="",
+    )
+
 
 def step_0016_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     SELECT /*L10*/  DISTINCT 
               [icmpcs] AS [icmpcs]
              ,[parameter] AS [parameter]
@@ -2510,43 +2582,127 @@ def step_0016_sqlite_query(ctx) -> None:
              ,[UNDERDEV]
              ,[CSRV]
              ,[MMSV]
-    """, output='configsets.csv', reader=SqliteReader(), inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'TZONE', 'TZS', 'SFOLDER', 'FAC', 'MARS', 'MARSN', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MONGO', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'VFMONGO', 'CSRPATH', 'MMSPATH', 'MIPPATH', 'LURL', 'IREPOP', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
+    """,
+        output="configsets.csv",
+        reader=SqliteReader(),
+        inputs=["ICMPCS_config.csv"],
+        crosstab={
+            "row_keys": [
+                "icmpcs",
+                "STARTTS",
+                "UTC",
+                "TZONE",
+                "TZS",
+                "SFOLDER",
+                "FAC",
+                "MARS",
+                "MARSN",
+                "RIMS",
+                "EIMS",
+                "ARIES",
+                "OASYS",
+                "MONGO",
+                "MMS",
+                "MMSI",
+                "TOOLLOG",
+                "VFMARS",
+                "VFARIES",
+                "VFMONGO",
+                "CSRPATH",
+                "MMSPATH",
+                "MIPPATH",
+                "LURL",
+                "IREPOP",
+                "UNDERDEV",
+                "CSRV",
+                "MMSV",
+            ],
+            "header_key": "parameter",
+            "value_key": "value",
+        },
+    )
+
 
 def step_0017_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
+    ctx.macro.set_named("CONFIGSETS", str(ctx.csv_io.row_count("configsets.csv")))
+
 
 def step_0019_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Alert: Pls check ICMPCS (' + ctx.macro.named('SFOLDER') + ') config file as it contains not equal to 1 row', body='', attachments=['ICMPCS_config.csv', 'configsets.csv'])
+    ctx.email.send(
+        to="yeu.chuan.lim@intel.com",
+        subject="Alert: Pls check ICMPCS ("
+        + ctx.macro.named("SFOLDER")
+        + ") config file as it contains not equal to 1 row",
+        body="",
+        attachments=["ICMPCS_config.csv", "configsets.csv"],
+    )
+
 
 def step_0023_write_file(ctx) -> None:
-    ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
+    ctx.write_file(
+        path="CSRVerror.htm",
+        template="\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>",
+    )
+
 
 def step_0024_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: Cannot access to ' + ctx.macro.named('CSRPATH'), body='CSRVerror.htm')
+    ctx.email.send(
+        to="yeu.chuan.lim@intel.com",
+        subject="Critical: Cannot access to " + ctx.macro.named("CSRPATH"),
+        body="CSRVerror.htm",
+    )
+
 
 def step_0027_write_file(ctx) -> None:
-    ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
+    ctx.write_file(
+        path="MMSVerror.htm",
+        template="\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>",
+    )
+
 
 def step_0028_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: Cannot access to ' + ctx.macro.named('MMSPATH'), body='MMSVerror.htm')
+    ctx.email.send(
+        to="yeu.chuan.lim@intel.com",
+        subject="Critical: Cannot access to " + ctx.macro.named("MMSPATH"),
+        body="MMSVerror.htm",
+    )
+
 
 def step_0030_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src=str(Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\HIST') / 'HIST.txt'), dst='.')
+    ctx.fs_ops.copy(
+        src=str(
+            Path(
+                "\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\"
+                + ctx.macro.named("SFOLDER")
+                + "\\KM\\HIST"
+            )
+            / "HIST.txt"
+        ),
+        dst=".",
+    )
+
 
 def step_0031_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('HIST', str(ctx.csv_io.row_count('HIST.txt')))
+    ctx.macro.set_named("HIST", str(ctx.csv_io.row_count("HIST.txt")))
+
 
 def step_0033_write_file(ctx) -> None:
-    ctx.write_file(path='HIST.csv', template='\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00')
+    ctx.write_file(
+        path="HIST.csv", template="\nLOT,OUT_DATE\nDUMMY,2000-01-01 00:00:00"
+    )
+
 
 def step_0034_write_file(ctx) -> None:
-    ctx.write_file(path='HISTERROR.txt', template='\nERROR\nERROR\nERROR')
+    ctx.write_file(path="HISTERROR.txt", template="\nERROR\nERROR\nERROR")
+
 
 def step_0036_fs_copy(ctx) -> None:
-    ctx.fs_ops.rename(src='HIST.txt', dst='HIST.csv')
+    ctx.fs_ops.rename(src="HIST.txt", dst="HIST.csv")
+
 
 def step_0043_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     /*BEGIN SQL*/
     SELECT 
               lot_1 AS lot_1
@@ -2593,10 +2749,27 @@ def step_0043_sql_query(ctx) -> None:
                   Interposer_SLI Is Not Null  
     /*END SQL*/
 
-    """, output='yeuchuan_a1_22697.tab', reader=MarsReader(), header=['lot_1', 'operation_1', 'out_date', 'oldqty1', 'newqty1', 'Interposer_SLI', 'Patch_SLI', 'prodgroup3_1', 'entity', 'transaction'])
+    """,
+        output="yeuchuan_a1_22697.tab",
+        reader=MarsReader(),
+        header=[
+            "lot_1",
+            "operation_1",
+            "out_date",
+            "oldqty1",
+            "newqty1",
+            "Interposer_SLI",
+            "Patch_SLI",
+            "prodgroup3_1",
+            "entity",
+            "transaction",
+        ],
+    )
+
 
 def step_0044_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     /*BEGIN SQL*/
     SELECT 
               facility AS facility
@@ -2647,7 +2820,12 @@ def step_0044_sql_query(ctx) -> None:
     LEFT JOIN ARIES_Views.AV_BAMS_DEVICE_RESULTS bams3 ON bams3.lao_start_ww = bams2.lao_start_ww AND bams3.obj_s_id = bams2.obj_s_id AND bams3.obj_mt_id = bams2.obj_mt_id AND bams3.obj_ut_id = bams2.obj_ut_id
     WHERE
                   (bams0.lot In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a1_22697.tab', 'lot_1', 'bams0.lot In') + """)""" + """ 
+    """
+        + ctx.csv_io.sql_get_csv_list(
+            ".\\yeuchuan_a1_22697.tab", "lot_1", "bams0.lot In"
+        )
+        + """)"""
+        + """ 
      AND      bams0.operation = '2303' 
     )
     GROUP BY 
@@ -2670,10 +2848,37 @@ def step_0044_sql_query(ctx) -> None:
              ,parameter
     /*END SQL*/
 
-    """, output='yeuchuan_a0_22697.tab', reader=AriesReader(), crosstab={'row_keys': ['facility', 'operation', 'module_name', 'tool_entity', 'primary_entity', 'processing_start_date', 'processing_end_date', 'lot', 'product', 'prodgroup3', 'product_desc', 'owner', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y'], 'header_key': 'parameter', 'value_key': 'numeric_value'})
+    """,
+        output="yeuchuan_a0_22697.tab",
+        reader=AriesReader(),
+        crosstab={
+            "row_keys": [
+                "facility",
+                "operation",
+                "module_name",
+                "tool_entity",
+                "primary_entity",
+                "processing_start_date",
+                "processing_end_date",
+                "lot",
+                "product",
+                "prodgroup3",
+                "product_desc",
+                "owner",
+                "visual_id",
+                "ws_loss_code",
+                "media_in_x",
+                "media_in_y",
+            ],
+            "header_key": "parameter",
+            "value_key": "numeric_value",
+        },
+    )
+
 
 def step_0045_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
 
     DROP INDEX IF EXISTS IdxA0;
     Create Index IF NOT EXISTS IdxA0 ON [yeuchuan_a0_22697] ([lot],[operation]);
@@ -2711,10 +2916,16 @@ def step_0045_sqlite_query(ctx) -> None:
      LEFT OUTER JOIN [yeuchuan_a0_22697] a0
       ON a1.[lot_1] = a0.[lot] 
      AND a1.[operation_1] = a0.[operation]
-    """, output='PARMI_IPM_RAW.csv', reader=SqliteReader(), inputs=['yeuchuan_a1_22697.tab', 'yeuchuan_a0_22697.tab'])
+    """,
+        output="PARMI_IPM_RAW.csv",
+        reader=SqliteReader(),
+        inputs=["yeuchuan_a1_22697.tab", "yeuchuan_a0_22697.tab"],
+    )
+
 
 def step_0046_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
 
     DROP TABLE IF EXISTS T_L0_Init;
     CREATE TABLE T_L0_Init AS
@@ -2907,24 +3118,72 @@ def step_0046_sqlite_query(ctx) -> None:
     WHERE
                   [FlagLot] = '1' 
     ;
-    """, output='IPM_Data.csv', reader=SqliteReader(), inputs=['PARMI_IPM_RAW.csv'], header=['lot_1', 'newqty1', 'facility', 'operation', 'tool_entity', 'primary_entity', 'processing_end_date', 'lot', 'prodgroup3', 'product', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y', 'height', 'patch_lift_roi1', 'patch_lift_roi2', 'patch_lift_roi3', 'patch_lift_roi4', 'patch_lift_roi5', 'patch_lift_roi6', 'patch_lift_roi7', 'patch_lift_roi8', 'patch_lift_roi_max', 'patch_sli', 'interposer_sli', 'NCO_Risk', 'VIDCount', 'FlagLot'])
+    """,
+        output="IPM_Data.csv",
+        reader=SqliteReader(),
+        inputs=["PARMI_IPM_RAW.csv"],
+        header=[
+            "lot_1",
+            "newqty1",
+            "facility",
+            "operation",
+            "tool_entity",
+            "primary_entity",
+            "processing_end_date",
+            "lot",
+            "prodgroup3",
+            "product",
+            "visual_id",
+            "ws_loss_code",
+            "media_in_x",
+            "media_in_y",
+            "height",
+            "patch_lift_roi1",
+            "patch_lift_roi2",
+            "patch_lift_roi3",
+            "patch_lift_roi4",
+            "patch_lift_roi5",
+            "patch_lift_roi6",
+            "patch_lift_roi7",
+            "patch_lift_roi8",
+            "patch_lift_roi_max",
+            "patch_sli",
+            "interposer_sli",
+            "NCO_Risk",
+            "VIDCount",
+            "FlagLot",
+        ],
+    )
+
 
 def step_0047_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     SELECT /*L0*/  DISTINCT 
               a0.[lot] AS [Lot_NCORisk]
     FROM 
     [IPM_Data] a0
     WHERE
      NOT          (a0.[lot] In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)""" + """
-    """, output='DATA.csv', reader=SqliteReader(), inputs=['IPM_Data.csv'], header=['Lot_NCORisk'])
+    """
+        + ctx.csv_io.sql_get_csv_list(".\\HIST.csv", 1, "a0.[lot] In")
+        + """)"""
+        + """
+    """,
+        output="DATA.csv",
+        reader=SqliteReader(),
+        inputs=["IPM_Data.csv"],
+        header=["Lot_NCORisk"],
+    )
+
 
 def step_0048_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('SIGNAL', str(ctx.csv_io.row_count('data.csv')))
+    ctx.macro.set_named("SIGNAL", str(ctx.csv_io.row_count("data.csv")))
+
 
 def step_0051_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     SELECT DISTINCT 
      [Lot_NCORisk] AS [HOLD_LOT]
     ,'Y' AS [AUTO_CONTAIN]
@@ -2938,40 +3197,89 @@ def step_0051_sqlite_query(ctx) -> None:
     WHERE 1=1
 
 
-    """, output='RESULT_<<<%username%>>>_CWFNCO{TS}.csv', reader=SqliteReader(), inputs=['data.csv:T0'], header=['HOLD_LOT', 'AUTO_CONTAIN', 'LOT', 'EMAIL', 'CCB_NUMBER', 'HOLD_NOTE', 'HOLDCATEGORY', 'Module'])
+    """,
+        output="RESULT_<<<%username%>>>_CWFNCO{TS}.csv",
+        reader=SqliteReader(),
+        inputs=["data.csv:T0"],
+        header=[
+            "HOLD_LOT",
+            "AUTO_CONTAIN",
+            "LOT",
+            "EMAIL",
+            "CCB_NUMBER",
+            "HOLD_NOTE",
+            "HOLDCATEGORY",
+            "Module",
+        ],
+    )
+
 
 def step_0052_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src=str(Path('.') / 'RESULT_*.csv'), dst=ctx.macro.named('CSRPATH'))
+    ctx.fs_ops.copy(src=str(Path(".") / "RESULT_*.csv"), dst=ctx.macro.named("CSRPATH"))
+
 
 def step_0054_html_report(ctx) -> None:
-    ctx.html_report.defer(instance='22697', id='MYREPORT3', prompt_text='Step 6-6. sending notification', app_server_default='atd_atm.hadoop', template='\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12<\\\\>COL13<\\\\>COL14<\\\\>COL15<\\\\>COL16<\\\\>COL17<\\\\>COL18<\\\\>COL19<\\\\>COL20<\\\\>COL21<\\\\>COL22<\\\\>COL23<\\\\>COL24<\\\\>COL25<\\\\>COL26\nTYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nINPUT-FILE<\\\\>IPM_Data.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nOUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nNOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nAT-TOP-OF-REPORT<\\\\><\\\\>CWF_MLINCO_LOTHOLD<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-DATA<\\\\><\\\\>facility<\\\\>operation<\\\\>tool_entity<\\\\>primary_entity<\\\\>processing_end_date<\\\\>lot<\\\\>prodgroup3<\\\\>product<\\\\>visual_id<\\\\>ws_loss_code<\\\\>media_in_x<\\\\>media_in_y<\\\\>height<\\\\>patch_lift_roi1<\\\\>patch_lift_roi2<\\\\>patch_lift_roi3<\\\\>patch_lift_roi4<\\\\>patch_lift_roi5<\\\\>patch_lift_roi6<\\\\>patch_lift_roi7<\\\\>patch_lift_roi8<\\\\>patch_lift_roi_max<\\\\>lot_1<\\\\>patch_sli<\\\\>interposer_sli<\\\\>nco_risk\nCOLUMN-HEADERS<\\\\><\\\\>Facility<\\\\>Operation<\\\\>Tool Entity<\\\\>Primary Entity<\\\\>Processing End Date<\\\\>Lot<\\\\>Prodgroup3<\\\\>Product<\\\\>Visual Id<\\\\>Ws Loss Code<\\\\>Media In X<\\\\>Media In Y<\\\\>Height<\\\\>Patch Lift Roi1<\\\\>Patch Lift Roi2<\\\\>Patch Lift Roi3<\\\\>Patch Lift Roi4<\\\\>Patch Lift Roi5<\\\\>Patch Lift Roi6<\\\\>Patch Lift Roi7<\\\\>Patch Lift Roi8<\\\\>Patch Lift Roi Max<\\\\>Lot 1<\\\\>Patch Sli<\\\\>Interposer Sli<\\\\>Nco Risk\nCOLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left\nCOLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>')
+    ctx.html_report.defer(
+        instance="22697",
+        id="MYREPORT3",
+        prompt_text="Step 6-6. sending notification",
+        app_server_default="atd_atm.hadoop",
+        template="\n\n\nType<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12<\\\\>COL13<\\\\>COL14<\\\\>COL15<\\\\>COL16<\\\\>COL17<\\\\>COL18<\\\\>COL19<\\\\>COL20<\\\\>COL21<\\\\>COL22<\\\\>COL23<\\\\>COL24<\\\\>COL25<\\\\>COL26\nTYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nINPUT-FILE<\\\\>IPM_Data.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nOUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nDYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nNOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nAT-TOP-OF-REPORT<\\\\><\\\\>CWF_MLINCO_LOTHOLD<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>\nCOLUMN-DATA<\\\\><\\\\>facility<\\\\>operation<\\\\>tool_entity<\\\\>primary_entity<\\\\>processing_end_date<\\\\>lot<\\\\>prodgroup3<\\\\>product<\\\\>visual_id<\\\\>ws_loss_code<\\\\>media_in_x<\\\\>media_in_y<\\\\>height<\\\\>patch_lift_roi1<\\\\>patch_lift_roi2<\\\\>patch_lift_roi3<\\\\>patch_lift_roi4<\\\\>patch_lift_roi5<\\\\>patch_lift_roi6<\\\\>patch_lift_roi7<\\\\>patch_lift_roi8<\\\\>patch_lift_roi_max<\\\\>lot_1<\\\\>patch_sli<\\\\>interposer_sli<\\\\>nco_risk\nCOLUMN-HEADERS<\\\\><\\\\>Facility<\\\\>Operation<\\\\>Tool Entity<\\\\>Primary Entity<\\\\>Processing End Date<\\\\>Lot<\\\\>Prodgroup3<\\\\>Product<\\\\>Visual Id<\\\\>Ws Loss Code<\\\\>Media In X<\\\\>Media In Y<\\\\>Height<\\\\>Patch Lift Roi1<\\\\>Patch Lift Roi2<\\\\>Patch Lift Roi3<\\\\>Patch Lift Roi4<\\\\>Patch Lift Roi5<\\\\>Patch Lift Roi6<\\\\>Patch Lift Roi7<\\\\>Patch Lift Roi8<\\\\>Patch Lift Roi Max<\\\\>Lot 1<\\\\>Patch Sli<\\\\>Interposer Sli<\\\\>Nco Risk\nCOLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left\nCOLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>",
+    )
+
 
 def step_0055_html_report(ctx) -> None:
-    ctx.html_report.layout(ctx, outlook='N', instance='22697', json_only='N', chart_instance='30819', app_server_default='atd_atm.hadoop', template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:EMAIL:<<<dEmail>>>\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:Y\n:RR:NO\n:B:Y\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:CWF_MLINCO_LOTHOLD\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black">Lot on hold due to suspected MLI NCO. Lot will need to go through 100% XRAY (2846)</font>\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\nHTM:MYREPORT3\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black"><strong>Configurations applied</strong><br>CSR enabled: <<<DCSR>>><br>ICMPCS MMS Workflow enabled: <<<DMWF>>><br>MMS Signal Tracer enabled: <<<DMST>>></font>\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\nIHJ:revision.htm\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>')
+    ctx.html_report.layout(
+        ctx,
+        outlook="N",
+        instance="22697",
+        json_only="N",
+        chart_instance="30819",
+        app_server_default="atd_atm.hadoop",
+        template='<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">\n:FILE:EMAIL:<<<dEmail>>>\n:CSS:sqlpathfinder_style_1.css\n:CSSEMBED:Y\n:RR:NO\n:B:Y\n:EM-A:\n:EM-S:\n:SEC:Y\n:TITLE:CWF_MLINCO_LOTHOLD\n<table class="tblout">\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black">Lot on hold due to suspected MLI NCO. Lot will need to go through 100% XRAY (2846)</font>\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\nHTM:MYREPORT3\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\n<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black"><strong>Configurations applied</strong><br>CSR enabled: <<<DCSR>>><br>ICMPCS MMS Workflow enabled: <<<DMWF>>><br>MMS Signal Tracer enabled: <<<DMST>>></font>\n</td>\n</tr>\n<tr class="tblout">\n<td class="tblout">\nIHJ:revision.htm\n</td>\n</tr>\n</table>\n</td><td class="tblout" valign="top">\n<table class="tblout">\n<tr class="tblout"><td class="tblout"></td></tr>\n</table>\n</td></tr></table>',
+    )
+
 
 def step_0056_html_report(ctx) -> None:
-    ctx.html_report.delete(instance='22697')
+    ctx.html_report.delete(instance="22697")
+
 
 def step_0057_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('HISTERR', str(ctx.csv_io.row_count('HISTERROR.txt')))
+    ctx.macro.set_named("HISTERR", str(ctx.csv_io.row_count("HISTERROR.txt")))
+
 
 def step_0059_smart_append(ctx) -> None:
-    ctx.smart_append.append('HIST.csv', 'data.csv')
+    ctx.smart_append.append("HIST.csv", "data.csv")
+
 
 def step_0060_fs_copy(ctx) -> None:
-    ctx.fs_ops.rename(src='HIST.csv', dst='HIST.txt')
+    ctx.fs_ops.rename(src="HIST.csv", dst="HIST.txt")
+
 
 def step_0061_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src=str(Path('.') / 'HIST.txt'), dst=ctx.macro.named('IREPOP') + '\\' + ctx.macro.named('SFOLDER') + '\\KM\\HIST')
+    ctx.fs_ops.copy(
+        src=str(Path(".") / "HIST.txt"),
+        dst=ctx.macro.named("IREPOP")
+        + "\\"
+        + ctx.macro.named("SFOLDER")
+        + "\\KM\\HIST",
+    )
+
 
 def step_0064_rows_in_file(ctx) -> None:
-    ctx.macro.set_named('SIGNAL', str(ctx.csv_io.row_count('data.csv')))
+    ctx.macro.set_named("SIGNAL", str(ctx.csv_io.row_count("data.csv")))
+
 
 def step_0067_write_file(ctx) -> None:
-    ctx.write_file(path='spfheaderfile.csv', template='DATE,EMAIL,MODULE,SIGNALTYPE,COMPONENT_ID,HOLD_LOT,AUTO_CONTAIN,SHOULD_EMAIL,MMS,ALARMTYPE,SUB_ENTITY_1,SUB_ENTITY_2,SUB_ENTITY_3,FACILITY,PRODGROUP3,ENTITY,DEFECT_SIDE,DEFECT_MODE,LOT_OWNR,IMPACT_LOT_VI,IMPACT_VIDS\n')
+    ctx.write_file(
+        path="spfheaderfile.csv",
+        template="DATE,EMAIL,MODULE,SIGNALTYPE,COMPONENT_ID,HOLD_LOT,AUTO_CONTAIN,SHOULD_EMAIL,MMS,ALARMTYPE,SUB_ENTITY_1,SUB_ENTITY_2,SUB_ENTITY_3,FACILITY,PRODGROUP3,ENTITY,DEFECT_SIDE,DEFECT_MODE,LOT_OWNR,IMPACT_LOT_VI,IMPACT_VIDS\n",
+    )
+
 
 def step_0068_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
+    ctx.run_query(
+        sql="""
     SELECT DISTINCT 
      'BA' AS [MODULE]
     ,'ICMPCS' AS [SIGNALTYPE]
@@ -2989,30 +3297,62 @@ def step_0068_sqlite_query(ctx) -> None:
     FROM [T0]
     WHERE 1=1
 
-    """, output='SPFMMSTMP.csv', reader=SqliteReader(), inputs=['IPM_Data.csv:T0'], header=['MODULE', 'SIGNALTYPE', 'ALARMTYPE', 'EMAIL', 'HOLD_LOT', 'AUTO_CONTAIN', 'PRODGROUP3', 'IMPACT_LOT_VI', 'IMPACT_VIDS'])
+    """,
+        output="SPFMMSTMP.csv",
+        reader=SqliteReader(),
+        inputs=["IPM_Data.csv:T0"],
+        header=[
+            "MODULE",
+            "SIGNALTYPE",
+            "ALARMTYPE",
+            "EMAIL",
+            "HOLD_LOT",
+            "AUTO_CONTAIN",
+            "PRODGROUP3",
+            "IMPACT_LOT_VI",
+            "IMPACT_VIDS",
+        ],
+    )
+
 
 def step_0069_smart_append(ctx) -> None:
-    ctx.smart_append.append('spfheaderfile.csv', 'SPFMMSTMP.csv')
+    ctx.smart_append.append("spfheaderfile.csv", "SPFMMSTMP.csv")
+
 
 def step_0070_fs_copy(ctx) -> None:
-    ctx.fs_ops.rename(src='spfheaderfile.csv', dst='<TS>_' + ctx.macro.named('%USERNAME%') + '_output.pickle.csv')
+    ctx.fs_ops.rename(
+        src="spfheaderfile.csv",
+        dst="<TS>_" + ctx.macro.named("%USERNAME%") + "_output.pickle.csv",
+    )
+
 
 def step_0071_fs_delete(ctx) -> None:
-    ctx.fs_ops.delete(paths=['SPFMMSTMP.csv'])
+    ctx.fs_ops.delete(paths=["SPFMMSTMP.csv"])
+
 
 def step_0072_fs_copy(ctx) -> None:
-    ctx.fs_ops.copy(src=str(Path('.') / '*_output.pickle.csv'), dst=ctx.macro.named('MIPPATH'))
+    ctx.fs_ops.copy(
+        src=str(Path(".") / "*_output.pickle.csv"), dst=ctx.macro.named("MIPPATH")
+    )
+
 
 def step_0075_write_file(ctx) -> None:
-    ctx.write_file(path='update.bat', template='\n@echo off\nset currd=%date:~10,4%-%date:~4,2%-%date:~7,2%\nset currms=%time:~2,6%\nset /a currh=%time:~0,2%\nif %currh% LSS 10 set currh=0%currh%\nset currt=%currh%%currms%\nset PriConfig=<<<IREPOP>>>\\<<<SFOLDER>>>\n\n\nREM ************** edit here only if needed **************\n\nset record=<<<DCSR>>>,<<<DMST>>>,<<<DMWF>>>\n\n\n\n\nREM *************** do not edit below here ***************\n\ncall :retry\ngoto:eof\n\n:retry\nset /a tries=300\n\n:loop\nif %tries% LEQ 0 goto return\necho <<<STARTTS>>>,%currd% %currt%,<<<UTC>>>,KM,<<<%username%>>>,<<<UNDERDEV>>>,%record%>>%PriConfig%\\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop\n\n:return\n@exit /B')
+    ctx.write_file(
+        path="update.bat",
+        template="\n@echo off\nset currd=%date:~10,4%-%date:~4,2%-%date:~7,2%\nset currms=%time:~2,6%\nset /a currh=%time:~0,2%\nif %currh% LSS 10 set currh=0%currh%\nset currt=%currh%%currms%\nset PriConfig=<<<IREPOP>>>\\<<<SFOLDER>>>\n\n\nREM ************** edit here only if needed **************\n\nset record=<<<DCSR>>>,<<<DMST>>>,<<<DMWF>>>\n\n\n\n\nREM *************** do not edit below here ***************\n\ncall :retry\ngoto:eof\n\n:retry\nset /a tries=300\n\n:loop\nif %tries% LEQ 0 goto return\necho <<<STARTTS>>>,%currd% %currt%,<<<UTC>>>,KM,<<<%username%>>>,<<<UNDERDEV>>>,%record%>>%PriConfig%\\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop\n\n:return\n@exit /B",
+    )
+
 
 def step_0076_external(ctx) -> None:
-    ctx.external.run(argv=['update.bat'])
+    ctx.external.run(argv=["update.bat"])
+
 
 def step_0077_fs_delete(ctx) -> None:
-    ctx.fs_ops.delete(paths=['update.bat'])
+    ctx.fs_ops.delete(paths=["update.bat"])
+
 
 # <vg2c:steps:end>
+
 
 # <vg2c:workflow:start>
 def run() -> None:
@@ -3024,66 +3364,79 @@ def run() -> None:
     step_0003_write_file(ctx)
     step_0004_write_file(ctx)
     step_0005_external(ctx)
-    with ctx.macro.scope(ctx.csv_io.single_row('macrotmp.csv')):
+    with ctx.macro.scope(ctx.csv_io.single_row("macrotmp.csv")):
         step_0007_external(ctx)
         step_0008_write_file(ctx)
     step_0010_fs_delete(ctx)
-    with ctx.macro.scope(ctx.csv_io.single_row('ctime.csv')):
+    with ctx.macro.scope(ctx.csv_io.single_row("ctime.csv")):
         step_0012_rows_in_file(ctx)
-        if int(ctx.macro.named('CONFIG')) <= int('0'):
+        if int(ctx.macro.named("CONFIG")) <= int("0"):
             step_0014_email(ctx)
         else:
             step_0016_sqlite_query(ctx)
             step_0017_rows_in_file(ctx)
-            if int(ctx.macro.named('CONFIGSETS')) != int('1'):
+            if int(ctx.macro.named("CONFIGSETS")) != int("1"):
                 step_0019_email(ctx)
             else:
-                with ctx.macro.scope(ctx.csv_io.single_row('configsets.csv')):
-                    if ctx.macro.named('CSRV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
+                with ctx.macro.scope(ctx.csv_io.single_row("configsets.csv")):
+                    if (
+                        ctx.macro.named("CSRV") == "FAIL"
+                        and ctx.macro.named("UNDERDEV") == "N"
+                    ):
                         step_0023_write_file(ctx)
                         step_0024_email(ctx)
-                    if ctx.macro.named('MMSV') == 'FAIL' and ctx.macro.named('UNDERDEV') == 'N':
+                    if (
+                        ctx.macro.named("MMSV") == "FAIL"
+                        and ctx.macro.named("UNDERDEV") == "N"
+                    ):
                         step_0027_write_file(ctx)
                         step_0028_email(ctx)
                     step_0030_fs_copy(ctx)
                     step_0031_rows_in_file(ctx)
-                    if int(ctx.macro.named('HIST')) <= int('0'):
+                    if int(ctx.macro.named("HIST")) <= int("0"):
                         step_0033_write_file(ctx)
                         step_0034_write_file(ctx)
                     else:
                         step_0036_fs_copy(ctx)
-    with ctx.macro.scope(ctx.csv_io.single_row('configsets.csv')):
+    with ctx.macro.scope(ctx.csv_io.single_row("configsets.csv")):
         step_0043_sql_query(ctx)
         step_0044_sql_query(ctx)
         step_0045_sqlite_query(ctx)
         step_0046_sqlite_query(ctx)
         step_0047_sqlite_query(ctx)
         step_0048_rows_in_file(ctx)
-        if int(ctx.macro.named('SIGNAL')) > int('0'):
-            if ctx.macro.named('DCSR') == 'Y':
+        if int(ctx.macro.named("SIGNAL")) > int("0"):
+            if ctx.macro.named("DCSR") == "Y":
                 step_0051_sqlite_query(ctx)
-                step_0052_fs_copy(ctx)
+                # step_0052_fs_copy(ctx)
             step_0054_html_report(ctx)
             step_0055_html_report(ctx)
             step_0056_html_report(ctx)
             step_0057_rows_in_file(ctx)
-            if int(ctx.macro.named('HISTERR')) <= int('0'):
+            if int(ctx.macro.named("HISTERR")) <= int("0"):
                 step_0059_smart_append(ctx)
                 step_0060_fs_copy(ctx)
                 step_0061_fs_copy(ctx)
         step_0064_rows_in_file(ctx)
-        if int(ctx.macro.named('SIGNAL')) > int('0'):
-            if ctx.macro.named('DMWF') == 'Y':
-                step_0067_write_file(ctx)
-                step_0068_sqlite_query(ctx)
-                step_0069_smart_append(ctx)
-                step_0070_fs_copy(ctx)
-                step_0071_fs_delete(ctx)
-                step_0072_fs_copy(ctx)
+        if int(ctx.macro.named("SIGNAL")) > int("0"):
+            pass
+            # if ctx.macro.named("DMWF") == "Y":
+            #     step_0067_write_file(ctx)
+            #     step_0068_sqlite_query(ctx)
+            #     step_0069_smart_append(ctx)
+            #     step_0070_fs_copy(ctx)
+            #     step_0071_fs_delete(ctx)
+            #     step_0072_fs_copy(ctx)
         step_0075_write_file(ctx)
         step_0076_external(ctx)
         step_0077_fs_delete(ctx)
+
+
 # <vg2c:workflow:end>
 
 if __name__ == "__main__":
-    run()
+    # run()
+    OracleClient.configure()
+    ctx = PipelineContext()
+    step_0045_sqlite_query(ctx)
+    print("A")

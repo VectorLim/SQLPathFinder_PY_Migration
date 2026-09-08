@@ -293,7 +293,13 @@ class CsvIO(UtilitySpec):
 
         if isinstance(content, pandas.DataFrame):
             if header is not None:
-                content = content.reindex(columns=header)
+                columns = {
+                    str(column).casefold(): column for column in content.columns
+                }
+                content = content.reindex(
+                    columns=[columns.get(column.casefold(), column) for column in header]
+                )
+                content.columns = header
             content.to_csv(path, index=False, encoding="utf-8")
             return
 
