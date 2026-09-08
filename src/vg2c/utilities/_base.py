@@ -6,6 +6,12 @@ import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from vg2c.emitter.models import (
+    StepEmission,
+    UtilityOperationDefinition,
+    build_step_emission,
+    emittable,
+)
 from vg2c.kind import Kind
 
 if TYPE_CHECKING:
@@ -16,6 +22,8 @@ __all__ = ["EmitterUtility", "UtilitySpec"]
 
 
 _CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
+_EMBED_ONLY_ASSIGNMENTS = {"handles", "check_priority"}
+_EMBED_ONLY_DECORATORS = {"emittable", "operation_spec"}
 
 
 def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
@@ -26,8 +34,48 @@ def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
     return None
 
 
+def _decorator_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Call):
+        return _decorator_name(node.func)
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _assignment_names(node: ast.stmt) -> set[str]:
+    if isinstance(node, ast.Assign):
+        return {target.id for target in node.targets if isinstance(target, ast.Name)}
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return {node.target.id}
+    return set()
+
+
+def _embed_only_lines(source: str, class_name: str) -> set[int]:
+    """Return 0-based lines containing compiler-only class metadata."""
+    node = _find_class_def(source, class_name)
+    if node is None:
+        return set()
+
+    remove: set[int] = set()
+    for child in node.body:
+        if _assignment_names(child) & _EMBED_ONLY_ASSIGNMENTS:
+            end = child.end_lineno or child.lineno
+            remove.update(range(child.lineno - 1, end))
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for decorator in child.decorator_list:
+                if _decorator_name(decorator) not in _EMBED_ONLY_DECORATORS:
+                    continue
+                end = decorator.end_lineno or decorator.lineno
+                remove.update(range(decorator.lineno - 1, end))
+    return remove
+
+
 def _strip_embed_artifacts(source: str, class_name: str) -> str:
     lines = source.split("\n")
+    remove = _embed_only_lines(source, class_name)
+    lines = [line for index, line in enumerate(lines) if index not in remove]
 
     while lines and lines[0].lstrip().startswith("@"):
         lines.pop(0)
@@ -38,26 +86,16 @@ def _strip_embed_artifacts(source: str, class_name: str) -> str:
     lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
     lines[0] = lines[0].replace(f"({EmitterUtility.__name__}):", ":")
     lines[0] = lines[0].replace(f"({UtilitySpec.__name__}):", ":")
-    lines[0] = lines[0].replace(
-        f"({class_name}, {UtilitySpec.__name__}):", f"({class_name}):"
-    )
-
-    lines = [
-        line
-        for line in lines
-        if not line.lstrip().startswith("handles =") and "@emittable" not in line
-    ]
+    lines[0] = lines[0].replace(f"({class_name}, {UtilitySpec.__name__}):", f"({class_name}):")
 
     return "\n".join(lines).rstrip()
 
 
 class UtilitySpec(ABC):
-    """Base contract for all embeddable utilities."""
+    """Base contract for all embeddable utilities and their semantic operations."""
 
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
-    # Forced-in regardless of which block Kinds the workflow uses (e.g. PipelineContext/Logger
-    # are referenced unconditionally by every generated script).
     always_include: ClassVar[bool] = False
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
     _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
@@ -83,19 +121,13 @@ class UtilitySpec(ABC):
             owner = UtilitySpec._emit_handlers.get(handled_kind)
             if owner is not None and owner is not cls:
                 raise ValueError(
-                    "duplicate handler for "
-                    f"{handled_kind}: {owner.__name__} and {cls.__name__}"
+                    f"duplicate handler for {handled_kind}: {owner.__name__} and {cls.__name__}"
                 )
             UtilitySpec._emit_handlers[handled_kind] = cls
 
     @classmethod
     def get_source(cls, source_override: str | None = None) -> str:
-        """Return this utility's embeddable source.
-
-        ``source_override``, when given, is a whole-file source string (already
-        cleaned of promoted inline imports -- see ``utilities/__init__.py``) to
-        extract this class's definition from instead of live ``inspect.getsource``.
-        """
+        """Return this utility's embeddable source."""
         custom = getattr(cls, "__vg2c_source__", None)
         if custom is not None:
             return str(custom).rstrip()
@@ -113,20 +145,36 @@ class UtilitySpec(ABC):
     @classmethod
     def registered(cls) -> tuple[type[UtilitySpec], ...]:
         """Return loaded utilities in deterministic registration order."""
-
         return tuple(cls._registry.values())
 
     @classmethod
     def for_name(cls, name: str) -> type[UtilitySpec] | None:
-        """Return the loaded utility registered under *name*."""
-
         return cls._registry.get(name)
 
     @classmethod
     def for_kind(cls, kind: Kind) -> type[UtilitySpec] | None:
-        """Return the loaded emitter for *kind*, falling back to UNKNOWN."""
-
         return cls._emit_handlers.get(kind) or cls._emit_handlers.get(Kind.UNKNOWN)
+
+    @classmethod
+    def operation_definitions(cls) -> tuple[UtilityOperationDefinition, ...]:
+        """Enumerate @emittable operations directly from the registered utilities."""
+        definitions: list[UtilityOperationDefinition] = []
+        for utility in cls.registered():
+            for name in utility.__dict__:
+                raw = inspect.getattr_static(utility, name, None)
+                if isinstance(raw, emittable):
+                    definitions.append(raw.definition(utility))
+        return tuple(definitions)
+
+    @classmethod
+    def operation_definition(
+        cls, utility_name: str, method_name: str
+    ) -> UtilityOperationDefinition | None:
+        utility = cls.for_name(utility_name)
+        if utility is None:
+            return None
+        raw = inspect.getattr_static(utility, method_name, None)
+        return raw.definition(utility) if isinstance(raw, emittable) else None
 
     @staticmethod
     def emit_block(block: Any) -> list[str] | tuple[str, list[str]] | None:
@@ -136,39 +184,27 @@ class UtilitySpec(ABC):
     def _step_name(block: Any, suffix: str) -> str:
         return f"step_{block.index:04d}_{suffix}"
 
-    @staticmethod
-    def _emit_step_source(name: str, body_lines: list[str]) -> tuple[str, str]:
-        lines = [f"def {name}(ctx) -> None:"]
-        if body_lines:
-            for body_line in body_lines:
-                for line in body_line.split("\n"):
-                    if line.strip():
-                        lines.append(f"    {line}")
-                    else:
-                        lines.append("")
-        else:
-            lines.append("    pass")
-        return "\n".join(lines), f"{name}(ctx)"
-
     @classmethod
     def _wrap_in_step(
         cls, subclass: type[UtilitySpec], block: Any, result: Any
-    ) -> tuple[str, str] | None:
+    ) -> StepEmission | None:
         if result is None:
             return None
-        if (
-            isinstance(result, tuple)
-            and len(result) == 2
-            and isinstance(result[1], list)
-        ):
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
             suffix, body_lines = result
         else:
             suffix = getattr(subclass, "utility_name", "utility")
             body_lines = result
-        return cls._emit_step_source(cls._step_name(block, suffix), body_lines)
+        function_name = cls._step_name(block, suffix)
+        return build_step_emission(
+            function_name=function_name,
+            block_index=block.index,
+            functional_kind=block.kind.value,
+            body_lines=body_lines,
+        )
 
     @classmethod
-    def dispatch_and_emit(cls, block: Any) -> tuple[str, str]:
+    def dispatch_and_emit(cls, block: Any) -> StepEmission:
         handler_cls = cls._emit_handlers.get(block.kind)
         if handler_cls is not None:
             emitted = handler_cls.emit_block(block)
@@ -176,20 +212,24 @@ class UtilitySpec(ABC):
                 wrapped = cls._wrap_in_step(handler_cls, block, emitted)
                 if wrapped is not None:
                     return wrapped
-        return "", ""
+        return build_step_emission(
+            function_name=cls._step_name(block, "unsupported"),
+            block_index=block.index,
+            functional_kind=block.kind.value,
+            body_lines=[],
+        )
 
 
 class EmitterUtility(UtilitySpec):
     """Utility that participates in Stage 1 classification and block emission."""
 
+    check_priority: ClassVar[int] = 0
     _check_handlers: ClassVar[list[type[EmitterUtility]]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-
         if inspect.isabstract(cls):
             return
-
         EmitterUtility._check_handlers.append(cls)
 
     @staticmethod
@@ -204,4 +244,10 @@ class EmitterUtility(UtilitySpec):
 
     @classmethod
     def iter_checks(cls) -> tuple[type[EmitterUtility], ...]:
-        return tuple(cls._check_handlers)
+        return tuple(
+            sorted(
+                cls._check_handlers,
+                key=lambda utility: utility.check_priority,
+                reverse=True,
+            )
+        )

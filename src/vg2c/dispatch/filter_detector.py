@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import re
+
 from vg2c.dispatch.models import SQLFilter
 
 # Match qualified attribute like v1.batch_id or [v1].[batch_id] or "v1"."batch_id"

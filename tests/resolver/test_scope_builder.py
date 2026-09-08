@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import logging
+
 import pytest
 
+from tests.resolver._fixture_flow import (
+    all_scope_nodes,
+    max_scope_depth,
+    parse_classify_fixture,
+)
 from vg2c.frontend.models import (
     BlockOptions,
     ClassifiedBlock,
@@ -11,12 +17,6 @@ from vg2c.frontend.models import (
 )
 from vg2c.kind import Kind
 from vg2c.resolver.scope_builder import build_scope_tree
-
-from tests.resolver._fixture_flow import (
-    all_scope_nodes,
-    max_scope_depth,
-    parse_classify_fixture,
-)
 
 
 def _block(

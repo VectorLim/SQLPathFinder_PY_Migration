@@ -5,20 +5,19 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities.macro_state import MacroState
 from vg2c.utilities._emit_helpers import (
-    resolve_path,
     resolve_output_path,
+    resolve_path,
     split_utility_command,
     strip_quotes,
 )
-from vg2c.kind import Kind
+from vg2c.utilities.macro_state import MacroState
 
 
 class FileSystemOps(EmitterUtility):
-
     utility_name = "fs_ops"
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
 
@@ -53,8 +52,8 @@ class FileSystemOps(EmitterUtility):
         from vg2c.utilities.pipeline_context import PipelineContext
 
         stmt = PipelineContext.write_file.render(
-            path=repr(resolve_output_path(block)),
-            template=repr(block.resolved_body),
+            path=resolve_output_path(block),
+            template=block.resolved_body,
         )
         return "write_file", [stmt]
 
@@ -89,35 +88,32 @@ class FileSystemOps(EmitterUtility):
     @classmethod
     def _emit_robocopy(cls, argv: list[str]) -> str:
         # RoboCopy.va arg layout: <file_name> <source_dir> <dest_dir> [...]
-        file_name = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
-        source_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
-        dest_dir = MacroState.to_py_expr(argv[3]) if len(argv) > 3 else repr(".")
-        src_expr = f"str(Path({source_dir}) / {file_name})"
-        dst_expr = dest_dir
-        return cls.copy.render(src=src_expr, dst=dst_expr)
+        file_name = MacroState.to_code_expr(argv[1] if len(argv) > 1 else "")
+        source_dir = MacroState.to_code_expr(argv[2] if len(argv) > 2 else ".")
+        dest_dir = MacroState.to_code_expr(argv[3] if len(argv) > 3 else ".")
+        src_expr = CodeExpr(f"str(Path({source_dir.source}) / {file_name.source})")
+        return cls.copy.render(src=src_expr, dst=dest_dir)
 
     @classmethod
     def _emit_spf_copy(cls, argv: list[str]) -> str:
         # SPFCopy.bat arg layout: <source_path> <dest_dir> [recurse]
-        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst_dir = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr(".")
-        src_expr = src
-        dst_expr = f"str(Path({dst_dir}) / Path({src}).name)"
-        return cls.copy.render(src=src_expr, dst=dst_expr)
+        src = MacroState.to_code_expr(argv[1] if len(argv) > 1 else "")
+        dst_dir = MacroState.to_code_expr(argv[2] if len(argv) > 2 else ".")
+        dst_expr = CodeExpr(f"str(Path({dst_dir.source}) / Path({src.source}).name)")
+        return cls.copy.render(src=src, dst=dst_expr)
 
     @classmethod
     def _emit_spf_rename(cls, argv: list[str]) -> str:
         # SPFRename.va arg layout: <source_path> <dest_path>
-        src = MacroState.to_py_expr(argv[1]) if len(argv) > 1 else repr("")
-        dst = MacroState.to_py_expr(argv[2]) if len(argv) > 2 else repr("")
+        src = MacroState.to_code_expr(argv[1] if len(argv) > 1 else "")
+        dst = MacroState.to_code_expr(argv[2] if len(argv) > 2 else "")
         return cls.rename.render(src=src, dst=dst)
 
     @classmethod
     def _emit_spf_delete(cls, argv: list[str]) -> str:
         raw = strip_quotes(argv[1]) if len(argv) > 1 else ""
         items = [p.strip() for p in raw.split(",") if p.strip()]
-        paths_expr = "[" + ", ".join(MacroState.to_py_expr(p) for p in items) + "]"
-        return cls.delete.render(paths=paths_expr)
+        return cls.delete.render(paths=MacroState.list_code_expr(items))
 
     @emittable
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:

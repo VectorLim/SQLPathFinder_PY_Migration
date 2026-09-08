@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 
 
-class Kind(str, Enum):
+class Kind(str, Enum):  # noqa: UP042 - preserve existing Enum string semantics
     SQL_QUERY = "SQL_QUERY"
     SQLITE_QUERY = "SQLITE_QUERY"
     WRITE_FILE = "WRITE_FILE"

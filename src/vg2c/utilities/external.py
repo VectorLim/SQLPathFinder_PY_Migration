@@ -7,12 +7,10 @@ import subprocess
 from pathlib import Path
 
 from vg2c.emitter.models import emittable
-from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities.macro_state import MacroState
-from vg2c.utilities._emit_helpers import (
-    split_utility_command,
-)
 from vg2c.kind import Kind
+from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities._emit_helpers import split_utility_command
+from vg2c.utilities.macro_state import MacroState
 
 
 class ExternalProcess(EmitterUtility):
@@ -20,6 +18,8 @@ class ExternalProcess(EmitterUtility):
 
     utility_name = "external"
     handles = (Kind.EXTERNAL_RUN,)
+    # Generic .bat/.exe handling is a fallback after more specific utilities.
+    check_priority = -100
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -45,18 +45,12 @@ class ExternalProcess(EmitterUtility):
         if not argv:
             return ["pass  # TODO: empty external utility command"]
 
-        # basename = argv[0].split("/")[-1].split("\\")[-1].lower()
-        # if "run_python_script" in basename:
-        #     return ["pass  # Python script embedded directly, external run omitted"]
-
         stmt = cls._emit_run(argv)
         return [stmt]
 
     @classmethod
     def _emit_run(cls, argv: list[str]) -> str:
-        expr_items = [MacroState.to_py_expr(token) for token in argv]
-        argv_expr = "[" + ", ".join(expr_items) + "]"
-        return cls.run.render(argv=argv_expr)
+        return cls.run.render(argv=MacroState.list_code_expr(argv))
 
     @staticmethod
     def _resolve_exedir() -> str:

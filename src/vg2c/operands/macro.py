@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from vg2c.logger import Logger
 from vg2c.frontend.models import ClassifiedBlock
-
+from vg2c.logger import Logger
 from vg2c.operands.base import (
     ParseChildrenFn,
     ScopeIdSource,
@@ -98,12 +98,13 @@ class StartMacro:
         children: tuple[ScopeNode, ...],
     ) -> None:
         """Emit a CSV-backed or static macro scope using a single context manager."""
+        from vg2c.emitter.models import CodeExpr
         from vg2c.utilities.csv_io import CsvIO
         from vg2c.utilities.macro_state import MacroState
 
         if self.csv_path:
-            row_expr = CsvIO.single_row.render(repr(self.csv_path))
-            scope_call = MacroState.scope.render(row_expr)
+            row_expr = CsvIO.single_row.render(self.csv_path)
+            scope_call = MacroState.scope.render(CodeExpr(str(row_expr)))
         else:
             scope_call = MacroState.scope.render()
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+
 from vg2c.frontend import classify
-from vg2c.kind import Kind
 from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
+from vg2c.kind import Kind
 
 
 def _block(options: dict[str, str], body: str = "") -> ParsedBlock:

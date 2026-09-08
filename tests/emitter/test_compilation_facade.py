@@ -19,10 +19,12 @@ def test_compile_document_exposes_metadata_without_writing(tmp_path):
     result = compile_document(source)
 
     assert not source.with_suffix(".py").exists()
-    assert result.resolved_blocks
-    assert result.scope_tree.kind == "program"
-    assert result.function_to_block
-    assert all(name.startswith("step_") for name in result.function_to_block)
+    assert result.resolved.blocks
+    assert result.resolved.scope_tree.kind == "program"
+    assert result.emitted.steps
+    assert all(step.function_name.startswith("step_") for step in result.emitted.steps)
+    resolved_indices = {block.index for block in result.resolved.blocks}
+    assert all(step.block_index in resolved_indices for step in result.emitted.steps)
 
 
 def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):

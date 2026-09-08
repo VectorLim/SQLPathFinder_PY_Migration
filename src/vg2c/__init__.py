@@ -43,5 +43,5 @@ def translate(input_path: Path, out_dir: Path | None = None) -> Path:
     dest = out_dir if out_dir is not None else input_path.parent
     dest.mkdir(parents=True, exist_ok=True)
     out_path = dest / input_path.with_suffix(".py").name
-    out_path.write_text(result.generated_python, encoding="utf-8")
+    out_path.write_text(result.emitted.source, encoding="utf-8")
     return out_path

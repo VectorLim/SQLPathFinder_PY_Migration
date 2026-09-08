@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -67,7 +66,7 @@ def test_active_client_is_logged_once(monkeypatch, capsys, tmp_path):
         "\n"
         + "=" * 72
         + "\n"
-        + f" Oracle client: 23.26.0.0.0 | mode=thick | source=Instant Client "
+        + " Oracle client: 23.26.0.0.0 | mode=thick | source=Instant Client "
         + f"({tmp_path / 'instantclient_23_26'})\n"
         + "=" * 72
         + "\n"

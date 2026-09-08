@@ -14,8 +14,9 @@ Contains:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Literal, Mapping
+from typing import TYPE_CHECKING, Literal
 
 from vg2c.frontend.models import ClassifiedBlock, SourceSpan
 
@@ -58,15 +59,15 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         return _int_expr("0") if numeric else repr("")
 
     if value.startswith("VAR(") and value.endswith(")"):
-        base = MacroState.named.render(repr(normalize_macro_name(value[4:-1].strip())))
+        base = MacroState.named.render(normalize_macro_name(value[4:-1].strip()))
         return _int_expr(base) if numeric else base
 
     if MacroState.NAMED_PLACEHOLDER_RE.fullmatch(value):
-        base = MacroState.named.render(repr(normalize_macro_name(value)))
+        base = MacroState.named.render(normalize_macro_name(value))
         return _int_expr(base) if numeric else base
 
     if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = MacroState.named.render(repr(normalize_macro_name(value)))
+        base = MacroState.named.render(normalize_macro_name(value))
         return _int_expr(base) if numeric else base
 
     if numeric:
@@ -138,14 +139,14 @@ class ScopeNode:
     kind: Literal["program", "macro", "loop", "if", "if-branch", "else-branch", "leaf"]
     start_index: int
     end_index: int
-    children: tuple["ScopeNode", ...]
+    children: tuple[ScopeNode, ...]
     block_index: int | None
-    control_payload: "MacroControlPayload | None"
+    control_payload: MacroControlPayload | None
 
     def emit(
         self,
-        writer: "IndentWriter",
-        walk: Callable[["ScopeNode"], None],
+        writer: IndentWriter,
+        walk: Callable[[ScopeNode], None],
     ) -> None:
         """Delegate structural emission to the control payload, or walk children transparently.
 

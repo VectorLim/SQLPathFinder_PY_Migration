@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, fields
 from pathlib import Path
 from types import MappingProxyType
-from typing import Iterable, Literal, Mapping
 
 from vg2c.kind import Kind
 
@@ -20,7 +20,7 @@ class BlockOptions:
     lookup: Mapping[str, str]
 
     @classmethod
-    def from_pairs(cls, pairs: Iterable[tuple[str, str]]) -> "BlockOptions":
+    def from_pairs(cls, pairs: Iterable[tuple[str, str]]) -> BlockOptions:
         ordered_pairs: tuple[tuple[str, str], ...] = tuple(
             (k.upper(), v) for k, v in pairs
         )

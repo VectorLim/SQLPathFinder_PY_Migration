@@ -3,14 +3,14 @@ from __future__ import annotations
 import re
 
 from vg2c.dispatch.base import DialectHandler
-from datasyncx import MarsReader
+from vg2c.dispatch.models import ReaderSpec
 from vg2c.kind import Kind
 
 
 class MarsDialect(DialectHandler):
     """Handler for Oracle MARS dialect."""
 
-    reader_cls = MarsReader
+    reader = ReaderSpec(module="datasyncx", name="MarsReader")
     kind = Kind.SQL_QUERY
 
     _MARS_MISSING_DOT_PATTERN = re.compile(r"@\[\]@(?=[A-Za-z_])")
@@ -26,5 +26,4 @@ class MarsDialect(DialectHandler):
 
     @classmethod
     def substitute(cls, body: str) -> str:
-        # Normalize malformed @[]@F_* to @[]@.F_*
         return cls._MARS_MISSING_DOT_PATTERN.sub("@[]@.", body)

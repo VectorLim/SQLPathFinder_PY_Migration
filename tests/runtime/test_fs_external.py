@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
-
-import pytest
 
 from vg2c.utilities.external import ExternalProcess
 from vg2c.utilities.fs_ops import FileSystemOps

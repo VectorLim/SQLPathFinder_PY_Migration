@@ -1,28 +1,25 @@
-"""apply_crosstab - pivot utility for DataFrames (embeddable)."""
+"""Crosstab pivot utility for DataFrames."""
 
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._emit_helpers import strip_quotes
 
-__all__ = [
-    "CROSSTAB_RE",
-    "apply_crosstab",
-    "substitute_crosstab",
-    "CrosstabUtility",
-]
+__all__ = ["CrosstabUtility"]
 
 
 class CrosstabUtility(UtilitySpec):
     utility_name = "crosstab"
     TOKEN = "CrossTab->[["
     TOKEN_RE = re.compile(
-        r"(?P<prefix>,?)\s*CrossTab->\[\[\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*(?P<instance>[^;\]]+)\s*;\s*:(?P<mode>[YyNn])\s*\]\](?P<suffix>,?)"
+        r"(?P<prefix>,?)\s*CrossTab->\[\[\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
+        r"(?P<instance>[^;\]]+)\s*;\s*:(?P<mode>[YyNn])\s*\]\](?P<suffix>,?)"
     )
 
     @classmethod
@@ -42,7 +39,8 @@ class CrosstabUtility(UtilitySpec):
 
         select_part = match.group("select_part")
         col_ref_re = re.compile(
-            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:\[([^\]]+)\]|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))"
+            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*"
+            r'(?:\[([^\]]+)\]|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))'
         )
         for col_match in col_ref_re.finditer(select_part):
             alias = col_match.group(1).lower()
@@ -94,7 +92,9 @@ class CrosstabUtility(UtilitySpec):
                 body = ",".join(dynamic_cols)
                 return f"{prefix}{body}{suffix}"
 
-            body = "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
+            body = "\n         ,".join(
+                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
+            )
             return f"{prefix}{body}{suffix}"
 
         return cls.TOKEN_RE.sub(_replace, sql)

@@ -3,10 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b"
+    "generate:contracts": "python ../../../scripts/generate_frontend_contracts.py",
+    "check:contracts": "python ../../../scripts/generate_frontend_contracts.py --check",
+    "typecheck": "tsc -b",
+    "test:state": "node --experimental-strip-types src/workspaceState.test.ts",
+    "test": "npm run check:contracts && npm run typecheck && npm run test:state",
+    "build": "npm run check:contracts && tsc -b && vite build"
   },
   "dependencies": {
     "react": "19.2.8",

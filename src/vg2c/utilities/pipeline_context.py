@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
-from typing import Callable, Any, ContextManager
+from collections.abc import Callable
+from typing import Any
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import ArtifactRole, emittable, operation_spec
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.oracle_client import OracleClient
 
@@ -48,7 +49,8 @@ class PipelineContext(UtilitySpec):
         method = getattr(utility_instance, method_func.__name__, None)
         if method is None:
             raise AttributeError(
-                f"Method '{method_func.__name__}' not found in utility '{utility_cls.utility_name}'."
+                f"Method '{method_func.__name__}' not found in utility "
+                f"'{utility_cls.utility_name}'."
             )
         return method
 
@@ -71,9 +73,16 @@ class PipelineContext(UtilitySpec):
         return result
 
     @emittable
+    @operation_spec(
+        parameter_capabilities={"sql": ("structured-sql",)},
+        artifact_roles={
+            "output": ArtifactRole("output"),
+            "inputs": ArtifactRole("input", many=True),
+        },
+    )
     def run_query(
         self,
-        sql,
+        sql: str,
         output: str,
         reader: Any,
         inputs: list[str] | None = None,
@@ -82,11 +91,8 @@ class PipelineContext(UtilitySpec):
         node: str | None = None,
     ):
         sql = self.macro.substitute(sql)
-        # precedence: explicit override > script default (ctx.macro "NODE") > global env setting > legacy default
         effective_node = (
-            node
-            or self.macro.named("NODE")
-            or os.environ.get("VG2C_DEFAULT_NODE", "KM")
+            node or self.macro.named("NODE") or os.environ.get("VG2C_DEFAULT_NODE", "KM")
         )
 
         if hasattr(reader, "execute"):

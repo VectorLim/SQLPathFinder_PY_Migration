@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from vg2c.logger import Logger
 from vg2c.frontend.models import BlockOptions, ParsedBlock, SourceSpan
+from vg2c.logger import Logger
 
 log = Logger.getLogger("vg2c.frontend.parser")
 

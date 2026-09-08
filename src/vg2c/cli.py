@@ -15,8 +15,8 @@ import tomllib
 import traceback
 from pathlib import Path
 
-from vg2c.logger import Logger
 from vg2c import translate
+from vg2c.logger import Logger
 
 _log = Logger.getLogger(__name__)
 
