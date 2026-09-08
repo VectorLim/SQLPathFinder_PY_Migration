@@ -48,6 +48,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.mail import MailService  # noqa: F401
     from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401
     from vg2c.utilities.sqlite_reader import SqliteReader  # noqa: F401
+    from vg2c.utilities.smart_append import SmartAppend  # noqa: F401
     from vg2c.utilities.wait_file import WaitFile  # noqa: F401
 
     _CONCRETE_UTILS_LOADED = True
@@ -388,5 +389,6 @@ __all__ = [
     "PipelineContext",
     "SqliteEngine",
     "PythonEmbed",
+    "SmartAppend",
     "WaitFile",
 ]
