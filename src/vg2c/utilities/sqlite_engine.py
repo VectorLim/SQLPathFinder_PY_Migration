@@ -6,6 +6,7 @@ from vg2c.emitter.models import CodeExpr
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
+    parse_table_binding,
     resolve_output_path,
     strip_quotes,
 )
@@ -81,15 +82,15 @@ class SqliteEngine(EmitterUtility):
         return CodeExpr(" + ".join(parts))
 
     @staticmethod
-    def _extract_table_inputs(block) -> list[str]:
-        inputs: list[str] = []
+    def _extract_table_inputs(block) -> list[str | tuple[str, str]]:
+        inputs: list[str | tuple[str, str]] = []
         for key, value in block.resolved_options.pairs:
             if key != "TABLE":
                 continue
-            for table_name in value.split(","):
-                table_name = strip_quotes(table_name.strip())
-                if table_name:
-                    inputs.append(table_name)
+            for table_spec in value.split(","):
+                path, table_name = parse_table_binding(table_spec.strip())
+                if path:
+                    inputs.append((path, table_name) if table_name else path)
         return inputs
 
     @staticmethod

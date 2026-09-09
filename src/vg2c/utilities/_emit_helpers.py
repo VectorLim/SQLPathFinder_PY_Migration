@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -8,11 +9,16 @@ from vg2c.kind import Kind
 
 __all__ = [
     "normalize_macro_name",
+    "parse_table_binding",
     "resolve_output_path",
     "resolve_path",
     "split_utility_command",
     "strip_quotes",
 ]
+
+_TABLE_BINDING_RE = re.compile(
+    r"^(?P<path>.+\.[^\\/:]+):(?P<table>[A-Za-z_][A-Za-z0-9_]*)$"
+)
 
 
 
@@ -22,6 +28,15 @@ def strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
+
+def parse_table_binding(value: str) -> tuple[str, str | None]:
+    """Return a /TABLE path and its optional SQLite table name."""
+    value = strip_quotes(value)
+    match = _TABLE_BINDING_RE.match(value)
+    if match:
+        return match.group("path"), match.group("table")
+    return value, None
 
 
 def split_utility_command(text: str) -> list[str]:

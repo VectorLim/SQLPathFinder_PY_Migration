@@ -24,9 +24,11 @@ class SqliteReader(UtilitySpec):
     )
 
     @staticmethod
-    def _load_csv_as_table(conn: sqlite3.Connection, csv_path: str) -> str:
+    def _load_csv_as_table(
+        conn: sqlite3.Connection, csv_path: str, table_name: str | None = None
+    ) -> str:
         path = Path(csv_path)
-        table_name = path.stem
+        table_name = table_name or path.stem
 
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
@@ -69,12 +71,16 @@ class SqliteReader(UtilitySpec):
             if match.group(0).strip()
         ]
 
-    def execute(self, sql: str, inputs: list[str]) -> pd.DataFrame:
+    def execute(self, sql: str, inputs: list[str | tuple[str, str]]) -> pd.DataFrame:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
 
-        for csv_path in inputs:
-            self._load_csv_as_table(conn, csv_path)
+        for input_spec in inputs:
+            if isinstance(input_spec, tuple):
+                csv_path, table_name = input_spec
+            else:
+                csv_path, table_name = input_spec, None
+            self._load_csv_as_table(conn, csv_path, table_name)
 
         stmts = self._split_statements(sql)
         if not stmts:

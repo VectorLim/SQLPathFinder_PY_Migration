@@ -24,6 +24,7 @@ from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
 )
+from vg2c.utilities._emit_helpers import parse_table_binding
 
 if TYPE_CHECKING:
     from vg2c.utilities.csv_io import CsvIO
@@ -180,10 +181,11 @@ def _collect_consumers(
                     item.strip() for item in value.split(",") if item.strip()
                 ]
                 for table_item in table_items:
+                    csv_path, _ = parse_table_binding(table_item)
                     consumers.append(
                         ConsumerRecord(
                             block_index=block.index,
-                            csv_path=_normalize_csv_path(table_item),
+                            csv_path=_normalize_csv_path(csv_path),
                             scope_id=block.scope_id,
                             consumer_kind="table",
                         )
