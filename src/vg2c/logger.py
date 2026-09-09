@@ -116,6 +116,11 @@ class Logger(UtilitySpec):
         return logging.getLogger(name)  # type: ignore[return-value]
 
     @classmethod
+    def condition(cls, prompt: str, value: bool) -> bool:
+        cls.getLogger("vg2c.workflow").info("%s | IF evaluated to %s", prompt, value)
+        return value
+
+    @classmethod
     def table(
         cls,
         rows: Sequence[Mapping[str, Any]] | Sequence[Sequence[Any]],

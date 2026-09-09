@@ -68,3 +68,18 @@ def test_emitted_script_omits_node_default_when_no_literal_site(tmp_path):
     generated = output.read_text(encoding="utf-8")
 
     assert 'ctx.macro.set_named("NODE"' not in generated
+
+
+def test_every_emitted_if_logs_its_source_prompt_and_result(tmp_path):
+    source = tmp_path / "script.txt"
+    source.write_text((FIXTURES / "actual_script.txt").read_text(encoding="utf-8"))
+
+    generated = translate(source).read_text(encoding="utf-8")
+    workflow = generated.split(WORKFLOW_START, 1)[1].split(WORKFLOW_END, 1)[0]
+
+    assert "Logger.basicConfig(level=Logger.INFO)" in workflow
+    assert "def condition(cls, prompt: str, value: bool) -> bool:" in generated
+    assert "/PROMPT-TEXT=Step 1-11. TRUE if config file not found" in workflow
+    assert "_if_result" not in workflow
+    assert 'Logger.getLogger("vg2c.workflow").info(' not in workflow
+    assert workflow.count("if Logger.condition(") == 7

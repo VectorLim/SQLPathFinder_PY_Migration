@@ -111,6 +111,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
+    script_writer.write("Logger.basicConfig(level=Logger.INFO)")
     script_writer.write("OracleClient.configure()")
     script_writer.write("ctx = PipelineContext()")
     default_site = _first_literal_site(dispatched)

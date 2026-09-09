@@ -32,6 +32,7 @@ class IfThen:
     lhs2: str | None
     op2: str | None
     rhs2: str | None
+    prompt_text: str
 
     # ------------------------------------------------------------------
     # Option / expression parsing
@@ -48,7 +49,16 @@ class IfThen:
         lhs2 = args[4] if len(args) > 4 and args[4] else None
         op2 = args[5].upper() if len(args) > 5 and args[5] else None
         rhs2 = args[6] if len(args) > 6 and args[6] else None
-        return cls(lhs=lhs, op=op, rhs=rhs, conj=conj, lhs2=lhs2, op2=op2, rhs2=rhs2)
+        return cls(
+            lhs=lhs,
+            op=op,
+            rhs=rhs,
+            conj=conj,
+            lhs2=lhs2,
+            op2=op2,
+            rhs2=rhs2,
+            prompt_text=block.options.lookup.get("PROMPT-TEXT", ""),
+        )
 
     def build_scope(
         self,
@@ -174,8 +184,8 @@ class IfThen:
                 else_branch = child
 
         condition_expr = self._build_condition_expr()
-
-        writer.write(f"if {condition_expr}:")
+        prompt = f"/PROMPT-TEXT={self.prompt_text}"
+        writer.write(f"if Logger.condition({prompt!r}, {condition_expr}):")
         writer.push_indent()
         if if_branch:
             for child in if_branch.children:
