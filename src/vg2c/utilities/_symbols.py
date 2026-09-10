@@ -206,7 +206,7 @@ class SymbolResolver:
         module = self.index.module(ref.module)
         members: list[SymbolRef] = []
         for name, child in symbol.members.items():
-            if name in COMPILER_STATE or name in {"check", "emit_block"}:
+            if name in COMPILER_STATE or name in {"check", "emit_block", "extract_globals"}:
                 continue
             if not name.startswith("_") or name.startswith("__") and name.endswith("__"):
                 members.append(child)

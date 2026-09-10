@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import UnionType
 from typing import (
     Any,
@@ -27,6 +27,7 @@ class CodeExpr:
 
     source: str
     value: Any = _UNSET
+    global_names: tuple[str, ...] = ()
 
     @property
     def has_value(self) -> bool:
@@ -120,6 +121,7 @@ class RenderedArgument:
     read_only_reason: str | None
     definition: ParameterDefinition | None
     source_range: SourceRange
+    global_names: tuple[str, ...] = ()
 
 
 class RenderedCall(str):
@@ -408,8 +410,13 @@ def build_step_emission(
     )
 
 
-def finalize_steps(source: str, emissions: list[StepEmission]) -> tuple[EmittedStep, ...]:
+def finalize_steps(
+    source: str,
+    emissions: list[StepEmission],
+    global_parameters: dict[str, EmittedParameter] | None = None,
+) -> tuple[EmittedStep, ...]:
     """Convert emitter-relative metadata into absolute ranges in the final source."""
+    global_parameters = global_parameters or {}
     finalized: list[EmittedStep] = []
     search_from = 0
     for emission in emissions:
@@ -432,6 +439,17 @@ def finalize_steps(source: str, emissions: list[StepEmission]) -> tuple[EmittedS
             seen_invocation_ids.add(invocation_id)
             parameters: list[EmittedParameter] = []
             for argument in relative.arguments:
+                if argument.global_names and argument.source in argument.global_names:
+                    parameters.append(
+                        replace(
+                            global_parameters[argument.source],
+                            name=argument.name,
+                            position=argument.position,
+                            definition=argument.definition,
+                            artifact_role=relative.operation.artifact_role(argument.name),
+                        )
+                    )
+                    continue
                 key = (
                     argument.definition.name
                     if argument.definition
@@ -458,6 +476,11 @@ def finalize_steps(source: str, emissions: list[StepEmission]) -> tuple[EmittedS
                             step_start + argument.source_range.end_offset,
                         ),
                     )
+                )
+                parameters.extend(
+                    global_parameters[name]
+                    for name in argument.global_names
+                    if global_parameters[name].id not in {parameter.id for parameter in parameters}
                 )
             invocations.append(
                 EmittedInvocation(
@@ -501,6 +524,7 @@ def _adjust_argument_for_indentation(
         read_only_reason=argument.read_only_reason,
         definition=argument.definition,
         source_range=SourceRange(call_start + start, call_start + end),
+        global_names=argument.global_names,
     )
 
 
@@ -522,6 +546,7 @@ def _joined_length(lines: list[str]) -> int:
 def _render_argument(value: Any) -> tuple[str, dict[str, Any]]:
     if isinstance(value, CodeExpr):
         metadata = _value_metadata(value.value) if value.has_value else _dynamic_metadata()
+        metadata["global_names"] = value.global_names
         return value.source, metadata
     return repr(value), _value_metadata(value)
 

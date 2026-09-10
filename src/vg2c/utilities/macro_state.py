@@ -34,7 +34,7 @@ class MacroState(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
         return "macro_control", ["pass"]
 
     def __init__(self) -> None:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from vg2c.emitter.globals import GlobalValues, render_globals
 from vg2c.emitter.indent_writer import IndentWriter
-from vg2c.emitter.models import EmittedScript, finalize_steps
+from vg2c.emitter.models import EmittedScript, SourceRange, finalize_steps
 
 if TYPE_CHECKING:
     from vg2c.dispatch.models import DispatchedBlock, DispatchedProgram, ReaderSpec
@@ -53,10 +55,12 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     from vg2c.emitter.walker import walk_and_emit
     from vg2c.logger import Logger
     from vg2c.utilities import assemble_utilities
+    from vg2c.utilities._symbol_index import bound_names
 
     log = Logger.getLogger("vg2c.emitter")
     reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(dispatched.dispatched)
-    step_emissions, run_body = walk_and_emit(dispatched)
+    collected: GlobalValues = {}
+    step_emissions, run_body = walk_and_emit(dispatched, collected=collected)
     default_site = _first_literal_site(dispatched)
     setup = ["Logger.basicConfig(level=Logger.INFO)", "OracleClient.configure()"]
     if default_site:
@@ -71,6 +75,18 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         reader_imports=reader_imports,
     )
     imports = set(embedded.imports)
+    reserved = bound_names(ast.parse("\n".join([*imports, *embedded.sources])).body).names
+    if reserved.intersection(name for group in collected.values() for name in group):
+        # Only names change; runtime dependencies and workflow call sites stay identical.
+        collected.clear()
+        step_emissions, _ = walk_and_emit(dispatched, collected=collected, reserved=reserved)
+    used_globals = {
+        name
+        for step in step_emissions
+        for invocation in step.invocations
+        for argument in invocation.arguments
+        for name in argument.global_names
+    }
 
     script_writer = IndentWriter()
     script_writer.write("# Auto-generated Python script from VG2")
@@ -80,6 +96,13 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     for imp in sorted(imports):
         script_writer.write(imp)
     script_writer.write("")
+
+    globals_source, global_parameters = render_globals(
+        collected, used_globals, len(script_writer.source()) + 1
+    )
+    if globals_source:
+        script_writer.write_block(globals_source)
+        script_writer.write("")
 
     for utility_source in embedded.sources:
         script_writer.write_block(utility_source)
@@ -132,7 +155,18 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
             f"Generated script has syntax error at line {exc.lineno}: {exc.msg}"
         )
 
-    steps = finalize_steps(source, step_emissions)
+    prefix_length = len(source) - len(body_source)
+    global_parameters = {
+        name: replace(
+            parameter,
+            source_range=SourceRange(
+                parameter.source_range.start_offset + prefix_length,
+                parameter.source_range.end_offset + prefix_length,
+            ),
+        )
+        for name, parameter in global_parameters.items()
+    }
+    steps = finalize_steps(source, step_emissions, global_parameters)
     return EmittedScript(source=source, imports=tuple(sorted(imports)), steps=steps)
 
 

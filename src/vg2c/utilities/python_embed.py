@@ -23,6 +23,6 @@ class PythonEmbed(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block: Any) -> list[str] | None:
+    def emit_block(cls, block: Any, *, global_refs=None) -> list[str] | None:
         # Wrap the original python body directly in the step function definition
         return [block.resolved_body]

@@ -1,8 +1,8 @@
 # SQL statements containing filters:
-# - step_0016_sqlite_query (Line 1027): filters on a0.icmpcs
-# - step_0043_sql_query (Line 1163): filters on f0.history_deleted_flag, f0.operation, f0.out_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, f5.history_deleted_flag, f5.transaction, la.attribute_number, p.latest_version
-# - step_0044_sql_query (Line 1213): filters on bams0.lot, bams0.operation, yeuchuan_a1_22697.tab
-# - step_0046_sqlite_query (Line 1331): filters on FlagLot, a0.rowid, lot_1
+# - step_0016_sqlite_query (Line 1057): filters on a0.icmpcs
+# - step_0043_sql_query (Line 1093): filters on f0.history_deleted_flag, f0.operation, f0.out_date, f0.owner, f4.history_deleted_flag, f4.unique_flag, f5.history_deleted_flag, f5.transaction, la.attribute_number, p.latest_version
+# - step_0044_sql_query (Line 1096): filters on bams0.lot, bams0.operation, yeuchuan_a1_22697.tab
+# - step_0046_sqlite_query (Line 1140): filters on FlagLot, a0.rowid, lot_1
 
 # Auto-generated Python script from VG2
 """Pipeline implementation."""
@@ -30,6 +30,17 @@ import smtplib
 import sqlite3
 import subprocess
 import sys
+
+EMAIL_TO = 'alex.chin.hooi.lee@intel.com'
+ICMPCS = 'ICMPCS'
+ATTRIBUTE_NUMBER = 5005
+ROWNUM_MAX = 1
+ATTRIBUTE_NUMBER_2 = 5001
+UNIQUE_FLAG = 'Y'
+TRANSACTION = 'MVOU'
+OWNER = 'EMPTYFOUP'
+OPERATION = '2303'
+FLAGLOT = '1'
 
 class Logger:
     CRITICAL: 'ClassVar[int]' = logging.CRITICAL
@@ -909,6 +920,25 @@ class SmartAppend:
                     writer.writerow(header)
                 writer.writerows(reader)
 
+class SqliteEngine:
+    _SQL_NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?'
+
+    @staticmethod
+    def global_sql(value, numeric: 'bool'=False) -> 'str':
+        """Render editable operands with their original SQL literal category."""
+        if isinstance(value, list):
+            if not value:
+                raise ValueError('SQL IN globals must contain at least one value')
+            return ', '.join((SqliteEngine.global_sql(item, numeric) for item in value))
+        if numeric or type(value) is int:
+            text = str(value)
+            if not re.fullmatch(SqliteEngine._SQL_NUMBER, text):
+                raise ValueError(f'Invalid SQL numeric global: {value!r}')
+            return text
+        if not isinstance(value, str):
+            raise ValueError(f'Expected a SQL string or number, got {value!r}')
+        return "'" + value.replace("'", "''") + "'"
+
 class SqliteReader:
     STMT_SPLIT_RE = re.compile('(?:\'[^\']*\'|\\"[^\\"]*\\"|\\[[^\\]]*\\]|`[^`]*`|[^;])+', re.DOTALL)
 
@@ -1022,128 +1052,28 @@ def step_0012_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIG', str(ctx.csv_io.row_count('ICMPCS_config.csv')))
 
 def step_0014_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\Config', body='')
+    ctx.email.send(to=EMAIL_TO, subject='Critical: ICMPCS config file not found - Path: \\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\Config', body='')
 
 def step_0016_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
-    SELECT /*L10*/  DISTINCT 
-              [icmpcs] AS [icmpcs]
-             ,[parameter] AS [parameter]
-             ,Max([value]) AS [value]
-             ,[STARTTS] AS [STARTTS]
-             ,[UTC] AS [UTC]
-             ,[TZONE] AS [TZONE]
-             ,[TZS] AS [TZS]
-             ,[SFOLDER] AS [SFOLDER]
-             ,[FAC] AS [FAC]
-             ,[MARS] AS [MARS]
-             ,[MARSN] AS [MARSN]
-             ,[RIMS] AS [RIMS]
-             ,[EIMS] AS [EIMS]
-             ,[ARIES] AS [ARIES]
-             ,[OASYS] AS [OASYS]
-             ,[MONGO] AS [MONGO]
-             ,[MMS] AS [MMS]
-             ,[MMSI] AS [MMSI]
-             ,[TOOLLOG] AS [TOOLLOG]
-             ,[VFMARS] AS [VFMARS]
-             ,[VFARIES] AS [VFARIES]
-             ,[VFMONGO] AS [VFMONGO]
-             ,[CSRPATH] AS [CSRPATH]
-             ,[MMSPATH] AS [MMSPATH]
-             ,[MIPPATH] AS [MIPPATH]
-             ,[LURL] AS [LURL]
-             ,[IREPOP] AS [IREPOP]
-             ,[UNDERDEV] AS [UNDERDEV]
-             ,[CSRV] AS [CSRV]
-             ,[MMSV] AS [MMSV]
-    FROM
-    (
-    SELECT /*L0*/  
-              a0.[icmpcs] AS [icmpcs]
-             ,a0.[parameter] AS [parameter]
-             ,a0.[value] AS [value]
-             ,'<<<STARTTS>>>' AS [STARTTS]
-             ,'<<<UTC>>>' AS [UTC]
-             ,'<<<TZONE>>>' AS [TZONE]
-             ,'<<<TZS>>>' AS [TZS]
-             ,'<<<SFOLDER>>>' AS [SFOLDER]
-             ,'<<<FAC>>>' AS [FAC]
-             ,'<<<MARS>>>' AS [MARS]
-             ,'<<<MARSN>>>' AS [MARSN]
-             ,'<<<RIMS>>>' AS [RIMS]
-             ,'<<<EIMS>>>' AS [EIMS]
-             ,'<<<ARIES>>>' AS [ARIES]
-             ,'<<<OASYS>>>' AS [OASYS]
-             ,'<<<MONGO>>>' AS [MONGO]
-             ,'<<<MMS>>>' AS [MMS]
-             ,'<<<MMSI>>>' AS [MMSI]
-             ,'<<<TOOLLOG>>>' AS [TOOLLOG]
-             ,'<<<VFMARS>>>' AS [VFMARS]
-             ,'<<<VFARIES>>>' AS [VFARIES]
-             ,'<<<VFMONGO>>>' AS [VFMONGO]
-             ,'<<<CSRPATH>>>' AS [CSRPATH]
-             ,'<<<MMSPATH>>>' AS [MMSPATH]
-             ,'<<<MIPPATH>>>' AS [MIPPATH]
-             ,'<<<LURL>>>' AS [LURL]
-             ,'<<<IREPOP>>>' AS [IREPOP]
-             ,'<<<UNDERDEV>>>' AS [UNDERDEV]
-             ,'<<<CSRV>>>' AS [CSRV]
-             ,'<<<MMSV>>>' AS [MMSV]
-    FROM 
-    [ICMPCS_config] a0
-    WHERE
-                  a0.[icmpcs] = 'ICMPCS' 
-    ) t /*L0*/
-    GROUP BY 
-              [icmpcs]
-             ,[parameter]
-             ,[STARTTS]
-             ,[UTC]
-             ,[TZONE]
-             ,[TZS]
-             ,[SFOLDER]
-             ,[FAC]
-             ,[MARS]
-             ,[MARSN]
-             ,[RIMS]
-             ,[EIMS]
-             ,[ARIES]
-             ,[OASYS]
-             ,[MONGO]
-             ,[MMS]
-             ,[MMSI]
-             ,[TOOLLOG]
-             ,[VFMARS]
-             ,[VFARIES]
-             ,[VFMONGO]
-             ,[CSRPATH]
-             ,[MMSPATH]
-             ,[MIPPATH]
-             ,[LURL]
-             ,[IREPOP]
-             ,[UNDERDEV]
-             ,[CSRV]
-             ,[MMSV]
-    """, output='configsets.csv', reader=SqliteReader(), inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'TZONE', 'TZS', 'SFOLDER', 'FAC', 'MARS', 'MARSN', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MONGO', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'VFMONGO', 'CSRPATH', 'MMSPATH', 'MIPPATH', 'LURL', 'IREPOP', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
+    ctx.run_query(sql="\nSELECT /*L10*/  DISTINCT \n          [icmpcs] AS [icmpcs]\n         ,[parameter] AS [parameter]\n         ,Max([value]) AS [value]\n         ,[STARTTS] AS [STARTTS]\n         ,[UTC] AS [UTC]\n         ,[TZONE] AS [TZONE]\n         ,[TZS] AS [TZS]\n         ,[SFOLDER] AS [SFOLDER]\n         ,[FAC] AS [FAC]\n         ,[MARS] AS [MARS]\n         ,[MARSN] AS [MARSN]\n         ,[RIMS] AS [RIMS]\n         ,[EIMS] AS [EIMS]\n         ,[ARIES] AS [ARIES]\n         ,[OASYS] AS [OASYS]\n         ,[MONGO] AS [MONGO]\n         ,[MMS] AS [MMS]\n         ,[MMSI] AS [MMSI]\n         ,[TOOLLOG] AS [TOOLLOG]\n         ,[VFMARS] AS [VFMARS]\n         ,[VFARIES] AS [VFARIES]\n         ,[VFMONGO] AS [VFMONGO]\n         ,[CSRPATH] AS [CSRPATH]\n         ,[MMSPATH] AS [MMSPATH]\n         ,[MIPPATH] AS [MIPPATH]\n         ,[LURL] AS [LURL]\n         ,[IREPOP] AS [IREPOP]\n         ,[UNDERDEV] AS [UNDERDEV]\n         ,[CSRV] AS [CSRV]\n         ,[MMSV] AS [MMSV]\nFROM\n(\nSELECT /*L0*/  \n          a0.[icmpcs] AS [icmpcs]\n         ,a0.[parameter] AS [parameter]\n         ,a0.[value] AS [value]\n         ,'<<<STARTTS>>>' AS [STARTTS]\n         ,'<<<UTC>>>' AS [UTC]\n         ,'<<<TZONE>>>' AS [TZONE]\n         ,'<<<TZS>>>' AS [TZS]\n         ,'<<<SFOLDER>>>' AS [SFOLDER]\n         ,'<<<FAC>>>' AS [FAC]\n         ,'<<<MARS>>>' AS [MARS]\n         ,'<<<MARSN>>>' AS [MARSN]\n         ,'<<<RIMS>>>' AS [RIMS]\n         ,'<<<EIMS>>>' AS [EIMS]\n         ,'<<<ARIES>>>' AS [ARIES]\n         ,'<<<OASYS>>>' AS [OASYS]\n         ,'<<<MONGO>>>' AS [MONGO]\n         ,'<<<MMS>>>' AS [MMS]\n         ,'<<<MMSI>>>' AS [MMSI]\n         ,'<<<TOOLLOG>>>' AS [TOOLLOG]\n         ,'<<<VFMARS>>>' AS [VFMARS]\n         ,'<<<VFARIES>>>' AS [VFARIES]\n         ,'<<<VFMONGO>>>' AS [VFMONGO]\n         ,'<<<CSRPATH>>>' AS [CSRPATH]\n         ,'<<<MMSPATH>>>' AS [MMSPATH]\n         ,'<<<MIPPATH>>>' AS [MIPPATH]\n         ,'<<<LURL>>>' AS [LURL]\n         ,'<<<IREPOP>>>' AS [IREPOP]\n         ,'<<<UNDERDEV>>>' AS [UNDERDEV]\n         ,'<<<CSRV>>>' AS [CSRV]\n         ,'<<<MMSV>>>' AS [MMSV]\nFROM \n[ICMPCS_config] a0\nWHERE\n              a0.[icmpcs] = " + SqliteEngine.global_sql(ICMPCS, False) + ' \n) t /*L0*/\nGROUP BY \n          [icmpcs]\n         ,[parameter]\n         ,[STARTTS]\n         ,[UTC]\n         ,[TZONE]\n         ,[TZS]\n         ,[SFOLDER]\n         ,[FAC]\n         ,[MARS]\n         ,[MARSN]\n         ,[RIMS]\n         ,[EIMS]\n         ,[ARIES]\n         ,[OASYS]\n         ,[MONGO]\n         ,[MMS]\n         ,[MMSI]\n         ,[TOOLLOG]\n         ,[VFMARS]\n         ,[VFARIES]\n         ,[VFMONGO]\n         ,[CSRPATH]\n         ,[MMSPATH]\n         ,[MIPPATH]\n         ,[LURL]\n         ,[IREPOP]\n         ,[UNDERDEV]\n         ,[CSRV]\n         ,[MMSV]\n', output='configsets.csv', reader=SqliteReader(), inputs=['ICMPCS_config.csv'], crosstab={'row_keys': ['icmpcs', 'STARTTS', 'UTC', 'TZONE', 'TZS', 'SFOLDER', 'FAC', 'MARS', 'MARSN', 'RIMS', 'EIMS', 'ARIES', 'OASYS', 'MONGO', 'MMS', 'MMSI', 'TOOLLOG', 'VFMARS', 'VFARIES', 'VFMONGO', 'CSRPATH', 'MMSPATH', 'MIPPATH', 'LURL', 'IREPOP', 'UNDERDEV', 'CSRV', 'MMSV'], 'header_key': 'parameter', 'value_key': 'value'})
 
 def step_0017_rows_in_file(ctx) -> None:
     ctx.macro.set_named('CONFIGSETS', str(ctx.csv_io.row_count('configsets.csv')))
 
 def step_0019_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Alert: Pls check ICMPCS (' + ctx.macro.named('SFOLDER') + ') config file as it contains not equal to 1 row', body='', attachments=['ICMPCS_config.csv', 'configsets.csv'])
+    ctx.email.send(to=EMAIL_TO, subject='Alert: Pls check ICMPCS (' + ctx.macro.named('SFOLDER') + ') config file as it contains not equal to 1 row', body='', attachments=['ICMPCS_config.csv', 'configsets.csv'])
 
 def step_0023_write_file(ctx) -> None:
     ctx.write_file(path='CSRVerror.htm', template='\n<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>')
 
 def step_0024_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: Cannot access to ' + ctx.macro.named('CSRPATH'), body='CSRVerror.htm')
+    ctx.email.send(to=EMAIL_TO, subject='Critical: Cannot access to ' + ctx.macro.named('CSRPATH'), body='CSRVerror.htm')
 
 def step_0027_write_file(ctx) -> None:
     ctx.write_file(path='MMSVerror.htm', template='\n<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>')
 
 def step_0028_email(ctx) -> None:
-    ctx.email.send(to='alex.chin.hooi.lee@intel.com', subject='Critical: Cannot access to ' + ctx.macro.named('MMSPATH'), body='MMSVerror.htm')
+    ctx.email.send(to=EMAIL_TO, subject='Critical: Cannot access to ' + ctx.macro.named('MMSPATH'), body='MMSVerror.htm')
 
 def step_0030_fs_copy(ctx) -> None:
     ctx.fs_ops.copy(src=str(Path('\\\\AZATSHFS.intel.com\\AZATAnalysis$\\MAOATM\\Config\\VF_POR_Cfg\\ICM_PCS\\' + ctx.macro.named('SFOLDER') + '\\KM\\HIST') / 'HIST.txt'), dst='.')
@@ -1161,131 +1091,10 @@ def step_0036_fs_copy(ctx) -> None:
     ctx.fs_ops.rename(src='HIST.txt', dst='HIST.csv')
 
 def step_0043_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT 
-              lot_1 AS lot_1
-             ,operation_1 AS operation_1
-             ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
-             ,oldqty1 AS oldqty1
-             ,newqty1 AS newqty1
-             ,Replace(Replace(Replace(Replace(Replace(Replace(Interposer_SLI,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Interposer_SLI
-             ,Replace(Replace(Replace(Replace(Replace(Replace(Patch_SLI,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Patch_SLI
-             ,prodgroup3_1 AS prodgroup3_1
-             ,entity AS entity
-             ,transaction AS transaction
-    FROM
-    (
-    SELECT  
-              f0.lot AS lot_1
-             ,f0.operation AS operation_1
-             ,f0.out_date AS out_date
-             ,f0.oldqty1 AS oldqty1
-             ,f0.newqty1 AS newqty1
-             ,(SELECT la.attribute_value FROM @[]@.F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5005 AND la.src_erase_date IS NULL AND rownum <= 1) AS Interposer_SLI
-             ,(SELECT la.attribute_value FROM @[]@.F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = 5001 AND la.src_erase_date IS NULL AND rownum <= 1) AS Patch_SLI
-             ,p.prodgroup3 AS prodgroup3_1
-             ,f4.entity AS entity
-             ,f5.transaction AS transaction
-    FROM 
-    @[]@.F_LotHist f0
-    LEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
-    INNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot
-    LEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = 'Y'
-     AND      f4.entity Like 'IAM%' 
-    LEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource
-    LEFT JOIN @[]@.F_LotTxnHist f5 ON f5.lot = f0.lot AND f5.operation = f0.operation AND f5.prevout_date = f0.prevout_date AND NVL(f5.history_deleted_flag,'N') = 'N'
-     AND      f5.transaction = 'MVOU' 
-    WHERE
-    NVL(f0.history_deleted_flag,'N') = 'N'
-    AND      f0.owner <> 'EMPTYFOUP'
-     AND      f0.operation = '2303' 
-     AND      f0.out_date >= TRUNC(SYSDATE) - 2 
-     AND      p.prodgroup3 Like 'CWF%' 
-    -- Tail A
-    )
-    WHERE
-                  Interposer_SLI Is Not Null  
-    /*END SQL*/
-
-    """, output='yeuchuan_a1_22697.tab', reader=MarsReader(), header=['lot_1', 'operation_1', 'out_date', 'oldqty1', 'newqty1', 'Interposer_SLI', 'Patch_SLI', 'prodgroup3_1', 'entity', 'transaction'])
+    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          lot_1 AS lot_1\n         ,operation_1 AS operation_1\n         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date\n         ,oldqty1 AS oldqty1\n         ,newqty1 AS newqty1\n         ,Replace(Replace(Replace(Replace(Replace(Replace(Interposer_SLI,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Interposer_SLI\n         ,Replace(Replace(Replace(Replace(Replace(Replace(Patch_SLI,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS Patch_SLI\n         ,prodgroup3_1 AS prodgroup3_1\n         ,entity AS entity\n         ,transaction AS transaction\nFROM\n(\nSELECT  \n          f0.lot AS lot_1\n         ,f0.operation AS operation_1\n         ,f0.out_date AS out_date\n         ,f0.oldqty1 AS oldqty1\n         ,f0.newqty1 AS newqty1\n         ,(SELECT la.attribute_value FROM @[]@.F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = " + SqliteEngine.global_sql(ATTRIBUTE_NUMBER, True) + ' AND la.src_erase_date IS NULL AND rownum <= ' + SqliteEngine.global_sql(ROWNUM_MAX, True) + ') AS Interposer_SLI\n         ,(SELECT la.attribute_value FROM @[]@.F_LotAttribute la where la.lot= f9.lot AND la.attribute_number = ' + SqliteEngine.global_sql(ATTRIBUTE_NUMBER_2, True) + ' AND la.src_erase_date IS NULL AND rownum <= ' + SqliteEngine.global_sql(ROWNUM_MAX, True) + ") AS Patch_SLI\n         ,p.prodgroup3 AS prodgroup3_1\n         ,f4.entity AS entity\n         ,f5.transaction AS transaction\nFROM \n@[]@.F_LotHist f0\nLEFT JOIN @[]@.F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version\nINNER JOIN @[]@.F_Lot f9 ON f9.lot = f0.lot\nLEFT JOIN @[]@.F_EntityLotHist f4 ON f4.lot = f0.lot AND f4.operation = f0.operation AND f4.prevout_date = f0.prevout_date AND NVL(f4.history_deleted_flag,'N') = 'N' AND f4.unique_flag = " + SqliteEngine.global_sql(UNIQUE_FLAG, False) + "\n AND      f4.entity Like 'IAM%' \nLEFT JOIN @[]@.F_EntityHist eh ON f4.entity = eh.entity AND f4.txn_date = eh.txn_date AND f4.facility = eh.facility AND f4.datasource = eh.datasource\nLEFT JOIN @[]@.F_LotTxnHist f5 ON f5.lot = f0.lot AND f5.operation = f0.operation AND f5.prevout_date = f0.prevout_date AND NVL(f5.history_deleted_flag,'N') = 'N'\n AND      f5.transaction = " + SqliteEngine.global_sql(TRANSACTION, False) + " \nWHERE\nNVL(f0.history_deleted_flag,'N') = 'N'\nAND      f0.owner <> " + SqliteEngine.global_sql(OWNER, False) + '\n AND      f0.operation = ' + SqliteEngine.global_sql(OPERATION, False) + " \n AND      f0.out_date >= TRUNC(SYSDATE) - 2 \n AND      p.prodgroup3 Like 'CWF%' \n-- Tail A\n)\nWHERE\n              Interposer_SLI Is Not Null  \n/*END SQL*/\n\n", output='yeuchuan_a1_22697.tab', reader=MarsReader(), header=['lot_1', 'operation_1', 'out_date', 'oldqty1', 'newqty1', 'Interposer_SLI', 'Patch_SLI', 'prodgroup3_1', 'entity', 'transaction'])
 
 def step_0044_sql_query(ctx) -> None:
-    ctx.run_query(sql="""
-    /*BEGIN SQL*/
-    SELECT 
-              facility AS facility
-             ,operation AS operation
-             ,module_name AS module_name
-             ,tool_entity AS tool_entity
-             ,primary_entity AS primary_entity
-             ,To_Char(processing_start_date,'yyyy-mm-dd hh24:mi:ss') AS processing_start_date
-             ,To_Char(processing_end_date,'yyyy-mm-dd hh24:mi:ss') AS processing_end_date
-             ,lot AS lot
-             ,product AS product
-             ,prodgroup3 AS prodgroup3
-             ,Replace(Replace(Replace(Replace(Replace(Replace(product_desc,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS product_desc
-             ,owner AS owner
-             ,visual_id AS visual_id
-             ,ws_loss_code AS ws_loss_code
-             ,media_in_x AS media_in_x
-             ,media_in_y AS media_in_y
-             ,parameter AS parameter
-             ,Max(numeric_value) AS numeric_value
-    FROM
-    (
-    SELECT  
-              bams0.facility AS facility
-             ,bams0.operation AS operation
-             ,bams0.module_name AS module_name
-             ,bams0.tool_entity AS tool_entity
-             ,bams0.primary_entity AS primary_entity
-             ,bams0.processing_start_time AS processing_start_date
-             ,bams0.processing_end_time AS processing_end_date
-             ,bams0.lot AS lot
-             ,ml.product AS product
-             ,mp.prodgroup3 AS prodgroup3
-             ,mp.product_description AS product_desc
-             ,ml.owner AS owner
-             ,bams2.visual_id AS visual_id
-             ,bams2.ws_loss_code AS ws_loss_code
-             ,bams2.media_in_x AS media_in_x
-             ,bams2.media_in_y AS media_in_y
-             ,bams3.parameter AS parameter
-             ,bams3.numeric_value AS numeric_value
-    FROM 
-    ARIES_Views.AV_BAMS_SESSION bams0
-    LEFT JOIN A_MARS_Lot ml ON bams0.lot=ml.lot
-    LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND mp.facility=bams0.facility
-    INNER JOIN ARIES_Views.AV_BAMS_MEDIA_TESTING bams1 ON bams1.lao_start_ww = bams0.lao_start_ww AND bams1.obj_s_id = bams0.obj_s_id
-    INNER JOIN ARIES_Views.AV_BAMS_UNIT_TESTING bams2 ON bams2.lao_start_ww = bams1.lao_start_ww AND bams2.obj_s_id = bams1.obj_s_id AND bams2.obj_mt_id = bams1.obj_mt_id
-    LEFT JOIN ARIES_Views.AV_BAMS_DEVICE_RESULTS bams3 ON bams3.lao_start_ww = bams2.lao_start_ww AND bams3.obj_s_id = bams2.obj_s_id AND bams3.obj_mt_id = bams2.obj_mt_id AND bams3.obj_ut_id = bams2.obj_ut_id
-    WHERE
-                  (bams0.lot In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a1_22697.tab', 'lot_1', 'bams0.lot In') + """)""" + """ 
-     AND      bams0.operation = '2303' 
-    )
-    GROUP BY 
-              facility
-             ,operation
-             ,module_name
-             ,tool_entity
-             ,primary_entity
-             ,processing_start_date
-             ,processing_end_date
-             ,lot
-             ,product
-             ,prodgroup3
-             ,product_desc
-             ,owner
-             ,visual_id
-             ,ws_loss_code
-             ,media_in_x
-             ,media_in_y
-             ,parameter
-    /*END SQL*/
-
-    """, output='yeuchuan_a0_22697.tab', reader=AriesReader(), crosstab={'row_keys': ['facility', 'operation', 'module_name', 'tool_entity', 'primary_entity', 'processing_start_date', 'processing_end_date', 'lot', 'product', 'prodgroup3', 'product_desc', 'owner', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y'], 'header_key': 'parameter', 'value_key': 'numeric_value'})
+    ctx.run_query(sql="\n/*BEGIN SQL*/\nSELECT \n          facility AS facility\n         ,operation AS operation\n         ,module_name AS module_name\n         ,tool_entity AS tool_entity\n         ,primary_entity AS primary_entity\n         ,To_Char(processing_start_date,'yyyy-mm-dd hh24:mi:ss') AS processing_start_date\n         ,To_Char(processing_end_date,'yyyy-mm-dd hh24:mi:ss') AS processing_end_date\n         ,lot AS lot\n         ,product AS product\n         ,prodgroup3 AS prodgroup3\n         ,Replace(Replace(Replace(Replace(Replace(Replace(product_desc,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS product_desc\n         ,owner AS owner\n         ,visual_id AS visual_id\n         ,ws_loss_code AS ws_loss_code\n         ,media_in_x AS media_in_x\n         ,media_in_y AS media_in_y\n         ,parameter AS parameter\n         ,Max(numeric_value) AS numeric_value\nFROM\n(\nSELECT  \n          bams0.facility AS facility\n         ,bams0.operation AS operation\n         ,bams0.module_name AS module_name\n         ,bams0.tool_entity AS tool_entity\n         ,bams0.primary_entity AS primary_entity\n         ,bams0.processing_start_time AS processing_start_date\n         ,bams0.processing_end_time AS processing_end_date\n         ,bams0.lot AS lot\n         ,ml.product AS product\n         ,mp.prodgroup3 AS prodgroup3\n         ,mp.product_description AS product_desc\n         ,ml.owner AS owner\n         ,bams2.visual_id AS visual_id\n         ,bams2.ws_loss_code AS ws_loss_code\n         ,bams2.media_in_x AS media_in_x\n         ,bams2.media_in_y AS media_in_y\n         ,bams3.parameter AS parameter\n         ,bams3.numeric_value AS numeric_value\nFROM \nARIES_Views.AV_BAMS_SESSION bams0\nLEFT JOIN A_MARS_Lot ml ON bams0.lot=ml.lot\nLEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND mp.facility=bams0.facility\nINNER JOIN ARIES_Views.AV_BAMS_MEDIA_TESTING bams1 ON bams1.lao_start_ww = bams0.lao_start_ww AND bams1.obj_s_id = bams0.obj_s_id\nINNER JOIN ARIES_Views.AV_BAMS_UNIT_TESTING bams2 ON bams2.lao_start_ww = bams1.lao_start_ww AND bams2.obj_s_id = bams1.obj_s_id AND bams2.obj_mt_id = bams1.obj_mt_id\nLEFT JOIN ARIES_Views.AV_BAMS_DEVICE_RESULTS bams3 ON bams3.lao_start_ww = bams2.lao_start_ww AND bams3.obj_s_id = bams2.obj_s_id AND bams3.obj_mt_id = bams2.obj_mt_id AND bams3.obj_ut_id = bams2.obj_ut_id\nWHERE\n              (bams0.lot In \n" + ctx.csv_io.sql_get_csv_list('.\\yeuchuan_a1_22697.tab', 'lot_1', 'bams0.lot In') + ')' + ' \n AND      bams0.operation = ' + SqliteEngine.global_sql(OPERATION, False) + ' \n)\nGROUP BY \n          facility\n         ,operation\n         ,module_name\n         ,tool_entity\n         ,primary_entity\n         ,processing_start_date\n         ,processing_end_date\n         ,lot\n         ,product\n         ,prodgroup3\n         ,product_desc\n         ,owner\n         ,visual_id\n         ,ws_loss_code\n         ,media_in_x\n         ,media_in_y\n         ,parameter\n/*END SQL*/\n\n', output='yeuchuan_a0_22697.tab', reader=AriesReader(), crosstab={'row_keys': ['facility', 'operation', 'module_name', 'tool_entity', 'primary_entity', 'processing_start_date', 'processing_end_date', 'lot', 'product', 'prodgroup3', 'product_desc', 'owner', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y'], 'header_key': 'parameter', 'value_key': 'numeric_value'})
 
 def step_0045_sqlite_query(ctx) -> None:
     ctx.run_query(sql="""
@@ -1329,211 +1138,10 @@ def step_0045_sqlite_query(ctx) -> None:
     """, output='PARMI_IPM_RAW.csv', reader=SqliteReader(), inputs=['yeuchuan_a1_22697.tab', 'yeuchuan_a0_22697.tab'])
 
 def step_0046_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
-
-    DROP TABLE IF EXISTS T_L0_Init;
-    CREATE TABLE T_L0_Init AS
-    SELECT /*L0*/  
-              a0.[lot_1] AS [lot_1]
-             ,a0.[newqty1] AS [newqty1]
-             ,a0.[facility] AS [facility]
-             ,a0.[operation] AS [operation]
-             ,a0.[tool_entity] AS [tool_entity]
-             ,a0.[primary_entity] AS [primary_entity]
-             ,a0.[processing_end_date] AS [processing_end_date]
-             ,a0.[lot] AS [lot]
-             ,a0.[prodgroup3] AS [prodgroup3]
-             ,a0.[product] AS [product]
-             ,a0.[visual_id] AS [visual_id]
-             ,a0.[ws_loss_code] AS [ws_loss_code]
-             ,a0.[media_in_x] AS [media_in_x]
-             ,a0.[media_in_y] AS [media_in_y]
-             ,a0.[height] AS [height]
-             ,a0.[patch_lift_roi1] AS [patch_lift_roi1]
-             ,a0.[patch_lift_roi2] AS [patch_lift_roi2]
-             ,a0.[patch_lift_roi3] AS [patch_lift_roi3]
-             ,a0.[patch_lift_roi4] AS [patch_lift_roi4]
-             ,a0.[patch_lift_roi5] AS [patch_lift_roi5]
-             ,a0.[patch_lift_roi6] AS [patch_lift_roi6]
-             ,a0.[patch_lift_roi7] AS [patch_lift_roi7]
-             ,a0.[patch_lift_roi8] AS [patch_lift_roi8]
-             ,a0.[patch_lift_roi_max] AS [patch_lift_roi_max]
-             ,a0.[patch_sli] AS [patch_sli]
-             ,a0.[interposer_sli] AS [interposer_sli]
-             ,CASE  WHEN a0.[patch_lift_roi4]  >= 2000 AND  a0.[patch_lift_roi_max]  >= 2030 THEN '1' WHEN a0.[patch_lift_roi8] >= 2000 AND  a0.[patch_lift_roi_max]  >= 2030 THEN '1' ELSE '0' END AS [NCO_Risk]
-    FROM 
-    [PARMI_IPM_RAW] a0
-    ;
-
-    DROP TABLE IF EXISTS T_L0_1_1;
-    CREATE TABLE T_L0_1_1 AS
-    SELECT COUNT(DISTINCT  visual_id) AS AF$S1
-    ,lot_1 AS AF$PB1
-    FROM T_L0_Init GROUP BY 
-    AF$PB1
-    ;
-    CREATE INDEX T_L0_1_1_Idx ON T_L0_1_1 (AF$PB1);
-    DROP TABLE IF EXISTS T_L0_1_Result;
-    CREATE TABLE T_L0_1_Result AS
-    SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [VIDCount]
-    FROM T_L0_Init a0 LEFT JOIN T_L0_1_1 a1 ON 
-    lot_1 = a1.AF$PB1
-    ;
-    DROP TABLE IF EXISTS T_L0_1_1;
-
-    CREATE INDEX T_L0_1_Result_Idx ON T_L0_1_Result (orig_rowid);
-    DROP TABLE IF EXISTS T_L0_Result;
-    CREATE TABLE T_L0_Result AS
-    SELECT
-
-    [lot_1]
-    ,[newqty1]
-    ,[facility]
-    ,[operation]
-    ,[tool_entity]
-    ,[primary_entity]
-    ,[processing_end_date]
-    ,[lot]
-    ,[prodgroup3]
-    ,[product]
-    ,[visual_id]
-    ,[ws_loss_code]
-    ,[media_in_x]
-    ,[media_in_y]
-    ,[height]
-    ,[patch_lift_roi1]
-    ,[patch_lift_roi2]
-    ,[patch_lift_roi3]
-    ,[patch_lift_roi4]
-    ,[patch_lift_roi5]
-    ,[patch_lift_roi6]
-    ,[patch_lift_roi7]
-    ,[patch_lift_roi8]
-    ,[patch_lift_roi_max]
-    ,[patch_sli]
-    ,[interposer_sli]
-    ,[NCO_Risk]
-    ,[VIDCount]
-    FROM T_L0_Init a0
-    LEFT JOIN T_L0_1_Result a1 ON a0.rowid = a1.orig_rowid
-    ;
-    DROP TABLE IF EXISTS T_L0_1_Result;
-    DROP TABLE IF EXISTS T_L0_Init;
-
-    SELECT /*L3*/ 
-              [lot_1] AS [lot_1]
-             ,[newqty1] AS [newqty1]
-             ,[facility] AS [facility]
-             ,[operation] AS [operation]
-             ,[tool_entity] AS [tool_entity]
-             ,[primary_entity] AS [primary_entity]
-             ,[processing_end_date] AS [processing_end_date]
-             ,[lot] AS [lot]
-             ,[prodgroup3] AS [prodgroup3]
-             ,[product] AS [product]
-             ,[visual_id] AS [visual_id]
-             ,[ws_loss_code] AS [ws_loss_code]
-             ,[media_in_x] AS [media_in_x]
-             ,[media_in_y] AS [media_in_y]
-             ,[height] AS [height]
-             ,[patch_lift_roi1] AS [patch_lift_roi1]
-             ,[patch_lift_roi2] AS [patch_lift_roi2]
-             ,[patch_lift_roi3] AS [patch_lift_roi3]
-             ,[patch_lift_roi4] AS [patch_lift_roi4]
-             ,[patch_lift_roi5] AS [patch_lift_roi5]
-             ,[patch_lift_roi6] AS [patch_lift_roi6]
-             ,[patch_lift_roi7] AS [patch_lift_roi7]
-             ,[patch_lift_roi8] AS [patch_lift_roi8]
-             ,[patch_lift_roi_max] AS [patch_lift_roi_max]
-             ,[patch_sli] AS [patch_sli]
-             ,[interposer_sli] AS [interposer_sli]
-             ,[NCO_Risk] AS [NCO_Risk]
-             ,[VIDCount] AS [VIDCount]
-             ,[FlagLot] AS [FlagLot]
-    FROM
-    (
-    SELECT /*L2*/ 
-              [lot_1] AS [lot_1]
-             ,[newqty1] AS [newqty1]
-             ,[facility] AS [facility]
-             ,[operation] AS [operation]
-             ,[tool_entity] AS [tool_entity]
-             ,[primary_entity] AS [primary_entity]
-             ,[processing_end_date] AS [processing_end_date]
-             ,[lot] AS [lot]
-             ,[prodgroup3] AS [prodgroup3]
-             ,[product] AS [product]
-             ,[visual_id] AS [visual_id]
-             ,[ws_loss_code] AS [ws_loss_code]
-             ,[media_in_x] AS [media_in_x]
-             ,[media_in_y] AS [media_in_y]
-             ,[height] AS [height]
-             ,[patch_lift_roi1] AS [patch_lift_roi1]
-             ,[patch_lift_roi2] AS [patch_lift_roi2]
-             ,[patch_lift_roi3] AS [patch_lift_roi3]
-             ,[patch_lift_roi4] AS [patch_lift_roi4]
-             ,[patch_lift_roi5] AS [patch_lift_roi5]
-             ,[patch_lift_roi6] AS [patch_lift_roi6]
-             ,[patch_lift_roi7] AS [patch_lift_roi7]
-             ,[patch_lift_roi8] AS [patch_lift_roi8]
-             ,[patch_lift_roi_max] AS [patch_lift_roi_max]
-             ,[patch_sli] AS [patch_sli]
-             ,[interposer_sli] AS [interposer_sli]
-             ,[NCO_Risk] AS [NCO_Risk]
-             ,[VIDCount] AS [VIDCount]
-             ,CASE WHEN  [NCO_Risk]  = '1' OR  [VIDCount] < 2 THEN '1' ELSE '0' END AS [FlagLot]
-    FROM
-    (
-    SELECT /*L1*/ 
-              [lot_1] AS [lot_1]
-             ,[newqty1] AS [newqty1]
-             ,[facility] AS [facility]
-             ,[operation] AS [operation]
-             ,[tool_entity] AS [tool_entity]
-             ,[primary_entity] AS [primary_entity]
-             ,[processing_end_date] AS [processing_end_date]
-             ,[lot] AS [lot]
-             ,[prodgroup3] AS [prodgroup3]
-             ,[product] AS [product]
-             ,[visual_id] AS [visual_id]
-             ,[ws_loss_code] AS [ws_loss_code]
-             ,[media_in_x] AS [media_in_x]
-             ,[media_in_y] AS [media_in_y]
-             ,[height] AS [height]
-             ,[patch_lift_roi1] AS [patch_lift_roi1]
-             ,[patch_lift_roi2] AS [patch_lift_roi2]
-             ,[patch_lift_roi3] AS [patch_lift_roi3]
-             ,[patch_lift_roi4] AS [patch_lift_roi4]
-             ,[patch_lift_roi5] AS [patch_lift_roi5]
-             ,[patch_lift_roi6] AS [patch_lift_roi6]
-             ,[patch_lift_roi7] AS [patch_lift_roi7]
-             ,[patch_lift_roi8] AS [patch_lift_roi8]
-             ,[patch_lift_roi_max] AS [patch_lift_roi_max]
-             ,[patch_sli] AS [patch_sli]
-             ,[interposer_sli] AS [interposer_sli]
-             ,[NCO_Risk] AS [NCO_Risk]
-             ,[VIDCount] AS [VIDCount]
-    FROM
-    (
-    T_L0_Result
-    )
-    ) t /*L1*/
-    ) t /*L2*/
-    WHERE
-                  [FlagLot] = '1' 
-    ;
-    """, output='IPM_Data.csv', reader=SqliteReader(), inputs=['PARMI_IPM_RAW.csv'], header=['lot_1', 'newqty1', 'facility', 'operation', 'tool_entity', 'primary_entity', 'processing_end_date', 'lot', 'prodgroup3', 'product', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y', 'height', 'patch_lift_roi1', 'patch_lift_roi2', 'patch_lift_roi3', 'patch_lift_roi4', 'patch_lift_roi5', 'patch_lift_roi6', 'patch_lift_roi7', 'patch_lift_roi8', 'patch_lift_roi_max', 'patch_sli', 'interposer_sli', 'NCO_Risk', 'VIDCount', 'FlagLot'])
+    ctx.run_query(sql="\n\nDROP TABLE IF EXISTS T_L0_Init;\nCREATE TABLE T_L0_Init AS\nSELECT /*L0*/  \n          a0.[lot_1] AS [lot_1]\n         ,a0.[newqty1] AS [newqty1]\n         ,a0.[facility] AS [facility]\n         ,a0.[operation] AS [operation]\n         ,a0.[tool_entity] AS [tool_entity]\n         ,a0.[primary_entity] AS [primary_entity]\n         ,a0.[processing_end_date] AS [processing_end_date]\n         ,a0.[lot] AS [lot]\n         ,a0.[prodgroup3] AS [prodgroup3]\n         ,a0.[product] AS [product]\n         ,a0.[visual_id] AS [visual_id]\n         ,a0.[ws_loss_code] AS [ws_loss_code]\n         ,a0.[media_in_x] AS [media_in_x]\n         ,a0.[media_in_y] AS [media_in_y]\n         ,a0.[height] AS [height]\n         ,a0.[patch_lift_roi1] AS [patch_lift_roi1]\n         ,a0.[patch_lift_roi2] AS [patch_lift_roi2]\n         ,a0.[patch_lift_roi3] AS [patch_lift_roi3]\n         ,a0.[patch_lift_roi4] AS [patch_lift_roi4]\n         ,a0.[patch_lift_roi5] AS [patch_lift_roi5]\n         ,a0.[patch_lift_roi6] AS [patch_lift_roi6]\n         ,a0.[patch_lift_roi7] AS [patch_lift_roi7]\n         ,a0.[patch_lift_roi8] AS [patch_lift_roi8]\n         ,a0.[patch_lift_roi_max] AS [patch_lift_roi_max]\n         ,a0.[patch_sli] AS [patch_sli]\n         ,a0.[interposer_sli] AS [interposer_sli]\n         ,CASE  WHEN a0.[patch_lift_roi4]  >= 2000 AND  a0.[patch_lift_roi_max]  >= 2030 THEN '1' WHEN a0.[patch_lift_roi8] >= 2000 AND  a0.[patch_lift_roi_max]  >= 2030 THEN '1' ELSE '0' END AS [NCO_Risk]\nFROM \n[PARMI_IPM_RAW] a0\n;\n\nDROP TABLE IF EXISTS T_L0_1_1;\nCREATE TABLE T_L0_1_1 AS\nSELECT COUNT(DISTINCT  visual_id) AS AF$S1\n,lot_1 AS AF$PB1\nFROM T_L0_Init GROUP BY \nAF$PB1\n;\nCREATE INDEX T_L0_1_1_Idx ON T_L0_1_1 (AF$PB1);\nDROP TABLE IF EXISTS T_L0_1_Result;\nCREATE TABLE T_L0_1_Result AS\nSELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [VIDCount]\nFROM T_L0_Init a0 LEFT JOIN T_L0_1_1 a1 ON \nlot_1 = a1.AF$PB1\n;\nDROP TABLE IF EXISTS T_L0_1_1;\n\nCREATE INDEX T_L0_1_Result_Idx ON T_L0_1_Result (orig_rowid);\nDROP TABLE IF EXISTS T_L0_Result;\nCREATE TABLE T_L0_Result AS\nSELECT\n\n[lot_1]\n,[newqty1]\n,[facility]\n,[operation]\n,[tool_entity]\n,[primary_entity]\n,[processing_end_date]\n,[lot]\n,[prodgroup3]\n,[product]\n,[visual_id]\n,[ws_loss_code]\n,[media_in_x]\n,[media_in_y]\n,[height]\n,[patch_lift_roi1]\n,[patch_lift_roi2]\n,[patch_lift_roi3]\n,[patch_lift_roi4]\n,[patch_lift_roi5]\n,[patch_lift_roi6]\n,[patch_lift_roi7]\n,[patch_lift_roi8]\n,[patch_lift_roi_max]\n,[patch_sli]\n,[interposer_sli]\n,[NCO_Risk]\n,[VIDCount]\nFROM T_L0_Init a0\nLEFT JOIN T_L0_1_Result a1 ON a0.rowid = a1.orig_rowid\n;\nDROP TABLE IF EXISTS T_L0_1_Result;\nDROP TABLE IF EXISTS T_L0_Init;\n\nSELECT /*L3*/ \n          [lot_1] AS [lot_1]\n         ,[newqty1] AS [newqty1]\n         ,[facility] AS [facility]\n         ,[operation] AS [operation]\n         ,[tool_entity] AS [tool_entity]\n         ,[primary_entity] AS [primary_entity]\n         ,[processing_end_date] AS [processing_end_date]\n         ,[lot] AS [lot]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[product] AS [product]\n         ,[visual_id] AS [visual_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[media_in_x] AS [media_in_x]\n         ,[media_in_y] AS [media_in_y]\n         ,[height] AS [height]\n         ,[patch_lift_roi1] AS [patch_lift_roi1]\n         ,[patch_lift_roi2] AS [patch_lift_roi2]\n         ,[patch_lift_roi3] AS [patch_lift_roi3]\n         ,[patch_lift_roi4] AS [patch_lift_roi4]\n         ,[patch_lift_roi5] AS [patch_lift_roi5]\n         ,[patch_lift_roi6] AS [patch_lift_roi6]\n         ,[patch_lift_roi7] AS [patch_lift_roi7]\n         ,[patch_lift_roi8] AS [patch_lift_roi8]\n         ,[patch_lift_roi_max] AS [patch_lift_roi_max]\n         ,[patch_sli] AS [patch_sli]\n         ,[interposer_sli] AS [interposer_sli]\n         ,[NCO_Risk] AS [NCO_Risk]\n         ,[VIDCount] AS [VIDCount]\n         ,[FlagLot] AS [FlagLot]\nFROM\n(\nSELECT /*L2*/ \n          [lot_1] AS [lot_1]\n         ,[newqty1] AS [newqty1]\n         ,[facility] AS [facility]\n         ,[operation] AS [operation]\n         ,[tool_entity] AS [tool_entity]\n         ,[primary_entity] AS [primary_entity]\n         ,[processing_end_date] AS [processing_end_date]\n         ,[lot] AS [lot]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[product] AS [product]\n         ,[visual_id] AS [visual_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[media_in_x] AS [media_in_x]\n         ,[media_in_y] AS [media_in_y]\n         ,[height] AS [height]\n         ,[patch_lift_roi1] AS [patch_lift_roi1]\n         ,[patch_lift_roi2] AS [patch_lift_roi2]\n         ,[patch_lift_roi3] AS [patch_lift_roi3]\n         ,[patch_lift_roi4] AS [patch_lift_roi4]\n         ,[patch_lift_roi5] AS [patch_lift_roi5]\n         ,[patch_lift_roi6] AS [patch_lift_roi6]\n         ,[patch_lift_roi7] AS [patch_lift_roi7]\n         ,[patch_lift_roi8] AS [patch_lift_roi8]\n         ,[patch_lift_roi_max] AS [patch_lift_roi_max]\n         ,[patch_sli] AS [patch_sli]\n         ,[interposer_sli] AS [interposer_sli]\n         ,[NCO_Risk] AS [NCO_Risk]\n         ,[VIDCount] AS [VIDCount]\n         ,CASE WHEN  [NCO_Risk]  = '1' OR  [VIDCount] < 2 THEN '1' ELSE '0' END AS [FlagLot]\nFROM\n(\nSELECT /*L1*/ \n          [lot_1] AS [lot_1]\n         ,[newqty1] AS [newqty1]\n         ,[facility] AS [facility]\n         ,[operation] AS [operation]\n         ,[tool_entity] AS [tool_entity]\n         ,[primary_entity] AS [primary_entity]\n         ,[processing_end_date] AS [processing_end_date]\n         ,[lot] AS [lot]\n         ,[prodgroup3] AS [prodgroup3]\n         ,[product] AS [product]\n         ,[visual_id] AS [visual_id]\n         ,[ws_loss_code] AS [ws_loss_code]\n         ,[media_in_x] AS [media_in_x]\n         ,[media_in_y] AS [media_in_y]\n         ,[height] AS [height]\n         ,[patch_lift_roi1] AS [patch_lift_roi1]\n         ,[patch_lift_roi2] AS [patch_lift_roi2]\n         ,[patch_lift_roi3] AS [patch_lift_roi3]\n         ,[patch_lift_roi4] AS [patch_lift_roi4]\n         ,[patch_lift_roi5] AS [patch_lift_roi5]\n         ,[patch_lift_roi6] AS [patch_lift_roi6]\n         ,[patch_lift_roi7] AS [patch_lift_roi7]\n         ,[patch_lift_roi8] AS [patch_lift_roi8]\n         ,[patch_lift_roi_max] AS [patch_lift_roi_max]\n         ,[patch_sli] AS [patch_sli]\n         ,[interposer_sli] AS [interposer_sli]\n         ,[NCO_Risk] AS [NCO_Risk]\n         ,[VIDCount] AS [VIDCount]\nFROM\n(\nT_L0_Result\n)\n) t /*L1*/\n) t /*L2*/\nWHERE\n              [FlagLot] = " + SqliteEngine.global_sql(FLAGLOT, False) + ' \n;\n', output='IPM_Data.csv', reader=SqliteReader(), inputs=['PARMI_IPM_RAW.csv'], header=['lot_1', 'newqty1', 'facility', 'operation', 'tool_entity', 'primary_entity', 'processing_end_date', 'lot', 'prodgroup3', 'product', 'visual_id', 'ws_loss_code', 'media_in_x', 'media_in_y', 'height', 'patch_lift_roi1', 'patch_lift_roi2', 'patch_lift_roi3', 'patch_lift_roi4', 'patch_lift_roi5', 'patch_lift_roi6', 'patch_lift_roi7', 'patch_lift_roi8', 'patch_lift_roi_max', 'patch_sli', 'interposer_sli', 'NCO_Risk', 'VIDCount', 'FlagLot'])
 
 def step_0047_sqlite_query(ctx) -> None:
-    ctx.run_query(sql="""
-    SELECT /*L0*/  DISTINCT 
-              a0.[lot] AS [Lot_NCORisk]
-    FROM 
-    [IPM_Data] a0
-    WHERE
-     NOT          (a0.[lot] In 
-    """ + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + """)""" + """
-    """, output='DATA.csv', reader=SqliteReader(), inputs=['IPM_Data.csv'], header=['Lot_NCORisk'])
+    ctx.run_query(sql='\nSELECT /*L0*/  DISTINCT \n          a0.[lot] AS [Lot_NCORisk]\nFROM \n[IPM_Data] a0\nWHERE\n NOT          (a0.[lot] In \n' + ctx.csv_io.sql_get_csv_list('.\\HIST.csv', 1, 'a0.[lot] In') + ')' + '\n', output='DATA.csv', reader=SqliteReader(), inputs=['IPM_Data.csv'], header=['Lot_NCORisk'])
 
 def step_0048_rows_in_file(ctx) -> None:
     ctx.macro.set_named('SIGNAL', str(ctx.csv_io.row_count('data.csv')))

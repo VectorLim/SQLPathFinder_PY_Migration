@@ -43,7 +43,7 @@ class FileSystemOps(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
         if block.kind is Kind.FS_COPY:
             return cls._emit_copy_block(block)
         if block.kind is Kind.FS_DELETE:
