@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import Any
 
 from vg2c.emitter.models import ArtifactRole, emittable, operation_spec
@@ -15,44 +14,9 @@ class PipelineContext(UtilitySpec):
     """Single runtime context object for generated scripts."""
 
     utility_name = "ctx"
-    always_include = True
 
-    def __init__(self) -> None:
-        registry = getattr(type(self), "_registry", None)
-        if isinstance(registry, dict) and registry:
-            candidates = list(registry.items())
-        else:
-            candidates = []
-            for obj in globals().values():
-                if not isinstance(obj, type):
-                    continue
-                utility_name = getattr(obj, "utility_name", None)
-                if isinstance(utility_name, str):
-                    candidates.append((utility_name, obj))
-
-        for utility_name, utility_cls in candidates:
-            if utility_name == self.utility_name:
-                continue
-            try:
-                setattr(self, utility_name, utility_cls())
-            except TypeError:
-                continue
-
-    def get_method(self, utility_cls: type[UtilitySpec], method_func: Callable) -> Any:
-        """Get a method from a utility class."""
-        if not hasattr(self, utility_cls.utility_name):
-            raise AttributeError(
-                f"Utility '{utility_cls.utility_name}' not found in PipelineContext."
-            )
-
-        utility_instance = getattr(self, utility_cls.utility_name)
-        method = getattr(utility_instance, method_func.__name__, None)
-        if method is None:
-            raise AttributeError(
-                f"Method '{method_func.__name__}' not found in utility "
-                f"'{utility_cls.utility_name}'."
-            )
-        return method
+    def __init__(self, utilities: dict[str, object]) -> None:
+        self.__dict__.update(utilities)
 
     @emittable
     def write_file(

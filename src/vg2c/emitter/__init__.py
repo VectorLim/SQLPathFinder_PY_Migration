@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import ast
-import inspect
 from typing import TYPE_CHECKING
 
-from vg2c import kind as kind_module
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import EmittedScript, finalize_steps
 
@@ -54,35 +52,25 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5: emit Python and the edit/semantic manifest at the same time."""
     from vg2c.emitter.walker import walk_and_emit
     from vg2c.logger import Logger
-    from vg2c.utilities import assemble_all_utilities
+    from vg2c.utilities import assemble_utilities
 
     log = Logger.getLogger("vg2c.emitter")
-    reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(
-        dispatched.dispatched
-    )
-    required_kinds = frozenset(b.kind for b in dispatched.analyzed.resolved.blocks)
-    utility_imports, utility_sources = assemble_all_utilities(
-        required_kinds=required_kinds,
-        extra_root_names=frozenset(forced_utility_names),
-    )
-    log.debug(
-        "Assembled %d utility sources and %d utility imports.",
-        len(utility_sources),
-        len(utility_imports),
-    )
-
+    reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(dispatched.dispatched)
     step_emissions, run_body = walk_and_emit(dispatched)
-    log.debug("Walker emitted %d helper functions.", len(step_emissions))
-
-    kind_source = "\n".join(
-        line
-        for line in inspect.getsource(kind_module).splitlines()
-        if not line.startswith(("import ", "from "))
+    default_site = _first_literal_site(dispatched)
+    setup = ["Logger.basicConfig(level=Logger.INFO)", "OracleClient.configure()"]
+    if default_site:
+        run_body = f'ctx.macro.set_named("NODE", {default_site!r})\n' + run_body
+    workflow_source = "def run(ctx):\n" + "\n".join(
+        "    " + line for line in [*setup, *run_body.splitlines()]
     )
-
-    imports = set(utility_imports)
-    imports.add("from enum import Enum")
-    imports.update(reader_imports)
+    embedded = assemble_utilities(
+        step_emissions=step_emissions,
+        workflow_source=workflow_source,
+        reader_names=forced_utility_names,
+        reader_imports=reader_imports,
+    )
+    imports = set(embedded.imports)
 
     script_writer = IndentWriter()
     script_writer.write("# Auto-generated Python script from VG2")
@@ -93,10 +81,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         script_writer.write(imp)
     script_writer.write("")
 
-    script_writer.write_block(kind_source)
-    script_writer.write("")
-
-    for utility_source in utility_sources:
+    for utility_source in embedded.sources:
         script_writer.write_block(utility_source)
         script_writer.write("")
 
@@ -111,12 +96,9 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
-    script_writer.write("Logger.basicConfig(level=Logger.INFO)")
-    script_writer.write("OracleClient.configure()")
-    script_writer.write("ctx = PipelineContext()")
-    default_site = _first_literal_site(dispatched)
-    if default_site:
-        script_writer.write(f'ctx.macro.set_named("NODE", {default_site!r})')
+    for line in setup:
+        script_writer.write(line)
+    script_writer.write(f"ctx = {embedded.context_expression}")
     script_writer.write_block(run_body)
     script_writer.pop_indent()
     script_writer.write(WORKFLOW_END)
@@ -151,7 +133,7 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         )
 
     steps = finalize_steps(source, step_emissions)
-    return EmittedScript(source=source, imports=tuple(imports), steps=steps)
+    return EmittedScript(source=source, imports=tuple(sorted(imports)), steps=steps)
 
 
 def _sql_filter_comment_lines(

@@ -32,7 +32,7 @@ class MockMacro:
         return val
 
     def resolve_file_path(self, raw_path: str) -> Path:
-        from vg2c.utilities._emit_helpers import resolve_path
+        from vg2c.utilities._runtime_helpers import resolve_path
 
         return resolve_path(self.substitute(raw_path))
 

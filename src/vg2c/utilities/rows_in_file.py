@@ -7,7 +7,8 @@ import re
 from vg2c.emitter.models import CodeExpr
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import split_utility_command, strip_quotes
+from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
+from vg2c.utilities._runtime_helpers import strip_quotes
 
 
 class RowsInFile(EmitterUtility):
@@ -41,7 +42,7 @@ class RowsInFile(EmitterUtility):
         utilities = block.resolved_options.lookup.get("UTILITIES", "")
         argv = split_utility_command(utilities)
         # argv[0] = '{ROWS-IN-FILE}', argv[1] = csv_path, argv[2] = var_name
-        csv_path_expr = MacroState.to_code_expr(argv[1] if len(argv) > 1 else None)
+        csv_path_expr = to_code_expr(argv[1] if len(argv) > 1 else None)
         var_name = strip_quotes(argv[2]).upper() if len(argv) > 2 else ""
 
         row_count_call = CsvIO.row_count.render(csv_path_expr)

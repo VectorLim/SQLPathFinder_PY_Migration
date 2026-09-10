@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import ast
 import inspect
-import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -21,82 +19,11 @@ if TYPE_CHECKING:
 __all__ = ["EmitterUtility", "UtilitySpec"]
 
 
-_CLASS_SIG_RE = re.compile(r"^(\s*class\s+\w+)\(.*\):\s*$")
-_EMBED_ONLY_ASSIGNMENTS = {"handles", "check_priority"}
-_EMBED_ONLY_DECORATORS = {"emittable", "operation_spec"}
-
-
-def _find_class_def(source: str, class_name: str) -> ast.ClassDef | None:
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            return node
-    return None
-
-
-def _decorator_name(node: ast.expr) -> str | None:
-    if isinstance(node, ast.Call):
-        return _decorator_name(node.func)
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    return None
-
-
-def _assignment_names(node: ast.stmt) -> set[str]:
-    if isinstance(node, ast.Assign):
-        return {target.id for target in node.targets if isinstance(target, ast.Name)}
-    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        return {node.target.id}
-    return set()
-
-
-def _embed_only_lines(source: str, class_name: str) -> set[int]:
-    """Return 0-based lines containing compiler-only class metadata."""
-    node = _find_class_def(source, class_name)
-    if node is None:
-        return set()
-
-    remove: set[int] = set()
-    for child in node.body:
-        if _assignment_names(child) & _EMBED_ONLY_ASSIGNMENTS:
-            end = child.end_lineno or child.lineno
-            remove.update(range(child.lineno - 1, end))
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for decorator in child.decorator_list:
-                if _decorator_name(decorator) not in _EMBED_ONLY_DECORATORS:
-                    continue
-                end = decorator.end_lineno or decorator.lineno
-                remove.update(range(decorator.lineno - 1, end))
-    return remove
-
-
-def _strip_embed_artifacts(source: str, class_name: str) -> str:
-    lines = source.split("\n")
-    remove = _embed_only_lines(source, class_name)
-    lines = [line for index, line in enumerate(lines) if index not in remove]
-
-    while lines and lines[0].lstrip().startswith("@"):
-        lines.pop(0)
-
-    if not lines:
-        return ""
-
-    lines[0] = _CLASS_SIG_RE.sub(r"\1:", lines[0])
-    lines[0] = lines[0].replace(f"({EmitterUtility.__name__}):", ":")
-    lines[0] = lines[0].replace(f"({UtilitySpec.__name__}):", ":")
-    lines[0] = lines[0].replace(f"({class_name}, {UtilitySpec.__name__}):", f"({class_name}):")
-
-    return "\n".join(lines).rstrip()
-
-
 class UtilitySpec(ABC):
     """Base contract for all embeddable utilities and their semantic operations."""
 
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
-    always_include: ClassVar[bool] = False
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
     _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
 
@@ -126,23 +53,6 @@ class UtilitySpec(ABC):
             UtilitySpec._emit_handlers[handled_kind] = cls
 
     @classmethod
-    def get_source(cls, source_override: str | None = None) -> str:
-        """Return this utility's embeddable source."""
-        custom = getattr(cls, "__vg2c_source__", None)
-        if custom is not None:
-            return str(custom).rstrip()
-
-        if source_override is not None:
-            node = _find_class_def(source_override, cls.__name__)
-            if node is not None:
-                segment = ast.get_source_segment(source_override, node)
-                if segment is not None:
-                    return _strip_embed_artifacts(segment, cls.__name__)
-
-        source = inspect.getsource(cls)
-        return _strip_embed_artifacts(source, cls.__name__)
-
-    @classmethod
     def registered(cls) -> tuple[type[UtilitySpec], ...]:
         """Return loaded utilities in deterministic registration order."""
         return tuple(cls._registry.values())
@@ -150,10 +60,6 @@ class UtilitySpec(ABC):
     @classmethod
     def for_name(cls, name: str) -> type[UtilitySpec] | None:
         return cls._registry.get(name)
-
-    @classmethod
-    def for_kind(cls, kind: Kind) -> type[UtilitySpec] | None:
-        return cls._emit_handlers.get(kind) or cls._emit_handlers.get(Kind.UNKNOWN)
 
     @classmethod
     def operation_definitions(cls) -> tuple[UtilityOperationDefinition, ...]:

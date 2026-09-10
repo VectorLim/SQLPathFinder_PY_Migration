@@ -9,8 +9,7 @@ from pathlib import Path
 from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import split_utility_command
-from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import list_code_expr, split_utility_command
 
 
 class ExternalProcess(EmitterUtility):
@@ -50,7 +49,7 @@ class ExternalProcess(EmitterUtility):
 
     @classmethod
     def _emit_run(cls, argv: list[str]) -> str:
-        return cls.run.render(argv=MacroState.list_code_expr(argv))
+        return cls.run.render(argv=list_code_expr(argv))
 
     @staticmethod
     def _resolve_exedir() -> str:

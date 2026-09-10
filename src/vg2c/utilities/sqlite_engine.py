@@ -6,13 +6,15 @@ from vg2c.emitter.models import CodeExpr
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
+    extract_crosstab_options,
     parse_table_binding,
     resolve_output_path,
-    strip_quotes,
+    scan_sql_get_csv_list_calls,
+    to_code_expr,
 )
+from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utilities.crosstab import CrosstabUtility
 from vg2c.utilities.csv_io import CsvIO
-from vg2c.utilities.macro_state import MacroState
 
 
 class SqliteEngine(EmitterUtility):
@@ -57,7 +59,7 @@ class SqliteEngine(EmitterUtility):
         if sql is None:
             sql = block.resolved_body
 
-        calls = CsvIO.scan_sql_get_csv_list_calls(sql)
+        calls = scan_sql_get_csv_list_calls(sql)
         if not calls:
             return CodeExpr(SqliteEngine._format_sql_literal(sql), sql)
 
@@ -68,7 +70,7 @@ class SqliteEngine(EmitterUtility):
             if literal:
                 parts.append(SqliteEngine._format_sql_literal(literal))
 
-            csv_path_expr = MacroState.to_code_expr(call.csv_path)
+            csv_path_expr = to_code_expr(call.csv_path)
             expr = CsvIO.sql_get_csv_list.render(csv_path_expr, call.column_ref, call.lead_in)
             parts.append(expr)
             if call.needs_closing_paren:
@@ -121,7 +123,7 @@ class SqliteEngine(EmitterUtility):
         reader = getattr(block, "reader", None)
         if reader is None:
             raise ValueError("SQL emission requires dispatch metadata")
-        crosstab = CrosstabUtility.extract_options(block)
+        crosstab = extract_crosstab_options(block)
         header = None if crosstab else cls._extract_header(block)
 
         reader_kwargs = getattr(block, "reader_kwargs", {})

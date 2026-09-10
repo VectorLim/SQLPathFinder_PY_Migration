@@ -8,8 +8,8 @@ from pathlib import Path
 from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import resolve_path, split_utility_command
-from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
+from vg2c.utilities._runtime_helpers import resolve_path
 
 
 class SmartAppend(EmitterUtility):
@@ -32,8 +32,8 @@ class SmartAppend(EmitterUtility):
     @classmethod
     def emit_block(cls, block) -> tuple[str, list[str]]:
         argv = split_utility_command(block.resolved_options.lookup.get("UTILITIES", ""))
-        destination = MacroState.to_py_expr(argv[1] if len(argv) > 1 else "")
-        source = MacroState.to_py_expr(argv[2] if len(argv) > 2 else "")
+        destination = to_code_expr(argv[1] if len(argv) > 1 else "")
+        source = to_code_expr(argv[2] if len(argv) > 2 else "")
         return "smart_append", [cls.append.render(destination, source)]
 
     @emittable
@@ -43,17 +43,13 @@ class SmartAppend(EmitterUtility):
         destination_path = resolve_path(destination, for_write=True)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with source_path.open(
-            newline="", encoding="utf-8", errors="replace"
-        ) as source_fh:
+        with source_path.open(newline="", encoding="utf-8", errors="replace") as source_fh:
             reader = csv.reader(source_fh)
             header = next(reader, None)
             if header is None:
                 return
 
-            write_header = (
-                not destination_path.exists() or destination_path.stat().st_size == 0
-            )
+            write_header = not destination_path.exists() or destination_path.stat().st_size == 0
             with destination_path.open(
                 "w" if write_header else "a", newline="", encoding="utf-8"
             ) as destination_fh:

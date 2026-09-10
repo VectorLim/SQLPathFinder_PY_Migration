@@ -55,7 +55,7 @@ def test_emitted_script_seeds_node_default_from_literal_site(tmp_path):
     output = translate(source)
     generated = output.read_text(encoding="utf-8")
 
-    ctx_line = generated.index("ctx = PipelineContext()")
+    ctx_line = generated.index("ctx = PipelineContext({")
     node_line = generated.index('ctx.macro.set_named("NODE", \'PG\')')
     assert node_line > ctx_line
 
@@ -78,7 +78,7 @@ def test_every_emitted_if_logs_its_source_prompt_and_result(tmp_path):
     workflow = generated.split(WORKFLOW_START, 1)[1].split(WORKFLOW_END, 1)[0]
 
     assert "Logger.basicConfig(level=Logger.INFO)" in workflow
-    assert "def condition(cls, prompt: str, value: bool) -> bool:" in generated
+    assert "def condition(cls," in generated
     assert "/PROMPT-TEXT=Step 1-11. TRUE if config file not found" in workflow
     assert "_if_result" not in workflow
     assert 'Logger.getLogger("vg2c.workflow").info(' not in workflow

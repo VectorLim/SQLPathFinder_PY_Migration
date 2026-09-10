@@ -25,17 +25,15 @@ from typing import Any
 
 import keyring
 
-from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
-from vg2c.logger import Logger
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
+    list_code_expr,
     split_utility_command,
-    strip_quotes,
+    to_code_expr,
 )
-from vg2c.utilities.macro_state import MacroState
-
-log = Logger.getLogger("vg2c.emitter.mail")
+from vg2c.utilities._runtime_helpers import strip_quotes
 
 
 class MailService(EmitterUtility):
@@ -92,10 +90,6 @@ class MailService(EmitterUtility):
     def _csv_items(value: str) -> list[str]:
         return [p.strip() for p in strip_quotes(value).split(",") if p.strip()]
 
-    @staticmethod
-    def _list_expr(values: list[str]) -> CodeExpr:
-        return MacroState.list_code_expr(values)
-
     @classmethod
     def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
         payload = argv[1:]
@@ -106,21 +100,21 @@ class MailService(EmitterUtility):
             body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
 
             kwargs: dict[str, Any] = {
-                "to": MacroState.to_code_expr(payload[4]),
-                "subject": MacroState.to_code_expr(payload[2]),
-                "body": MacroState.to_code_expr(body),
+                "to": to_code_expr(payload[4]),
+                "subject": to_code_expr(payload[2]),
+                "body": to_code_expr(body),
             }
             if attachments:
-                kwargs["attachments"] = cls._list_expr(attachments)
+                kwargs["attachments"] = list_code_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = MacroState.to_code_expr(from_addr)
+                kwargs["from_addr"] = to_code_expr(from_addr)
             return cls.send.render(**kwargs)
 
         if len(payload) >= 3:
             return cls.send.render(
-                to=MacroState.to_code_expr(payload[0]),
-                subject=MacroState.to_code_expr(payload[1]),
-                body=MacroState.to_code_expr(payload[2]),
+                to=to_code_expr(payload[0]),
+                subject=to_code_expr(payload[1]),
+                body=to_code_expr(payload[2]),
             )
 
         return None

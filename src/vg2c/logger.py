@@ -11,8 +11,6 @@ class Logger(UtilitySpec):
     """Shared logger utility used by translator code and generated scripts."""
 
     utility_name = "logger"
-    always_include = True
-
     CRITICAL: ClassVar[int] = logging.CRITICAL
     ERROR: ClassVar[int] = logging.ERROR
     WARNING: ClassVar[int] = logging.WARNING
@@ -66,7 +64,7 @@ class Logger(UtilitySpec):
             cols = (
                 [str(h) for h in headers]
                 if headers
-                else [f"col_{i+1}" for i in range(max(len(r) for r in rows))]
+                else [f"col_{i + 1}" for i in range(max(len(r) for r in rows))]
             )
             for row in rows:
                 if isinstance(row, Mapping):
@@ -82,9 +80,7 @@ class Logger(UtilitySpec):
                 widths[i] = max(widths[i], len(value))
 
         border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
-        header = (
-            "| " + " | ".join(cols[i].ljust(widths[i]) for i in range(len(cols))) + " |"
-        )
+        header = "| " + " | ".join(cols[i].ljust(widths[i]) for i in range(len(cols))) + " |"
         lines = [
             "| " + " | ".join(row[i].ljust(widths[i]) for i in range(len(cols))) + " |"
             for row in body
