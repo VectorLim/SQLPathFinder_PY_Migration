@@ -8,7 +8,7 @@ import pytest
 
 from vg2c.utilities._symbol_emit import render_symbols
 from vg2c.utilities._symbol_index import ResolutionError, SymbolRef
-from vg2c.utilities._symbols import SymbolResolver, resolve_symbols
+from vg2c.utilities._symbols import SymbolResolver
 
 
 def build(tmp_path, modules, roots):
@@ -16,7 +16,10 @@ def build(tmp_path, modules, roots):
         path = tmp_path.joinpath(*name.split(".")).with_suffix(".py")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source, encoding="utf-8")
-    selection = resolve_symbols(tmp_path, [SymbolRef(*root) for root in roots])
+    resolver = SymbolResolver(tmp_path)
+    for root in roots:
+        resolver.require(SymbolRef(*root))
+    selection = resolver.drain()
     emitted = render_symbols(selection)
     source = "\n\n".join([*emitted.imports, *emitted.sources])
     return selection, source
@@ -91,7 +94,7 @@ def test_transitive_functions_aliases_constants_and_duplicate_roots(tmp_path):
     assert set(selection.index.modules) == {"a", "b", "c"}
 
 
-def test_methods_state_properties_static_and_class_methods(tmp_path):
+def test_helper_class_keeps_full_api_state_properties_and_method_dependencies(tmp_path):
     _, source = build(
         tmp_path,
         {
@@ -99,7 +102,7 @@ def test_methods_state_properties_static_and_class_methods(tmp_path):
 def helper(value): return value + 1
 class Reader:
     LIMIT = 40
-    UNUSED = 'unneeded'
+    UNUSED = 9
     def __init__(self): self.value = 1
     @property
     def amount(self): return self.value
@@ -110,7 +113,7 @@ class Reader:
     @staticmethod
     def inc(value): return helper(value)
     def run(self): return self.inc(self.limit()) + self.amount
-    def unused(self): return 'unused'
+    def unused(self): return helper(self.UNUSED)
 """
         },
         [("a", "Reader.run")],
@@ -119,8 +122,25 @@ class Reader:
     assert reader.run() == 42
     reader.amount = 3
     assert reader.run() == 44
-    assert "def unused" not in source
-    assert "UNUSED" not in source
+    assert reader.unused() == 10
+    assert reader.UNUSED == 9
+
+
+def test_helper_class_keeps_initialization_statements(tmp_path):
+    _, source = build(
+        tmp_path,
+        {
+            "a": """
+events = []
+def record(): events.append('initialized')
+class Helper:
+    record()
+    def run(self): return events
+"""
+        },
+        [("a", "Helper.run")],
+    )
+    assert execute(source)["Helper"]().run() == ["initialized"]
 
 
 def test_nested_functions_lambdas_comprehensions_and_shadowing(tmp_path):

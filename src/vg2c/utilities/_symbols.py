@@ -24,9 +24,7 @@ from ._symbol_index import (
     SourceIndex,
     SymbolRef,
     bound_names,
-    definition_effects,
     dotted,
-    pure_value,
 )
 
 log = logging.getLogger("vg2c.utilities")
@@ -36,7 +34,6 @@ log = logging.getLogger("vg2c.utilities")
 class Dependency:
     target: SymbolRef
     eager: bool
-    reason: str
 
 
 @dataclass(frozen=True)
@@ -89,7 +86,6 @@ class SymbolResolver:
         origin: SymbolRef | None = None,
         *,
         eager: bool = False,
-        reason: str = "reference",
     ) -> None:
         if ref.module == "__workflow__":
             return  # These definitions are emitted verbatim by the workflow writer.
@@ -105,19 +101,17 @@ class SymbolResolver:
         if any(getattr(node, "type_params", None) for node in symbol.nodes):
             raise ResolutionError(f"{ref}: generic type-parameter scopes are not supported")
         if origin is not None:
-            self.selection.dependencies.setdefault(origin, set()).add(
-                Dependency(ref, eager, reason)
-            )
+            self.selection.dependencies.setdefault(origin, set()).add(Dependency(ref, eager))
         if ref in self.selected:
             return
         self.selected.add(ref)
         self.pending.append(ref)
         if symbol.owner:
-            self.require(symbol.owner, ref, reason="owning class")
+            self.require(symbol.owner, ref)
         if ref.module not in self.active_modules:
             self.active_modules.add(ref.module)
             for effect in self.index.module(ref.module).effects:
-                self.require(effect, ref, reason="module initialization")
+                self.require(effect, ref)
 
     def import_target(self, ref: SymbolRef) -> SymbolRef | str | None:
         symbol = self.index.symbol(ref)
@@ -170,11 +164,11 @@ class SymbolResolver:
     def member(
         self, cls: SymbolRef, name: str, origin: SymbolRef | None = None, *, eager: bool = False
     ) -> None:
-        self.require(cls, origin, eager=eager, reason=f"member {name}")
+        self.require(cls, origin, eager=eager)
         symbol = self.index.symbol(cls)
         if name in symbol.members:
             child = symbol.members[name]
-            self.require(child, origin, eager=eager, reason=f"member {name}")
+            self.require(child, origin, eager=eager)
             if self.index.symbol(child).is_class:
                 self.widen(child, "nested class retained intact", origin=origin)
 
@@ -202,7 +196,11 @@ class SymbolResolver:
         """Return the runtime surface of a registered utility class."""
         symbol = self.index.symbol(ref)
         if not symbol.is_class or not self.is_utility(ref):
-            return tuple(symbol.members.values())
+            return tuple(
+                child
+                for child, part in self.index.module(ref.module).symbols.items()
+                if part.owner == ref
+            )
         module = self.index.module(ref.module)
         members: list[SymbolRef] = []
         for name, child in symbol.members.items():
@@ -232,9 +230,9 @@ class SymbolResolver:
     def seed_runtime_api(self, ref: SymbolRef) -> None:
         if not self.is_utility(ref) or not self.index.symbol(ref).is_class:
             return
-        self.require(ref, reason="runtime utility API")
+        self.require(ref)
         for member in self.runtime_members(ref):
-            self.require(member, ref, reason="runtime utility API")
+            self.require(member, ref)
 
     def expand_runtime_apis(self) -> None:
         """Retain utility APIs without adding instances for uncalled ctx operations.
@@ -245,7 +243,6 @@ class SymbolResolver:
         included = {
             ref for ref in self.selected if self.is_utility(ref) and self.index.symbol(ref).is_class
         }
-        included.update(self.selection.context.values())
         self.freeze_context = True
         for ref in sorted(included):
             self.seed_runtime_api(ref)
@@ -258,7 +255,7 @@ class SymbolResolver:
         origin: SymbolRef | None = None,
         line: int | None = None,
     ) -> None:
-        self.require(ref, origin, reason=reason)
+        self.require(ref, origin)
         if ref in self.whole:
             return
         self.whole.add(ref)
@@ -283,7 +280,7 @@ class SymbolResolver:
             else self.index.module(ref.module).bindings.values()
         )
         for child in refs:
-            self.require(child, ref, reason=reason)
+            self.require(child, ref)
 
     def is_utility(self, ref: SymbolRef) -> bool:
         return ref in self.utilities.values()
@@ -330,64 +327,29 @@ class SymbolResolver:
                 ]
                 if node.bases or node.keywords or node.decorator_list:
                     self.widen(ref, "inheritance, metaclass, or class decorator", line=node.lineno)
-                utility = self.is_utility(ref)
-                for name, child in symbol.members.items():
-                    part = self.index.symbol(child)
-                    if utility and name in COMPILER_STATE:
-                        continue
-                    if name.startswith("__") and name.endswith("__"):
-                        self.require(child, ref, reason="construction/protocol")
-                    if name in {"__getattr__", "__getattribute__", "__setattr__", "__delattr__"}:
-                        self.widen(ref, "dynamic attribute protocol", line=part.nodes[0].lineno)
-                    if utility:
-                        # Mixed utility classes also initialize compiler regexes
-                        # and dispatch tables. Runtime references select their own
-                        # state; only ordinary helper classes need effect widening.
-                        continue
-                    for original in part.nodes:
-                        if isinstance(original, FUNCTIONS):
-                            declaration = copy.copy(original)
-                            declaration.decorator_list = [
-                                dec
-                                for dec in original.decorator_list
-                                if self.qualified(module, dec) not in COMPILER_DECORATORS
-                                and not self.safe_decorator(module, dec)
-                            ]
-                            if definition_effects(declaration):
-                                self.require(
-                                    child, ref, eager=True, reason="member definition effects"
-                                )
-                    if any(
-                        isinstance(n, (ast.Assign, ast.AnnAssign)) and not pure_value(n.value)
-                        for n in part.nodes
-                    ):
-                        self.require(child, ref, eager=True, reason="class initialization")
-                        for statement in part.nodes:
-                            if isinstance(statement, (ast.Assign, ast.AnnAssign)) and isinstance(
-                                statement.value, ast.Call
-                            ):
-                                if self.qualified(module, statement.value) != "re.compile":
-                                    self.widen(
-                                        ref,
-                                        "possible descriptor/class initialization",
-                                        line=statement.lineno,
-                                    )
-                    if any(
-                        not isinstance(n, (*FUNCTIONS, ast.ClassDef, ast.Assign, ast.AnnAssign))
-                        for n in part.nodes
-                    ):
-                        self.require(child, ref, eager=True, reason="class body")
+                if not self.is_utility(ref):
+                    # Ordinary runtime helpers stay intact; only registered
+                    # utilities mix runtime members with compiler machinery.
+                    for child in self.runtime_members(ref):
+                        self.require(child, ref)
+                else:
+                    for name, child in symbol.members.items():
+                        if name.startswith("__") and name.endswith("__"):
+                            self.require(child, ref)
+                        if name in {
+                            "__getattr__",
+                            "__getattribute__",
+                            "__setattr__",
+                            "__delattr__",
+                        }:
+                            self.widen(ref, "dynamic attribute protocol", line=node.lineno)
                 node.body = []
                 node.bases = [visitor.visit(base) for base in node.bases]
                 node.keywords = [visitor.visit(kw) for kw in node.keywords]
                 node.decorator_list = [visitor.decorator(dec) for dec in node.decorator_list]
                 self.selection.nodes[ref] = [node]
             else:
-                result: list[ast.stmt] = []
-                for node in nodes:
-                    item = visitor.visit(node)
-                    result.extend(item if isinstance(item, list) else [item] if item else [])
-                self.selection.nodes[ref] = result
+                self.selection.nodes[ref] = visitor._body(nodes)
         # Calls executed while defining a symbol also need their runtime closure ready.
         for origin, callee in sorted(self.eager_calls):
             seen: set[SymbolRef] = set()
@@ -399,9 +361,7 @@ class SymbolResolver:
                 seen.add(target)
                 stack.extend(edge.target for edge in self.selection.dependencies.get(target, ()))
             for target in seen:
-                self.selection.dependencies.setdefault(origin, set()).add(
-                    Dependency(target, True, "definition-time call")
-                )
+                self.selection.dependencies.setdefault(origin, set()).add(Dependency(target, True))
         return self.selection
 
 
@@ -432,8 +392,8 @@ class _References(ast.NodeTransformer):
             f"{self.module.path}:{getattr(node, 'lineno', 1)}: {self.origin}: {message}"
         )
 
-    def dependency(self, ref: SymbolRef, reason: str = "name") -> None:
-        self.r.require(ref, self.origin, eager=self.eager, reason=reason)
+    def dependency(self, ref: SymbolRef) -> None:
+        self.r.require(ref, self.origin, eager=self.eager)
 
     def builtin(self, node: ast.AST, name: str) -> bool:
         return (
@@ -494,18 +454,31 @@ class _References(ast.NodeTransformer):
             recv = self.receiver(node.value)
             if recv:
                 return self.r.index.symbol(recv).members.get(node.attr, recv)
-            chain = dotted(node)
-            if chain:
-                first, _, tail = chain.partition(".")
-                ref = self.binding(first)
-                if ref:
-                    target = self.r.canonical(ref)
-                    if isinstance(target, str):
-                        imp = self.r.index.symbol(ref).nodes[0]
-                        if isinstance(imp, ast.Import) and not imp.names[0].asname:
-                            tail = chain.removeprefix(imp.names[0].name + ".")
-                        return self.r.index.module(target).bindings.get(tail)
+            member = self.module_member(node)
+            if member and len(member[1]) == 1:
+                return member[0]
         return None
+
+    def module_member(self, node: ast.Attribute) -> tuple[SymbolRef, list[str]] | None:
+        chain = dotted(node)
+        if not chain:
+            return None
+        first = chain.split(".", 1)[0]
+        ref = self.binding(first)
+        target = self.r.canonical(ref) if ref else None
+        if not isinstance(target, str):
+            return None
+        imp = self.r.index.symbol(ref).nodes[0]
+        prefix = (
+            imp.names[0].name if isinstance(imp, ast.Import) and not imp.names[0].asname else first
+        )
+        if not chain.startswith(prefix + "."):
+            self.error(node, "ambiguous project package reference")
+        rest = chain[len(prefix) + 1 :].split(".")
+        binding = self.r.index.module(target).bindings.get(rest[0])
+        if binding is None:
+            self.error(node, f"unknown member {target}.{rest[0]}")
+        return binding, rest
 
     def visit_Name(self, node: ast.Name) -> ast.Name:
         if not isinstance(node.ctx, ast.Load):
@@ -567,49 +540,32 @@ class _References(ast.NodeTransformer):
                 if isinstance(node.ctx, (ast.Store, ast.Del)) and ref:
                     self.r.widen(recv, "class mutation", origin=self.origin, line=node.lineno)
                 return node
-            ref = self.binding(parts[0])
-            if ref:
-                target = self.r.canonical(ref)
-                if isinstance(target, str):
-                    imp = self.r.index.symbol(ref).nodes[0]
-                    prefix = parts[0]
-                    if isinstance(imp, ast.Import) and not imp.names[0].asname:
-                        prefix = imp.names[0].name
-                    if not chain.startswith(prefix + "."):
-                        self.error(node, "ambiguous project package reference")
-                    rest = chain[len(prefix) + 1 :].split(".")
-                    binding = self.r.index.module(target).bindings.get(rest[0])
-                    if binding is None:
-                        self.error(node, f"unknown member {target}.{rest[0]}")
-                    self.dependency(binding)
-                    canonical = self.r.canonical(binding)
-                    if isinstance(canonical, str):
-                        self.error(node, "nested module objects require a direct module import")
-                    if self.r.index.symbol(canonical).is_class:
-                        if len(rest) > 1:
-                            self.r.member(canonical, rest[1], self.origin, eager=self.eager)
-                        else:
-                            self.r.widen(
-                                canonical,
-                                "class value escapes",
-                                origin=self.origin,
-                                line=node.lineno,
-                            )
-                    # A local named like the imported symbol must not capture the rewrite.
-                    if any(rest[0] in scope.names for scope in self.scopes):
-                        alias = self.r.local_import_alias(binding)
-                        self.dependency(alias, "module member alias")
-                        rest[0] = alias.name
-                    return ast.copy_location(ast.parse(".".join(rest), mode="eval").body, node)
+            member = self.module_member(node)
+            if member:
+                binding, rest = member
+                self.dependency(binding)
+                canonical = self.r.canonical(binding)
+                if isinstance(canonical, str):
+                    self.error(node, "nested module objects require a direct module import")
+                if self.r.index.symbol(canonical).is_class:
+                    if len(rest) > 1:
+                        self.r.member(canonical, rest[1], self.origin, eager=self.eager)
+                    else:
+                        self.r.widen(
+                            canonical,
+                            "class value escapes",
+                            origin=self.origin,
+                            line=node.lineno,
+                        )
+                # A local named like the imported symbol must not capture the rewrite.
+                if any(rest[0] in scope.names for scope in self.scopes):
+                    alias = self.r.local_import_alias(binding)
+                    self.dependency(alias)
+                    rest[0] = alias.name
+                return ast.copy_location(ast.parse(".".join(rest), mode="eval").body, node)
         return self.generic_visit(node)
 
-    def visit_Import(self, node: ast.Import) -> ast.AST | list[ast.stmt]:
-        return self._import(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.AST | list[ast.stmt]:
-        return self._import(node)
-
-    def _import(self, node: ast.Import | ast.ImportFrom) -> ast.AST | list[ast.stmt]:
+    def visit_Import(self, node: ast.Import | ast.ImportFrom) -> ast.AST | list[ast.stmt]:
         result: list[ast.stmt] = []
         for alias in node.names:
             item = copy.deepcopy(node)
@@ -643,13 +599,13 @@ class _References(ast.NodeTransformer):
             # Deferred project initialization cannot be hoisted without changing behavior.
             if not self.eager and self.r.index.module(module).effects:
                 self.error(node, f"runtime-local import of {module} has initialization effects")
-            self.dependency(target, "import binding")
+            self.dependency(target)
             local = alias.asname or alias.name
             if not self.eager:
                 target = self.r.local_import_alias(target)
                 if any(target.name in scope.names for scope in self.scopes):
                     self.error(node, "reserved local import alias is shadowed")
-                self.dependency(target, "runtime-local import binding")
+                self.dependency(target)
             if local != target.name:
                 assignment = ast.Assign(
                     targets=[ast.Name(id=local, ctx=ast.Store())],
@@ -659,6 +615,8 @@ class _References(ast.NodeTransformer):
         if not result and not self.eager:
             return [ast.copy_location(ast.Pass(), node)]
         return result
+
+    visit_ImportFrom = visit_Import
 
     def _annotation(self, node: ast.AST | None) -> ast.AST | None:
         if node is None:
@@ -719,7 +677,7 @@ class _References(ast.NodeTransformer):
         self.scopes.append(scope)
         eager = self.eager
         self.eager = False
-        node.body = self._body(node.body)
+        node.body = self._body(node.body) or [ast.Pass()]
         self.eager = eager
         self.scopes.pop()
         return node
@@ -744,14 +702,14 @@ class _References(ast.NodeTransformer):
         for node in body:
             value = self.visit(node)
             result.extend(value if isinstance(value, list) else [value] if value else [])
-        return result or [ast.Pass()]
+        return result
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         # A function-local class is kept intact, with its lexical scope preserved.
         node.bases = [self.visit(base) for base in node.bases]
         node.decorator_list = [self.visit(d) for d in node.decorator_list]
         self.scopes.append(_Scope(bound_names(node.body).names, is_class=True))
-        node.body = self._body(node.body)
+        node.body = self._body(node.body) or [ast.Pass()]
         self.scopes.pop()
         return node
 
@@ -856,7 +814,7 @@ class _References(ast.NodeTransformer):
             if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
                 ref = self.module.bindings.get(node.slice.value)
                 if ref:
-                    self.dependency(ref, "literal global lookup")
+                    self.dependency(ref)
                     target = self.r.canonical(ref)
                     if isinstance(target, str):
                         self.error(node, "module namespace identity cannot be embedded")
@@ -872,11 +830,3 @@ class _References(ast.NodeTransformer):
             node.slice = self.visit(node.slice)
             return node
         return self.generic_visit(node)
-
-
-def resolve_symbols(source_root: Path, roots: list[SymbolRef]) -> Selection:
-    """Resolve explicit entry symbols, also useful for isolated compiler tests."""
-    resolver = SymbolResolver(source_root)
-    for ref in roots:
-        resolver.require(ref)
-    return resolver.drain()
