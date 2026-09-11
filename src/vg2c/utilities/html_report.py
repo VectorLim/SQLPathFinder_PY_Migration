@@ -133,7 +133,7 @@ tr th {{ background-color:#f5f5f5; }}
     # ------------------------------------------------------------------
 
     @classmethod
-    def emit_block(cls, block) -> list[str] | None:
+    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         entry = cls._EMIT_DISPATCH.get(report_type)
         if entry is None:

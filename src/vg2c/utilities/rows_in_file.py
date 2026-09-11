@@ -35,7 +35,7 @@ class RowsInFile(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
         from vg2c.utilities.csv_io import CsvIO
         from vg2c.utilities.macro_state import MacroState
 

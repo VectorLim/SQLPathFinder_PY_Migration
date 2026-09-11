@@ -12,6 +12,7 @@ from vg2c.sql_editor.models import (
     SqlSource,
     SqlSpan,
 )
+from vg2c.sql_lexer import SqlToken, lex_sql
 
 SET_OPERATORS = {"UNION", "INTERSECT", "EXCEPT"}
 CLAUSE_WORDS = {
@@ -29,30 +30,20 @@ SIMPLE_JOIN_TYPES = {"INNER", "LEFT", "RIGHT", "FULL", "CROSS"}
 
 
 @dataclass(frozen=True, slots=True)
-class _Token:
-    kind: str
-    text: str
-    upper: str
-    start: int
-    end: int
-    depth: int
-
-
-@dataclass(frozen=True, slots=True)
 class _Clauses:
-    select: _Token
-    from_: _Token | None
-    where: _Token | None
-    group: _Token | None
-    having: _Token | None
-    order: _Token | None
-    limit: _Token | None
-    offset: _Token | None
-    fetch: _Token | None
-    qualify: _Token | None
-    window: _Token | None
+    select: SqlToken
+    from_: SqlToken | None
+    where: SqlToken | None
+    group: SqlToken | None
+    having: SqlToken | None
+    order: SqlToken | None
+    limit: SqlToken | None
+    offset: SqlToken | None
+    fetch: SqlToken | None
+    qualify: SqlToken | None
+    window: SqlToken | None
 
-    def values(self) -> tuple[_Token | None, ...]:
+    def values(self) -> tuple[SqlToken | None, ...]:
         return (
             self.select,
             self.from_,
@@ -74,7 +65,7 @@ def parse_sql(source: str) -> SqlEditableModel:
     if full_span.start >= full_span.end:
         return _replace_model(initial, read_only_reason="SQL is empty.")
 
-    tokens, error = _lex_sql(source)
+    tokens, error = lex_sql(source)
     if error:
         return _replace_model(initial, read_only_reason=error)
 
@@ -160,7 +151,7 @@ def _replace_model(model: SqlEditableModel, *, read_only_reason: str | None) -> 
 
 
 def _choose_editable_statement(
-    tokens: list[_Token], full_span: SqlSpan
+    tokens: list[SqlToken], full_span: SqlSpan
 ) -> tuple[SqlSpan | None, str | None]:
     semicolons = [
         token
@@ -228,7 +219,7 @@ def _empty_model(source: str, statement_span: SqlSpan) -> SqlEditableModel:
 
 def _parse_selections(
     source: str,
-    tokens: list[_Token],
+    tokens: list[SqlToken],
     clauses: _Clauses,
     statement_end: int,
 ) -> tuple[list[SqlSelection], SqlSpan | None, bool, str | None]:
@@ -291,7 +282,9 @@ def _parse_selections(
     )
 
 
-def _parse_selection(source: str, tokens: list[_Token], span: SqlSpan, index: int) -> SqlSelection:
+def _parse_selection(
+    source: str, tokens: list[SqlToken], span: SqlSpan, index: int
+) -> SqlSelection:
     local = [
         token
         for token in tokens
@@ -333,7 +326,7 @@ def _parse_selection(source: str, tokens: list[_Token], span: SqlSpan, index: in
 
 def _parse_where(
     source: str,
-    tokens: list[_Token],
+    tokens: list[SqlToken],
     clauses: _Clauses,
     statement_end: int,
 ) -> tuple[list[SqlPredicate], SqlSpan | None, SqlSpan | None, bool, str | None]:
@@ -355,7 +348,7 @@ def _parse_where(
 
 def _parse_from_and_joins(
     source: str,
-    tokens: list[_Token],
+    tokens: list[SqlToken],
     clauses: _Clauses,
     statement_end: int,
 ) -> tuple[list[SqlJoin], list[SqlSource], SqlSpan | None, bool, str | None]:
@@ -489,7 +482,7 @@ def _parse_from_and_joins(
     return joins, sources, span, True, None
 
 
-def _parse_sources(source: str, tokens: list[_Token], span: SqlSpan) -> list[SqlSource]:
+def _parse_sources(source: str, tokens: list[SqlToken], span: SqlSpan) -> list[SqlSource]:
     if span.start >= span.end:
         return []
     result: list[SqlSource] = []
@@ -523,7 +516,7 @@ def _parse_sources(source: str, tokens: list[_Token], span: SqlSpan) -> list[Sql
 
 
 def _parse_predicate_chain(
-    source: str, tokens: list[_Token], span: SqlSpan, prefix: str
+    source: str, tokens: list[SqlToken], span: SqlSpan, prefix: str
 ) -> list[SqlPredicate]:
     significant = [
         token
@@ -570,7 +563,7 @@ def _parse_predicate_chain(
 
 def _parse_predicate(
     source: str,
-    tokens: list[_Token],
+    tokens: list[SqlToken],
     piece: tuple[SqlSpan, SqlLogicalConnector | None, SqlSpan | None],
     id_: str,
 ) -> SqlPredicate:
@@ -627,7 +620,7 @@ def _parse_predicate(
 
 
 def _find_predicate_operator(
-    tokens: list[_Token],
+    tokens: list[SqlToken],
 ) -> tuple[int, int, str] | None:
     candidates: list[tuple[int, int, str]] = []
     for index, token in enumerate(tokens):
@@ -654,12 +647,12 @@ def _find_predicate_operator(
     return unique[0] if len(unique) == 1 else None
 
 
-def _locate_clauses(significant: list[_Token]) -> _Clauses:
+def _locate_clauses(significant: list[SqlToken]) -> _Clauses:
     top = [token for token in significant if token.depth == 0]
     select = next(token for token in top if token.upper == "SELECT")
     after = [token for token in top if token.start > select.start]
 
-    def find(name: str) -> _Token | None:
+    def find(name: str) -> SqlToken | None:
         return next((token for token in after if token.upper == name), None)
 
     return _Clauses(
@@ -695,7 +688,7 @@ def _next_clause_start(position: int, clauses: _Clauses, fallback: int) -> int:
     return starts[0] if starts else fallback
 
 
-def _split_by_top_level_comma(tokens: list[_Token], span: SqlSpan) -> list[SqlSpan]:
+def _split_by_top_level_comma(tokens: list[SqlToken], span: SqlSpan) -> list[SqlSpan]:
     commas = [
         token
         for token in tokens
@@ -717,7 +710,7 @@ def _split_by_top_level_comma(tokens: list[_Token], span: SqlSpan) -> list[SqlSp
     ]
 
 
-def _trimmed_span_from_tokens(tokens: list[_Token], span: SqlSpan) -> SqlSpan:
+def _trimmed_span_from_tokens(tokens: list[SqlToken], span: SqlSpan) -> SqlSpan:
     significant = [
         token
         for token in tokens
@@ -728,7 +721,7 @@ def _trimmed_span_from_tokens(tokens: list[_Token], span: SqlSpan) -> SqlSpan:
     return SqlSpan(significant[0].start, significant[-1].end)
 
 
-def _join_type_start(tokens: list[_Token], join_token: _Token) -> int:
+def _join_type_start(tokens: list[SqlToken], join_token: SqlToken) -> int:
     index = tokens.index(join_token)
     cursor = index - 1
     start = join_token.start
@@ -748,126 +741,6 @@ def _normalize_join_type(raw: str) -> str:
     return " ".join(words) if words else "INNER"
 
 
-def _lex_sql(source: str) -> tuple[list[_Token], str | None]:
-    tokens: list[_Token] = []
-    index = 0
-    depth = 0
-    while index < len(source):
-        start = index
-        character = source[index]
-
-        if character.isspace():
-            index += 1
-            while index < len(source) and source[index].isspace():
-                index += 1
-            tokens.append(_token("whitespace", source, start, index, depth))
-            continue
-
-        if source.startswith("--", index):
-            index += 2
-            while index < len(source) and source[index] != "\n":
-                index += 1
-            tokens.append(_token("comment", source, start, index, depth))
-            continue
-
-        if source.startswith("/*", index):
-            close = source.find("*/", index + 2)
-            if close < 0:
-                return tokens, "SQL contains an unterminated block comment."
-            index = close + 2
-            tokens.append(_token("comment", source, start, index, depth))
-            continue
-
-        if character == "'":
-            index += 1
-            closed = False
-            while index < len(source):
-                if source[index] == "'":
-                    if index + 1 < len(source) and source[index + 1] == "'":
-                        index += 2
-                        continue
-                    index += 1
-                    closed = True
-                    break
-                index += 1
-            if not closed:
-                return tokens, "SQL contains an unterminated string literal."
-            tokens.append(_token("string", source, start, index, depth))
-            continue
-
-        if character in {'"', "`", "["}:
-            close_character = "]" if character == "[" else character
-            index += 1
-            closed = False
-            while index < len(source):
-                if source[index] == close_character:
-                    if (
-                        character != "["
-                        and index + 1 < len(source)
-                        and source[index + 1] == close_character
-                    ):
-                        index += 2
-                        continue
-                    if character == "[" and index + 1 < len(source) and source[index + 1] == "]":
-                        index += 2
-                        continue
-                    index += 1
-                    closed = True
-                    break
-                index += 1
-            if not closed:
-                return tokens, "SQL contains an unterminated quoted identifier."
-            tokens.append(_token("quoted", source, start, index, depth))
-            continue
-
-        if character.isalpha() or character in "_$#@":
-            index += 1
-            while index < len(source) and (source[index].isalnum() or source[index] in "_$#@"):
-                index += 1
-            tokens.append(_token("word", source, start, index, depth))
-            continue
-
-        if character.isdigit():
-            index += 1
-            while index < len(source) and (source[index].isdigit() or source[index] in ".eE+-"):
-                index += 1
-            tokens.append(_token("number", source, start, index, depth))
-            continue
-
-        two = source[index : index + 2]
-        if two in {"<=", ">=", "<>", "!=", "||", "::", "->"}:
-            index += 2
-            tokens.append(_token("operator", source, start, index, depth))
-            continue
-
-        if character == "(":
-            tokens.append(_token("symbol", source, start, start + 1, depth))
-            depth += 1
-            index += 1
-            continue
-
-        if character == ")":
-            depth -= 1
-            if depth < 0:
-                return tokens, "SQL contains an unmatched closing parenthesis."
-            tokens.append(_token("symbol", source, start, start + 1, depth))
-            index += 1
-            continue
-
-        kind = "operator" if character in "=<>+-*/%" else "symbol"
-        index += 1
-        tokens.append(_token(kind, source, start, index, depth))
-
-    if depth != 0:
-        return tokens, "SQL contains unmatched parentheses."
-    return tokens, None
-
-
-def _token(kind: str, source: str, start: int, end: int, depth: int) -> _Token:
-    text = source[start:end]
-    return _Token(kind, text, text.upper(), start, end, depth)
-
-
 def _trimmed_span(source: str, span: SqlSpan) -> SqlSpan:
     start = max(0, span.start)
     end = min(len(source), span.end)
@@ -878,15 +751,15 @@ def _trimmed_span(source: str, span: SqlSpan) -> SqlSpan:
     return SqlSpan(start, end)
 
 
-def _is_trivia(token: _Token) -> bool:
+def _is_trivia(token: SqlToken) -> bool:
     return token.kind in {"whitespace", "comment"}
 
 
-def _overlaps(token: _Token, span: SqlSpan) -> bool:
+def _overlaps(token: SqlToken, span: SqlSpan) -> bool:
     return token.end > span.start and token.start < span.end
 
 
-def _is_identifier_token(token: _Token) -> bool:
+def _is_identifier_token(token: SqlToken) -> bool:
     return token.kind in {"word", "quoted"}
 
 

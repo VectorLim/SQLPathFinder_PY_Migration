@@ -39,7 +39,7 @@ class ExternalProcess(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def emit_block(cls, block) -> list[str] | None:
+    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
         argv = cls._utility_argv(block)
         if not argv:
             return ["pass  # TODO: empty external utility command"]

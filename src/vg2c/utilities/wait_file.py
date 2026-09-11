@@ -50,7 +50,7 @@ class WaitFile(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]]:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]]:
         argv = cls._utility_argv(block)
         # argv[0] = tool path, argv[1] = file path, argv[2] = timeout seconds
         path_expr = to_code_expr(argv[1] if len(argv) > 1 else "")

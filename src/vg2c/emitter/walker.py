@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from vg2c.dispatch.models import DispatchedProgram
+from vg2c.emitter.globals import GlobalValues
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import StepEmission
 from vg2c.logger import Logger
@@ -15,7 +16,12 @@ __all__ = ["walk_and_emit"]
 log = Logger.getLogger("vg2c.emitter.walker")
 
 
-def walk_and_emit(dispatched: DispatchedProgram) -> tuple[list[StepEmission], str]:
+def walk_and_emit(
+    dispatched: DispatchedProgram,
+    *,
+    collected: GlobalValues | None = None,
+    reserved: set[str] | frozenset[str] = frozenset(),
+) -> tuple[list[StepEmission], str]:
     """Walk the scope tree and return emitted steps plus the run() body."""
     block_by_index = {b.index: b for b in dispatched.analyzed.resolved.blocks}
     dispatch_map = {db.index: db for db in dispatched.dispatched}
@@ -29,6 +35,8 @@ def walk_and_emit(dispatched: DispatchedProgram) -> tuple[list[StepEmission], st
         block_by_index,
         writer,
         steps,
+        collected,
+        reserved,
     )
 
     return steps, writer.source()
@@ -40,11 +48,13 @@ def _walk_scope(
     block_by_index: dict[int, ResolvedBlock],
     writer: IndentWriter,
     steps: list[StepEmission],
+    collected: GlobalValues | None,
+    reserved: set[str] | frozenset[str],
 ) -> None:
     """Recursively walk scope structure; leaf semantics stay with UtilitySpec."""
 
     def walk(child: ScopeNode) -> None:
-        _walk_scope(child, dispatch_map, block_by_index, writer, steps)
+        _walk_scope(child, dispatch_map, block_by_index, writer, steps, collected, reserved)
 
     if node.kind == "leaf":
         block_index = node.block_index
@@ -56,7 +66,7 @@ def _walk_scope(
             return
 
         try:
-            step = UtilitySpec.dispatch_and_emit(block)
+            step = UtilitySpec.dispatch_and_emit(block, collected=collected, reserved=reserved)
             steps.append(step)
             writer.write(step.call_site)
         except Exception as exc:

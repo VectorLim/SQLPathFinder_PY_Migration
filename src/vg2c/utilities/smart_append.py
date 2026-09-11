@@ -30,7 +30,7 @@ class SmartAppend(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]]:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]]:
         argv = split_utility_command(block.resolved_options.lookup.get("UTILITIES", ""))
         destination = to_code_expr(argv[1] if len(argv) > 1 else "")
         source = to_code_expr(argv[2] if len(argv) > 2 else "")

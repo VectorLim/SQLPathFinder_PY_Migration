@@ -63,17 +63,26 @@ def project_changes(
     """Project parameter intent onto canonical emitted source without writing files."""
     requested = tuple(changes)
     parameters = {
-        parameter.id: parameter
-        for step in result.emitted.steps
-        for parameter in step.parameters
+        parameter.id: parameter for step in result.emitted.steps for parameter in step.parameters
     }
     issues: list[ValidationIssue] = []
-    replacements: list[tuple[int, int, str]] = []
+    replacements: dict[tuple[int, int], str] = {}
     accepted: list[ParameterChange] = []
-    seen: set[str] = set()
+    seen: dict[str, str] = {}
 
     for change in requested:
         if change.parameter_id in seen:
+            if change.parameter_id.startswith("global:"):
+                if seen[change.parameter_id] == repr(change.value):
+                    continue
+                issues.append(
+                    ValidationIssue(
+                        code="conflicting-global-change",
+                        message="Steps sharing a global must use the same value.",
+                        parameter_id=change.parameter_id,
+                    )
+                )
+                continue
             issues.append(
                 ValidationIssue(
                     code="duplicate-change",
@@ -82,7 +91,7 @@ def project_changes(
                 )
             )
             continue
-        seen.add(change.parameter_id)
+        seen[change.parameter_id] = repr(change.value)
         parameter = parameters.get(change.parameter_id)
         if parameter is None:
             issues.append(
@@ -98,17 +107,12 @@ def project_changes(
             issues.append(issue)
             continue
         serialized = _serialize(parameter, change.value)
-        replacements.append(
-            (
-                parameter.source_range.start_offset,
-                parameter.source_range.end_offset,
-                serialized,
-            )
-        )
+        span = (parameter.source_range.start_offset, parameter.source_range.end_offset)
+        replacements[span] = serialized
         accepted.append(change)
 
     candidate = result.emitted.source
-    for start, end, replacement in sorted(replacements, reverse=True):
+    for (start, end), replacement in sorted(replacements.items(), reverse=True):
         candidate = f"{candidate[:start]}{replacement}{candidate[end:]}"
 
     if not issues:
@@ -125,9 +129,7 @@ def project_changes(
     )
 
 
-def preview_changes(
-    result: CompilationResult, changes: Iterable[ParameterChange]
-) -> ChangePreview:
+def preview_changes(result: CompilationResult, changes: Iterable[ParameterChange]) -> ChangePreview:
     projection = project_changes(result, changes)
     diff = "".join(
         difflib.unified_diff(
@@ -150,9 +152,7 @@ def apply_changes(
     return projection
 
 
-def _validate_value(
-    parameter: EmittedParameter, value: Any
-) -> ValidationIssue | None:
+def _validate_value(parameter: EmittedParameter, value: Any) -> ValidationIssue | None:
     if not parameter.editable:
         return ValidationIssue(
             code="read-only-parameter",

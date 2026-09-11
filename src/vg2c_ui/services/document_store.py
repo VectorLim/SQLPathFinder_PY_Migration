@@ -339,10 +339,10 @@ def _merge_changes(
     base: Iterable[ParameterChange],
     overrides: Iterable[ParameterChange],
 ) -> list[ParameterChange]:
-    result: dict[str, ParameterChange] = {item.parameter_id: item for item in base}
-    for item in overrides:
-        result[item.parameter_id] = item
-    return list(result.values())
+    requested = list(overrides)
+    overridden = {item.parameter_id for item in requested}
+    # Preserve duplicate requests so core validation can reject conflicting shared edits.
+    return [item for item in base if item.parameter_id not in overridden] + requested
 
 
 def _issue_view(issue: ValidationIssue) -> ValidationIssueView:

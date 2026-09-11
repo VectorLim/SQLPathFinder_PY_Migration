@@ -109,7 +109,7 @@ def test_included_utility_keeps_every_emittable_method(utility):
     assert operations <= methods(source, utility.__name__)
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            assert node.name not in {"check", "emit_block"}
+            assert node.name not in {"check", "emit_block", "extract_globals"}
             assert not node.name.startswith("_emit_")
         if isinstance(node, ast.Name):
             assert node.id not in {
@@ -131,19 +131,22 @@ def test_included_utility_keeps_every_emittable_method(utility):
 
 
 @pytest.mark.parametrize(
-    ("fixture", "context_keys", "reader"),
+    ("fixture", "context_keys", "reader", "sql_globals"),
     [
-        ("script_short.txt", "crosstab csv_io macro", True),
-        ("script_another.txt", "crosstab csv_io external macro", False),
-        ("html_test.txt", "csv_io fs_ops html_report macro", False),
+        ("script_short.txt", "crosstab csv_io macro", True, False),
+        ("script_another.txt", "crosstab csv_io external macro", False, True),
+        ("html_test.txt", "csv_io fs_ops html_report macro", False, False),
         (
             "maxlidheight.txt",
             "crosstab csv_io email external fs_ops html_report macro smart_append",
             True,
+            True,
         ),
     ],
 )
-def test_api_retention_preserves_workflow_utility_selection(fixture, context_keys, reader):
+def test_api_retention_preserves_workflow_utility_selection(
+    fixture, context_keys, reader, sql_globals
+):
     emitted = compile_document(Path(__file__).parents[1] / "fixtures" / fixture).emitted
     tree = ast.parse(emitted.source)
     context = next(
@@ -159,4 +162,7 @@ def test_api_retention_preserves_workflow_utility_selection(fixture, context_key
     }
     if reader:
         expected_classes.add("SqliteReader")
+    if sql_globals:
+        expected_classes.add("SqliteEngine")
+        assert methods(emitted.source, "SqliteEngine") == {"global_sql"}
     assert {node.name for node in tree.body if isinstance(node, ast.ClassDef)} == expected_classes

@@ -13,6 +13,8 @@ from vg2c.emitter.models import (
 from vg2c.kind import Kind
 
 if TYPE_CHECKING:
+    from vg2c.emitter.globals import GlobalValues
+    from vg2c.emitter.models import CodeExpr
     from vg2c.frontend.models import BlockOptions
 
 
@@ -83,8 +85,15 @@ class UtilitySpec(ABC):
         return raw.definition(utility) if isinstance(raw, emittable) else None
 
     @staticmethod
-    def emit_block(block: Any) -> list[str] | tuple[str, list[str]] | None:
+    def emit_block(
+        block: Any, *, global_refs: dict[str, CodeExpr] | None = None
+    ) -> list[str] | tuple[str, list[str]] | None:
         return None
+
+    @classmethod
+    def extract_globals(cls, block: Any) -> dict[str, object]:
+        """Select configurable literals; extraction remains owned by each utility."""
+        return {}
 
     @staticmethod
     def _step_name(block: Any, suffix: str) -> str:
@@ -110,10 +119,23 @@ class UtilitySpec(ABC):
         )
 
     @classmethod
-    def dispatch_and_emit(cls, block: Any) -> StepEmission:
+    def dispatch_and_emit(
+        cls,
+        block: Any,
+        *,
+        collected: GlobalValues | None = None,
+        reserved: set[str] | frozenset[str] = frozenset(),
+    ) -> StepEmission:
         handler_cls = cls._emit_handlers.get(block.kind)
         if handler_cls is not None:
-            emitted = handler_cls.emit_block(block)
+            from vg2c.emitter.globals import resolve_globals
+
+            global_refs = {}
+            if collected is not None:
+                global_refs = resolve_globals(
+                    handler_cls.extract_globals(block), collected, block.index, reserved
+                )
+            emitted = handler_cls.emit_block(block, global_refs=global_refs)
             if emitted is not None:
                 wrapped = cls._wrap_in_step(handler_cls, block, emitted)
                 if wrapped is not None:
@@ -145,7 +167,9 @@ class EmitterUtility(UtilitySpec):
 
     @classmethod
     @abstractmethod
-    def emit_block(cls, block: Any) -> list[str] | tuple[str, list[str]] | None:
+    def emit_block(
+        cls, block: Any, *, global_refs: dict[str, CodeExpr] | None = None
+    ) -> list[str] | tuple[str, list[str]] | None:
         raise NotImplementedError
 
     @classmethod
