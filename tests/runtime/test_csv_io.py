@@ -144,6 +144,19 @@ def test_write_dataframe_reindexed_to_header(tmp_path):
     assert lines[2] == "4,5,6"
 
 
+def test_write_dataframe_matches_header_case_insensitively(tmp_path):
+    """Keep legacy header spelling when reader columns have been normalized."""
+    import pandas as pd
+
+    csv_io = CsvIO()
+    df = pd.DataFrame({"interposer_sli": ["IB"], "patch_sli": ["AS"]})
+    out = str(tmp_path / "case_preserved.csv")
+    csv_io.write(out, df, header=["Interposer_SLI", "Patch_SLI"])
+
+    lines = Path(out).read_text(encoding="utf-8").splitlines()
+    assert lines == ["Interposer_SLI,Patch_SLI", "IB,AS"]
+
+
 def test_write_dataframe_fills_missing_columns(tmp_path):
     """When declared header includes columns not in DataFrame, fill with empty."""
     import pandas as pd

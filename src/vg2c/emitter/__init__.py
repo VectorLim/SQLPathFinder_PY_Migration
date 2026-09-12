@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import ast
-import inspect
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from vg2c import kind as kind_module
+from vg2c.emitter.globals import GlobalValues, render_globals
 from vg2c.emitter.indent_writer import IndentWriter
-from vg2c.emitter.models import EmittedScript, finalize_steps
+from vg2c.emitter.models import EmittedScript, SourceRange, finalize_steps
 
 if TYPE_CHECKING:
     from vg2c.dispatch.models import DispatchedBlock, DispatchedProgram, ReaderSpec
@@ -54,35 +54,39 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5: emit Python and the edit/semantic manifest at the same time."""
     from vg2c.emitter.walker import walk_and_emit
     from vg2c.logger import Logger
-    from vg2c.utilities import assemble_all_utilities
+    from vg2c.utilities import assemble_utilities
+    from vg2c.utilities._symbol_index import bound_names
 
     log = Logger.getLogger("vg2c.emitter")
-    reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(
-        dispatched.dispatched
+    reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(dispatched.dispatched)
+    collected: GlobalValues = {}
+    step_emissions, run_body = walk_and_emit(dispatched, collected=collected)
+    default_site = _first_literal_site(dispatched)
+    setup = ["Logger.basicConfig(level=Logger.INFO)", "OracleClient.configure()"]
+    if default_site:
+        run_body = f'ctx.macro.set_named("NODE", {default_site!r})\n' + run_body
+    workflow_source = "def run(ctx):\n" + "\n".join(
+        "    " + line for line in [*setup, *run_body.splitlines()]
     )
-    required_kinds = frozenset(b.kind for b in dispatched.analyzed.resolved.blocks)
-    utility_imports, utility_sources = assemble_all_utilities(
-        required_kinds=required_kinds,
-        extra_root_names=frozenset(forced_utility_names),
+    embedded = assemble_utilities(
+        step_emissions=step_emissions,
+        workflow_source=workflow_source,
+        reader_names=forced_utility_names,
+        reader_imports=reader_imports,
     )
-    log.debug(
-        "Assembled %d utility sources and %d utility imports.",
-        len(utility_sources),
-        len(utility_imports),
-    )
-
-    step_emissions, run_body = walk_and_emit(dispatched)
-    log.debug("Walker emitted %d helper functions.", len(step_emissions))
-
-    kind_source = "\n".join(
-        line
-        for line in inspect.getsource(kind_module).splitlines()
-        if not line.startswith(("import ", "from "))
-    )
-
-    imports = set(utility_imports)
-    imports.add("from enum import Enum")
-    imports.update(reader_imports)
+    imports = set(embedded.imports)
+    reserved = bound_names(ast.parse("\n".join([*imports, *embedded.sources])).body).names
+    if reserved.intersection(name for group in collected.values() for name in group):
+        # Only names change; runtime dependencies and workflow call sites stay identical.
+        collected.clear()
+        step_emissions, _ = walk_and_emit(dispatched, collected=collected, reserved=reserved)
+    used_globals = {
+        name
+        for step in step_emissions
+        for invocation in step.invocations
+        for argument in invocation.arguments
+        for name in argument.global_names
+    }
 
     script_writer = IndentWriter()
     script_writer.write("# Auto-generated Python script from VG2")
@@ -93,10 +97,14 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
         script_writer.write(imp)
     script_writer.write("")
 
-    script_writer.write_block(kind_source)
-    script_writer.write("")
+    globals_source, global_parameters = render_globals(
+        collected, used_globals, len(script_writer.source()) + 1
+    )
+    if globals_source:
+        script_writer.write_block(globals_source)
+        script_writer.write("")
 
-    for utility_source in utility_sources:
+    for utility_source in embedded.sources:
         script_writer.write_block(utility_source)
         script_writer.write("")
 
@@ -111,10 +119,9 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     script_writer.write(WORKFLOW_START)
     script_writer.write("def run() -> None:")
     script_writer.push_indent()
-    script_writer.write("ctx = PipelineContext()")
-    default_site = _first_literal_site(dispatched)
-    if default_site:
-        script_writer.write(f'ctx.macro.set_named("NODE", {default_site!r})')
+    for line in setup:
+        script_writer.write(line)
+    script_writer.write(f"ctx = {embedded.context_expression}")
     script_writer.write_block(run_body)
     script_writer.pop_indent()
     script_writer.write(WORKFLOW_END)
@@ -148,8 +155,19 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
             f"Generated script has syntax error at line {exc.lineno}: {exc.msg}"
         )
 
-    steps = finalize_steps(source, step_emissions)
-    return EmittedScript(source=source, imports=tuple(imports), steps=steps)
+    prefix_length = len(source) - len(body_source)
+    global_parameters = {
+        name: replace(
+            parameter,
+            source_range=SourceRange(
+                parameter.source_range.start_offset + prefix_length,
+                parameter.source_range.end_offset + prefix_length,
+            ),
+        )
+        for name, parameter in global_parameters.items()
+    }
+    steps = finalize_steps(source, step_emissions, global_parameters)
+    return EmittedScript(source=source, imports=tuple(sorted(imports)), steps=steps)
 
 
 def _sql_filter_comment_lines(

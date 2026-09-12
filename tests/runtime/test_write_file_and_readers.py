@@ -6,10 +6,17 @@ from pathlib import Path
 
 import pytest
 
+from vg2c.utilities import assemble_utilities
 from vg2c.utilities.macro_state import MacroState
 from vg2c.utilities.pipeline_context import PipelineContext
 
-PIPELINE_CONTEXT_SNIPPET = PipelineContext.get_source()
+PIPELINE_CONTEXT_SNIPPET = "\n".join(
+    assemble_utilities(
+        step_emissions=(),
+        workflow_source="def run(ctx): ctx.run_query('', '', None)",
+        reader_names=set(),
+    ).sources
+)
 
 # --- MacroState.substitute and FileSystemOps/PipelineContext write_file ---
 
@@ -47,7 +54,9 @@ def test_fs_ops_write_file_auto_mkdir(tmp_path):
 
 
 def test_pipeline_context_write_file(tmp_path):
-    ctx = PipelineContext()
+    from vg2c.utilities.fs_ops import FileSystemOps
+
+    ctx = PipelineContext({"macro": MacroState(), "fs_ops": FileSystemOps()})
     out = str(tmp_path / "ctx_out.txt")
     ctx.macro.set_named("USER", "Bob")
     ctx.write_file(out, "hello <<<USER>>>")

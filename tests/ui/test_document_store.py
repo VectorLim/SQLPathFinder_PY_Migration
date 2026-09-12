@@ -48,6 +48,36 @@ def _batch(document: DocumentView, parameter_id: str, value: str) -> ChangeBatch
     )
 
 
+def test_shared_global_edits_persist_across_steps(tmp_path):
+    source = tmp_path / "shared.txt"
+    source.write_text(
+        (
+            "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT * FROM t WHERE lot = '1'\n"
+            "<---- New Query ---->\n"
+        )
+        * 2,
+        encoding="utf-8",
+    )
+    store = DocumentStore(tmp_path)
+    document = store.translate(str(source)).view
+    globals = [p for step in document.steps for p in step.parameters if p.name == "LOT"]
+    assert len(globals) == 2 and globals[0].id == globals[1].id
+    batch = _batch(document, globals[0].id, "2")
+    assert store.preview(batch).valid
+    store.apply(batch)
+    reopened = store.open_document(source).view
+    assert reopened.synchronized
+    assert [p.value for step in reopened.steps for p in step.parameters if p.name == "LOT"] == [
+        "2",
+        "2",
+    ]
+    conflicting = _batch(reopened, globals[0].id, "3")
+    conflicting.changes.append(ParameterChangeRequest(parameter_id=globals[1].id, value="4"))
+    preview = store.preview(conflicting)
+    assert not preview.valid
+    assert preview.issues[0].code == "conflicting-global-change"
+
+
 def test_api_exposes_only_current_transport_routes(tmp_path):
     paths = set(create_app(tmp_path).openapi()["paths"])
     assert "/api/documents/open" in paths
@@ -70,9 +100,7 @@ def test_translation_starts_without_editor_sidecar(tmp_path):
 def test_batch_translation_resolves_out_dir_to_output_files(tmp_path):
     source = _copy_fixture(tmp_path)
     store = DocumentStore(tmp_path)
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(document_store=store))
-    )
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(document_store=store)))
     response = translate_batch(
         BatchTranslationRequest(
             source_paths=[source.name],
@@ -111,10 +139,7 @@ def test_parameter_change_uses_core_preview_apply_and_reopens_with_effective_val
     assert applied.document.revision != document.revision
     reopened = store.open_document(source, document.output_path).view
     reopened_parameter = next(
-        item
-        for step in reopened.steps
-        for item in step.parameters
-        if item.id == parameter.id
+        item for step in reopened.steps for item in step.parameters if item.id == parameter.id
     )
     assert reopened_parameter.value == "edited by script editor"
     with pytest.raises(RevisionConflict):

@@ -175,4 +175,5 @@ secrets.yaml
 secrets.yml
 .secrets
 
-/docs
+/docs/*
+!/docs/symbol-dependency-resolution.md

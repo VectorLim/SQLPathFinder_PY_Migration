@@ -5,7 +5,6 @@ from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import PurePosixPath
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 from vg2c.dataflow.models import (
     AnalyzedProgram,
@@ -24,23 +23,22 @@ from vg2c.resolver.models import (
     ResolvedBlock,
     ResolvedProgram,
 )
-
-if TYPE_CHECKING:
-    from vg2c.utilities.csv_io import CsvIO
+from vg2c.utilities._emit_helpers import (
+    SqlGetCsvListCall,
+    parse_table_binding,
+    scan_sql_get_csv_list_calls,
+)
 
 _CSV_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:csv|tab|txt)", re.IGNORECASE)
 _SQL_SCANNED_KINDS = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
 
 
 def analyze(resolved: ResolvedProgram) -> AnalyzedProgram:
-    # Lazy import to avoid circular dependency: dataflow→utilities→emitter→dispatch→dataflow
-    from vg2c.utilities.csv_io import CsvIO
-
-    calls_by_block: dict[int, tuple[CsvIO.SqlGetCsvListCall, ...]] = {}
+    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]] = {}
     for block in resolved.blocks:
         if block.kind not in _SQL_SCANNED_KINDS:
             continue
-        calls = tuple(CsvIO.scan_sql_get_csv_list_calls(block.resolved_body))
+        calls = tuple(scan_sql_get_csv_list_calls(block.resolved_body))
         if calls:
             calls_by_block[block.index] = calls
 
@@ -77,9 +75,7 @@ def analyze_records(
         if producer is None:
             producer = _choose_external_candidate(consumer, external_records)
 
-        scope_relation, order_ok = _classify_edge_relation(
-            producer, consumer, scope_rel
-        )
+        scope_relation, order_ok = _classify_edge_relation(producer, consumer, scope_rel)
         edges.append(
             DataflowEdge(
                 csv_path=consumer.csv_path,
@@ -118,9 +114,7 @@ def _collect_explicit_producers(
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
-                    is_in_loop=scope_rel.is_under_kind(
-                        block.scope_id, {"macro", "loop"}
-                    ),
+                    is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro", "loop"}),
                 )
             )
 
@@ -160,9 +154,7 @@ def _collect_external_utility_candidates(
                     is_conditional=scope_rel.is_under_kind(
                         block.scope_id, {"if-branch", "else-branch"}
                     ),
-                    is_in_loop=scope_rel.is_under_kind(
-                        block.scope_id, {"macro", "loop"}
-                    ),
+                    is_in_loop=scope_rel.is_under_kind(block.scope_id, {"macro", "loop"}),
                 )
             )
     return candidates
@@ -170,20 +162,19 @@ def _collect_external_utility_candidates(
 
 def _collect_consumers(
     blocks: list[ResolvedBlock],
-    calls_by_block: dict[int, tuple[CsvIO.SqlGetCsvListCall, ...]],
+    calls_by_block: dict[int, tuple[SqlGetCsvListCall, ...]],
 ) -> list[ConsumerRecord]:
     consumers: list[ConsumerRecord] = []
     for block in blocks:
         for key, value in block.resolved_options.pairs:
             if key == "TABLE":
-                table_items = [
-                    item.strip() for item in value.split(",") if item.strip()
-                ]
+                table_items = [item.strip() for item in value.split(",") if item.strip()]
                 for table_item in table_items:
+                    csv_path, _ = parse_table_binding(table_item)
                     consumers.append(
                         ConsumerRecord(
                             block_index=block.index,
-                            csv_path=_normalize_csv_path(table_item),
+                            csv_path=_normalize_csv_path(csv_path),
                             scope_id=block.scope_id,
                             consumer_kind="table",
                         )
@@ -196,9 +187,7 @@ def _collect_consumers(
             payload_csv_path = payload.csv_path
             consumer_kind = "start-macro"
         elif block.kind == Kind.ROWS_IN_FILE:
-            args = re.findall(
-                r'"([^"]*)"', block.resolved_options.lookup.get("UTILITIES", "")
-            )
+            args = re.findall(r'"([^"]*)"', block.resolved_options.lookup.get("UTILITIES", ""))
             if args:
                 payload_csv_path = args[0]
                 consumer_kind = "rows-in-file"
@@ -278,11 +267,7 @@ def _classify_edge_relation(
     elif scope_rel.is_ancestor(producer.scope_id, consumer.scope_id):
         relation = "consumer-deeper"
     elif scope_rel.is_ancestor(consumer.scope_id, producer.scope_id):
-        relation = (
-            "producer-deeper-loop"
-            if producer.is_in_loop
-            else "producer-in-other-branch"
-        )
+        relation = "producer-deeper-loop" if producer.is_in_loop else "producer-in-other-branch"
     else:
         relation = "producer-in-other-branch"
 

@@ -10,8 +10,8 @@ from typing import Any
 from vg2c.emitter.models import CodeExpr, emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import resolve_path
-from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import to_code_expr
+from vg2c.utilities._runtime_helpers import resolve_path
 
 
 class HtmlReport(EmitterUtility):
@@ -133,7 +133,7 @@ tr th {{ background-color:#f5f5f5; }}
     # ------------------------------------------------------------------
 
     @classmethod
-    def emit_block(cls, block) -> list[str] | None:
+    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
         entry = cls._EMIT_DISPATCH.get(report_type)
         if entry is None:
@@ -144,7 +144,7 @@ tr th {{ background-color:#f5f5f5; }}
         for key in keys:
             val = block.resolved_options.lookup.get(key)
             if val is not None:
-                kwargs[key.lower().replace("-", "_")] = MacroState.to_code_expr(val)
+                kwargs[key.lower().replace("-", "_")] = to_code_expr(val)
         if needs_template:
             kwargs["template"] = block.resolved_body
 

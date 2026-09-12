@@ -25,17 +25,15 @@ from typing import Any
 
 import keyring
 
-from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
-from vg2c.logger import Logger
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
+    list_code_expr,
     split_utility_command,
-    strip_quotes,
+    to_code_expr,
 )
-from vg2c.utilities.macro_state import MacroState
-
-log = Logger.getLogger("vg2c.emitter.mail")
+from vg2c.utilities._runtime_helpers import strip_quotes
 
 
 class MailService(EmitterUtility):
@@ -68,14 +66,27 @@ class MailService(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block: Any) -> list[str] | None:
+    def emit_block(cls, block: Any, *, global_refs=None) -> list[str] | None:
         argv = cls._utility_argv(block)
         if not cls._is_mail_utility(argv):
             return None
-        stmt = cls._emit_send(argv, block.resolved_body)
-        if stmt is None:
+        kwargs = cls._send_kwargs(argv, block.resolved_body)
+        if kwargs is None:
             return ["pass  # TODO: unsupported email utility command"]
-        return [stmt]
+        for field in ("to", "subject"):
+            key = f"EMAIL_{field.upper()}"
+            if global_refs and key in global_refs:
+                kwargs[field] = global_refs[key]
+        return [cls.send.render(**kwargs)]
+
+    @classmethod
+    def extract_globals(cls, block: Any) -> dict[str, object]:
+        kwargs = cls._send_kwargs(cls._utility_argv(block), block.resolved_body) or {}
+        return {
+            f"EMAIL_{field.upper()}": kwargs[field].value
+            for field in ("to", "subject")
+            if field in kwargs and kwargs[field].has_value
+        }
 
     @staticmethod
     def _utility_argv(block: Any) -> list[str]:
@@ -92,12 +103,8 @@ class MailService(EmitterUtility):
     def _csv_items(value: str) -> list[str]:
         return [p.strip() for p in strip_quotes(value).split(",") if p.strip()]
 
-    @staticmethod
-    def _list_expr(values: list[str]) -> CodeExpr:
-        return MacroState.list_code_expr(values)
-
     @classmethod
-    def _emit_send(cls, argv: list[str], body_fallback: str) -> str | None:
+    def _send_kwargs(cls, argv: list[str], body_fallback: str) -> dict[str, Any] | None:
         payload = argv[1:]
 
         if len(payload) >= 5:
@@ -106,22 +113,22 @@ class MailService(EmitterUtility):
             body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
 
             kwargs: dict[str, Any] = {
-                "to": MacroState.to_code_expr(payload[4]),
-                "subject": MacroState.to_code_expr(payload[2]),
-                "body": MacroState.to_code_expr(body),
+                "to": to_code_expr(payload[4]),
+                "subject": to_code_expr(payload[2]),
+                "body": to_code_expr(body),
             }
             if attachments:
-                kwargs["attachments"] = cls._list_expr(attachments)
+                kwargs["attachments"] = list_code_expr(attachments)
             if from_addr and from_addr.lower() != "self":
-                kwargs["from_addr"] = MacroState.to_code_expr(from_addr)
-            return cls.send.render(**kwargs)
+                kwargs["from_addr"] = to_code_expr(from_addr)
+            return kwargs
 
         if len(payload) >= 3:
-            return cls.send.render(
-                to=MacroState.to_code_expr(payload[0]),
-                subject=MacroState.to_code_expr(payload[1]),
-                body=MacroState.to_code_expr(payload[2]),
-            )
+            return {
+                "to": to_code_expr(payload[0]),
+                "subject": to_code_expr(payload[1]),
+                "body": to_code_expr(payload[2]),
+            }
 
         return None
 

@@ -44,7 +44,7 @@ def topological_sort(
     if len(ordered) != len(nodes):
         cycle_members = sorted(name for name, degree in indegree.items() if degree > 0)
         raise ValueError(
-            "Dependency cycle detected among utilities: " + " -> ".join(cycle_members)
+            "Dependency cycle detected: " + " -> ".join(cycle_members)
         )
 
     return ordered

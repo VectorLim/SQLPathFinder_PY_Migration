@@ -7,14 +7,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import (
-    normalize_macro_name,
-    resolve_path,
-    strip_quotes,
-)
+from vg2c.utilities._runtime_helpers import normalize_macro_name, resolve_path
 
 
 class MacroState(EmitterUtility):
@@ -38,62 +34,7 @@ class MacroState(EmitterUtility):
         return None
 
     @classmethod
-    def to_py_expr(cls, value: str | None) -> str:
-        if value is None:
-            return "None"
-        return cls.placeholders_to_python_expr(strip_quotes(value))
-
-    @classmethod
-    def to_code_expr(cls, value: str | None) -> CodeExpr:
-        if value is None:
-            return CodeExpr("None")
-        text = strip_quotes(value)
-        source = cls.placeholders_to_python_expr(text)
-        if cls.PLACEHOLDER_RE.search(text):
-            return CodeExpr(source)
-        return CodeExpr(source, text)
-
-    @classmethod
-    def list_code_expr(cls, values: list[str]) -> CodeExpr:
-        items = [cls.to_code_expr(value) for value in values]
-        source = "[" + ", ".join(item.source for item in items) + "]"
-        if all(item.has_value for item in items):
-            return CodeExpr(source, [item.value for item in items])
-        return CodeExpr(source)
-
-    @classmethod
-    def placeholders_to_python_expr(cls, text: str) -> str:
-        if not text:
-            return repr("")
-
-        parts: list[str] = []
-        cursor = 0
-
-        for match in cls.PLACEHOLDER_RE.finditer(text):
-            literal = text[cursor : match.start()]
-            if literal:
-                parts.append(repr(literal))
-
-            named = match.group(1)
-            if named is not None:
-                parts.append(cls.named.render(normalize_macro_name(named)))
-            else:
-                parts.append(cls.positional.render())
-
-            cursor = match.end()
-
-        tail = text[cursor:]
-        if tail:
-            parts.append(repr(tail))
-
-        if not parts:
-            return repr(text)
-        if len(parts) == 1:
-            return parts[0]
-        return " + ".join(parts)
-
-    @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
         return "macro_control", ["pass"]
 
     def __init__(self) -> None:

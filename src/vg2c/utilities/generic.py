@@ -15,5 +15,5 @@ class UnknownUtility(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block) -> list[str] | None:
+    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
         return ["pass  # TODO: utility command not classified"]

@@ -16,6 +16,7 @@ class Kind(str, Enum):  # noqa: UP042 - preserve existing Enum string semantics
     EMAIL = "EMAIL"
     MACRO_CONTROL = "MACRO_CONTROL"
     ROWS_IN_FILE = "ROWS_IN_FILE"
+    SMART_APPEND = "SMART_APPEND"
     UNKNOWN = "UNKNOWN"
 
     @property

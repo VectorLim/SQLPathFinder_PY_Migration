@@ -51,7 +51,7 @@ def test_translate_selected_file_to_output_directory(tmp_path):
     assert out_file.exists()
     text = out_file.read_text(encoding="utf-8")
     assert "def run() -> None:" in text
-    assert "ctx = PipelineContext()" in text
+    assert "ctx = PipelineContext({" in text
 
 
 def test_translate_defaults_output_to_input_directory(tmp_path):

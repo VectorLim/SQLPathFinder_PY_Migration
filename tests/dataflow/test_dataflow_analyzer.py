@@ -56,6 +56,19 @@ def test_detects_write_file_and_table_consumer() -> None:
     )
 
 
+def test_table_binding_links_to_its_csv_producer() -> None:
+    program = _analyze_blocks(
+        [
+            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "data.csv"}),
+            _block(1, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "data.csv:T0"}),
+        ]
+    )
+
+    assert any(
+        edge.csv_path == "data.csv" and edge.producer is not None for edge in program.edges
+    )
+
+
 def test_sqlite_block_can_be_producer_and_consumer() -> None:
     program = _analyze_blocks(
         [

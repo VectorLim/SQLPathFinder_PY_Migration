@@ -9,7 +9,6 @@ from typing import Any
 import pandas as pd
 
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utilities._emit_helpers import strip_quotes
 
 __all__ = ["CrosstabUtility"]
 
@@ -51,20 +50,6 @@ class CrosstabUtility(UtilitySpec):
 
         return by_alias
 
-    @staticmethod
-    def extract_options(block) -> dict[str, Any] | None:
-        ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
-        ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
-        ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
-        if not (ctrow and ctheader and ctvalue):
-            return None
-        row_keys = [c.strip() for c in ctrow.split(",") if c.strip()]
-        return {
-            "row_keys": row_keys,
-            "header_key": ctheader,
-            "value_key": ctvalue,
-        }
-
     @classmethod
     def substitute_sql(
         cls,
@@ -92,9 +77,7 @@ class CrosstabUtility(UtilitySpec):
                 body = ",".join(dynamic_cols)
                 return f"{prefix}{body}{suffix}"
 
-            body = "\n         ,".join(
-                f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols
-            )
+            body = "\n         ,".join(f"{alias}.[{c}] AS [{c}]" for c in dynamic_cols)
             return f"{prefix}{body}{suffix}"
 
         return cls.TOKEN_RE.sub(_replace, sql)
@@ -111,9 +94,7 @@ class CrosstabUtility(UtilitySpec):
             return pd.DataFrame(columns=row_keys)
 
         ci_lookup = {str(c).casefold(): c for c in rows.columns}
-        rename_map = {
-            ci_lookup[k.casefold()]: k for k in (*row_keys, header_key, value_key)
-        }
+        rename_map = {ci_lookup[k.casefold()]: k for k in (*row_keys, header_key, value_key)}
         df = rows.rename(columns=rename_map)
 
         df = df[df[header_key].notna() & (df[header_key].astype(str) != "")]

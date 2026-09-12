@@ -8,8 +8,8 @@ from pathlib import Path
 from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import split_utility_command, strip_quotes
-from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
+from vg2c.utilities._runtime_helpers import strip_quotes
 
 
 class WaitFile(EmitterUtility):
@@ -50,10 +50,10 @@ class WaitFile(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def emit_block(cls, block) -> tuple[str, list[str]]:
+    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]]:
         argv = cls._utility_argv(block)
         # argv[0] = tool path, argv[1] = file path, argv[2] = timeout seconds
-        path_expr = MacroState.to_code_expr(argv[1] if len(argv) > 1 else "")
+        path_expr = to_code_expr(argv[1] if len(argv) > 1 else "")
         raw_timeout = strip_quotes(argv[2]) if len(argv) > 2 else str(cls._DEFAULT_TIMEOUT)
         try:
             timeout_val = int(raw_timeout)
