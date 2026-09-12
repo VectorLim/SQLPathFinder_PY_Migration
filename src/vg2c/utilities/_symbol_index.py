@@ -10,7 +10,7 @@ FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 IMPORTS = (ast.Import, ast.ImportFrom)
 COMPILER_BASES = {"vg2c.utilities._base.UtilitySpec", "vg2c.utilities._base.EmitterUtility"}
 COMPILER_DECORATORS = {"vg2c.emitter.models.emittable", "vg2c.emitter.models.operation_spec"}
-COMPILER_STATE = {"handles", "check_priority", "utility_name"}
+COMPILER_STATE = {"handles", "check_priority", "script_settings", "utility_name"}
 
 
 class ResolutionError(ValueError):

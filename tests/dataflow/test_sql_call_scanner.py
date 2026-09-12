@@ -65,3 +65,23 @@ def test_spans_slice_back_to_call_text() -> None:
     calls = scan_sql_get_csv_list_calls(body)
     assert body[calls[0].start : calls[0].end].startswith("SQL_Get_CSV_List")
     assert body[calls[0].start : calls[0].end].endswith(")")
+
+
+def test_legacy_increment_marker_is_interpreted_only_on_a_csv_list_call() -> None:
+    body = (
+        "SELECT 'keep->999' AS note WHERE x = 'also->5' AND "
+        "SQL_Get_CSV_List('.\\input.tab->500', lot, 't.lot In')"
+    )
+    call = scan_sql_get_csv_list_calls(body)[0]
+
+    assert call.csv_path == ".\\input.tab->500"
+    assert call.source_path == ".\\input.tab"
+    assert "keep->999" in body and "also->5" in body
+
+
+def test_nonpositive_or_non_numeric_csv_list_suffix_is_not_stripped() -> None:
+    for path in ("input.tab->0", "input.tab->bad", "input.tab->"):
+        call = scan_sql_get_csv_list_calls(
+            f"SQL_Get_CSV_List('{path}', lot, 't.lot In')"
+        )[0]
+        assert call.source_path == path

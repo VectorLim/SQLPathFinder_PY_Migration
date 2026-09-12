@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from vg2c.compilation import compile_document
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import EmittableOperation
 from vg2c.utilities import assemble_utilities, ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 
@@ -89,7 +89,7 @@ ensure_utility_checks_loaded()
         utility
         for utility in UtilitySpec.registered()
         if utility.__module__.startswith("vg2c.")
-        and any(isinstance(value, emittable) for value in vars(utility).values())
+        and any(isinstance(value, EmittableOperation) for value in vars(utility).values())
     ],
     ids=lambda utility: utility.utility_name,
 )
@@ -97,7 +97,7 @@ def test_included_utility_keeps_every_emittable_method(utility):
     operations = {
         name
         for name in vars(utility)
-        if isinstance(inspect.getattr_static(utility, name), emittable)
+        if isinstance(inspect.getattr_static(utility, name), EmittableOperation)
     }
     receiver = "ctx" if utility.utility_name == "ctx" else f"ctx.{utility.utility_name}"
     embedded = assemble_utilities(

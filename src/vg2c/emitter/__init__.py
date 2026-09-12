@@ -4,7 +4,7 @@ import ast
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from vg2c.emitter.globals import GlobalValues, render_globals
+from vg2c.emitter.globals import GlobalValues, render_globals, render_script_settings
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import EmittedScript, SourceRange, finalize_steps
 
@@ -54,9 +54,11 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5: emit Python and the edit/semantic manifest at the same time."""
     from vg2c.emitter.walker import walk_and_emit
     from vg2c.logger import Logger
-    from vg2c.utilities import assemble_utilities
+    from vg2c.utilities import assemble_utilities, ensure_utility_checks_loaded
+    from vg2c.utilities._base import UtilitySpec
     from vg2c.utilities._symbol_index import bound_names
 
+    ensure_utility_checks_loaded()
     log = Logger.getLogger("vg2c.emitter")
     reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(dispatched.dispatched)
     collected: GlobalValues = {}
@@ -96,6 +98,11 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     for imp in sorted(imports):
         script_writer.write(imp)
     script_writer.write("")
+
+    settings_source = render_script_settings(UtilitySpec.generated_script_settings())
+    if settings_source:
+        script_writer.write_block(settings_source)
+        script_writer.write("")
 
     globals_source, global_parameters = render_globals(
         collected, used_globals, len(script_writer.source()) + 1
