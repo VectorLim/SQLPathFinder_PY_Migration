@@ -110,7 +110,7 @@ npm install
 For development, run the API and Vite in separate terminals from the repository root:
 
 ```powershell
-vg2c-ui .
+vg2c-ui --data-dir .\data
 npm --prefix src/vg2c_ui/frontend run dev
 ```
 
@@ -137,3 +137,7 @@ npm --prefix src/vg2c_ui/frontend run test
 The current API surface uses focused routes for document open/translation, change preview/apply, workspace projection, CSV preview, and structured SQL inspect/actions. There is no generic arbitrary-Python replacement or legacy `/api/commands` compatibility route.
 
 Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an existing generated workflow and retain previously applied visual-editor values when its sidecar still matches the source/output hashes.
+
+## LAN Docker test deployment
+
+The Docker deployment serves the visual editor over one LAN port with anonymous, isolated browser workspaces. Users upload VG2/data files and download generated results; generated workflows are not executed. See [the Docker LAN guide](docs/docker-lan.md) for the Intel dependency-build prerequisites, Docker Compose commands, firewall setup, and workspace lifecycle.

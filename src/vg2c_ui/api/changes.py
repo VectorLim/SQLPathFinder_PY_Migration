@@ -4,13 +4,13 @@ from fastapi import APIRouter, HTTPException, Request
 
 from vg2c.editing import ChangeValidationError
 from vg2c_ui.api.models import ChangeBatch, ChangePreviewView, ChangeResultView
-from vg2c_ui.services.document_store import DocumentStore, RevisionConflict
+from vg2c_ui.services.document_store import DocumentStore, RevisionConflict, get_document_store
 
 router = APIRouter(prefix="/api/changes", tags=["changes"])
 
 
 def _store(request: Request) -> DocumentStore:
-    return request.app.state.document_store
+    return get_document_store(request)
 
 
 @router.post("/preview", response_model=ChangePreviewView)

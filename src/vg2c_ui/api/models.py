@@ -209,6 +209,12 @@ class WorkspaceProjectionView(BaseModel):
     issues: list[DependencyIssueView]
 
 
+class WorkspaceFileView(BaseModel):
+    path: str
+    size_bytes: int
+    modified_at: float
+
+
 class SqlSpanView(BaseModel):
     start: int
     end: int
@@ -327,6 +333,7 @@ CONTRACT_MODELS = (
     DependencyLinkView,
     ProjectedDocumentView,
     WorkspaceProjectionView,
+    WorkspaceFileView,
     SqlSpanView,
     SqlSelectionView,
     SqlSourceView,

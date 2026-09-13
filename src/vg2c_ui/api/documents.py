@@ -3,13 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from vg2c_ui.api.models import CsvPreviewRequest, CsvPreviewView, DocumentReference, DocumentView
-from vg2c_ui.services.document_store import DocumentStore
+from vg2c_ui.services.document_store import DocumentStore, get_document_store
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
 def _store(request: Request) -> DocumentStore:
-    return request.app.state.document_store
+    return get_document_store(request)
 
 
 @router.post("/open", response_model=DocumentView)

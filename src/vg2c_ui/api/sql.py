@@ -4,13 +4,13 @@ from fastapi import APIRouter, HTTPException, Request
 
 from vg2c.sql_editor import SqlEditError
 from vg2c_ui.api.models import SqlActionRequest, SqlActionResponse, SqlModelRequest, SqlModelView
-from vg2c_ui.services.document_store import DocumentStore
+from vg2c_ui.services.document_store import DocumentStore, get_document_store
 
 router = APIRouter(prefix="/api/sql", tags=["sql"])
 
 
 def _store(request: Request) -> DocumentStore:
-    return request.app.state.document_store
+    return get_document_store(request)
 
 
 @router.post("/inspect", response_model=SqlModelView)

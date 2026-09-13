@@ -1,7 +1,8 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import { ContextSidebar } from './ContextSidebar'
 import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
+import { listWorkspaceFiles, uploadWorkspaceFiles, workspaceDownloadUrl } from './api'
 import { baseName } from './operationLabels'
 import { ancestorScopeIds, ScriptTree } from './ScriptTree'
 import { useWorkspace } from './useWorkspace'
@@ -10,32 +11,48 @@ import type { TabStatus, TabState } from './workspaceState'
 export function App() {
   const workspace = useWorkspace()
   const { state, active, dispatch } = workspace
-  const [sourceText, setSourceText] = useState('')
+  const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ path: string, size_bytes: number }>>([])
+  const [sourcePaths, setSourcePaths] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('Enter one VG2 source path per line.')
+  const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
 
+  useEffect(() => {
+    void refreshWorkspaceFiles().catch((error) => setMessage(errorMessage(error, 'Could not load workspace files')))
+  }, [])
+
+  async function refreshWorkspaceFiles() {
+    const files = await listWorkspaceFiles()
+    setWorkspaceFiles(files)
+    setSourcePaths((current) => current.length
+      ? current.filter((path) => files.some((file) => file.path === path))
+      : files.filter((file) => file.path.toLowerCase().endsWith('.txt')).map((file) => file.path))
+  }
+
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    if (!files.length) return
+    setBusy(true); setMessage('Uploading…')
+    try {
+      const saved = await uploadWorkspaceFiles(files)
+      await refreshWorkspaceFiles()
+      const sources = saved.filter((item) => item.path.toLowerCase().endsWith('.txt')).map((item) => item.path)
+      setSourcePaths((current) => [...new Set([...current, ...sources])])
+      setMessage(`${saved.length} file${saved.length === 1 ? '' : 's'} uploaded.`)
+    } catch (error) { setMessage(errorMessage(error, 'Upload failed')) } finally { setBusy(false); event.target.value = '' }
+  }
+
   async function translate() {
-    const paths = parseSourcePaths(sourceText)
-    if (!paths.length) return
+    if (!sourcePaths.length) return
     setBusy(true); setMessage('Translating…')
     try {
-      const response = await workspace.translate(paths)
+      const response = await workspace.translate(sourcePaths)
+      await refreshWorkspaceFiles()
       setBatchDiagnostics(response.diagnostics)
       setMessage(response.documents.length ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.` : 'No scripts were translated.')
     } catch (error) { setMessage(errorMessage(error, 'Translation failed')) } finally { setBusy(false) }
-  }
-
-  async function openExisting() {
-    const paths = parseSourcePaths(sourceText)
-    if (!paths.length) return
-    setBusy(true); setMessage('Opening generated scripts…')
-    try {
-      const documents = await workspace.open(paths)
-      setMessage(`${documents.length} script${documents.length === 1 ? '' : 's'} opened.`)
-    } catch (error) { setMessage(errorMessage(error, 'Open failed')) } finally { setBusy(false) }
   }
 
   function selectItem(id: string) {
@@ -84,8 +101,11 @@ export function App() {
   const editCount = active ? Object.keys(active.edits.values).length : 0
   const documents = state.tabs.map((tab) => tab.document)
 
+  const uploadedSources = workspaceFiles.filter((file) => file.path.toLowerCase().endsWith('.txt'))
+  const generatedFiles = workspaceFiles.filter((file) => file.path.startsWith('generated/'))
+
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span>PYTHON</span>PathFinder</div><div className="translate-box"><textarea aria-label="VG2 source paths" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder={'workflows/report.txt\nworkflows/export.txt'} rows={2} /><button type="button" onClick={() => void openExisting()} disabled={busy || !sourceText.trim()}>Open</button><button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourceText.trim()}>{busy ? 'Working…' : 'Translate'}</button></div><output className="status-message" aria-live="polite">{message}</output></header>
+    <header className="topbar"><div className="brand"><span>PYTHON</span>PathFinder</div><div className="translate-box"><label className="upload-button">Upload files<input aria-label="Upload VG2 source and data files" type="file" multiple onChange={(event) => void upload(event)} /></label><label className="upload-button">Upload folder<input aria-label="Upload a VG2 workspace folder" type="file" multiple ref={(node) => node?.setAttribute('webkitdirectory', '')} onChange={(event) => void upload(event)} /></label><select aria-label="VG2 source files" multiple value={sourcePaths} onChange={(event) => setSourcePaths(Array.from(event.target.selectedOptions, (option) => option.value))}>{uploadedSources.map((file) => <option key={file.path} value={file.path}>{file.path}</option>)}</select><button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourcePaths.length}>{busy ? 'Working…' : 'Translate'}</button></div><output className="status-message" aria-live="polite">{message}</output><div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div></header>
 
     <nav className="tabs" aria-label="Open translated files" role="tablist">{state.tabs.map((tab, index) => <div className={`tab${tab.document.id === state.activeId ? ' is-active' : ''}`} key={tab.document.id}><button type="button" role="tab" aria-selected={tab.document.id === state.activeId} aria-controls="script-workspace" tabIndex={tab.document.id === state.activeId ? 0 : -1} title={tab.document.output_path} onClick={() => dispatch({ type: 'activate', tabId: tab.document.id })} onKeyDown={(event) => handleTabKeys(event, state.tabs, index, (id) => dispatch({ type: 'activate', tabId: id }))}><span className="tab-name">{baseName(tab.document.output_path || tab.document.source_path)}</span><span className={`tab-state tab-state--${tab.status}`} aria-hidden="true" /><span className="sr-only">{tab.status}</span></button><button className="tab-close" type="button" tabIndex={tab.document.id === state.activeId ? 0 : -1} onClick={() => dispatch({ type: 'close', tabId: tab.document.id })} aria-label={`Close ${baseName(tab.document.output_path)}`}>×</button></div>)}</nav>
 
@@ -106,7 +126,6 @@ export function App() {
 }
 
 function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}<pre>{preview.diff || 'No textual change.'}</pre></div></details> }
-function parseSourcePaths(value: string): string[] { return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) }
 function errorMessage(error: unknown, fallback: string): string { return error instanceof Error ? error.message : fallback }
 function statusCopy(status: TabStatus): string { if (status === 'dirty') return 'Preview before applying.'; if (status === 'validating') return 'Validating generated Python…'; if (status === 'valid') return 'Validation passed.'; if (status === 'invalid') return 'Validation found issues.'; if (status === 'saving') return 'Applying changes…'; if (status === 'conflict') return 'File changed externally; reload required.'; if (status === 'error') return 'The last update failed.'; return 'Select an operation to inspect or edit it.' }
 function handleTabKeys(event: ReactKeyboardEvent<HTMLButtonElement>, tabs: TabState[], index: number, activate: (id: string) => void) { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); let nextIndex = index; if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length; if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length; if (event.key === 'Home') nextIndex = 0; if (event.key === 'End') nextIndex = tabs.length - 1; const next = tabs[nextIndex]; if (!next) return; activate(next.document.id); document.querySelectorAll<HTMLButtonElement>('.tab > button[role="tab"]')[nextIndex]?.focus() }

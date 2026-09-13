@@ -10,7 +10,7 @@ from vg2c_ui.api.models import (
     DiagnosticView,
     DocumentView,
 )
-from vg2c_ui.services.document_store import DocumentStore
+from vg2c_ui.services.document_store import DocumentStore, get_document_store
 
 router = APIRouter(prefix="/api/translations", tags=["translations"])
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/translations", tags=["translations"])
 def translate_batch(
     payload: BatchTranslationRequest, request: Request
 ) -> BatchTranslationResponse:
-    store: DocumentStore = request.app.state.document_store
+    store: DocumentStore = get_document_store(request)
     documents: list[DocumentView] = []
     diagnostics: list[DiagnosticView] = []
     for source_path in payload.source_paths:
@@ -27,7 +27,11 @@ def translate_batch(
             output_path = (
                 str(Path(payload.out_dir) / Path(source_path).with_suffix(".py").name)
                 if payload.out_dir
-                else None
+                else (
+                    str(Path("generated") / Path(source_path).with_suffix(".py"))
+                    if store.expose_relative_paths
+                    else None
+                )
             )
             documents.append(store.translate(source_path, output_path).view)
         except (OSError, ValueError) as exc:
