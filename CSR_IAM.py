@@ -39,17 +39,21 @@ HIST_PATH = ""
 CONFIG_PATH = ""
 EMAIL_RECEIVER = ""
 EMAIL_SUBJECT = ""
-NODE = ""
+CHOSEN_NODE = ""
 monitorset = "'V_PRE_NDLE_OFFSTS_SING'"  # setup monset
 
 
 # -------- CONFIG ---------------
 def configure():
-    global NODE, HIST_PATH, CONFIG_PATH, EMAIL_RECEIVER, EMAIL_SUBJECT, SITE
+    global CHOSEN_NODE, HIST_PATH, CONFIG_PATH, EMAIL_RECEIVER, EMAIL_SUBJECT, SITE
 
     args = sys.argv[1:]
     SITE = args[0]
-    source_path = args[1]
+
+    source_path = None
+    if len(args) >= 2:
+        source_path = args[1]
+
     sys.argv = [sys.argv[0]]
 
     node_mapping = {
@@ -59,13 +63,15 @@ def configure():
         "VN": "A90_PROD_21",
         "CR": "A61_PROD_4",
     }
-    NODE = node_mapping.get(SITE)
-    hist_dir = os.path.join(SITE, "HIST", "HIST.csv")
-    HIST_PATH = os.path.join(source_path, hist_dir)
+    CHOSEN_NODE = node_mapping.get(SITE)
 
     # read config.txt
-    # CONFIG_PATH = os.path.join(source_path, site, "config.txt")
+    if source_path is None:
+        return
 
+    hist_dir = os.path.join(SITE, "HIST", "HIST.csv")
+    HIST_PATH = os.path.join(source_path, hist_dir)
+    CONFIG_PATH = os.path.join(source_path, SITE, "config.txt")
     with open(CONFIG_PATH, "r") as f:
         columns = next(f).strip().split(",")
         lines = f.readlines()
@@ -747,7 +753,7 @@ def step_0001_sql_query(ctx) -> None:
             "entity",
             "transaction",
         ],
-        node=NODE,
+        node=SITE,
     )
 
 
@@ -857,7 +863,7 @@ def step_0002_sql_query(ctx) -> None:
             "header_key": "parameter",
             "value_key": "numeric_value",
         },
-        node=NODE,
+        node=SITE,
     )
 
 
@@ -910,9 +916,7 @@ def step_0003_sqlite_query(ctx) -> None:
 
 def step_0004_sqlite_query(ctx) -> None:
     ctx.run_query(
-        sql="""
-
-    DROP TABLE IF EXISTS T_L0_Init;
+        sql="""DROP TABLE IF EXISTS T_L0_Init;
     CREATE TABLE T_L0_Init AS
     SELECT /*L0*/  
               a0.[lot_1] AS [lot_1]
@@ -1248,6 +1252,7 @@ def process_facility_attribute_update(ctx):
 
 if __name__ == "__main__":
     OracleClient.configure()
+    configure()
     ctx = PipelineContext(
         {"crosstab": CrosstabUtility(), "csv_io": CsvIO(), "macro": MacroState()}
     )
