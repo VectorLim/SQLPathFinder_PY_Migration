@@ -56,6 +56,12 @@ class RevisionConflict(RuntimeError):
     pass
 
 
+def get_document_store(request) -> "DocumentStore":
+    """Return the caller-scoped store, retaining the legacy app store for tests."""
+    state = getattr(request, "state", None)
+    return getattr(state, "document_store", request.app.state.document_store)
+
+
 @dataclass(frozen=True, slots=True)
 class OpenedDocument:
     result: CompilationResult
@@ -65,8 +71,9 @@ class OpenedDocument:
 class DocumentStore:
     """Workspace-safe persistence boundary around compiler-owned semantics."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path, *, expose_relative_paths: bool = False):
         self.workspace = Path(workspace).resolve()
+        self.expose_relative_paths = expose_relative_paths
 
     def open_document(
         self, source_path: str, output_path: str | None = None
@@ -96,7 +103,7 @@ class DocumentStore:
             synchronized=synchronized,
             read_only_reason=read_only_reason,
         )
-        return OpenedDocument(result=result, view=view)
+        return OpenedDocument(result=result, view=self._present_view(view))
 
     def translate(
         self, source_path: str, output_path: str | None = None
@@ -310,6 +317,39 @@ class DocumentStore:
             raise PathOutsideWorkspace(f"Path is outside workspace: {value}")
         return resolved
 
+    def _present_view(self, view: DocumentView) -> DocumentView:
+        """Remove host paths from API responses for browser workspaces."""
+        if not self.expose_relative_paths:
+            return view
+        steps = [
+            step.model_copy(
+                update={
+                    "source_span": step.source_span.model_copy(
+                        update={
+                            "file": self._relative_display(step.source_span.file)
+                            if step.source_span.file
+                            else None
+                        }
+                    )
+                }
+            )
+            for step in view.steps
+        ]
+        return view.model_copy(
+            update={
+                "id": self._relative_display(view.source_path),
+                "source_path": self._relative_display(view.source_path),
+                "output_path": self._relative_display(view.output_path),
+                "steps": steps,
+            }
+        )
+
+    def _relative_display(self, value: str) -> str:
+        path = Path(value).resolve()
+        if path != self.workspace and self.workspace not in path.parents:
+            raise PathOutsideWorkspace("Cannot expose a path outside the workspace.")
+        return path.relative_to(self.workspace).as_posix()
+
     def _resolve_relative_to_source(self, source: Path, value: str) -> Path:
         candidate = Path(value)
         if not candidate.is_absolute():
@@ -376,4 +416,5 @@ __all__ = [
     "OpenedDocument",
     "PathOutsideWorkspace",
     "RevisionConflict",
+    "get_document_store",
 ]

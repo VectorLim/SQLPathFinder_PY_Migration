@@ -202,6 +202,12 @@ export interface WorkspaceProjectionView {
   issues: Array<DependencyIssueView>
 }
 
+export interface WorkspaceFileView {
+  path: string
+  size_bytes: number
+  modified_at: number
+}
+
 export interface SqlSpanView {
   start: number
   end: number

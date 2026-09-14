@@ -209,7 +209,7 @@ def _collect_consumers(
             consumers.append(
                 ConsumerRecord(
                     block_index=block.index,
-                    csv_path=_normalize_csv_path(call.csv_path),
+                    csv_path=_normalize_csv_path(call.source_path),
                     scope_id=block.scope_id,
                     consumer_kind="sql-macro",
                 )

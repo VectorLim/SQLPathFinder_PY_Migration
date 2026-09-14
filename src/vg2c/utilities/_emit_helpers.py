@@ -36,9 +36,20 @@ class SqlGetCsvListCall:
     lead_in: str
     needs_closing_paren: bool
 
+    @property
+    def source_path(self) -> str:
+        """Return this call's input path, ignoring a legacy terminal ``->N`` marker.
+
+        This interpretation is deliberately available only on a parsed
+        SQL_Get_CSV_List call. It does not rewrite arbitrary SQL or paths.
+        """
+        match = _INCREMENTAL_CSV_PATH_RE.fullmatch(self.csv_path)
+        return match.group("path") if match is not None else self.csv_path
+
 
 _CALL_RE = re.compile(r"\bSQL_Get_CSV_List\s*\(", re.IGNORECASE)
 _CALL_SITE_WRAP_RE = re.compile(r"\(\s*[A-Za-z_][\w.\[\]@]*\s+In\s*$", re.IGNORECASE)
+_INCREMENTAL_CSV_PATH_RE = re.compile(r"^(?P<path>.+)->[1-9]\d*$")
 
 
 def scan_sql_get_csv_list_calls(body: str) -> list[SqlGetCsvListCall]:

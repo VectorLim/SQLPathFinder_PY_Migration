@@ -10,7 +10,6 @@ from vg2c.emitter.models import (
     build_step_emission,
     emittable,
     finalize_steps,
-    operation_spec,
 )
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
@@ -25,13 +24,14 @@ class MetadataProbeUtility(UtilitySpec):
 
     utility_name = "test_metadata_probe"
 
-    @emittable
-    @operation_spec(
+    @emittable(
+        capabilities=("probe-capability",),
         parameter_capabilities={"source": ("browse-path",)},
         artifact_roles={
             "source": ArtifactRole("input"),
             "output": ArtifactRole("output"),
         },
+        supported_mutations=("set-parameter", "probe-mutation"),
     )
     def transform(
         self,
@@ -41,6 +41,14 @@ class MetadataProbeUtility(UtilitySpec):
         retries: int = 1,
     ) -> None:
         pass
+
+
+def test_parameterized_emittable_metadata_is_stripped_from_embedded_source():
+    source = PipelineContext.get_source()
+
+    assert "@emittable" not in source
+    assert "parameter_capabilities=" not in source
+    compile(source, "<pipeline-context>", "exec")
 
 
 def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):
@@ -190,6 +198,12 @@ def test_utility_catalog_is_derived_from_registered_emittable_methods():
     assert run_query.artifact_role("output").direction == "output"
     assert run_query.capabilities_for_parameter("sql") == ("structured-sql",)
 
+    write_file = definitions["ctx.write_file"]
+    assert write_file.capabilities == ()
+    assert write_file.parameter_capabilities == ()
+    assert write_file.artifact_roles == ()
+    assert write_file.supported_mutations == ("set-parameter",)
+
 
 def test_new_ordinary_utility_flows_from_registry_to_generic_parameter_metadata():
     definition = UtilitySpec.operation_definition("test_metadata_probe", "transform")
@@ -199,6 +213,8 @@ def test_new_ordinary_utility_flows_from_registry_to_generic_parameter_metadata(
     assert definition.artifact_role("source") == ArtifactRole("input")
     assert definition.artifact_role("output") == ArtifactRole("output")
     assert definition.capabilities_for_parameter("source") == ("browse-path",)
+    assert definition.capabilities == ("probe-capability",)
+    assert definition.supported_mutations == ("set-parameter", "probe-mutation")
 
     rendered = MetadataProbeUtility.transform.render(
         "input.csv",

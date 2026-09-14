@@ -88,8 +88,13 @@ class SqliteEngine(EmitterUtility):
             )
             references.extend(reference.global_names)
         for call in calls:
-            csv_path_expr = to_code_expr(call.csv_path)
-            expr = CsvIO.sql_get_csv_list.render(csv_path_expr, call.column_ref, call.lead_in)
+            csv_path_expr = to_code_expr(call.source_path)
+            expr = CsvIO.sql_get_csv_list.render(
+                csv_path_expr,
+                call.column_ref,
+                call.lead_in,
+                chunk_size=CodeExpr("VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE"),
+            )
             if call.needs_closing_paren:
                 expr += " + ')'"
             replacements.append((call.start, call.end, expr))

@@ -34,5 +34,7 @@ def test_pipeline_emits_compilable_source(fixture: Path) -> None:
 
     source = emitted.source
     assert source and "def run(" in source, f"empty/invalid emit for {fixture.name}"
+    if "OracleReader(" in source:
+        assert "from datasyncx import OracleReader" in source
 
     compile(source, filename=f"<{fixture.name}>", mode="exec")

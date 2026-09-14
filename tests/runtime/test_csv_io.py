@@ -232,6 +232,30 @@ def test_chunking_at_1000(tmp_path):
     assert result.endswith(")")
 
 
+def test_chunk_size_is_configurable(tmp_path):
+    m = CsvIO()
+    f = tmp_path / "small.csv"
+    _write_csv(f, [["v"], ["A"], ["B"], ["C"]])
+
+    result = m.sql_get_csv_list(str(f), 1, "v In", chunk_size=2)
+
+    assert result.count("(") == 2
+    assert "OR v In" in result
+
+
+@pytest.mark.parametrize(
+    ("suffix", "delimiter"),
+    [(".tab", "\t"), (".asc", "|")],
+)
+def test_csv_list_reads_legacy_delimiters(tmp_path, suffix, delimiter):
+    f = tmp_path / f"values{suffix}"
+    f.write_text(f"value{delimiter}other\nA{delimiter}1\nB{delimiter}2\n", encoding="utf-8")
+
+    result = CsvIO().sql_get_csv_list(str(f), "value", "t.value In")
+
+    assert "'A'" in result and "'B'" in result
+
+
 def test_balanced_output_when_unwrapped(tmp_path):
     """Output alone is balanced; call sites without a wrap stay valid."""
     m = CsvIO()

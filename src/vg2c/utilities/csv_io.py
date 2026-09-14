@@ -18,6 +18,13 @@ class CsvIO(UtilitySpec):
     """Read and write CSV files relative to the runtime script directory."""
 
     utility_name = "csv_io"
+    script_settings = (
+        (
+            "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE",
+            1000,
+            "Maximum values emitted in each SQL_Get_CSV_List IN clause.",
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Read
@@ -44,12 +51,12 @@ class CsvIO(UtilitySpec):
         return first
 
     def _read_column(self, path: str, column_ref: int | str) -> list[str]:
-        """Read a column from a CSV file."""
+        """Read a column from a legacy comma, tab, or pipe-delimited file."""
         rows: list[str] = []
         resolved_path = resolve_path(path)
 
         with resolved_path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
+            reader = csv.reader(fh, delimiter=self._delimiter_for(path))
             header = next(reader, [])
             header_str = [str(h) for h in header]
 
@@ -75,21 +82,37 @@ class CsvIO(UtilitySpec):
         return rows
 
     @staticmethod
+    def _delimiter_for(path: str) -> str:
+        suffix = Path(path).suffix.casefold()
+        if suffix == ".tab":
+            return "\t"
+        if suffix == ".asc":
+            return "|"
+        return ","
+
+    @staticmethod
     def _single_quote(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
     @emittable
-    def sql_get_csv_list(self, path: str, column_ref: int | str, lead_in: str) -> str:
+    def sql_get_csv_list(
+        self,
+        path: str,
+        column_ref: int | str,
+        lead_in: str,
+        chunk_size: int = 1000,
+    ) -> str:
         """Return chunked IN-list clause for Oracle-style SQL.
 
-        Oracle hard-limits IN lists to 1000 values. When there are more, the
-        result is chunked: ``(v1..v1000) OR <lead_in> (v1001..)``.
+        When there are more values than *chunk_size*, the result is chunked as
+        ``(v1..vN) OR <lead_in> (vN+1..)``.
         """
         values = self._read_column(path, column_ref)
         if not values:
             return "('__NO_VALUES__')"
 
-        chunk_size = 1000
+        if chunk_size < 1:
+            raise ValueError("SQL_Get_CSV_List chunk_size must be positive")
         chunks = [values[i : i + chunk_size] for i in range(0, len(values), chunk_size)]
         parts: list[str] = []
         for i, chunk in enumerate(chunks):

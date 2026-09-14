@@ -11,6 +11,7 @@ import type {
   SqlModelView,
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
+  WorkspaceFileView,
 } from './contracts.generated'
 
 export class ApiError extends Error {
@@ -63,4 +64,32 @@ export function applySqlAction(request: SqlActionRequest): Promise<SqlActionResp
 
 export function previewCsv(sourcePath: string, csvPath: string): Promise<CsvPreviewView> {
   return post('/api/documents/preview-csv', { source_path: sourcePath, csv_path: csvPath })
+}
+
+export async function uploadWorkspaceFiles(files: File[]): Promise<WorkspaceFileView[]> {
+  const body = new FormData()
+  for (const file of files) {
+    const relativePath = file.webkitRelativePath || file.name
+    body.append('files', file)
+    body.append('paths', relativePath)
+  }
+  const response = await fetch('/api/workspace/files', { method: 'POST', body })
+  if (!response.ok) await throwApiError(response)
+  return response.json() as Promise<WorkspaceFileView[]>
+}
+
+export async function listWorkspaceFiles(): Promise<WorkspaceFileView[]> {
+  const response = await fetch('/api/workspace/files')
+  if (!response.ok) await throwApiError(response)
+  return response.json() as Promise<WorkspaceFileView[]>
+}
+
+export function workspaceDownloadUrl(path: string): string {
+  return `/api/workspace/download/${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
+async function throwApiError(response: Response): Promise<never> {
+  const payload = await response.json().catch(() => ({ detail: response.statusText }))
+  const detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail)
+  throw new ApiError(detail || response.statusText, response.status)
 }

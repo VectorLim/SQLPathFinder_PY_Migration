@@ -54,39 +54,20 @@ Verify the installation:
 uv run vg2c --help
 ```
 
-## Oracle Instant Client (optional DataSyncX setup)
+## Oracle client setup (DataSyncX)
 
-Use this only when generated workflows need DataSyncX to query Oracle and a
-full Oracle Client is not the selected client. Download the **Basic** package
-for **Microsoft Windows (x64)** from Oracle's [Instant Client download page](https://www.oracle.com/database/technologies/instant-client/downloads.html).
-Unzip its inner `instantclient_*` folder to a stable location, for example:
-
-```text
-C:\Oracle\instantclient_23_26\oci.dll
-```
-
-Do not use the Downloads directory as the runtime location. The Basic package
-is sufficient for Python/DataSyncX; SQL*Plus and SDK packages are optional.
-Ask the database team for the required Oracle Net files (`tnsnames.ora` and,
-when needed, `sqlnet.ora`) and store them separately, for example in
-`C:\Oracle\network\admin`.
-
-For one PowerShell session, opt a generated workflow into Instant Client:
+Only the approved full Oracle Client is supported. Set `ORACLE_HOME` to the
+client root, not its `bin` directory:
 
 ```powershell
-$env:DATASYNCX_ORACLE_CLIENT = 'instant'
-$env:DATASYNCX_INSTANT_CLIENT_DIR = 'C:\Oracle\instantclient_23_26'
-$env:DATASYNCX_ORACLE_NET_CONFIG_DIR = 'C:\Oracle\network\admin'
-Test-Path "$env:DATASYNCX_INSTANT_CLIENT_DIR\oci.dll"
+$env:ORACLE_HOME = 'C:\Oracle\Product\11.2.0\client_k64'
 ```
 
-Do not set `ORACLE_HOME` or change the machine-wide `PATH` for this setup.
-These variables affect only the current PowerShell session; remove them (or
-set `DATASYNCX_ORACLE_CLIENT` to `home`) and start a new Python process to use
-the existing full-client configuration again. After the first Oracle read, the
-terminal reports the loaded client and source. See
-[the detailed Oracle client guide](docs/oracle_instant_client.md) for platform
-limitations and troubleshooting.
+The generated workflow validates `ORACLE_HOME\network\admin` before importing
+DataSyncX. That directory must contain `tnsnames.ora` and `sqlnet.ora`. If
+either file is absent, copy SQLPathFinder's provided Oracle Net files from
+`C:\Oracle\network` into `ORACLE_HOME\network\admin`, then start a new Python
+process. No client discovery or fallback configuration is supported.
 
 ## CLI Usage
 
@@ -129,7 +110,7 @@ npm install
 For development, run the API and Vite in separate terminals from the repository root:
 
 ```powershell
-vg2c-ui .
+vg2c-ui --data-dir .\data
 npm --prefix src/vg2c_ui/frontend run dev
 ```
 
@@ -156,3 +137,7 @@ npm --prefix src/vg2c_ui/frontend run test
 The current API surface uses focused routes for document open/translation, change preview/apply, workspace projection, CSV preview, and structured SQL inspect/actions. There is no generic arbitrary-Python replacement or legacy `/api/commands` compatibility route.
 
 Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an existing generated workflow and retain previously applied visual-editor values when its sidecar still matches the source/output hashes.
+
+## LAN Docker test deployment
+
+The Docker deployment serves the visual editor over one LAN port with anonymous, isolated browser workspaces. Users upload VG2/data files and download generated results; generated workflows are not executed. See [the Docker LAN guide](docs/docker-lan.md) for the Intel dependency-build prerequisites, Docker Compose commands, firewall setup, and workspace lifecycle.

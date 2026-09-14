@@ -1,0 +1,14 @@
+<OPTIONS>
+/NODE=KM.OASYS
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=No
+/CSV=oracle_datasyncx_smoke.csv
+/HEADERS=smoke_test
+/PROMPT-TEXT=DataSyncX Oracle smoke test
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 1 AS smoke_test FROM dual
+/*END SQL*/

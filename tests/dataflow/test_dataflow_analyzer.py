@@ -69,6 +69,27 @@ def test_table_binding_links_to_its_csv_producer() -> None:
     )
 
 
+def test_incremental_csv_list_marker_links_to_the_unmarked_producer() -> None:
+    program = _analyze_blocks(
+        [
+            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "lots.tab"}),
+            _block(
+                1,
+                Kind.SQLITE_QUERY,
+                {"ENGINE": "SQLite"},
+                body="WHERE SQL_Get_CSV_List('lots.tab->500', lot, 't.lot In')",
+            ),
+        ]
+    )
+
+    assert any(
+        edge.csv_path == "lots.tab"
+        and edge.consumer.consumer_kind == "sql-macro"
+        and edge.producer is not None
+        for edge in program.edges
+    )
+
+
 def test_sqlite_block_can_be_producer_and_consumer() -> None:
     program = _analyze_blocks(
         [

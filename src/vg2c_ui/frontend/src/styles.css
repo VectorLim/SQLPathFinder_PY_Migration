@@ -83,7 +83,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   max-width: 760px;
   min-width: 280px;
 }
-.translate-box textarea {
+.translate-box textarea, .translate-box select {
   flex: 1;
   min-width: 180px;
   resize: none;
@@ -95,6 +95,24 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   line-height: 1.35;
 }
 .translate-box textarea::placeholder { color: #98a2b3; }
+.translate-box select { min-height: 38px; color: white; background: #1d2939; }
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid #475467;
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  color: white;
+  background: #344054;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.workspace-downloads { display: flex; flex-wrap: wrap; gap: 7px; max-width: 360px; }
+.workspace-downloads a { color: #d1e9ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .translate-box button {
   min-width: 74px;
   border: 1px solid #475467;
@@ -692,7 +710,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   }
   .brand { grid-column: 1 / -1; }
   .translate-box { grid-column: 1 / -1; width: 100%; max-width: none; min-width: 0; }
-  .translate-box textarea { min-width: 0; }
+  .translate-box textarea, .translate-box select { min-width: 0; }
   .editor-toolbar, .change-toolbar { padding: 8px 10px; }
   .tree-controls { display: none; }
   .change-toolbar { align-items: stretch; flex-direction: column; gap: 6px; }
@@ -712,7 +730,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .topbar { gap: 7px; }
   .brand { font-size: 14px; }
   .translate-box { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
-  .translate-box textarea { min-height: 46px; }
+  .translate-box textarea, .translate-box select { min-height: 46px; }
   .translate-box button { min-width: 66px; min-height: 44px; padding: 0 10px; }
   .tabs { padding-left: 7px; padding-right: 7px; }
   .tab { min-width: 138px; max-width: 210px; }
@@ -760,7 +778,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 @media (max-width: 430px) {
   .translate-box { grid-template-columns: 1fr 1fr; }
-  .translate-box textarea { grid-column: 1 / -1; }
+  .translate-box textarea, .translate-box select { grid-column: 1 / -1; }
   .translate-box button { width: 100%; }
   .change-toolbar .toolbar-group { margin-left: -2px; margin-right: -2px; }
   .tree-children { margin-left: 9px; padding-left: 6px; }

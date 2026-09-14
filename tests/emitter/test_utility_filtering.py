@@ -8,14 +8,22 @@ import pytest
 
 from vg2c.compilation import compile_document
 from vg2c.embedding import assemble_utilities
-from vg2c.emitter.models import emittable
 from vg2c.utilities import ensure_utility_checks_loaded
+from vg2c.emitter.models import EmittableOperation
 from vg2c.utilities._base import UtilitySpec
 
 
 def methods(source, name):
-    cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == name)
-    return {n.name for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    cls = next(
+        n
+        for n in ast.parse(source).body
+        if isinstance(n, ast.ClassDef) and n.name == name
+    )
+    return {
+        n.name
+        for n in cls.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
 
 
 def test_sqlite_workflow_embeds_runtime_reader_and_excludes_compiler():
@@ -45,7 +53,12 @@ def test_full_runtime_filesystem_api_is_embedded():
         reader_names=set(),
     )
     source = "\n".join(embedded.sources)
-    assert methods(source, "FileSystemOps") == {"copy", "rename", "delete", "write_file"}
+    assert methods(source, "FileSystemOps") == {
+        "copy",
+        "rename",
+        "delete",
+        "write_file",
+    }
     assert "class SqliteReader" not in source
     assert "'fs_ops': FileSystemOps()" in embedded.context_expression
 
@@ -76,7 +89,9 @@ def test_repeated_roots_emit_one_class_and_one_context_instance():
 
 def test_explicit_reader_root_uses_the_same_resolver():
     embedded = assemble_utilities(
-        step_emissions=(), workflow_source="def run(ctx): pass", reader_names={"sqlite_reader"}
+        step_emissions=(),
+        workflow_source="def run(ctx): pass",
+        reader_names={"sqlite_reader"},
     )
     assert "class SqliteReader" in "\n".join(embedded.sources)
 
@@ -90,7 +105,9 @@ ensure_utility_checks_loaded()
         utility
         for utility in UtilitySpec.registered()
         if utility.__module__.startswith("vg2c.")
-        and any(isinstance(value, emittable) for value in vars(utility).values())
+        and any(
+            isinstance(value, EmittableOperation) for value in vars(utility).values()
+        )
     ],
     ids=lambda utility: utility.utility_name,
 )
@@ -98,7 +115,7 @@ def test_included_utility_keeps_every_emittable_method(utility):
     operations = {
         name
         for name in vars(utility)
-        if isinstance(inspect.getattr_static(utility, name), emittable)
+        if isinstance(inspect.getattr_static(utility, name), EmittableOperation)
     }
     receiver = "ctx" if utility.utility_name == "ctx" else f"ctx.{utility.utility_name}"
     embedded = assemble_utilities(
@@ -166,4 +183,6 @@ def test_api_retention_preserves_workflow_utility_selection(
     if sql_globals:
         expected_classes.add("SqliteEngine")
         assert methods(emitted.source, "SqliteEngine") == {"global_sql"}
-    assert {node.name for node in tree.body if isinstance(node, ast.ClassDef)} == expected_classes
+    assert {
+        node.name for node in tree.body if isinstance(node, ast.ClassDef)
+    } == expected_classes

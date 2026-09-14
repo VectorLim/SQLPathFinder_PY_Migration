@@ -9,6 +9,24 @@ from vg2c.emitter.models import CodeExpr, EmittedParameter, SourceRange, _value_
 GlobalValues = dict[str, dict[str, object]]
 
 
+def render_script_settings(settings: tuple[tuple[str, object, str], ...]) -> str:
+    """Render input-agnostic runtime settings in the generated-script header."""
+    if not settings:
+        return ""
+
+    lines = [
+        "# ---------------------------------------------------------------------------",
+        "# VG2C generated-script settings",
+        "# Edit these values to tune runtime behavior for this generated script.",
+        "# ---------------------------------------------------------------------------",
+    ]
+    for name, default, description in settings:
+        lines.append(f"# {description}")
+        lines.append(f"{name} = {default!r}")
+    lines.append("# ---------------------------------------------------------------------------")
+    return "\n".join(lines)
+
+
 def global_key(key: str) -> str:
     name = re.sub(r"[^A-Z0-9_]", "_", key.upper()).strip("_") or "VALUE"
     return f"VALUE_{name}" if name[0].isdigit() else name

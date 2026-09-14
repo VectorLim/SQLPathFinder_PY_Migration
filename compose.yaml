@@ -1,0 +1,36 @@
+services:
+  vg2c-ui:
+    build:
+      context: .
+      secrets:
+        - git_credentials
+    ports:
+      - "${APP_PORT:-8765}:8765"
+    environment:
+      VG2C_WORKSPACE_RETENTION_SECONDS: "${VG2C_WORKSPACE_RETENTION_SECONDS:-86400}"
+      VG2C_CLEANUP_INTERVAL_SECONDS: "${VG2C_CLEANUP_INTERVAL_SECONDS:-3600}"
+      VG2C_MAX_UPLOAD_BYTES: "${VG2C_MAX_UPLOAD_BYTES:-104857600}"
+      VG2C_MAX_FILE_COUNT: "${VG2C_MAX_FILE_COUNT:-100}"
+      VG2C_MAX_WORKSPACE_BYTES: "${VG2C_MAX_WORKSPACE_BYTES:-524288000}"
+      VG2C_COOKIE_SECURE: "${VG2C_COOKIE_SECURE:-false}"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:8765/api/health', timeout=3)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+secrets:
+  git_credentials:
+    file: ${VG2C_GIT_CREDENTIALS_FILE:-./secrets/git-credentials}

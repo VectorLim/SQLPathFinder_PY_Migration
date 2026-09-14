@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from vg2c.emitter.models import ArtifactRole, emittable, operation_spec
+from vg2c.emitter.models import ArtifactRole, emittable
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.oracle_client import OracleClient
 
@@ -36,8 +36,7 @@ class PipelineContext(UtilitySpec):
         result.columns = [col.lower() for col in result.columns]
         return result
 
-    @emittable
-    @operation_spec(
+    @emittable(
         parameter_capabilities={"sql": ("structured-sql",)},
         artifact_roles={
             "output": ArtifactRole("output"),

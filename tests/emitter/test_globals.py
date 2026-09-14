@@ -129,7 +129,8 @@ def test_generated_globals_metadata_and_shared_edits(tmp_path):
     last_import = max(
         i for i, node in enumerate(tree.body) if isinstance(node, (ast.Import, ast.ImportFrom))
     )
-    assert ast.unparse(tree.body[last_import + 1]) == "LOT = '1'"
+    assert ast.unparse(tree.body[last_import + 1]) == "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000"
+    assert ast.unparse(tree.body[last_import + 2]) == "LOT = '1'"
     assert source.count("\nLOT = '1'\n") == 1
     assert len(result.emitted.steps) == 4
     all_parameters = [p for step in result.emitted.steps for p in step.parameters]

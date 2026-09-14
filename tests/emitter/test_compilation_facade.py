@@ -48,6 +48,18 @@ def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     assert output == source.with_suffix(".py")
 
 
+def test_generated_script_settings_follow_imports_and_precede_dependencies(tmp_path):
+    source = tmp_path / "script.txt"
+    source.write_text((FIXTURES / "script_short.txt").read_text(encoding="utf-8"))
+
+    generated = translate(source).read_text(encoding="utf-8")
+
+    settings = generated.index("# VG2C generated-script settings")
+    chunk_size = generated.index("VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000")
+    dependencies = generated.index(DEPENDENCIES_END)
+    assert settings < chunk_size < dependencies
+
+
 def test_emitted_script_seeds_node_default_from_literal_site(tmp_path):
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "reflow.txt").read_text(encoding="utf-8"))
