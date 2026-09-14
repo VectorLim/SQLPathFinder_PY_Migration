@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from vg2c.embedding import assemble_utilities
 from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
 from vg2c.kind import Kind
 from vg2c.resolver.models import ResolvedBlock
-from vg2c.utilities import assemble_utilities, ensure_utility_checks_loaded
+from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 
 

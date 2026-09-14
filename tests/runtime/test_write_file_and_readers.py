@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.utilities import assemble_utilities
+from vg2c.embedding import assemble_utilities
 from vg2c.utilities.macro_state import MacroState
 from vg2c.utilities.pipeline_context import PipelineContext
 

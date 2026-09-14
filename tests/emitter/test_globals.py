@@ -226,15 +226,15 @@ def test_generated_conflicts_reuse_the_disambiguated_global(tmp_path):
 
 
 def test_imported_or_embedded_names_are_reserved(tmp_path, monkeypatch):
-    import vg2c.utilities
+    import vg2c.embedding
 
-    assemble = vg2c.utilities.assemble_utilities
+    assemble = vg2c.embedding.assemble_utilities
 
     def with_runtime_constant(**kwargs):
         embedded = assemble(**kwargs)
         return replace(embedded, sources=(*embedded.sources, "LOT = 'runtime constant'"))
 
-    monkeypatch.setattr(vg2c.utilities, "assemble_utilities", with_runtime_constant)
+    monkeypatch.setattr(vg2c.embedding, "assemble_utilities", with_runtime_constant)
     result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'"))
     assert "STEP_0000_LOT = '1'" in result.emitted.source
     parameter = next(p for p in result.emitted.steps[0].parameters if p.id.startswith("global:"))

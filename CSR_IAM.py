@@ -29,17 +29,18 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-NODE = "KM"
-SITE = ""
+ATTR_LIST = "1064"
+SITE = "KM"
 OPERATION = "2303"
 SKIP_OPERATION = "2446"
 DURATION = "TRUNC(SYSDATE) - 2"
+
 HIST_PATH = ""
 CONFIG_PATH = ""
 EMAIL_RECEIVER = ""
 EMAIL_SUBJECT = ""
+NODE = ""
 monitorset = "'V_PRE_NDLE_OFFSTS_SING'"  # setup monset
-ATTR_LIST = "1064"
 
 
 # -------- CONFIG ---------------

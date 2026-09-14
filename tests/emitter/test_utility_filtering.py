@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from vg2c.compilation import compile_document
+from vg2c.embedding import assemble_utilities
 from vg2c.emitter.models import emittable
-from vg2c.utilities import assemble_utilities, ensure_utility_checks_loaded
+from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 
 

@@ -13,7 +13,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ._symbol_index import (
+from .index import (
     COMPILER_BASES,
     COMPILER_DECORATORS,
     COMPILER_STATE,
@@ -54,7 +54,9 @@ class Selection:
 
 
 class SymbolResolver:
-    def __init__(self, source_root: Path, utilities: dict[str, SymbolRef] | None = None) -> None:
+    def __init__(
+        self, source_root: Path, utilities: dict[str, SymbolRef] | None = None
+    ) -> None:
         self.index = SourceIndex(source_root)
         self.utilities = utilities or {}
         self.selection = Selection(self.index)
@@ -68,7 +70,9 @@ class SymbolResolver:
 
     def scan_workflow(self, source: str) -> None:
         """Scan runtime roots without changing text owned by the workflow writer."""
-        module = ModuleIndex("__workflow__", Path("<generated-workflow>"), ast.parse(source))
+        module = ModuleIndex(
+            "__workflow__", Path("<generated-workflow>"), ast.parse(source)
+        )
         module.bindings.update({ref.name: ref for ref in self.utilities.values()})
         self.index.modules[module.name] = module
         for ref, symbol in module.symbols.items():
@@ -99,9 +103,13 @@ class SymbolResolver:
                 f"Repeated class definition {ref} requires preserving rebinding order"
             )
         if any(getattr(node, "type_params", None) for node in symbol.nodes):
-            raise ResolutionError(f"{ref}: generic type-parameter scopes are not supported")
+            raise ResolutionError(
+                f"{ref}: generic type-parameter scopes are not supported"
+            )
         if origin is not None:
-            self.selection.dependencies.setdefault(origin, set()).add(Dependency(ref, eager))
+            self.selection.dependencies.setdefault(origin, set()).add(
+                Dependency(ref, eager)
+            )
         if ref in self.selected:
             return
         self.selected.add(ref)
@@ -162,7 +170,12 @@ class SymbolResolver:
         return name
 
     def member(
-        self, cls: SymbolRef, name: str, origin: SymbolRef | None = None, *, eager: bool = False
+        self,
+        cls: SymbolRef,
+        name: str,
+        origin: SymbolRef | None = None,
+        *,
+        eager: bool = False,
     ) -> None:
         self.require(cls, origin, eager=eager)
         symbol = self.index.symbol(cls)
@@ -204,9 +217,17 @@ class SymbolResolver:
         module = self.index.module(ref.module)
         members: list[SymbolRef] = []
         for name, child in symbol.members.items():
-            if name in COMPILER_STATE or name in {"check", "emit_block", "extract_globals"}:
+            if name in COMPILER_STATE or name in {
+                "check",
+                "emit_block",
+                "extract_globals",
+            }:
                 continue
-            if not name.startswith("_") or name.startswith("__") and name.endswith("__"):
+            if (
+                not name.startswith("_")
+                or name.startswith("__")
+                and name.endswith("__")
+            ):
                 members.append(child)
                 continue
             if any(
@@ -241,7 +262,9 @@ class SymbolResolver:
         methods still resolve their imports, helpers and state through this graph.
         """
         included = {
-            ref for ref in self.selected if self.is_utility(ref) and self.index.symbol(ref).is_class
+            ref
+            for ref in self.selected
+            if self.is_utility(ref) and self.index.symbol(ref).is_class
         }
         self.freeze_context = True
         for ref in sorted(included):
@@ -326,7 +349,11 @@ class SymbolResolver:
                     if self.qualified(module, dec) not in COMPILER_DECORATORS
                 ]
                 if node.bases or node.keywords or node.decorator_list:
-                    self.widen(ref, "inheritance, metaclass, or class decorator", line=node.lineno)
+                    self.widen(
+                        ref,
+                        "inheritance, metaclass, or class decorator",
+                        line=node.lineno,
+                    )
                 if not self.is_utility(ref):
                     # Ordinary runtime helpers stay intact; only registered
                     # utilities mix runtime members with compiler machinery.
@@ -342,11 +369,15 @@ class SymbolResolver:
                             "__setattr__",
                             "__delattr__",
                         }:
-                            self.widen(ref, "dynamic attribute protocol", line=node.lineno)
+                            self.widen(
+                                ref, "dynamic attribute protocol", line=node.lineno
+                            )
                 node.body = []
                 node.bases = [visitor.visit(base) for base in node.bases]
                 node.keywords = [visitor.visit(kw) for kw in node.keywords]
-                node.decorator_list = [visitor.decorator(dec) for dec in node.decorator_list]
+                node.decorator_list = [
+                    visitor.decorator(dec) for dec in node.decorator_list
+                ]
                 self.selection.nodes[ref] = [node]
             else:
                 self.selection.nodes[ref] = visitor._body(nodes)
@@ -359,9 +390,13 @@ class SymbolResolver:
                 if target in seen:
                     continue
                 seen.add(target)
-                stack.extend(edge.target for edge in self.selection.dependencies.get(target, ()))
+                stack.extend(
+                    edge.target for edge in self.selection.dependencies.get(target, ())
+                )
             for target in seen:
-                self.selection.dependencies.setdefault(origin, set()).add(Dependency(target, True))
+                self.selection.dependencies.setdefault(origin, set()).add(
+                    Dependency(target, True)
+                )
         return self.selection
 
 
@@ -440,7 +475,10 @@ class _References(ast.NodeTransformer):
             ref = self.binding(node.id)
             if ref:
                 target = self.r.canonical(ref)
-                if isinstance(target, SymbolRef) and self.r.index.symbol(target).is_class:
+                if (
+                    isinstance(target, SymbolRef)
+                    and self.r.index.symbol(target).is_class
+                ):
                     return target
         return None
 
@@ -470,7 +508,9 @@ class _References(ast.NodeTransformer):
             return None
         imp = self.r.index.symbol(ref).nodes[0]
         prefix = (
-            imp.names[0].name if isinstance(imp, ast.Import) and not imp.names[0].asname else first
+            imp.names[0].name
+            if isinstance(imp, ast.Import) and not imp.names[0].asname
+            else first
         )
         if not chain.startswith(prefix + "."):
             self.error(node, "ambiguous project package reference")
@@ -489,14 +529,16 @@ class _References(ast.NodeTransformer):
                 return ast.copy_location(ast.Constant(self.module.name), node)
             if node.id in {"__spec__", "__loader__", "__package__"}:
                 self.error(
-                    node, "package/loader identity cannot be represented in a standalone module"
+                    node,
+                    "package/loader identity cannot be represented in a standalone module",
                 )
         if ref:
             self.dependency(ref)
             target = self.r.canonical(ref)
             if isinstance(target, str):
                 self.error(
-                    node, "project module objects cannot escape; use a statically named member"
+                    node,
+                    "project module objects cannot escape; use a statically named member",
                 )
             if self.r.index.symbol(target).is_class and not self.annotation:
                 self.r.widen(
@@ -508,12 +550,16 @@ class _References(ast.NodeTransformer):
         elif not self.annotation:
             recv = self.receiver(node)
             if recv and recv != self.r.utilities.get("ctx"):
-                self.r.widen(recv, "instance escapes", origin=self.origin, line=node.lineno)
+                self.r.widen(
+                    recv, "instance escapes", origin=self.origin, line=node.lineno
+                )
         return node
 
     def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
         if node.attr in {"__globals__", "__code__"}:
-            self.error(node, "function namespace/code reflection cannot be safely embedded")
+            self.error(
+                node, "function namespace/code reflection cannot be safely embedded"
+            )
         # The compiler's ctx parameter is a known protocol, not general type inference.
         chain = dotted(node)
         if chain:
@@ -528,17 +574,25 @@ class _References(ast.NodeTransformer):
                         parts[1], parts[2] if len(parts) > 2 else None, self.origin
                     )
                 else:
-                    self.r.member(self.r.utilities["ctx"], parts[1], self.origin, eager=self.eager)
+                    self.r.member(
+                        self.r.utilities["ctx"], parts[1], self.origin, eager=self.eager
+                    )
                 return node
             if recv:
                 ref = self.binding(parts[0])
                 if ref:
                     self.dependency(ref)
-                if parts[1] == "__class__" or (ref and parts[1] in {"__dict__", "__annotations__"}):
-                    self.r.widen(recv, "class reflection", origin=self.origin, line=node.lineno)
+                if parts[1] == "__class__" or (
+                    ref and parts[1] in {"__dict__", "__annotations__"}
+                ):
+                    self.r.widen(
+                        recv, "class reflection", origin=self.origin, line=node.lineno
+                    )
                 self.r.member(recv, parts[1], self.origin, eager=self.eager)
                 if isinstance(node.ctx, (ast.Store, ast.Del)) and ref:
-                    self.r.widen(recv, "class mutation", origin=self.origin, line=node.lineno)
+                    self.r.widen(
+                        recv, "class mutation", origin=self.origin, line=node.lineno
+                    )
                 return node
             member = self.module_member(node)
             if member:
@@ -546,7 +600,9 @@ class _References(ast.NodeTransformer):
                 self.dependency(binding)
                 canonical = self.r.canonical(binding)
                 if isinstance(canonical, str):
-                    self.error(node, "nested module objects require a direct module import")
+                    self.error(
+                        node, "nested module objects require a direct module import"
+                    )
                 if self.r.index.symbol(canonical).is_class:
                     if len(rest) > 1:
                         self.r.member(canonical, rest[1], self.origin, eager=self.eager)
@@ -562,10 +618,14 @@ class _References(ast.NodeTransformer):
                     alias = self.r.local_import_alias(binding)
                     self.dependency(alias)
                     rest[0] = alias.name
-                return ast.copy_location(ast.parse(".".join(rest), mode="eval").body, node)
+                return ast.copy_location(
+                    ast.parse(".".join(rest), mode="eval").body, node
+                )
         return self.generic_visit(node)
 
-    def visit_Import(self, node: ast.Import | ast.ImportFrom) -> ast.AST | list[ast.stmt]:
+    def visit_Import(
+        self, node: ast.Import | ast.ImportFrom
+    ) -> ast.AST | list[ast.stmt]:
         result: list[ast.stmt] = []
         for alias in node.names:
             item = copy.deepcopy(node)
@@ -588,7 +648,8 @@ class _References(ast.NodeTransformer):
             if isinstance(node, ast.Import):
                 if self.scopes and not all(s.class_ref for s in self.scopes):
                     self.error(
-                        node, "runtime-local project module import requires namespace identity"
+                        node,
+                        "runtime-local project module import requires namespace identity",
                     )
                 continue
             target = self.r.index.module(module).bindings.get(alias.name)
@@ -598,7 +659,9 @@ class _References(ast.NodeTransformer):
                 self.error(node, f"unknown imported symbol {module}.{alias.name}")
             # Deferred project initialization cannot be hoisted without changing behavior.
             if not self.eager and self.r.index.module(module).effects:
-                self.error(node, f"runtime-local import of {module} has initialization effects")
+                self.error(
+                    node, f"runtime-local import of {module} has initialization effects"
+                )
             self.dependency(target)
             local = alias.asname or alias.name
             if not self.eager:
@@ -650,7 +713,10 @@ class _References(ast.NodeTransformer):
             for dec in node.decorator_list:
                 if not self.r.safe_decorator(self.module, dec):
                     self.r.widen(
-                        self.owner, "custom method decorator", origin=self.origin, line=dec.lineno
+                        self.owner,
+                        "custom method decorator",
+                        origin=self.origin,
+                        line=dec.lineno,
                     )
         node.decorator_list = [self.decorator(d) for d in node.decorator_list]
         args = node.args
@@ -701,7 +767,9 @@ class _References(ast.NodeTransformer):
         result: list[ast.stmt] = []
         for node in body:
             value = self.visit(node)
-            result.extend(value if isinstance(value, list) else [value] if value else [])
+            result.extend(
+                value if isinstance(value, list) else [value] if value else []
+            )
         return result
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
@@ -718,9 +786,12 @@ class _References(ast.NodeTransformer):
 
     def _lambda(self, node: ast.Lambda, *, called: bool) -> ast.Lambda:
         node.args.defaults = [self.visit(n) for n in node.args.defaults]
-        node.args.kw_defaults = [self.visit(n) if n else None for n in node.args.kw_defaults]
+        node.args.kw_defaults = [
+            self.visit(n) if n else None for n in node.args.kw_defaults
+        ]
         names = {
-            arg.arg for arg in [*node.args.args, *node.args.posonlyargs, *node.args.kwonlyargs]
+            arg.arg
+            for arg in [*node.args.args, *node.args.posonlyargs, *node.args.kwonlyargs]
         }
         names.update(a.arg for a in (node.args.vararg, node.args.kwarg) if a)
         self.scopes.append(_Scope(names))
@@ -735,7 +806,10 @@ class _References(ast.NodeTransformer):
         # The outer iterable is evaluated in the enclosing scope.
         node.generators[0].iter = self.visit(node.generators[0].iter)
         names = {
-            n.id for gen in node.generators for n in ast.walk(gen.target) if isinstance(n, ast.Name)
+            n.id
+            for gen in node.generators
+            for n in ast.walk(gen.target)
+            if isinstance(n, ast.Name)
         }
         self.scopes.append(_Scope(names))
         for index, gen in enumerate(node.generators):
@@ -756,13 +830,18 @@ class _References(ast.NodeTransformer):
     def visit_Call(self, node: ast.Call) -> ast.AST:
         name = dotted(node.func)
         if (
-            any(self.builtin(node.func, builtin) for builtin in ("eval", "exec", "__import__"))
+            any(
+                self.builtin(node.func, builtin)
+                for builtin in ("eval", "exec", "__import__")
+            )
             or name
             and name.endswith(".import_module")
         ):
             self.error(node, "dynamic code/import execution cannot be safely embedded")
         if self.builtin(node.func, "globals"):
-            self.error(node, "namespace-sensitive globals() use cannot be safely embedded")
+            self.error(
+                node, "namespace-sensitive globals() use cannot be safely embedded"
+            )
         # The existing path helper intentionally reads the generated script's __file__.
         if (
             isinstance(node.func, ast.Attribute)
@@ -787,17 +866,27 @@ class _References(ast.NodeTransformer):
             if recv:
                 attr = node.args[1]
                 if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
-                    if recv == self.r.utilities.get("ctx") and attr.value in self.r.utilities:
+                    if (
+                        recv == self.r.utilities.get("ctx")
+                        and attr.value in self.r.utilities
+                    ):
                         self.r.context_member(attr.value, None, self.origin)
                     else:
                         self.r.member(recv, attr.value, self.origin, eager=self.eager)
                 else:
-                    self.r.widen(recv, "dynamic member name", origin=self.origin, line=node.lineno)
+                    self.r.widen(
+                        recv,
+                        "dynamic member name",
+                        origin=self.origin,
+                        line=node.lineno,
+                    )
                 node.args[1:] = [self.visit(arg) for arg in node.args[1:]]
                 node.keywords = [self.visit(kw) for kw in node.keywords]
                 return node
         if self.builtin(node.func, "locals"):
-            self.error(node, "locals() namespace inspection is outside the static subset")
+            self.error(
+                node, "locals() namespace inspection is outside the static subset"
+            )
         if self.eager:
             target = self.callable_ref(node.func)
             if target:
@@ -810,8 +899,12 @@ class _References(ast.NodeTransformer):
         return self.generic_visit(node)
 
     def visit_Subscript(self, node: ast.Subscript) -> ast.AST:
-        if isinstance(node.value, ast.Call) and self.builtin(node.value.func, "globals"):
-            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+        if isinstance(node.value, ast.Call) and self.builtin(
+            node.value.func, "globals"
+        ):
+            if isinstance(node.slice, ast.Constant) and isinstance(
+                node.slice.value, str
+            ):
                 ref = self.module.bindings.get(node.slice.value)
                 if ref:
                     self.dependency(ref)

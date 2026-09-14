@@ -7,9 +7,9 @@ import copy
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ._symbol_index import IMPORTS, ResolutionError, SymbolRef, bound_names
-from ._symbols import Selection
-from ._topo_sort import topological_sort
+from .index import IMPORTS, ResolutionError, SymbolRef, bound_names
+from .resolver import Selection
+from .topology import topological_sort
 
 
 @dataclass(frozen=True)

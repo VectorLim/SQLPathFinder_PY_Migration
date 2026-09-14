@@ -52,10 +52,10 @@ def _resolve_reader_imports_and_roots(
 
 def emit(dispatched: DispatchedProgram) -> EmittedScript:
     """Stage 5: emit Python and the edit/semantic manifest at the same time."""
+    from vg2c.embedding import assemble_utilities
+    from vg2c.embedding.index import bound_names
     from vg2c.emitter.walker import walk_and_emit
     from vg2c.logger import Logger
-    from vg2c.utilities import assemble_utilities
-    from vg2c.utilities._symbol_index import bound_names
 
     log = Logger.getLogger("vg2c.emitter")
     reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(dispatched.dispatched)

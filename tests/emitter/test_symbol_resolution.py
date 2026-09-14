@@ -6,9 +6,9 @@ import types
 
 import pytest
 
-from vg2c.utilities._symbol_emit import render_symbols
-from vg2c.utilities._symbol_index import ResolutionError, SymbolRef
-from vg2c.utilities._symbols import SymbolResolver
+from vg2c.embedding.index import ResolutionError, SymbolRef
+from vg2c.embedding.renderer import render_symbols
+from vg2c.embedding.resolver import SymbolResolver
 
 
 def build(tmp_path, modules, roots):

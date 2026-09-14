@@ -10,11 +10,11 @@ The replacement has three internal responsibilities:
 
 | Responsibility | Implementation | Output |
 | --- | --- | --- |
-| Source indexing | `utilities/_symbol_index.py` | Module bindings, symbols, class members, initialization groups |
-| Root selection and closure | `utilities/_symbols.py` | Selected nodes, reasoned dependency edges, context instances, fallback records |
-| Ordering and rendering | `utilities/_symbol_emit.py` | Imports, definitions, generated context expression |
+| Source indexing | `embedding/index.py` | Module bindings, symbols, class members, initialization groups |
+| Root selection and closure | `embedding/resolver.py` | Selected nodes, reasoned dependency edges, context instances, fallback records |
+| Ordering and rendering | `embedding/renderer.py` | Imports, definitions, generated context expression |
 
-`assemble_utilities()` is the integration entry point. There is one dependency
+`embedding.assemble_utilities()` is the integration entry point. There is one dependency
 model, including conservative selections; no legacy resolver switch remains.
 
 ## 2. What whole-file inclusion did
@@ -176,10 +176,10 @@ and region markers remain unchanged.
 
 ## 13. Refactored modules
 
-The emitter now assembles dependency roots after step emission. Utilities' package
-entry point delegates indexing/resolution/rendering. `_base.py` remains responsible
-for registration and classification rather than source extraction. The runtime
-context accepts explicit instances; its repository callers were migrated.
+The emitter now assembles dependency roots after step emission through the dedicated
+`embedding` package. `_base.py` remains responsible for registration and
+classification rather than source extraction. The runtime context accepts explicit
+instances; its repository callers were migrated.
 
 Generated execution also exposed a pre-existing SmartAppend emission defect:
 already-rendered path strings were being rendered again. The emitter now passes

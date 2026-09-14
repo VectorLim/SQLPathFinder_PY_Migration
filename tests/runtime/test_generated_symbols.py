@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from vg2c.compilation import compile_document
-from vg2c.utilities import assemble_utilities
+from vg2c.embedding import assemble_utilities
 
 RUNNER = """
 import importlib.abc, runpy, sys
