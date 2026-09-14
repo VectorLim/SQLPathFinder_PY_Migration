@@ -681,8 +681,8 @@ class SqliteReader:
                 f"SQLite error in execute: {exc}\nSQL:\n{final_stmt}"
             ) from exc
         conn.close()
-        if not rows or not col_names:
-            return pd.DataFrame()
+        if not rows:
+            return pd.DataFrame(columns=col_names)
         data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
         return pd.DataFrame(data)
 
@@ -1152,12 +1152,6 @@ def step_0005_sqlite_query(ctx) -> None:
               a0.[lot] AS [Lot_NCORisk]
     FROM 
     [IPM_Data] a0
-    WHERE
-     NOT          (a0.[lot] In 
-    """
-        + ctx.csv_io.sql_get_csv_list(".\\HIST.csv", 1, "a0.[lot] In")
-        + """)"""
-        + """
     """,
         output="DATA.csv",
         reader=SqliteReader(),
@@ -1181,9 +1175,9 @@ def read_csv(path):
 
 def get_facility_lot(ctx):
     try:
-        step_0001_sql_query(ctx)
-        step_0002_sql_query(ctx)
-        step_0003_sqlite_query(ctx)
+        # step_0001_sql_query(ctx)
+        # step_0002_sql_query(ctx)
+        # step_0003_sqlite_query(ctx)
         step_0004_sqlite_query(ctx)
         step_0005_sqlite_query(ctx)
 

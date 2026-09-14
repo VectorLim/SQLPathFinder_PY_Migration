@@ -130,8 +130,8 @@ class SqliteReader(UtilitySpec):
 
         conn.close()
 
-        if not rows or not col_names:
-            return pd.DataFrame()
+        if not rows:
+            return pd.DataFrame(columns=col_names)
 
         data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
         return pd.DataFrame(data)
