@@ -1,1570 +1,1703 @@
 # SQLPathFinder Frontend Refactoring and UI Improvement Plan
 
-> **Inspection baseline:** `VectorLim/SQLPathFinder_PY_Migration` `main` at `1166cb22c49905c1a71d770e2bb0bf3e4062e871` (`combined sqlite table being empty without column header fix`, 2026-09-14).
+> **Current repository HEAD:** `3cd37769ae1cf00da2105d4d68c3c75d73584db4` on `main`.
 >
-> **Verification note:** the execution host could not perform a literal network `git pull`, so the repository was inspected directly through the connected GitHub repository at the verified remote `main` HEAD above. The plan commit itself is documentation-only; no UI implementation is included.
+> **Application-code baseline inspected:** `1166cb22c49905c1a71d770e2bb0bf3e4062e871`. The commit after it only added this planning document; no frontend implementation has changed since that application baseline.
 >
-> **Research inputs reviewed:** `SQLPathFinder_UI_Watermelon_Audit.md`, `SQLPathFinder_UI_Implementation_Plan.md`, and `SQLPathFinder_UI_Component_Matrix.md`. Their recommendations are treated as input and are overridden below where the current codebase supports a simpler or safer design.
+> **Research inputs:** the Detailed Watermelon UI Audit, SQLPathFinder UI Implementation Plan, and Watermelon Component Suitability Matrix were reviewed as design input, then validated against the actual repository. This document is the consolidated implementation source of truth.
+>
+> **Status:** planning only. Do not implement UI changes as part of this document update.
 
-## 1. Executive direction
+## 1. Execution constraints that remain authoritative
 
-The frontend should remain a small React workbench, not become a general-purpose application framework or a Watermelon showcase. The current code already has a sound core state architecture: backend-owned domain semantics are serialized into generated TypeScript contracts, `workspaceState.ts` owns tab/edit/projection state, and `useWorkspace.ts` mediates asynchronous API operations. Those pieces should be preserved.
-
-The refactor should focus on the actual pressure points:
-
-- make `App.tsx` a composition/orchestration root instead of a mixture of upload logic, shell layout, tabs, toolbars, notifications, dialogs, and editor rendering;
-- separate transient upload/file-inventory state from document editing state without introducing a global store;
-- replace the crowded top-bar upload flow with a real source intake workflow;
-- add a keyboard-first command palette without building a plugin framework;
-- keep the domain-specific `ScriptTree` and its existing accessibility behavior;
-- replace browser `prompt()` flows in `StructuredSqlEditor` with controlled accessible forms;
-- remove duplicated operation metadata/diagnostic UI;
-- fix transient feedback so it is not hidden on narrower screens;
-- convert the existing context panel into an accessible responsive inspector while preserving its data-flow functionality;
-- remove obsolete CSS and old UI paths immediately after replacements are verified;
-- keep styling source-owned and CSS-based rather than migrating the application to Tailwind/shadcn.
-
-Target responsibility flow remains:
+Keep the current responsibility direction:
 
 ```text
-compiler/domain semantics
+compiler / domain semantics
         ↓
-FastAPI contracts + serialization
+FastAPI models + serialization
         ↓
 generated TypeScript contracts + api.ts
         ↓
-controller hooks / reducer state
+workspace reducer / controller hooks
         ↓
-feature components
+feature UI state
         ↓
-small shared UI primitives
+presentation components / primitives
 ```
 
-No frontend component should rediscover compiler semantics that can be expressed by the backend contract.
+Preserve these existing strengths unless a regression test proves a real problem:
 
----
+- `workspaceState.ts` as the editor/document state machine;
+- `useWorkspace.ts` as the controller for document mutations and backend operations;
+- stale-response protection based on tab instance/version/request ownership;
+- generated `contracts.generated.ts` as the frontend domain-contract source;
+- backend-owned SQL parsing/mutation and data-flow projection;
+- `CAPABILITY_EDITORS` as the small capability dispatch seam in `OperationEditor.tsx`;
+- the existing domain-specific `ScriptTree`, including ARIA tree semantics, roving focus, arrow/Home/End navigation, search-driven temporary expansion, and scope behavior;
+- native semantic tables for CSV preview;
+- inline durable diagnostics and validation errors;
+- CSS design tokens, focus-visible styling, reduced-motion support, and contrast handling;
+- the single-page application model; do not add a frontend router for this refactor.
 
-## 2. Current-state assessment
+Do **not** introduce:
 
-### 2.1 Frontend structure and component hierarchy
+- Redux, Zustand, or another application-wide state framework;
+- client-side SQL parsing or compiler-semantic reconstruction;
+- duplicate TypeScript domain models beside generated contracts;
+- a plugin framework for commands;
+- Tailwind/shadcn as a second styling system;
+- Motion purely for decorative transitions;
+- fake upload percentages;
+- a generic tree replacement for `ScriptTree`;
+- compatibility layers that survive after their replacement is complete.
 
-The current React entry point is intentionally small:
+Watermelon remains a selective interaction/design reference. Copy only behavior that improves this workbench. Do not copy catalog components wholesale when native HTML, existing CSS, or a smaller accessible primitive is sufficient.
+
+## 2. Current code areas this plan acts on
+
+Primary frontend files:
 
 ```text
-main.tsx
-└─ App
-   ├─ top bar / upload / translation / downloads
-   ├─ translated-file tabs
-   └─ workspace
-      ├─ editor pane
-      │  ├─ editor toolbar
-      │  ├─ change toolbar
-      │  ├─ ScriptTree
-      │  │  └─ selected step → OperationEditor
-      │  │      ├─ GenericOperationEditor
-      │  │      └─ capability: structured-sql → StructuredSqlEditor
-      │  ├─ ChangePreview
-      │  └─ Diagnostics
-      └─ ContextSidebar
-         ├─ Data Flow
-         ├─ CSV preview
-         └─ File Details
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/ContextSidebar.tsx
+src/vg2c_ui/frontend/src/OperationEditor.tsx
+src/vg2c_ui/frontend/src/ScriptTree.tsx
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/src/api.ts
+src/vg2c_ui/frontend/src/contracts.generated.ts
+src/vg2c_ui/frontend/src/main.tsx
+src/vg2c_ui/frontend/src/operationLabels.ts
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/sql/sqlEditor.css
+src/vg2c_ui/frontend/src/useWorkspace.ts
+src/vg2c_ui/frontend/src/workspaceState.ts
+src/vg2c_ui/frontend/src/workspaceState.test.ts
+src/vg2c_ui/frontend/package.json
 ```
 
-There is no frontend router. Vite proxies `/api` in development and emits the built application into `src/vg2c_ui/static`; FastAPI mounts that static application at `/`. A router is not required for the current single-workspace application and should not be introduced as part of this refactor.
+Backend/API boundary files likely to change early:
 
-### 2.2 State ownership
+```text
+src/vg2c_ui/api/models.py
+src/vg2c_ui/api/contracts.py
+src/vg2c_ui/api/serialization.py
+src/vg2c_ui/api/workspace.py
+src/vg2c_ui/services/workspaces.py
+scripts/generate_frontend_contracts.py
+tests/ui/test_contracts.py
+tests/ui/test_workspace_sessions.py
+```
 
-The strongest part of the frontend is the document/workspace editing state.
+The current concrete maintainability problems that drive the sequence are:
 
-`workspaceState.ts` owns:
+- `App.tsx` owns workspace file inventory, source selection, upload orchestration, translation orchestration, global busy/message state, tabs, toolbars, shortcuts, diagnostics, and inspector coordination;
+- frontend code classifies workspace files using `.endsWith('.txt')` and `startsWith('generated/')` even though workspace semantics belong on the backend boundary;
+- `formatScopeLabel()` interprets compiler scope kinds in React rather than consuming a fully presentation-ready backend label;
+- upload feedback uses one app-wide `busy` flag and one overloaded `message` string;
+- `.status-message` disappears at narrower viewports, hiding errors/progress;
+- the top bar combines hidden file inputs, folder input, a multiple `<select>`, translation, generated downloads, and status messaging;
+- `StructuredSqlEditor.tsx` uses browser `prompt()` for add-selection, add-filter, and add-join flows;
+- operation file-reference and diagnostic presentation is duplicated between generic and SQL editors;
+- `ContextSidebar.Panel` unnecessarily mirrors native `<details>` open state with React state;
+- compact inspector behavior uses a custom backdrop/overlay implementation rather than a shared accessible dialog/sheet primitive;
+- `sql/sqlEditor.css` contains substantial selectors for structures no longer rendered by the current TSX;
+- reusable control styling is duplicated across global and SQL CSS.
 
-- open document tabs and active tab;
-- selected tree item and expanded scopes per tab;
-- draft parameter values;
-- undo/redo history;
-- document mutation status;
-- validated change preview;
-- request ownership/stale-response protection;
-- CSV preview request state;
-- projected multi-document dependency state.
+## 3. Dependency-ordered execution map
 
-`useWorkspace.ts` is a focused controller around that reducer. It owns API orchestration for translation/open/reload/edit/validate/apply/CSV/structured-SQL operations and rejects stale asynchronous SQL responses before committing them. This is appropriate separation and should remain the application state backbone.
+The intended dependency flow is:
 
-`App.tsx` currently owns unrelated shell/transient state together:
+```text
+1. Characterize current behavior
+        ↓
+2. Correct backend/frontend contracts
+        ↓
+3. Establish minimal shared UI primitives
+        ↓
+4. Separate workspace-file state from App
+        ↓
+5. Clean the stable workbench shell/layout
+        ↓
+6. Add one command system
+        ↓
+7. Replace upload/source intake
+        ↓
+8. Replace compact inspector infrastructure
+        ↓
+9. Replace Structured SQL prompt flows
+        ↓
+10. Unify feedback/dialog behavior
+        ↓
+11. Responsive + accessibility hardening
+        ↓
+12. Delete superseded/dead code and dependencies
+        ↓
+13. Final architecture and regression review
+```
 
-- workspace file inventory;
-- selected source paths;
-- operation search;
-- a single app-wide `busy` flag shared by upload and translation;
-- a single `message` string used for success, progress, and errors;
-- batch translation diagnostics;
-- context panel open/closed state.
-
-This is the main ownership problem. The solution is **not** Redux/Zustand/context-heavy architecture. Instead, move only coherent transient responsibilities into feature-level hooks/components.
-
-### 2.3 Backend/frontend boundary
-
-The backend boundary is already well-designed and should be preserved:
-
-- Pydantic API models are the source of truth;
-- `scripts/generate_frontend_contracts.py` generates `contracts.generated.ts`;
-- frontend builds verify generated contracts are current;
-- `api.ts` is a thin typed transport layer;
-- `serialization.py` explicitly serializes compiler-owned semantics instead of asking the frontend to infer them;
-- structured SQL mutation is backend-owned through `/api/sql/*` and the frontend only renders and submits structured actions;
-- workspace projection/data-flow semantics are backend-owned.
-
-This means the UI refactor should **not** create parallel TypeScript domain models, client-side SQL parsing, dependency inference, operation classification, or new frontend business services.
-
-### 2.4 Styling and responsive behavior
-
-The existing CSS is more mature than the previous Watermelon plan assumed:
-
-- semantic-ish design tokens already exist for text, surfaces, borders, accent, success, warning, danger, radii, and panel shadows;
-- focus-visible styling is global;
-- reduced-motion handling already exists;
-- increased-contrast handling already exists;
-- the context panel already changes from persistent desktop sidebar → right sheet → bottom sheet as viewport width decreases;
-- the tree and operation editor already have usable dense workbench styling.
-
-The problem is not lack of Tailwind. The problem is that `styles.css` has accumulated feature-specific control rules and `sql/sqlEditor.css` contains a large set of selectors for UI structures that the current `StructuredSqlEditor.tsx` no longer renders.
-
-The refactor should preserve the existing CSS/token system and remove dead/duplicated rules. It should not introduce a second styling language.
-
-### 2.5 Current upload workflow
-
-Current behavior in `App.tsx`:
-
-1. hidden file input or folder input returns a `FileList`;
-2. all selected files are sent in one `FormData` request through `uploadWorkspaceFiles()`;
-3. browser-relative folder paths are preserved with `webkitRelativePath`;
-4. workspace files are refreshed after success;
-5. uploaded `.txt` files are appended to the source selection;
-6. source files are identified client-side by `.txt` suffix;
-7. generated outputs are identified client-side by `generated/` prefix;
-8. a global `busy` flag and message string communicate progress.
-
-Backend behavior is authoritative and more specific:
-
-- uploads are workspace-scoped;
-- paths are sanitized server-side;
-- allowed upload suffixes are defined by `WorkspaceManager`;
-- per-file, file-count, and workspace-size limits are server-owned;
-- duplicate paths fail because files are created exclusively;
-- files are written one at a time within the request;
-- a later failure can occur after earlier files in the same HTTP request were already saved;
-- the current API does not expose byte-level upload progress or workspace-file deletion.
-
-Therefore the new UI must not simulate percentages or claim atomic multi-file behavior that does not exist.
-
-### 2.6 Existing behavior worth preserving
-
-Preserve these areas unless a regression test demonstrates a problem:
-
-- `workspaceState.ts` reducer and stale-request ownership checks;
-- `useWorkspace.ts` controller role;
-- generated backend→TypeScript contracts;
-- `CAPABILITY_EDITORS` in `OperationEditor.tsx` as a small, useful capability dispatch seam;
-- `ScriptTree` domain structure, search behavior, ARIA tree/treeitem roles, roving focus, and arrow/Home/End navigation;
-- search-driven temporary tree expansion without mutating saved expansion state;
-- backend structured SQL inspection/action APIs;
-- native semantic table for CSV preview;
-- durable diagnostics inline rather than as transient notifications;
-- desktop data-flow inspector and its projection-aware upstream/downstream behavior;
-- CSS reduced-motion and contrast accommodations;
-- single-page application structure with no router.
-
-### 2.7 Concrete maintainability problems and duplication
-
-#### `App.tsx` mixes too many responsibilities
-
-It currently owns transport orchestration, transient feedback, upload selection, download links, tabs, keyboard shortcuts, toolbars, change preview, diagnostics, and responsive context-panel coordination. This makes shell changes risky because unrelated behavior lives in the same render function.
-
-#### Global `busy` is too coarse
-
-Upload and translation use one boolean. Document mutation already has richer per-tab statuses. The new design should use operation-specific busy state rather than adding a bigger global status object.
-
-#### Global `message` is overloaded and becomes invisible
-
-`message` is used for loading, success, and failure. CSS hides `.status-message` below the desktop breakpoint, which means important upload/translation errors can disappear exactly where responsive behavior matters most.
-
-#### Browser `prompt()` is an obsolete UI path
-
-`StructuredSqlEditor` uses `prompt()` for adding selections, filters, and joins. These flows are not composable, are difficult to validate/test, provide weak accessibility, and cannot show field-level errors.
-
-#### Duplicate operation metadata UI
-
-`OperationEditor.tsx` and `StructuredSqlEditor.tsx` each implement file-reference chips and dependency-diagnostic rendering. These should become small shared feature components because the semantics are identical and already reused.
-
-#### Redundant `<details>` state
-
-`ContextSidebar.Panel` mirrors the native `<details open>` state with React `useState` even though no other component consumes that state. Use `defaultOpen` and let the semantic element own it unless controlled state becomes necessary.
-
-#### Frontend reconstructs some workspace classification
-
-`App.tsx` currently infers source files from `.txt` and generated files from `generated/`. That classification belongs in the workspace API if the UI depends on it.
-
-#### Frontend maps scope kinds to domain-facing names
-
-`formatScopeLabel()` understands `if`, `if-branch`, `else-branch`, `macro`, and `loop`. The backend already provides `ScopeView.label`; user-facing domain naming should be serialized there so React does not need to interpret compiler scope kinds.
-
-#### `sqlEditor.css` has strong signs of dead/abandoned UI
-
-The stylesheet contains selectors for structures such as SQL tabs, expression shells, drag handles, attribute pickers, add panels, filter cards, and join layouts that are not rendered by the current `StructuredSqlEditor.tsx`. Implementation should run a selector/reference audit, preserve only selectors reached by the replacement UI, and delete the obsolete remainder after parity is established.
-
-#### Repeated styling rules
-
-Buttons, form fields, focus states, errors, chips, and compact labels are styled independently in global and SQL CSS. Consolidate only the patterns with actual reuse; do not create a component wrapper for every HTML element.
+Steps 6 and 7 are low-coupled after Step 5, but keep the order above so the command palette has stable workbench actions before upload commands are added to it. Do not begin Steps 8–10 before the shared primitives are in place.
 
 ---
 
-## 3. Target frontend architecture
+# Step-by-step execution plan
 
-### 3.1 State and responsibility map
+## Step 1 — Baseline and regression coverage
 
-| Responsibility | Owner after refactor | Notes |
-|---|---|---|
-| document tabs, edits, undo/redo, validation/apply, selected tree item, projection, CSV | `workspaceState.ts` + `useWorkspace.ts` | Preserve existing architecture. |
-| remote workspace-file inventory | new `useWorkspaceFiles.ts` | Fetch/refresh only; no domain semantics. |
-| selected translation source paths | `App.tsx` or cohesive source-controls state | Shell-level user selection, not global app state. |
-| staged upload queue | `SourceUpload.tsx` | Ephemeral local state; removed on close/clear as appropriate. |
-| translation busy + translation diagnostics | source/translation feature owner | Do not reuse upload busy state. |
-| tree search | workbench/editor owner | Keep independent from global command palette. |
-| command palette query/selection | `CommandPalette.tsx` / `cmdk` | Command list is derived from existing state/callbacks. |
-| inspector open state | `App.tsx` | One parent-controlled source of truth. |
-| SQL add-form drafts | `StructuredSqlEditor.tsx` subforms | Local presentation state only. |
-| transient success/failure notification | Sonner | Never replace persistent diagnostics/conflicts with a toast only. |
+### Objective
 
-No new global state library is warranted.
+Establish executable characterization of behavior that must survive the refactor, especially the state machine, `ScriptTree`, editing flow, file tabs, upload/translate flow, and responsive inspector. This step changes test infrastructure only unless a tiny accessibility/testability fix is required.
 
-### 3.2 Proposed file organization
+### Scope
 
-Do not reorganize the whole frontend. Keep existing domain components where they are and add only files with clear ownership:
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/package.json
+src/vg2c_ui/frontend/package-lock.json
+src/vg2c_ui/frontend/src/workspaceState.test.ts
+src/vg2c_ui/frontend/playwright.config.ts               # new, if Playwright is selected
+tests/ui/*                                               # existing backend UI/API tests
+new browser test files under frontend/e2e or tests/ui-e2e
+```
+
+Existing production files may receive only stable semantic labels/roles if a test cannot locate an element accessibly. Prefer role/name selectors over `data-testid`.
+
+### Implementation work
+
+1. Capture the exact baseline commands that must stay green:
+   - frontend contract check;
+   - TypeScript typecheck;
+   - reducer tests;
+   - frontend build;
+   - relevant Python UI/API tests;
+   - SQL editor/domain tests that protect backend SQL semantics.
+2. Add a browser-level regression harness. Prefer Playwright because the risky behavior is keyboard/focus/responsive interaction, not isolated rendering.
+3. Add `@axe-core/playwright` only if it is used immediately in representative accessibility checks.
+4. Build a minimal fixture workflow from existing repository fixtures rather than inventing a separate demo application.
+5. Characterize these flows before changing UI structure:
+   - load workspace file list;
+   - upload an allowed source file;
+   - upload data files/folder-relative files where fixture support exists;
+   - translate one or more source files;
+   - open/switch/close generated-document tabs;
+   - retain edits on an inactive dirty tab;
+   - search `ScriptTree`;
+   - use ArrowUp/ArrowDown/Home/End and scope ArrowLeft/ArrowRight navigation;
+   - select an operation and expose its editor;
+   - edit a parameter, undo, redo, preview, and apply;
+   - reject/ignore stale asynchronous results through existing reducer tests;
+   - open and close file context on desktop and compact layouts;
+   - preview CSV where an existing fixture supports it;
+   - preserve generated download links/archive access.
+6. Record viewport checkpoints used for the rest of the work:
+   - desktop: 1440×900;
+   - compact desktop/tablet landscape: 1024×768;
+   - tablet portrait: 768×1024;
+   - phone: 390×844;
+   - narrow phone: 320×568.
+7. Add one representative axe check for the initial workbench state and one for an open overlay state.
+
+### Refactoring/deletion work
+
+None beyond deleting any temporary selectors/fixtures created only while developing the tests. Do not refactor production components in this step.
+
+### Dependencies
+
+None. This is the prerequisite for all subsequent replacement work.
+
+### Validation
+
+- `npm test` passes using the existing project scripts;
+- `npm run build` passes;
+- relevant `pytest tests/ui` tests pass;
+- new browser characterization tests pass against the unchanged UI;
+- current `ScriptTree` keyboard behavior is explicitly covered;
+- no baseline test depends on DOM class names where an accessible role/name is available.
+
+### Expected completion state
+
+This step is finished only when:
+
+- there is an automated regression path for the main upload → translate → edit → preview/apply workflow;
+- `ScriptTree` keyboard semantics are protected;
+- file-tab switching/closing is protected;
+- compact inspector open/close behavior is protected;
+- reducer stale-response tests still pass;
+- browser/accessibility tooling is actually exercised, not merely installed;
+- no user-visible behavior has intentionally changed.
+
+### Commit boundary
+
+Use a small coherent group of at most two commits:
+
+```text
+test(ui): add browser regression harness
+test(ui): characterize current workbench workflows
+```
+
+Combine them if the harness and first tests are small enough to review together.
+
+---
+
+## Step 2 — Move remaining workspace/presentation semantics into generated contracts
+
+### Objective
+
+Remove frontend inference that belongs to the workspace/compiler boundary before building new UI on top of those assumptions.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/api/models.py
+src/vg2c_ui/api/workspace.py
+src/vg2c_ui/api/serialization.py
+src/vg2c_ui/services/workspaces.py
+src/vg2c_ui/frontend/src/api.ts
+src/vg2c_ui/frontend/src/contracts.generated.ts
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/operationLabels.ts
+scripts/generate_frontend_contracts.py
+tests/ui/test_contracts.py
+tests/ui/test_workspace_sessions.py
+```
+
+### Implementation work
+
+1. Extend the backend workspace-file contract so the frontend does not derive semantic role from paths/suffixes.
+2. Keep classification centralized in the workspace/backend layer. A minimal useful file contract should expose concepts such as:
+   - file role/kind: source input, data input, or generated output;
+   - whether the file may be selected for translation;
+   - existing path/size/modified metadata.
+3. Do not duplicate the allowed-suffix set in the API layer. Reuse `WorkspaceManager` policy/configuration.
+4. Expose the upload policy through one small read endpoint or equivalent generated contract if the upload UI needs preflight validation. Only expose values that are actually consumed:
+   - allowed upload suffixes;
+   - maximum bytes per file;
+   - maximum file count;
+   - maximum workspace bytes.
+5. Keep server validation authoritative even after policy metadata is exposed.
+6. Make `ScopeView.label` presentation-ready in backend serialization so React does not interpret `if`, `if-branch`, `else-branch`, `macro`, or `loop` kinds to generate user-facing names.
+7. Regenerate `contracts.generated.ts` from the Pydantic models; never hand-edit the generated file.
+8. Update current consumers immediately:
+   - replace `.endsWith('.txt')` source classification with contract metadata;
+   - replace `startsWith('generated/')` output classification with contract metadata;
+   - simplify/remove scope-kind interpretation in `operationLabels.ts`.
+9. Keep `api.ts` as transport only. It may add `getWorkspacePolicy()` but must not repeat backend classification rules.
+
+### Refactoring/deletion work
+
+Delete in the same step after the new contract is consumed:
+
+- frontend `.endsWith('.txt')` semantic classification;
+- frontend `startsWith('generated/')` semantic classification;
+- redundant scope-kind-to-label mapping in React;
+- any copied upload limit/suffix constants introduced during implementation.
+
+### Dependencies
+
+Step 1 regression baseline must be green.
+
+### Validation
+
+- generated contract check passes;
+- backend tests prove every workspace file receives the intended role/capabilities;
+- backend tests prove upload policy values come from the existing manager configuration;
+- source/data/generated files still display/select correctly in the unchanged UI;
+- static search confirms no frontend source/output classification remains based on suffix/path prefix;
+- `ScriptTree` labels remain unchanged or intentionally improved by backend-provided labels;
+- frontend test/build and relevant Python tests pass.
+
+### Expected completion state
+
+This step is finished only when:
+
+- frontend code consumes explicit workspace-file semantics;
+- upload policy has one backend source of truth;
+- user-facing scope labels are backend-provided;
+- generated TypeScript contracts are current;
+- no duplicate frontend/backend models or policy constants exist;
+- all baseline workflows still pass.
+
+### Commit boundary
+
+Prefer one atomic commit because backend contract, generated types, and consumers must move together:
+
+```text
+refactor(api): expose workspace presentation metadata
+```
+
+Do not leave a commit where generated contracts and frontend consumers disagree.
+
+---
+
+## Step 3 — Establish minimal shared UI primitives and remove obvious editor duplication
+
+### Objective
+
+Create only the shared UI building blocks that have immediate consumers in later steps, while eliminating existing duplicated presentation logic before adding more UI.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/package.json
+src/vg2c_ui/frontend/package-lock.json
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/OperationEditor.tsx
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/src/ui/*                        # new, deliberately small
+src/vg2c_ui/frontend/src/OperationPresentation.tsx   # new shared editor presentation, or equivalent
+```
+
+### Implementation work
+
+1. Add the accessible primitive dependency selected in the existing plan (`radix-ui`) when it has an immediate production consumer.
+2. Add `lucide-react` when icon-only controls begin using it. Do not carry both Lucide and another icon library.
+3. Implement only shared primitives with concrete reuse:
+   - Button variant/size behavior if repeated button semantics justify a component;
+   - Badge/status-chip presentation;
+   - Dialog foundation with focus trapping, Escape, overlay, labelled title/description, and focus return;
+   - Tooltip for icon-only or abbreviated controls.
+4. Keep native controls where native behavior is sufficient:
+   - `<select>`;
+   - checkbox;
+   - `<textarea>`;
+   - `<table>`;
+   - `<details>`/`<summary>` unless later requirements need controlled collapsible behavior.
+5. Treat Button Group primarily as layout/semantic grouping (`role="group"`) rather than a configurable framework component.
+6. Consolidate genuinely duplicated editor presentation:
+   - one `FileReferences`/equivalent component for Reads/Produces chips;
+   - one `OperationDiagnostics`/equivalent component for dependency diagnostics.
+7. Reuse existing CSS variables. Add primitive styles to one shared location; do not introduce utility-class infrastructure.
+8. Keep visual changes intentionally small in this step so regressions can be attributed to component extraction rather than redesign.
+
+### Refactoring/deletion work
+
+Delete immediately after shared replacements are wired:
+
+- `FileChips` duplicate in `OperationEditor.tsx`;
+- `FileChips`/`FileSummary` duplicate path in `StructuredSqlEditor.tsx` where the shared component fully replaces it;
+- duplicate operation-diagnostic rendering helpers;
+- duplicated CSS rules that become identical shared primitive rules;
+- any temporary wrapper that merely forwards all props without owning styling, semantics, or behavior.
+
+### Dependencies
+
+Steps 1–2.
+
+### Validation
+
+- generic and structured-SQL editors render identical file-reference information to baseline;
+- diagnostics retain `role="alert"`/appropriate durable error semantics;
+- Dialog focus trap/Escape/focus return has a focused browser test before it is used widely;
+- icon-only controls have accessible names;
+- typecheck/build/browser regression tests pass;
+- dependency lockfile contains only packages actually imported by production or tests.
+
+### Expected completion state
+
+This step is finished only when:
+
+- there is exactly one shared operation file-reference presentation path;
+- there is exactly one shared operation diagnostic presentation path;
+- the shared Dialog and Tooltip primitives have tests and real consumers;
+- no Tailwind/shadcn/Motion/react-icons dependency has been added;
+- no primitive exists solely because Watermelon provides one.
+
+### Commit boundary
+
+Use a small coherent pair if needed:
+
+```text
+refactor(ui): add minimal accessible primitives
+refactor(ui): deduplicate operation presentation
+```
+
+A single commit is acceptable if both are compact.
+
+---
+
+## Step 4 — Separate workspace-file inventory/controller state from `App`
+
+### Objective
+
+Reduce `App.tsx` ownership before changing header/upload UI, while preserving the existing `workspaceState`/`useWorkspace` document state architecture.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/api.ts
+src/vg2c_ui/frontend/src/useWorkspaceFiles.ts     # new
+src/vg2c_ui/frontend/src/useWorkspace.ts          # only if a tiny interface adjustment is needed
+```
+
+### Implementation work
+
+1. Add a focused `useWorkspaceFiles` hook/controller that owns **remote workspace inventory**, not document editing semantics.
+2. Its responsibilities should remain narrow:
+   - load workspace file list;
+   - load/carry workspace upload policy;
+   - expose refresh;
+   - expose current loading/error state for the inventory request.
+3. Do not move document tabs, edits, CSV state, projection, validation, or SQL actions out of `workspaceState`/`useWorkspace`.
+4. Do not add Context providers; `App` can call both hooks and pass their outputs down explicitly.
+5. Keep source-selection/upload queue state where it is temporarily until Step 7 rather than prematurely designing a second large controller.
+6. Replace the initial `App` effect and direct `listWorkspaceFiles()` ownership with the new hook.
+7. Preserve error visibility during this intermediate step; do not silently swallow inventory errors.
+
+### Refactoring/deletion work
+
+Delete from `App.tsx` once the hook is active:
+
+- `workspaceFiles` fetch effect;
+- local `refreshWorkspaceFiles()` implementation;
+- direct list-policy fetching duplicated by the hook;
+- imports used only by the removed inventory code.
+
+### Dependencies
+
+Steps 1–3, especially Step 2’s explicit workspace contracts.
+
+### Validation
+
+- initial file inventory appears exactly as before;
+- upload/translation still refreshes file inventory through one hook API;
+- generated downloads remain correct;
+- inventory errors remain visible;
+- `workspaceState.test.ts` is untouched or still passes unchanged;
+- no new global state/store is introduced.
+
+### Expected completion state
+
+This step is finished only when:
+
+- `App.tsx` no longer implements workspace-file fetching/refetch logic;
+- there is one remote workspace-file inventory owner;
+- document/editor state ownership remains unchanged;
+- all baseline workflows pass.
+
+### Commit boundary
+
+One clean commit:
+
+```text
+refactor(ui): isolate workspace file inventory state
+```
+
+---
+
+## Step 5 — Clean the stable workbench shell and layout
+
+### Objective
+
+Make `App.tsx` a composition/orchestration root by extracting stable workbench responsibilities before adding command/upload/inspector features.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/FileTabs.tsx          # new
+src/vg2c_ui/frontend/src/EditorToolbar.tsx      # new only if it owns meaningful toolbar behavior
+src/vg2c_ui/frontend/src/ChangeToolbar.tsx      # new
+src/vg2c_ui/frontend/src/styles.css
+```
+
+Do not create an `AppShell`, `Layout`, `HeaderContainer`, or similar wrapper if it merely renders `children` and a class name.
+
+### Implementation work
+
+1. Extract `FileTabs` because it owns meaningful tab semantics:
+   - tablist/tab roles;
+   - active status;
+   - status indicator;
+   - close action;
+   - ArrowLeft/ArrowRight/Home/End behavior;
+   - focus movement.
+2. Extract `ChangeToolbar` because it presents and drives a cohesive document-editing state:
+   - unsaved change count/status copy;
+   - undo/redo;
+   - preview;
+   - apply;
+   - conflict reload.
+3. Extract the editor toolbar only if doing so groups real behavior (tree search, expand/collapse, inspector launcher). Do not extract a markup-only wrapper.
+4. Keep tree-search value ownership close to the workbench until/unless another consumer needs it.
+5. Restructure the root layout around explicit regions:
+   - top/header intake region;
+   - file tabs;
+   - editor toolbar/change toolbar;
+   - scrollable workbench body;
+   - inspector region.
+6. Fix structural overflow/min-size rules at the grid/flex root instead of adding component-specific breakpoint patches.
+7. Preserve the current desktop sidebar layout and current compact behavior until Step 8 replaces the compact overlay implementation.
+8. Keep the existing upload controls functional but avoid extracting them into a temporary `LegacyUploadControls` component that would be deleted two steps later.
+
+### Refactoring/deletion work
+
+Delete after extraction:
+
+- inline file-tab JSX from `App.tsx`;
+- `handleTabKeys()` from `App.tsx`;
+- inline change-toolbar JSX from `App.tsx`;
+- obsolete shell CSS selectors made redundant by the corrected root layout;
+- pass-through components created during experimentation.
+
+### Dependencies
+
+Steps 1–4.
+
+### Validation
+
+- file-tab keyboard regression suite passes unchanged;
+- tab close behavior and active-tab fallback remain correct;
+- unsaved state/status indicators remain correct;
+- Ctrl/Cmd+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+S behavior remains correct for now;
+- no new horizontal page overflow at the five agreed viewport checkpoints;
+- `ScriptTree` behavior remains unchanged;
+- build/tests pass.
+
+### Expected completion state
+
+This step is finished only when:
+
+- `App.tsx` contains orchestration and composition rather than tab keyboard algorithms/workspace-file fetch logic;
+- file tabs have one implementation;
+- change toolbar has one implementation;
+- root layout owns sizing/overflow rather than a collection of one-off child fixes;
+- upload and inspector behavior are still functionally baseline-compatible pending their dedicated replacement steps.
+
+### Commit boundary
+
+Prefer two independently reviewable commits if the root layout changes are substantial:
+
+```text
+refactor(ui): extract file tabs and change toolbar
+refactor(ui): simplify workbench root layout
+```
+
+Otherwise use one commit.
+
+---
+
+## Step 6 — Add the command palette with one command registry
+
+### Objective
+
+Add Ctrl/Cmd+K workbench navigation/actions without creating a plugin architecture or duplicating action ownership.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/package.json
+src/vg2c_ui/frontend/package-lock.json
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/CommandPalette.tsx      # new
+src/vg2c_ui/frontend/src/commands.ts             # new single registry/derivation module
+src/vg2c_ui/frontend/src/FileTabs.tsx
+src/vg2c_ui/frontend/src/ScriptTree.tsx          # only public helper reuse if needed
+src/vg2c_ui/frontend/src/styles.css
+```
+
+### Implementation work
+
+1. Add `cmdk` and use the shared Dialog foundation rather than copying Watermelon Command Search code.
+2. Define one small command descriptor type, for example:
+   - stable `id`;
+   - `group`;
+   - label;
+   - optional keywords/shortcut hint;
+   - enabled/disabled state;
+   - action callback.
+3. Implement one `buildCommands(...)`/equivalent derivation path. Do not allow arbitrary component self-registration.
+4. Initial command groups should come from current application state/actions:
+   - **Navigation:** activate open document; jump to an operation/scope; open inspector;
+   - **Editing:** undo, redo, preview changes, apply changes, reload conflict;
+   - **View:** expand all, collapse all;
+   - **Workspace:** commands that already have stable actions at this point, such as download archive if useful.
+5. Use existing `selectItem()`/ancestor expansion behavior when a command jumps to a tree item; do not duplicate tree ancestry logic.
+6. Implement Ctrl/Cmd+K globally, excluding cases where browser/native behavior would be damaged.
+7. Preserve current Ctrl/Cmd+Z/Y/S shortcuts, but route them through the same action callbacks where practical so behavior does not diverge.
+8. On close/execute:
+   - restore focus appropriately;
+   - clear query as appropriate;
+   - do not trap focus after the dialog closes.
+9. Let `cmdk` handle list filtering/keyboard mechanics; do not create a parallel filtering framework.
+10. Step 7 may append upload/translate commands to the same command derivation function. It must not create a second registry.
+
+### Refactoring/deletion work
+
+- remove duplicated shortcut action branches if they can safely share the same callbacks as commands;
+- delete any prototype registry or component-specific command arrays after the single derivation path is established;
+- do not keep Watermelon demo code, Motion code, or unused command-search assets.
+
+### Dependencies
+
+Steps 1–5, especially stable shell actions and shared Dialog.
+
+### Validation
+
+Automate and manually verify:
+
+- Ctrl+K on Windows/Linux and Cmd+K on macOS behavior;
+- palette opens from workbench focus and from an editor control without corrupting input values;
+- ArrowUp/ArrowDown navigate commands;
+- Enter executes exactly one action;
+- Escape closes;
+- focus returns to the invoking context;
+- disabled commands do not execute;
+- document navigation activates the correct tab;
+- operation navigation reveals ancestors and focuses/selects the intended operation;
+- undo/redo/preview/apply command enablement matches toolbar enablement;
+- axe reports no serious/critical issue for the open palette.
+
+### Expected completion state
+
+This step is finished only when:
+
+- there is exactly one command registry/derivation path;
+- Ctrl/Cmd+K is fully keyboard-operable;
+- commands call existing application actions rather than reimplementing them;
+- there is no plugin/registration framework;
+- no upload-specific second registry is planned or present;
+- existing tree and toolbar shortcuts still pass regression tests.
+
+### Commit boundary
+
+One clean feature commit:
+
+```text
+feat(ui): add keyboard command palette
+```
+
+Split test additions into the same commit unless the test harness itself changes substantially.
+
+---
+
+## Step 7 — Replace the upload/source-selection workflow
+
+### Objective
+
+Replace the crowded top-bar hidden-input/multiple-select flow with an explicit, truthful source-intake workflow that supports drag/drop, validation, queue state, failure recovery, and source selection while reusing backend policy/semantics.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/api.ts
+src/vg2c_ui/frontend/src/useWorkspaceFiles.ts
+src/vg2c_ui/frontend/src/SourceUpload.tsx       # new
+src/vg2c_ui/frontend/src/useSourceIntake.ts      # new only if palette + UI need shared intake state/actions
+src/vg2c_ui/frontend/src/commands.ts
+src/vg2c_ui/frontend/src/styles.css
+```
+
+### Implementation work
+
+1. Use the Watermelon file-upload pattern as an interaction reference only.
+2. Provide clear entry actions:
+   - Upload files;
+   - Upload folder using the existing `webkitdirectory` capability;
+   - drag/drop files onto the intake area.
+3. Do not implement complex recursive folder drag/drop unless browser support can be delivered cleanly. Explicit folder browse already preserves folder-relative paths and is sufficient for this refactor.
+4. Validate staged files against the backend-provided policy before network submission:
+   - supported suffix;
+   - per-file size;
+   - obvious file-count/workspace-capacity violations when determinable.
+5. Keep backend validation authoritative. If client and server disagree, display the server error.
+6. Represent queue state truthfully:
+   - queued;
+   - uploading;
+   - uploaded;
+   - failed.
+7. Do **not** show byte percentages because the current `fetch` upload API exposes no trustworthy progress callbacks.
+8. Prefer one-file-at-a-time calls through the existing upload endpoint rather than one opaque multi-file request. This gives deterministic per-file success/failure and makes retry semantics correct without changing backend storage behavior.
+9. Preserve `webkitRelativePath`/relative paths when each file is uploaded individually.
+10. Allow:
+    - removal of queued items before upload;
+    - removal of failed queue items;
+    - retry of a failed item.
+11. Do not claim server-side removal of already uploaded files; no delete endpoint exists and adding one is outside this refactor.
+12. Refresh remote workspace inventory after successful uploads and after failures where server state may have changed.
+13. Replace the `<select multiple>` with an explicit source-selection list derived from `can_translate`/contract metadata.
+14. Preserve useful existing behavior: newly uploaded source files should become selected for translation unless the user explicitly deselects them.
+15. Keep source selection simple—checkbox list first. Do not add a combobox/search framework unless real file counts demonstrate the need.
+16. Keep translation behavior in `useWorkspace`; the intake feature supplies selected source paths and calls the existing translation action.
+17. If command palette actions need intake state (`Upload files`, `Upload folder`, `Translate selected`), introduce one focused `useSourceIntake` controller only because that state/actions are shared between the intake UI and command system. Do not use it as a general workspace service.
+18. Add these actions to the existing command derivation; do not add another command registry.
+19. Keep generated-file downloads and workspace ZIP access available but visually separate them from source intake.
+
+### Refactoring/deletion work
+
+Delete once the replacement passes parity:
+
+- inline hidden file input labels in `App.tsx`;
+- inline folder input label;
+- current `upload(event)` handler;
+- current multiple `<select>` source picker;
+- old top-bar upload layout CSS;
+- old source-path classification branches already superseded by Step 2;
+- app-wide upload use of the global `busy` state;
+- any temporary old/new upload switch.
+
+### Dependencies
+
+Steps 1–6. Step 2 policy/file metadata and Step 3 Dialog are required.
+
+### Validation
+
+Test at minimum:
+
+- single source file upload;
+- multiple mixed allowed files;
+- folder upload preserves relative paths;
+- drag/drop files;
+- unsupported extension rejected before upload and still rejected server-side if bypassed;
+- oversized file handling;
+- duplicate path handling;
+- one failed file does not obscure the successful state of other sequentially uploaded files;
+- retry of a failed file;
+- removal of queued/failed items;
+- newly uploaded source becomes selectable/selected;
+- data files never become translation sources unless backend marks them translatable;
+- translate selected sources still opens documents and refreshes generated files;
+- no fake percentage is displayed;
+- keyboard-only file browse/source selection is usable;
+- phone/tablet layout does not overflow.
+
+### Expected completion state
+
+This step is finished only when:
+
+- old upload controls and multi-select source picker are no longer referenced;
+- upload queue has deterministic per-file states;
+- drag/drop and browse use one validation/upload path;
+- client validation uses backend policy metadata;
+- source selection uses backend file capability metadata;
+- upload errors are visible at every viewport;
+- no server-delete behavior is implied;
+- command palette uses the same intake actions;
+- all baseline translation behavior remains intact.
+
+### Commit boundary
+
+Use a small coherent group because the feature has separable behavior and presentation:
+
+```text
+refactor(ui): add source intake state and upload queue
+feat(ui): replace workspace upload and source selection
+```
+
+Do not merge unrelated inspector/SQL work into these commits.
+
+---
+
+## Step 8 — Modernize the inspector without changing its domain content
+
+### Objective
+
+Preserve the valuable data-flow/file-context functionality while replacing duplicated desktop/compact overlay mechanics with one inspector content path and accessible compact presentation.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/src/ContextSidebar.tsx
+src/vg2c_ui/frontend/src/Inspector.tsx          # optional clean-cut rename/replacement
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/ui/Dialog.tsx
+```
+
+### Implementation work
+
+1. Keep all backend/projected semantics unchanged:
+   - required inputs;
+   - produced files;
+   - upstream/downstream open documents;
+   - dependency issues;
+   - CSV preview;
+   - file details.
+2. Separate **inspector content** from **presentation shell**:
+   - desktop: persistent `<aside>` in the workbench grid;
+   - compact/tablet: right-side modal sheet;
+   - phone: bottom sheet.
+3. Implement compact sheet behavior using the shared accessible Dialog primitive styled responsively. A Sheet is a presentation of Dialog, not a separate parallel abstraction.
+4. Do not wrap the persistent desktop inspector in modal/dialog semantics.
+5. Preserve one content component so desktop and compact views cannot drift.
+6. Remove React-controlled mirror state from section `<details>` unless a real cross-component need appears. Use `defaultOpen` for initial expansion.
+7. Keep native CSV table; do not introduce DataTable infrastructure.
+8. Keep `Data Flow` prominent. Use Tabs only if a usability test shows `File Details` and `Data Flow` are mutually exclusive modes; otherwise the current section/collapsible hierarchy is simpler.
+9. On compact overlay:
+   - trap focus;
+   - close with Escape;
+   - close with overlay click when safe;
+   - return focus to the opener;
+   - prevent background interaction/scroll as provided by the dialog primitive.
+10. Preserve `onActivateDocument` behavior and close compact inspector after activation.
+
+### Refactoring/deletion work
+
+Delete after parity:
+
+- custom `.context-backdrop` element/path;
+- compact custom visibility/focus workaround code superseded by Dialog;
+- duplicated compact/desktop content if any appears during migration;
+- `Panel` `useState` that only mirrors `<details open>`;
+- obsolete context backdrop/sheet transition CSS;
+- `ContextSidebar.tsx` itself if a clean `Inspector.tsx` replacement is completed and all imports are updated.
+
+Do not leave both `ContextSidebar` and `Inspector` as aliases.
+
+### Dependencies
+
+Steps 1–5 and shared Dialog from Step 3. Command/upload work is not technically required, but keeping the sequence avoids simultaneous root-layout churn.
+
+### Validation
+
+- desktop inspector is persistently visible at desktop breakpoint;
+- 1024×768 uses right sheet without clipping;
+- phone uses bottom sheet without exceeding viewport;
+- Escape/overlay close works;
+- focus trap and focus return work;
+- background controls are not reachable while compact modal inspector is open;
+- CSV preview scrolls inside its own region and does not force page overflow;
+- upstream/downstream activation still selects the correct document;
+- axe checks pass for open compact inspector;
+- `ScriptTree` remains usable with inspector closed/open as appropriate.
+
+### Expected completion state
+
+This step is finished only when:
+
+- desktop and compact inspector share one content implementation;
+- custom backdrop/modal infrastructure is removed;
+- native section state is not redundantly mirrored in React;
+- data-flow behavior is unchanged;
+- compact inspector has correct dialog focus semantics;
+- there is no `ContextSidebar` compatibility alias if the component was renamed.
+
+### Commit boundary
+
+One clean refactor commit is preferred:
+
+```text
+refactor(ui): unify responsive file inspector
+```
+
+Use a second cleanup commit only if CSS deletion is large enough to obscure the behavior change.
+
+---
+
+## Step 9 — Replace Structured SQL `prompt()` flows with controlled workbench forms
+
+### Objective
+
+Eliminate the browser-prompt UI and obsolete SQL presentation paths while keeping SQL semantics, parsing, validation, operators, joins, and mutation ownership entirely on the backend.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/src/sql/SqlAddDialogs.tsx       # new
+src/vg2c_ui/frontend/src/sql/sqlEditor.css
+src/vg2c_ui/frontend/src/ui/Dialog.tsx
+src/vg2c_ui/frontend/src/ui/Tabs.tsx                 # add only if real SQL mode tabs are implemented
+src/vg2c_ui/frontend/src/OperationPresentation.tsx
+```
+
+Backend SQL API/model files should not change unless a concrete missing contract is discovered. Do not redesign backend SQL logic as part of this UI refactor.
+
+### Implementation work
+
+1. Replace `window.prompt()` add flows with controlled accessible forms:
+   - add selection;
+   - add filter;
+   - add join.
+2. Prefer three small purpose-specific form components over one deeply configurable mega-form.
+3. Keep the three forms in one SQL-focused module if that is clearer than three files.
+4. Initialize allowed operators/connectors/join types from the returned `SqlModelView`; never duplicate operator lists in React.
+5. Validate only presentation-level requirements locally (for example required text is non-empty). Backend action validation remains authoritative.
+6. Disable form submission while the structured SQL action is running.
+7. Show backend failures inside the active SQL editor/dialog and preserve user-entered values when correction is possible.
+8. Preserve existing update/remove/move action calls and stale-response protection through `useWorkspace.runSqlAction`.
+9. Keep raw SQL display read-only.
+10. Consider real Selected / Filters / Joins tabs because the editor is a dense mode-oriented workbench. If used:
+    - use one accessible Tabs primitive;
+    - expose counts with shared Badge;
+    - keep all three modes reachable by keyboard;
+    - do not recreate the stale CSS implementation verbatim.
+11. If sequential sections remain clearer after implementation testing, keep them; do not add Tabs solely to satisfy the Watermelon matrix.
+12. Audit `sqlEditor.css` against actual rendered class names after the replacement is working.
+13. Delete dead selectors for abandoned structures such as old tabs, drag handles, attribute pickers, add panels, filter cards, or join layouts when no current TSX renders them.
+14. Consolidate field/button/focus styling with shared primitive styles where semantics are actually identical.
+15. Do not create client-side SQL AST/state separate from `SqlModelView`.
+
+### Refactoring/deletion work
+
+Mandatory deletion after parity:
+
+- all `window.prompt`/`prompt()` calls;
+- prompt-specific inline callbacks;
+- stale SQL selectors not used by current replacement markup;
+- duplicated operation file/diagnostic UI already superseded by Step 3;
+- obsolete add-panel prototypes left from prior implementations;
+- any frontend list of SQL operators/connectors/join types copied from the backend.
+
+### Dependencies
+
+Steps 1–3 are required. Completing Steps 4–8 first reduces simultaneous layout risk.
+
+### Validation
+
+Automated/manual checks:
+
+- add selection with expression and optional alias;
+- edit selection;
+- move selection up/down;
+- remove selection with existing minimum-count constraints preserved;
+- add/update/remove filter;
+- connector/operator options exactly match `SqlModelView`;
+- add/update/remove join and predicates;
+- backend error remains visible and does not corrupt current draft;
+- stale SQL response still cannot overwrite a newer draft;
+- read-only SQL model cannot perform unsupported actions;
+- raw SQL remains display-only;
+- dialog keyboard/focus behavior passes;
+- SQL editor usable at desktop/tablet/phone widths;
+- static search finds no `prompt(` in frontend production code;
+- selector audit confirms deleted SQL styles are truly unused;
+- backend SQL tests remain unchanged/green.
+
+### Expected completion state
+
+This step is finished only when:
+
+- no browser prompt API remains in frontend production code;
+- every SQL add action uses controlled accessible form state;
+- frontend does not reconstruct SQL semantics;
+- backend action/model APIs remain authoritative;
+- obsolete SQL CSS for superseded markup is deleted;
+- SQL editor behavior is protected by browser regression coverage.
+
+### Commit boundary
+
+Use two small commits if needed:
+
+```text
+refactor(ui): replace structured SQL prompt flows
+refactor(ui): remove obsolete structured SQL styles
+```
+
+If real SQL tabs are added, include them with the first behavior commit rather than a separate cosmetic commit.
+
+---
+
+## Step 10 — Unify feedback, dialogs, loading, and dirty-close behavior
+
+### Objective
+
+Replace the app-wide overloaded status message with explicit durable states and lightweight transient feedback, while ensuring destructive/lossy actions use one dialog path.
+
+### Scope
+
+Likely files/modules:
+
+```text
+src/vg2c_ui/frontend/package.json
+src/vg2c_ui/frontend/package-lock.json
+src/vg2c_ui/frontend/src/main.tsx
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/FileTabs.tsx
+src/vg2c_ui/frontend/src/SourceUpload.tsx
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/ui/Dialog.tsx
+```
+
+### Implementation work
+
+1. Add `sonner` only now, when production feedback paths will use it immediately.
+2. Mount one Toaster at the application root.
+3. Define feedback ownership by durability:
+   - **inline durable:** validation issues, dependency errors, SQL form errors, upload queue item errors, conflicts;
+   - **transient toast:** upload completion, translation completion, successful apply/reload, copy/download-adjacent confirmations if added;
+   - **local loading state:** upload item, translation action, validation/apply, SQL mutation.
+4. Remove the single app-wide message as the source for unrelated operations.
+5. Do not toast every state transition. Avoid duplicate inline + toast text unless the toast provides necessary global awareness.
+6. Add dirty-tab close protection using the shared Dialog:
+   - clean tab closes immediately;
+   - dirty tab requires explicit discard/cancel;
+   - validation-only states should follow the actual risk of losing edits, not generic status names.
+7. If closing the browser/tab with unsaved document drafts needs protection, add `beforeunload` only while dirty tabs exist and keep the browser-native message behavior.
+8. Ensure action buttons expose local truthful progress (`Translating…`, `Applying…`, `Uploading…`) without a global `busy` lock unless operations truly must be mutually exclusive.
+9. Standardize empty/loading/error presentation patterns but do not create a universal `StateManager` component.
+10. Keep dialogs for actions that need confirmation/form focus. Do not use dialogs for ordinary success messages.
+
+### Refactoring/deletion work
+
+Delete after new paths are active:
+
+- `App` global `message` state;
+- `.status-message` output and CSS;
+- app-wide `busy` state if all remaining operations have scoped states;
+- duplicate ad-hoc confirmation implementations;
+- any dialog wrapper introduced by individual features instead of shared Dialog;
+- responsive rule that hides status/error text on smaller screens.
+
+### Dependencies
+
+Steps 1–9. Dirty-close uses stable FileTabs; feedback integrates upload/SQL after their replacements exist.
+
+### Validation
+
+- upload errors remain inline per item and are never hidden on mobile;
+- translation failure is visible and success is confirmed once;
+- validation issues remain durable inline;
+- successful apply gives a transient confirmation without masking the new document state;
+- dirty tab close dialog traps focus, supports Escape/cancel, and never discards without explicit confirmation;
+- clean tab closes with no unnecessary dialog;
+- `beforeunload`, if used, exists only while dirty drafts exist;
+- no two dialog systems exist;
+- no global `message` or `busy` reference remains unless a concrete shared operation still requires it;
+- axe checks pass for confirmation dialogs and toasts do not steal focus.
+
+### Expected completion state
+
+This step is finished only when:
+
+- transient feedback has one toast system;
+- confirmation/form overlays have one dialog system;
+- durable errors remain inline;
+- old global status output is deleted;
+- dirty edits cannot be silently lost through tab close;
+- feedback is visible at all viewport widths;
+- there is no duplicate dialog implementation.
+
+### Commit boundary
+
+Prefer two commits:
+
+```text
+feat(ui): unify transient feedback and scoped loading states
+feat(ui): protect dirty tab close with shared dialog
+```
+
+Combine if the changes are small and tightly coupled.
+
+---
+
+## Step 11 — Responsive and accessibility hardening
+
+### Objective
+
+Perform a dedicated pass after feature structure is stable so responsive/accessibility fixes address root layout and semantic behavior rather than being repeatedly patched during earlier migrations.
+
+### Scope
+
+Potentially all changed frontend feature files, with emphasis on:
+
+```text
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/sql/sqlEditor.css
+src/vg2c_ui/frontend/src/FileTabs.tsx
+src/vg2c_ui/frontend/src/CommandPalette.tsx
+src/vg2c_ui/frontend/src/SourceUpload.tsx
+src/vg2c_ui/frontend/src/Inspector.tsx
+src/vg2c_ui/frontend/src/ScriptTree.tsx
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/src/ui/*
+```
+
+`ScriptTree.tsx` should only change if the accessibility review finds a real regression/defect.
+
+### Implementation work
+
+1. Verify/fix the root layout first:
+   - `min-width: 0` / `min-height: 0` on actual grid/flex boundaries;
+   - intended scroll container owns scrolling;
+   - overlays do not create page scroll;
+   - horizontal scrolling is limited to intentional regions such as file tabs/tables.
+2. Rationalize breakpoints rather than adding new one-off thresholds. Start from the current ranges:
+   - desktop > 1100px;
+   - compact/tablet ≤ 1100px;
+   - stacked tablet behavior around ≤ 780px;
+   - phone behavior around ≤ 640px;
+   - narrow phone around ≤ 430px.
+3. Remove a breakpoint if fluid layout makes it unnecessary; do not add a new breakpoint for one button.
+4. Verify keyboard interaction end-to-end:
+   - file tabs;
+   - `ScriptTree`;
+   - command palette;
+   - upload dialog/queue/source selection;
+   - inspector sheet;
+   - SQL tabs/forms/dialogs;
+   - dirty-close dialog.
+5. Verify focus behavior:
+   - visible focus indication;
+   - modal initial focus;
+   - focus trap;
+   - focus return;
+   - no focus moved merely because a toast appears;
+   - no hidden tree item remains tabbable.
+6. Verify semantic labels/names for icon-only controls and abbreviated buttons. Use Tooltip as supplemental help, never as the only accessible name.
+7. Verify `aria-live` is used only where live announcement is actually needed; avoid competing live regions with Sonner.
+8. Preserve and test `prefers-reduced-motion`; no essential state change should depend on animation.
+9. Preserve `prefers-contrast` support and check status indicators are not color-only; accessible text should remain available.
+10. Check touch target size on phone for primary controls and close/menu buttons.
+11. Run axe against representative states, not only the empty page.
+12. Manually inspect zoom at 200% on a desktop viewport and ensure key workflows remain operable.
+
+### Refactoring/deletion work
+
+Delete during this pass:
+
+- breakpoint-specific overrides made obsolete by structural fixes;
+- duplicate focus styles superseded by shared primitives;
+- CSS icon hacks replaced by accessible Lucide icons where already adopted;
+- visually hidden duplicate text that no longer serves accessibility;
+- one-off mobile rules that only compensated for old upload/inspector markup.
+
+### Dependencies
+
+Steps 1–10. This pass should operate on the final feature structure.
+
+### Validation
+
+Required viewport matrix:
+
+```text
+1440×900
+1024×768
+768×1024
+390×844
+320×568
+```
+
+Required checks:
+
+- no unintended document-level horizontal scrollbar;
+- top-level actions remain reachable;
+- file tabs scroll intentionally when necessary;
+- operation editor fields do not overflow;
+- compact inspector fits and scrolls internally;
+- command palette fits phone width/height;
+- SQL add forms fit or scroll within dialog;
+- upload queue/source list remain usable;
+- keyboard-only workflow can upload/browse, translate, navigate tree, edit, preview/apply, open inspector, and close overlays;
+- automated axe checks have no serious/critical violations in agreed representative states;
+- reduced-motion test does not expose hidden/unclickable state.
+
+### Expected completion state
+
+This step is finished only when:
+
+- all agreed viewport checks pass;
+- all overlay focus behaviors pass;
+- all main actions are keyboard reachable;
+- accessible names exist for icon-only controls;
+- status is not conveyed only by color;
+- reduced-motion behavior is correct;
+- fixes are structural rather than a new collection of breakpoint hacks.
+
+### Commit boundary
+
+One focused commit unless CSS structural cleanup and accessibility behavior need separation:
+
+```text
+refactor(ui): harden responsive and accessible workbench behavior
+```
+
+---
+
+## Step 12 — Delete obsolete/redundant code, styles, and dependencies
+
+### Objective
+
+Make clean-cut migration explicit: after all replacements pass regression, remove every superseded implementation and temporary compatibility path so the codebase becomes smaller and easier to reason about.
+
+### Scope
+
+All frontend files touched by Steps 2–11, especially:
+
+```text
+src/vg2c_ui/frontend/src/App.tsx
+src/vg2c_ui/frontend/src/styles.css
+src/vg2c_ui/frontend/src/sql/sqlEditor.css
+src/vg2c_ui/frontend/src/ContextSidebar.tsx or Inspector.tsx
+src/vg2c_ui/frontend/src/OperationEditor.tsx
+src/vg2c_ui/frontend/src/StructuredSqlEditor.tsx
+src/vg2c_ui/frontend/package.json
+src/vg2c_ui/frontend/package-lock.json
+```
+
+### Implementation work
+
+1. Run a deliberate static audit for:
+   - `prompt(` / `window.prompt`;
+   - `.endsWith('.txt')` semantic classification;
+   - `startsWith('generated/')` semantic classification;
+   - old status-message selectors/state;
+   - old hidden upload controls;
+   - old multiple source select;
+   - old context backdrop;
+   - deleted component names/imports;
+   - stale SQL class names;
+   - temporary aliases/adapter components;
+   - unused icon imports;
+   - copied Watermelon assets/example helpers.
+2. Audit CSS selectors against current rendered/class source. Delete selectors with no production markup consumer unless they are documented global states (`:focus-visible`, media preferences, etc.).
+3. Remove old files rather than retaining aliases when a component was renamed/replaced.
+4. Audit runtime dependencies:
+   - React/ReactDOM;
+   - Radix package used by real primitives;
+   - cmdk;
+   - Sonner;
+   - lucide-react;
+   - remove anything else added experimentally and no longer imported.
+5. Audit dev dependencies similarly; browser/a11y tooling must have real scripts/tests.
+6. Run package pruning/lockfile regeneration through the normal npm workflow.
+7. Remove dead imports/helpers revealed by the refactor.
+8. If `noUnusedLocals`/`noUnusedParameters` can be enabled without unrelated churn, consider enabling them; do not turn this UI refactor into a repository-wide lint migration.
+9. Confirm there is no old/new feature flag or compatibility branch for upload, inspector, SQL forms, feedback, or command palette.
+10. Compare migrated-area code/CSS size qualitatively and quantitatively. New features may add code, but replaced paths should not retain both implementations.
+
+### Refactoring/deletion work
+
+This step **is** the deletion work. Expected candidates include:
+
+- old top-bar upload labels/inputs and associated CSS;
+- old multiple source picker CSS;
+- app-wide `message`/`busy` remnants;
+- `.status-message`;
+- inline App file-tab helper/markup remnants;
+- custom inspector backdrop and old compact overlay CSS;
+- `ContextSidebar` alias/file if replaced by `Inspector`;
+- duplicate file-reference/diagnostic helpers;
+- all browser prompt paths;
+- unused SQL selectors;
+- CSS selectors for deleted markup;
+- temporary migration helpers;
+- unused dependencies and imports.
+
+### Dependencies
+
+Steps 1–11 must be passing. Do not delete fallback code before replacement parity is demonstrated.
+
+### Validation
+
+- full frontend tests/build pass;
+- relevant Python tests pass;
+- browser E2E/axe suite passes;
+- static searches for known old paths return no production matches;
+- package dependency audit shows every runtime dependency has a production import;
+- no generated contract drift;
+- no deleted CSS class is still referenced;
+- no compatibility path is still callable.
+
+### Expected completion state
+
+This step is finished only when:
+
+- each migrated responsibility has one implementation path;
+- no obsolete component/import/helper/style remains intentionally “just in case”;
+- no unused runtime dependency remains;
+- no copied Watermelon demo implementation remains;
+- no frontend duplicate of backend domain semantics remains;
+- the replaced areas are measurably simpler than an old+new parallel implementation would be.
+
+### Commit boundary
+
+One cleanup commit is preferred so the deletion is easy to review:
+
+```text
+refactor(ui): remove superseded UI paths and dead styles
+```
+
+If dependency cleanup is substantial, use a second narrow commit:
+
+```text
+chore(ui): remove unused frontend dependencies
+```
+
+---
+
+## Step 13 — Final maintainability, architecture, and regression review
+
+### Objective
+
+Challenge the completed result against the original goals and remove any abstraction or responsibility that survived only because it was convenient during implementation.
+
+### Scope
+
+All changed frontend/API files and this plan/documentation.
+
+### Implementation work
+
+Review every new module/component/hook with these questions:
+
+1. Does it own meaningful state/semantics/behavior, or is it only forwarding props?
+2. Does it have more than one real consumer where reuse was the reason for creating it?
+3. Could native HTML plus existing CSS be simpler?
+4. Is the state in the narrowest correct owner?
+5. Did any domain/backend semantic leak into React string/path parsing?
+6. Did any frontend model duplicate generated contracts?
+7. Is there exactly one command registry?
+8. Is there exactly one remote workspace-file inventory owner?
+9. Is there exactly one upload/source-intake workflow?
+10. Is there exactly one dialog foundation and one toast system?
+11. Is there exactly one inspector content path?
+12. Is `ScriptTree` still the domain-specific tree rather than being wrapped/replaced for visual consistency?
+13. Did an abstraction become configurable for hypothetical consumers that do not exist?
+14. Did any migration adapter or compatibility alias survive?
+15. Can a dependency now be removed?
+16. Did CSS grow because root causes were patched rather than fixed?
+17. Is `App.tsx` primarily composition/orchestration rather than feature implementation?
+18. Are `workspaceState.ts` and `useWorkspace.ts` still cohesive rather than accumulating unrelated UI state?
+
+Update this document only if the implemented architecture intentionally differs from the plan. Document the final reason rather than preserving outdated planned structure.
+
+### Refactoring/deletion work
+
+Delete/simplify anything that fails the review above. Do not open unrelated compiler/runtime refactors simply because they are visible during the review.
+
+### Dependencies
+
+Steps 1–12 complete.
+
+### Validation
+
+Run the final gate from a clean checkout/install where practical:
+
+```text
+frontend contract check
+frontend TypeScript typecheck
+frontend reducer/unit tests
+frontend production build
+browser E2E suite
+browser axe checks
+relevant Python UI/API tests
+relevant SQL editor/domain tests
+static legacy/dead-code searches
+runtime dependency audit
+responsive viewport matrix
+manual keyboard/focus smoke test
+```
+
+Also verify the final diff for accidental unrelated changes.
+
+### Expected completion state
+
+This step is finished only when:
+
+- no review question identifies an unnecessary surviving abstraction/path;
+- all regression gates pass;
+- all intended deletions are committed;
+- the final dependency set is justified;
+- the final architecture matches the responsibility direction at the top of this document;
+- the changed frontend is simpler to trace from event → controller → API/state → rendering than before the refactor.
+
+### Commit boundary
+
+Do not create a ceremonial code commit if no code changes are needed. If the review discovers simplifications, use one or more very small cleanup commits, then a documentation-only update if the final architecture description changed.
+
+---
+
+## 4. Expected target frontend structure
+
+This is a target shape, not a requirement to create directories/components that have no real need. Keep the repository flat where that is simpler.
+
+A reasonable end state is approximately:
 
 ```text
 src/vg2c_ui/frontend/src/
-├─ components/
-│  └─ ui/
-│     ├─ Button.tsx
-│     ├─ Badge.tsx
-│     ├─ Dialog.tsx
-│     └─ Tooltip.tsx
-├─ App.tsx
+├─ App.tsx                         # orchestration/composition
+├─ api.ts                          # typed transport only
+├─ contracts.generated.ts          # generated; backend is source
+├─ useWorkspace.ts                 # document/editor controller
+├─ workspaceState.ts               # document/editor reducer
+├─ useWorkspaceFiles.ts            # remote workspace inventory/policy
+├─ useSourceIntake.ts              # only if UI + palette share intake state
+├─ commands.ts                     # one command derivation/registry
 ├─ CommandPalette.tsx
-├─ commandItems.ts
-├─ FileTabs.tsx
 ├─ SourceUpload.tsx
-├─ WorkspaceHeader.tsx
+├─ FileTabs.tsx
 ├─ ChangeToolbar.tsx
-├─ ContextSidebar.tsx
+├─ Inspector.tsx
+├─ ScriptTree.tsx                  # existing domain-specific tree
 ├─ OperationEditor.tsx
-├─ OperationShared.tsx
-├─ ScriptTree.tsx
+├─ OperationPresentation.tsx       # shared file refs/diagnostics
 ├─ StructuredSqlEditor.tsx
-├─ useWorkspace.ts
-├─ useWorkspaceFiles.ts
-├─ useMediaQuery.ts          # only if needed for semantic desktop/sidebar vs modal-sheet switch
-├─ workspaceState.ts
-├─ api.ts
+├─ operationLabels.ts              # presentation helpers only; no compiler inference
 ├─ styles.css
-└─ sql/sqlEditor.css
+├─ sql/
+│  ├─ SqlAddDialogs.tsx
+│  └─ sqlEditor.css
+└─ ui/
+   ├─ Dialog.tsx
+   ├─ Tooltip.tsx
+   ├─ Button.tsx                   # only if real shared variant behavior remains useful
+   ├─ Badge.tsx
+   └─ Tabs.tsx                     # only if SQL or another real mode switch uses it
 ```
 
-This is intentionally smaller than the earlier proposed `components/ui` + `components/workbench` hierarchy. Do **not** create generic `Select`, `Checkbox`, `Textarea`, `Table`, `Collapsible`, `Sheet`, or `Combobox` files until at least two real consumers need behavior beyond native HTML plus shared CSS.
-
-### 3.3 App after refactor
-
-`App.tsx` should primarily:
-
-- instantiate `useWorkspace()` and workspace-file inventory;
-- own shell-level selection/open state;
-- compose header, tabs, editor, inspector, and command palette;
-- define orchestration callbacks that combine existing state operations, e.g. “go to operation” = select + expand ancestors + restore focus;
-- pass domain data down rather than duplicate it.
-
-It should no longer implement file-input markup, tab keyboard handling, toast message text, SQL form behavior, or full inspector markup inline.
-
-### 3.4 API/domain boundary invariant
-
-The frontend may format data for presentation, but must not infer compiler behavior.
-
-Allowed frontend derivations:
-
-- basename/ellipsis formatting;
-- grouping commands by UI category;
-- counting diagnostics/edits;
-- filtering already-provided operations by label;
-- displaying artifact relationships already supplied by the projection contract.
-
-Move to backend/API contract when needed:
-
-- whether a workspace file is translatable;
-- whether a file is generated vs uploaded input;
-- accepted upload suffixes and configured upload limits when the UI displays/pre-validates them;
-- user-facing scope labels if they depend on compiler scope kinds.
-
----
-
-## 4. Watermelon recommendations validated against the current code
-
-### 4.1 Adopt or strongly adapt
-
-| Watermelon candidate | Decision | SQLPathFinder use |
-|---|---|---|
-| Command Search | **Adopt interaction model** | `Ctrl/Cmd+K` global file/operation/action palette. Use restrained project styling. |
-| Button / Button Group | **Adopt locally** | Shared variants and grouped toolbar actions. |
-| Badge | **Adopt locally** | Dirty/valid/error/read-only/status/count indicators. |
-| Dialog | **Adopt behavior** | SQL add forms and dirty-close confirmation. |
-| Tooltip | **Adopt behavior** | Icon-only actions and shortcuts. |
-| Sonner | **Adopt** | Transient success/error/info feedback. |
-| File Upload block | **Adopt interaction pattern** | Drag/drop, queue, server-backed validation, per-file state, retry. Do not copy simulated upload logic. |
-| Dropdown Menu | **Adopt only where needed** | Consolidate generated downloads/secondary workspace actions if header remains crowded. |
-| Extended Toolbar | **Use composition ideas only** | Group primary vs history vs secondary actions; no morphing toolbar. |
-
-### 4.2 Adapt with domain-specific behavior preserved
-
-| Candidate | Decision |
-|---|---|
-| Tabs | Preserve the existing closeable file-tab semantics and keyboard behavior; extract them rather than replacing with a generic animated tab. Use accessible Tabs separately only where a true mode switch exists, such as Structured SQL sections. |
-| Sheet | Use the Dialog primitive styled as a sheet for the compact inspector instead of adding a second independent Sheet abstraction. |
-| Collapsible | Keep native `<details>/<summary>` where it already works; standardize styles rather than introducing a dependency. |
-| Form controls | Keep native inputs/selects/checkboxes/textareas with shared styles unless a control needs richer behavior. |
-| Table | Keep semantic HTML tables for CSV preview. A data-grid dependency is not justified. |
-| Labeled Progress Indicator | Use only an indeterminate uploading state with the current API. Do not display fabricated percentages. |
-
-### 4.3 Explicitly preserve existing SQLPathFinder implementations
-
-- `ScriptTree` stays domain-specific and keeps its tree semantics.
-- `workspaceState.ts` and `useWorkspace.ts` remain the state/controller backbone.
-- `CAPABILITY_EDITORS` remains the extension seam for operation-specific editors.
-- data-flow projection and structured SQL semantics remain backend-owned.
-- native CSV table remains.
-
-### 4.4 Explicitly avoid/defer
-
-Do not adopt:
-
-- Watermelon Tree Menu as a `ScriptTree` replacement;
-- Tailwind/shadcn migration solely to consume Watermelon examples;
-- Motion for decorative transitions;
-- `react-icons` in addition to another icon set;
-- Quick Switcher unless a real two-mode workflow appears;
-- shimmer/gooey/wiggling/carousel/card-showcase patterns;
-- marketing blocks, bento layouts, dashboards, hero/CTA composition;
-- generic DataTable/data-grid packages;
-- a command registration/plugin framework;
-- a global application state framework;
-- React Router without an actual deep-link/navigation requirement.
-
-### 4.5 Dependency plan
-
-#### Runtime dependencies to introduce
-
-| Dependency | Reason |
-|---|---|
-| `radix-ui` | Accessible unstyled Dialog/AlertDialog/Tooltip/DropdownMenu/Tabs primitives with managed focus and keyboard behavior. The current Radix documentation recommends the unified tree-shakeable package to avoid duplicated primitive versions. Use only the primitives actually needed. |
-| `cmdk` | Keyboard-first command list, grouping/filtering, arrow navigation, empty state, and selection without creating a custom command-menu framework. Render `Command` inside the project dialog styling rather than importing Watermelon motion. |
-| `sonner` | Small React toast layer for transient feedback; removes the overloaded/hideable global status message. |
-| `lucide-react` | One consistent icon set for close, search, chevrons, warning, undo/redo, menu, upload, etc. Replace text/CSS glyphs as components are touched; do not add `react-icons`. |
-
-#### Dev dependencies to introduce for regression coverage
-
-| Dependency | Reason |
-|---|---|
-| `vitest` | Fast React/component unit tests integrated with Vite. |
-| `@testing-library/react` | Test behavior/semantics instead of implementation details. |
-| `@testing-library/user-event` | Keyboard/pointer interaction tests. |
-| `jsdom` | Component DOM environment. |
-| `@playwright/test` | Representative browser-level workflows and responsive/focus behavior. |
-| `@axe-core/playwright` | Accessibility regression checks on representative screens. |
-
-Do not add all runtime primitives up front and then search for uses. Add the dependency set with the first concrete consumers and keep lockfile changes reviewable.
-
----
-
-## 5. Command palette design
-
-### 5.1 Ownership
-
-Create `commandItems.ts` as a pure derivation layer, not a registry service.
-
-```ts
-export interface CommandItem {
-  id: string
-  group: 'Files' | 'Operations' | 'Actions' | 'Navigation'
-  label: string
-  keywords?: string[]
-  shortcut?: string
-  disabled?: boolean
-  run: () => void
-}
-```
-
-The builder receives current state plus callbacks from `App`; it does not import the reducer, mutate state directly, call fetch, or discover commands through global registration.
-
-A future command is added by adding one entry/builder branch. Do not create provider/plugin/registration APIs unless independently loaded extensions become a real product requirement.
-
-### 5.2 Initial command groups
-
-**Files**
-
-- activate each open translated file;
-- optionally focus/select an uploaded translatable source in the source picker.
-
-**Operations**
-
-- one command per operation/scope in the active document;
-- label/keywords come from existing display data;
-- executing uses the existing selection/ancestor-expansion behavior and restores focus to the selected tree item.
-
-**Actions**
-
-- Translate selected sources;
-- Undo;
-- Redo;
-- Preview changes;
-- Apply changes;
-- Reload after conflict;
-- Expand all scopes;
-- Collapse all scopes;
-- open Add Sources;
-- download current generated file/workspace archive when available.
-
-**Navigation**
-
-- focus operation search;
-- focus ScriptTree;
-- open File Context/Inspector;
-- focus diagnostics/change preview when present.
-
-### 5.3 Keyboard behavior
-
-- `Ctrl/Cmd+K`: open and focus the palette input;
-- arrows: move selection through results;
-- Enter: execute selected command;
-- Escape: close;
-- query filters immediately across label/keywords;
-- closing without action restores prior focus;
-- executing a navigation command moves focus to the destination rather than back to the trigger;
-- palette shortcuts must not interfere with existing Ctrl/Cmd+Z/Y/S behavior.
-
-Keep tree search as local operation filtering. The palette is global navigation/actions, not a replacement for in-tree filtering.
-
-### 5.4 Visual treatment
-
-Borrow Watermelon Command Search’s grouping/density only. Use existing neutral surfaces, current blue accent, small icons, and short CSS opacity/transform transitions under `prefers-reduced-motion: no-preference`. No backdrop-heavy blur or spring animation.
-
----
-
-## 6. Upload/source workflow redesign
-
-### 6.1 Split remote inventory from staged queue
-
-Add `useWorkspaceFiles.ts` for server state:
-
-- `files`;
-- `refresh()`;
-- initial loading/error state if needed.
-
-Keep staged queue state in `SourceUpload.tsx` because it is temporary presentation/workflow state.
-
-Do not merge uploaded-file inventory into `workspaceState.ts`; document editing state and remote file intake have different lifecycles.
-
-### 6.2 Small backend contract improvement
-
-Before building richer upload UI, remove the React path/suffix inference that currently classifies workspace files.
-
-Extend `WorkspaceFileView` with server-derived metadata such as:
-
-```py
-role: Literal["source", "data", "generated"]
-translatable: bool
-```
-
-Add a small read-only workspace capabilities response if the uploader is expected to preflight/display exact constraints:
-
-```py
-class WorkspaceCapabilitiesView(BaseModel):
-    allowed_upload_suffixes: list[str]
-    max_upload_bytes: int
-    max_file_count: int
-    max_workspace_bytes: int
-```
-
-Expose it from `/api/workspace/capabilities`. Values come directly from `WorkspaceManager`; the server remains the final validator. This prevents a hard-coded React copy of suffixes/limits.
-
-Update generated contracts rather than creating handwritten TypeScript duplicates.
-
-### 6.3 Queue model
-
-A staged upload item needs only UI state:
-
-```ts
-type UploadState = 'staged' | 'uploading' | 'done' | 'error'
-
-interface UploadItem {
-  id: string
-  file: File
-  relativePath: string
-  state: UploadState
-  error?: string
-}
-```
-
-Use stable identity from staged relative path plus file metadata as needed. Reject duplicate staged relative paths before upload and show the problem inline.
-
-### 6.4 Upload execution
-
-For truthful per-file success/failure with the existing backend, submit queue items individually through the existing `/api/workspace/files` endpoint (`uploadWorkspaceFiles([file])`) rather than sending the entire queue in one opaque request.
-
-Start sequentially. The backend has workspace-wide count/byte limits, and sequential submission avoids unnecessary races while remaining fast enough for the current maximum file count. Introduce bounded concurrency only if measured upload performance requires it.
-
-Per item:
-
-```text
-staged → uploading → done
-                   ↘ error
-```
-
-After queue completion or failure:
-
-- refresh workspace inventory even if one item failed, because prior uploads may have succeeded;
-- automatically add successful `translatable` files to the selected source set without using suffix logic;
-- allow retry of failed items individually;
-- allow removal of staged/failed items from the queue;
-- allow clearing completed queue rows.
-
-Do **not** label clearing a completed queue row as deleting an uploaded workspace file. The backend has no delete endpoint today. Workspace-file deletion should be a separate feature/API only if product requirements call for it.
-
-### 6.5 Progress semantics
-
-The current `fetch` upload path exposes no trustworthy byte-level percentage. Show:
-
-- queued;
-- uploading with indeterminate activity;
-- done;
-- error.
-
-Do not copy Watermelon’s simulated percentage timer. If true upload percentage becomes important later, change transport deliberately (e.g. supported XHR/progress path) and treat that as a separate feature.
-
-### 6.6 Drag/drop and folder behavior
-
-- one drop zone accepts files from drag/drop and regular selection;
-- retain a distinct “Choose folder” action because folder selection relies on `webkitdirectory`;
-- preserve `webkitRelativePath` exactly when present;
-- show relative path, size, status, and failure reason;
-- keyboard users must be able to trigger both file and folder selection without drag/drop;
-- dragging is an enhancement, never the only intake path.
-
-### 6.7 Source selection
-
-Replace the cramped `<select multiple>` with a clear source-selection list/popover using server-provided `translatable` metadata. Start with checkbox rows and counts; do not add a searchable Combobox until source counts demonstrate that scrolling is insufficient.
-
----
-
-## 7. Workbench and inspector redesign
-
-### 7.1 Preserve `ScriptTree`
-
-The tree is not a target for component-library replacement.
-
-Only make changes required for integration:
-
-- stable focus destination for command-palette navigation;
-- shared Button/Badge/icon styling where it does not alter semantics;
-- visual cleanup that preserves `role="tree"`, `role="treeitem"`, roving focus, selection, expansion, and existing key behavior.
-
-Do not convert it into accordion cards or Watermelon Tree Menu level transitions.
-
-### 7.2 File tabs
-
-Extract inline tab rendering and keyboard handling from `App.tsx` into `FileTabs.tsx`.
-
-Preserve:
-
-- tablist/tab roles;
-- ArrowLeft/ArrowRight/Home/End behavior;
-- active/dirty/error status;
-- close action;
-- focus transfer.
-
-Add dirty close protection:
-
-- clean tab closes immediately;
-- dirty tab opens a confirmation alert dialog;
-- confirm discards local draft and closes;
-- cancel returns focus to the close control/tab;
-- add `beforeunload` protection if any tab is dirty so browser refresh/close cannot silently discard edits.
-
-Do not replace the closeable domain tabs with a generic tab primitive that cannot express these behaviors.
-
-### 7.3 ContextSidebar → responsive inspector
-
-Keep `ContextSidebar.tsx` and its domain content rather than creating a parallel Inspector implementation.
-
-Refactor into reusable content plus responsive containers:
-
-```text
-ContextSidebar
-├─ desktop: persistent <aside>
-└─ compact: Radix Dialog content styled as sheet
-   ├─ right sheet on tablet
-   └─ bottom sheet on narrow phone
-```
-
-Use one `InspectorContent` subtree so data-flow/file-details logic is not duplicated.
-
-A small `useMediaQuery` hook is justified here because the semantic container changes from persistent complementary content to modal dialog; CSS alone cannot provide correct focus trapping/inert behavior.
-
-After the compact Dialog/Sheet path is verified, delete the old custom full-screen backdrop/button/focus behavior.
-
-### 7.4 Inspector information hierarchy
-
-Keep two primary sections:
-
-1. **Data Flow** — dependency issues, required inputs, upstream files, produced files, downstream files, CSV preview.
-2. **File Details** — source/generated path, revision, operation count, diagnostics count.
-
-Native `<details>` is sufficient for section disclosure. Remove React state mirroring the element’s `open` state; use `defaultOpen` where appropriate.
-
-CSV remains a native semantic table with sticky header and scroll container. Do not introduce DataTable unless sorting/filtering/pagination become actual requirements.
-
-### 7.5 Operation editor cleanup
-
-Preserve `CAPABILITY_EDITORS` and the generic editor fallback.
-
-Extract only genuine duplicated UI:
-
-- `FileReferences` / file-chip presentation;
-- `OperationDiagnostics` / dependency-issue presentation.
-
-Avoid a large `OperationEditorFrame` with dozens of layout props merely to remove a few header lines. If header markup remains trivially duplicated after the shared content extraction, leave it until a third use justifies a component.
-
-Native form elements can share `.control`, `.field`, `.field-error`, etc. styling without requiring a React wrapper for each element.
-
-### 7.6 Structured SQL editor
-
-This is the highest-value editor-specific cleanup.
-
-Preserve:
-
-- backend inspection via `inspectSql`;
-- backend mutation via `runSqlAction`;
-- stale-response safeguards in `useWorkspace`;
-- `CommitInput`-style local draft before mutation where appropriate;
-- raw SQL as read-only presentation.
-
-Replace all browser `prompt()` paths with controlled forms:
-
-**Add selection dialog**
-
-- expression required;
-- alias optional;
-- submit `add-selection`.
-
-**Add filter dialog**
-
-- left expression;
-- operator from backend `filter_operators`;
-- right expression;
-- connector from backend `logical_connectors` when required;
-- submit `add-filter`.
-
-**Add join dialog**
-
-- join type from backend `join_types`;
-- source;
-- left key;
-- operator;
-- right key;
-- submit `add-join`.
-
-Use server-provided options; do not hard-code SQL operators/join types in the frontend.
-
-Use accessible Tabs for `Selected`, `Filters`, and `Joins` if all three sections are present, with item counts in tab labels. This is a genuine mode switch and a better fit for Tabs than the closeable document tabs. Raw SQL remains a separate collapsible section below the structured editor.
-
-Each dialog owns temporary draft values and only calls the backend action on submit. Errors from the action remain visible in the editor/dialog as appropriate; do not reduce mutation errors to a toast only.
-
-### 7.7 Dead SQL CSS migration
-
-Before editing `sqlEditor.css`, generate/record a selector usage list against current and new TSX. Then:
-
-1. establish current structured SQL interaction tests;
-2. implement the controlled form/tab replacement;
-3. verify interaction parity;
-4. remove selectors no longer referenced by the new UI;
-5. merge duplicated button/field/error styles into global shared control classes;
-6. keep only SQL-specific layout rules in `sqlEditor.css`.
-
-Do not preserve unused selectors “just in case”. Git history is the fallback.
-
----
-
-## 8. Feedback and interaction model
-
-### 8.1 Replace the global message string
-
-The current `message` string combines loading, success, and failure, and is hidden by responsive CSS. Replace it with state at the point of action plus transient toasts.
-
-Examples:
-
-- Uploading → visible queue-item state;
-- Translating → Translate button/section busy state;
-- Validation/apply → existing per-tab status/change toolbar;
-- Upload succeeded → short toast;
-- Translation completed → short toast plus durable translation diagnostics if any;
-- Apply succeeded → short toast;
-- unexpected API failure → toast plus inline error if user must act on it;
-- conflict → persistent change-toolbar state and Reload action, optionally announced once by toast.
-
-After migration, delete `message`, `.status-message`, and message-setting wrappers that exist only for the old global string.
-
-### 8.2 Toast rules
-
-Use Sonner only for transient acknowledgement. Never rely on a disappearing toast for:
-
-- validation issues;
-- dependency errors;
-- conflict resolution;
-- upload item failures that need retry;
-- form field errors;
-- read-only reasons.
-
-### 8.3 Tooltips
-
-Use tooltips only on icon-only actions or where the shortcut is useful. Every icon button still needs an `aria-label`; tooltip text is supplemental, not its accessible name.
-
-### 8.4 Dialogs and destructive actions
-
-Use Dialog/AlertDialog for:
-
-- dirty tab close;
-- structured SQL add forms;
-- any future explicit discard action.
-
-Do not add confirmation dialogs for reversible, low-risk actions such as expand/collapse or selecting a file.
-
-### 8.5 Motion
-
-Use CSS transitions already gated by reduced-motion preference. No Motion dependency is planned.
-
-Allowed:
-
-- short overlay fade;
-- sheet slide;
-- small selected-tab indicator transition;
-- tree expansion already present;
-- subtle toast transition supplied by Sonner.
-
-Avoid layout-changing morphs, shimmer, springs on every item, and decorative movement in the editor.
-
----
-
-## 9. Responsive and accessibility plan
-
-### 9.1 Root layout instead of breakpoint accumulation
-
-Refactor the header into stable regions rather than continuing to patch `.translate-box` at each breakpoint:
-
-```text
-[Brand]
-[Source / Add Sources / Translate]
-[Command / Downloads / utility actions]
-```
-
-Use wrapping/grid minmax behavior so controls naturally reflow. Keep breakpoints only for real mode changes:
-
-- desktop vs modal inspector;
-- right-sheet vs bottom-sheet inspector;
-- multi-column vs single-column form layout.
-
-Remove CSS-generated pseudo-icons such as the compact context symbol once Lucide controls exist.
-
-### 9.2 Keyboard requirements
-
-Regression-gate:
-
-- complete `ScriptTree` navigation;
-- file tab arrow/Home/End behavior;
-- Ctrl/Cmd+Z/Y/S existing behavior;
-- Ctrl/Cmd+K palette;
-- Escape closes topmost dialog/palette/sheet;
-- command palette arrow/Enter navigation;
-- Dialog/AlertDialog focus trap and focus return;
-- Dropdown Menu arrow/typeahead behavior supplied by Radix;
-- SQL forms are fully operable without a mouse;
-- drag/drop has equivalent file/folder buttons.
-
-### 9.3 Focus management
-
-- opening palette focuses search;
-- palette close restores prior focus;
-- command navigation focuses its destination;
-- compact inspector focuses its heading/first meaningful control and restores trigger focus on close;
-- dirty-close dialog restores focus on cancel;
-- newly added SQL items receive focus or an announcement after successful creation;
-- validation failures focus or identify the first actionable error when appropriate.
-
-### 9.4 Semantic controls
-
-Continue using native controls wherever possible. Do not replace semantic buttons/inputs/tables/details with clickable divs for styling convenience.
-
-### 9.5 Reduced motion and contrast
-
-Preserve existing `prefers-reduced-motion` and `prefers-contrast` handling. New transitions/components must respect them. Radix/command/tooltip content should use the same project tokens and focus ring.
-
-### 9.6 Responsive verification sizes
-
-At minimum test representative browser widths around:
-
-- 1440/1280 desktop;
-- 1024 tablet / compact inspector threshold;
-- 768 small tablet;
-- 390 phone.
-
-Validate scroll containment, no clipped toolbar actions, dialog/sheet reachability, CSV horizontal scrolling, tree indentation, and form usability rather than relying only on screenshots.
-
----
-
-## 10. Testing and regression gates
-
-### 10.1 Keep existing tests
-
-Preserve and continue running:
-
-- generated contract check;
-- TypeScript build/typecheck;
-- `workspaceState.test.ts` stale-response/edit-history checks;
-- backend UI/workspace tests;
-- SQL editor/backend tests;
-- broader project test suite appropriate to touched backend contracts.
-
-### 10.2 Add React characterization tests before refactoring
-
-Use Vitest + Testing Library to capture behavior rather than markup snapshots.
-
-**ScriptTree**
-
-- correct tree/treeitem roles;
-- selected item roving tabindex;
-- Up/Down/Home/End;
-- Right expands / enters child;
-- Left collapses / focuses parent;
-- search shows matching items and ancestors;
-- selecting an operation shows its editor;
-- dependency-error semantics remain.
-
-**File tabs**
-
-- activate by click and keyboard;
-- close clean tab;
-- dirty tab requires confirmation after refactor;
-- focus moves predictably after close.
-
-**Workspace state**
-
-- retain current reducer tests;
-- add any new actions only if state genuinely belongs there.
-
-**Structured SQL**
-
-- initial inspect request;
-- stale model handling remains in controller;
-- update actions emit server-defined action names/arguments;
-- add selection/filter/join forms submit once with expected arguments;
-- errors remain visible;
-- no `window.prompt` usage after migration.
-
-**Upload**
-
-- file chooser and folder paths stage correctly;
-- drag/drop stages equivalent items;
-- capability-based preflight displays relevant errors without replacing server validation;
-- sequential item success/failure state;
-- retry failed item;
-- refresh after partial failure;
-- successful translatable files become selectable;
-- no fake progress percentage.
-
-**Command palette**
-
-- Ctrl/Cmd+K opens;
-- grouping/filtering;
-- arrow navigation and Enter execute;
-- disabled commands cannot execute;
-- Escape closes;
-- file activation and operation navigation call existing actions;
-- focus restoration/destination behavior.
-
-### 10.3 Browser-level E2E
-
-Use Playwright for a small number of representative workflows, not every component state.
-
-**Workflow A — intake and translate**
-
-```text
-open app
-→ add source/data files
-→ verify upload queue completion
-→ select sources
-→ translate
-→ verify translated tabs and generated download availability
-```
-
-**Workflow B — edit and apply**
-
-```text
-open translated document
-→ navigate ScriptTree by keyboard
-→ edit parameter
-→ undo / redo
-→ preview changes
-→ apply
-→ verify clean state
-```
-
-**Workflow C — structured SQL**
-
-```text
-select structured SQL operation
-→ open add filter/join form
-→ submit
-→ verify updated model
-→ preview/apply document changes
-```
-
-**Workflow D — command palette**
-
-```text
-Ctrl/Cmd+K
-→ search operation/file
-→ Enter
-→ verify activation/focus
-→ invoke one safe action
-```
-
-**Workflow E — compact layout**
-
-```text
-set tablet/phone viewport
-→ open inspector sheet
-→ tab through controls
-→ close with Escape
-→ verify focus returns
-→ verify upload/source controls remain reachable
-```
-
-### 10.4 Accessibility checks
-
-Run Axe on representative desktop and compact workbench states. Also manually verify keyboard behavior because automated scans do not validate application-specific tree/tab behavior.
-
-Regression gate should include:
-
-- no unlabeled interactive controls;
-- one visible focus indicator;
-- dialog title/description semantics;
-- no focus escaping modal sheet/dialog;
-- no keyboard-inaccessible drag/drop action;
-- status changes announced or persistently visible;
-- reduced-motion behavior;
-- color not used as the sole state indicator.
-
-### 10.5 Avoid brittle tests
-
-Do not make pixel snapshots or large DOM snapshots the primary gate. Prefer state, role, accessible name, keyboard action, API-call, and focus assertions.
-
----
-
-## 11. Implementation phases
-
-Each phase should be independently reviewable and leave the application in a valid state. Do not start the next phase with an intentionally permanent “temporary” parallel UI.
-
-### Phase 0 — baseline and characterization
-
-**Purpose:** lock down behavior before UI extraction.
-
-**Files/modules affected**
-
-- `src/vg2c_ui/frontend/package.json`
-- `src/vg2c_ui/frontend/vite.config.ts` or dedicated Vitest config
-- new frontend test setup/files
-- existing `workspaceState.test.ts`
-- no production UI behavior changes.
-
-**Add**
-
-- Vitest/Testing Library/user-event/jsdom setup;
-- characterization tests for ScriptTree, file tabs/current App shell where practical, StructuredSqlEditor core actions;
-- a lightweight checklist of current manual upload/translation behavior.
-
-**Remove**
-
-- nothing.
-
-**Dependencies**
-
-- test-only dependencies listed above.
-
-**Regression checks**
-
-- existing `npm test` / build;
-- relevant pytest UI/SQL suites;
-- new characterization tests.
-
-**Completion criteria**
-
-- tree keyboard behavior and reducer stale-response behavior are covered before structural changes;
-- current SQL inspect/action path is covered;
-- current upload/translation request shape is documented/tested.
-
----
-
-### Phase 1 — contract/boundary cleanup
-
-**Purpose:** prevent the improved UI from embedding workspace/compiler semantics in React.
-
-**Files/modules affected**
-
-- `src/vg2c_ui/api/models.py`
-- `src/vg2c_ui/api/workspace.py`
-- `src/vg2c_ui/api/serialization.py` for backend-owned scope display labels if changed
-- `src/vg2c_ui/frontend/src/contracts.generated.ts` via generator
-- `src/vg2c_ui/frontend/src/api.ts`
-- `src/vg2c_ui/frontend/src/App.tsx`
-- `src/vg2c_ui/frontend/src/operationLabels.ts`
-- UI/workspace contract tests.
-
-**Add/change**
-
-- server-derived workspace file role/translatable metadata;
-- optional workspace capabilities endpoint used by uploader for exact constraints;
-- `getWorkspaceCapabilities()` transport;
-- backend-friendly scope display labels so React no longer maps compiler scope kinds.
-
-**Remove**
-
-- React classification based on `.txt` and `generated/` once contract metadata is available;
-- scope-kind-to-user-label mapping from the frontend once backend labels cover it.
-
-**Dependencies**
-
-- none beyond existing stack.
-
-**Regression checks**
-
-- contract generator/check;
-- workspace session/upload tests;
-- translation/open-document tests;
-- frontend typecheck.
-
-**Completion criteria**
-
-- frontend consumes explicit contract fields for file role/translatability;
-- upload limit/type UI, if shown, comes from backend capabilities;
-- no new handwritten duplicate domain types.
-
----
-
-### Phase 2 — minimal shared primitives and style foundation
-
-**Purpose:** create only the reusable controls required by later phases.
-
-**Files/modules affected**
-
-- `package.json` / lockfile
-- new `components/ui/*`
-- `styles.css`
-- `OperationEditor.tsx`
-- `StructuredSqlEditor.tsx`
-- new `OperationShared.tsx`.
-
-**Add**
-
-- `radix-ui`;
-- `lucide-react`;
-- Button and Badge source-owned primitives;
-- Dialog and Tooltip project wrappers only where they centralize shared styling/required semantics;
-- shared `FileReferences` and `OperationDiagnostics`.
-
-**Remove**
-
-- duplicate file-chip and operation-diagnostic implementations after both editors migrate;
-- touched duplicate button/control CSS.
-
-**Do not add**
-
-- Tailwind/shadcn;
-- Motion;
-- React Router;
-- state library;
-- wrappers for every native form element.
-
-**Regression checks**
-
-- operation editors render/edit identically;
-- focus-visible behavior;
-- existing tree behavior untouched;
-- typecheck/build.
-
-**Completion criteria**
-
-- shared primitive layer is small and has real consumers;
-- no duplicate icon libraries;
-- existing token palette remains source of truth.
-
----
-
-### Phase 3 — shell and layout cleanup
-
-**Purpose:** simplify `App.tsx` before adding new workflows.
-
-**Files/modules affected**
-
-- `App.tsx`
-- new `FileTabs.tsx`
-- new `WorkspaceHeader.tsx`
-- new `ChangeToolbar.tsx`
-- optional small editor-toolbar component if extraction is cohesive
-- `styles.css`.
-
-**Add/change**
-
-- extract translated-file tab UI and its keyboard handler;
-- extract header/source/download composition;
-- extract change-toolbar presentation while keeping reducer state in `useWorkspace`;
-- group generated downloads under a Radix Dropdown Menu only if the current variable-length link list remains a header-density problem;
-- replace CSS-generated compact icons with Lucide icons;
-- restructure header regions so flex/grid wrapping handles most width changes.
-
-**Remove**
-
-- corresponding inline markup/helpers from `App.tsx` after each extraction;
-- superseded header/tab CSS hacks as layout is stabilized.
-
-**Dependencies**
-
-- Radix Dropdown Menu only through already-added `radix-ui` if used.
-
-**Regression checks**
-
-- tab keyboard/close behavior;
-- translate/source selection;
-- generated downloads;
-- 1280/1024/768/390 layout smoke test.
-
-**Completion criteria**
-
-- `App.tsx` reads as orchestration/composition rather than a collection of feature implementations;
-- no old and new header/tab paths coexist.
-
----
-
-### Phase 4 — command palette
-
-**Purpose:** add the highest-value Watermelon interaction pattern without introducing architecture overhead.
-
-**Files/modules affected**
-
-- `package.json` / lockfile
-- new `CommandPalette.tsx`
-- new `commandItems.ts`
-- `App.tsx`
-- `ScriptTree.tsx` only for stable focus integration if necessary
-- `styles.css`.
-
-**Add**
-
-- `cmdk`;
-- pure command derivation;
-- Ctrl/Cmd+K listener;
-- file/operation/action/navigation groups;
-- focus restoration/destination logic.
-
-**Remove**
-
-- nothing unless an old ad-hoc shortcut becomes fully redundant; existing Z/Y/S shortcuts remain.
-
-**Regression checks**
-
-- keyboard navigation/filter/execute/Escape;
-- operation navigation expands ancestors and focuses destination;
-- disabled actions stay disabled;
-- no command executes stale/closed tab data.
-
-**Completion criteria**
-
-- adding a normal future command means editing the pure command builder, not registering with a framework;
-- palette owns no domain state and calls existing actions only.
-
----
-
-### Phase 5 — upload/source intake workflow
-
-**Purpose:** replace hidden file inputs + multiple select with a clear, truthful workflow.
-
-**Files/modules affected**
-
-- new `useWorkspaceFiles.ts`
-- new `SourceUpload.tsx`
-- `WorkspaceHeader.tsx`
-- `App.tsx`
-- `api.ts`
-- `styles.css`
-- related tests.
-
-**Add/change**
-
-- drag/drop and keyboard file/folder selection;
-- staged queue;
-- server-capability-based preflight;
-- one-file-per-request sequential upload execution;
-- staged removal, error retry, completed clear;
-- indeterminate uploading state;
-- source selection based on `translatable` contract metadata;
-- refresh after partial failure.
-
-**Remove**
-
-- old `Upload files`/`Upload folder` hidden-input markup from header;
-- old `<select multiple>` source picker;
-- suffix/prefix classification logic if not already removed;
-- upload usage of global `busy`/`message`.
-
-**Dependencies**
-
-- none beyond Phase 2 primitives.
-
-**Regression checks**
-
-- relative folder paths;
-- duplicate/unsupported/oversized error display;
-- server remains final validator;
-- partial success reconciliation;
-- source auto-selection;
-- translation still receives exactly selected workspace paths.
-
-**Completion criteria**
-
-- no simulated progress;
-- no UI claim of deleting uploaded files;
-- every queue state corresponds to a real request state.
-
----
-
-### Phase 6 — inspector and editor cleanup
-
-**Purpose:** improve information hierarchy and remove obsolete SQL UI paths.
-
-**Files/modules affected**
-
-- `ContextSidebar.tsx`
-- optional `useMediaQuery.ts`
-- `StructuredSqlEditor.tsx`
-- `OperationEditor.tsx`
-- `OperationShared.tsx`
-- `sql/sqlEditor.css`
-- `styles.css`.
-
-**Add/change**
-
-- shared inspector content for desktop aside and compact modal sheet;
-- Radix-managed compact focus/escape behavior;
-- native uncontrolled details sections;
-- controlled SQL add dialogs;
-- server-option-driven SQL fields;
-- structured SQL tabs for Selections/Filters/Joins where all are relevant;
-- clear local form validation and mutation errors.
-
-**Remove**
-
-- `ContextSidebar.Panel` mirrored open state;
-- custom compact backdrop once Radix sheet is live;
-- all `window.prompt` calls;
-- replaced SQL add path;
-- dead SQL selectors confirmed unused after migration.
-
-**Regression checks**
-
-- data-flow dependency behavior;
-- CSV preview;
-- inspector desktop/compact behavior;
-- focus trap/return;
-- structured SQL inspect/update/add/remove/move;
-- raw SQL remains read-only;
-- backend action payloads unchanged.
-
-**Completion criteria**
-
-- no browser prompts;
-- one inspector content implementation;
-- SQL stylesheet describes the UI that actually exists.
-
----
-
-### Phase 7 — feedback and interaction polish
-
-**Purpose:** remove the overloaded global status channel and protect destructive actions.
-
-**Files/modules affected**
-
-- `package.json` / lockfile
-- `main.tsx` or `App.tsx` for Toaster placement
-- `App.tsx`
-- `FileTabs.tsx`
-- source/translation components
-- `styles.css`.
-
-**Add**
-
-- `sonner`;
-- transient success/error toasts;
-- dirty-tab AlertDialog;
-- `beforeunload` dirty-document protection;
-- tooltips on icon-only actions;
-- explicit persistent conflict/validation states.
-
-**Remove**
-
-- `message` state;
-- `status-message` element/CSS;
-- message-setting wrappers that only serviced that element;
-- shared app-wide `busy` once upload and translation each have truthful state.
-
-**Regression checks**
-
-- mobile/tablet failures remain visible;
-- persistent problems remain inline;
-- close/refresh cannot silently discard dirty edits;
-- toast does not steal focus.
-
-**Completion criteria**
-
-- every long-running action has an in-place busy state;
-- every transient result has a consistent notification path;
-- persistent issues never depend on a toast.
-
----
-
-### Phase 8 — responsive and accessibility pass
-
-**Purpose:** validate the integrated architecture and remove residual breakpoint patches.
-
-**Files/modules affected**
-
-- `styles.css`
-- touched feature components
-- Playwright accessibility/responsive tests.
-
-**Add/change**
-
-- final layout simplification;
-- touch target sizing;
-- focus destination fixes;
-- reduced-motion overrides for new components;
-- Axe checks and browser tests.
-
-**Remove**
-
-- obsolete narrow-width overrides superseded by the structural header/inspector solution;
-- pseudo-content icons and one-off layout nudges no longer needed.
-
-**Regression checks**
-
-- keyboard-only full edit workflow;
-- screen sizes listed above;
-- no horizontal page overflow;
-- dialog/palette/inspector focus;
-- reduced-motion/contrast modes.
-
-**Completion criteria**
-
-- breakpoints correspond to actual mode changes rather than accumulated patches;
-- no inaccessible action appears only on hover/drag.
-
----
-
-### Phase 9 — redundant-code deletion and dependency audit
-
-**Purpose:** make deletion an explicit deliverable rather than postponed cleanup.
-
-**Files/modules affected**
-
-- entire touched frontend tree;
-- package manifest/lockfile;
-- CSS.
-
-**Delete after confirmed replacement**
-
-- old top-bar upload markup and source multiple-select;
-- old global status message path;
-- old custom compact inspector backdrop/path;
-- duplicated file-reference/diagnostic components;
-- `window.prompt` SQL path;
-- unused SQL CSS selectors;
-- CSS selectors for deleted markup;
-- dead imports/helpers exposed by refactor;
-- old compatibility aliases added temporarily during migration, if any.
-
-**Audit**
-
-- every runtime dependency has at least one production consumer;
-- no Tailwind/shadcn/Motion/react-icons accidentally remains;
-- no unused copied Watermelon example code/assets;
-- no frontend copy of backend domain models;
-- no path/suffix semantic inference superseded by contract metadata;
-- no two implementations solve the same UI responsibility.
-
-**Regression checks**
-
-- full frontend build/tests;
-- relevant backend tests;
-- E2E workflows;
-- static search for deleted selectors/imports/prompts/legacy markup.
-
-**Completion criteria**
-
-- the replacement is the only implementation path;
-- code and CSS size should decrease in the migrated areas despite the new features.
-
----
-
-### Phase 10 — final architecture review
-
-**Purpose:** challenge the result before declaring the modernization complete.
-
-Review each new abstraction:
-
-- Is it used by more than one place or does it own meaningful behavior?
-- Could native HTML + shared CSS replace it more simply?
-- Does it own state that belongs to `workspaceState`, a feature, or the backend?
-- Is any domain semantic being inferred from strings/path conventions?
-- Did a temporary migration adapter survive without reason?
-- Is a component configurable because of real consumers or speculative future use?
-- Can any dependency be removed?
-
-Expected end state:
-
-```text
-Backend/core owns semantics and validation
-        ↓
-Generated contracts are the only domain model bridge
-        ↓
-api.ts is transport only
-        ↓
-useWorkspace/workspaceState own editor/document state
-useWorkspaceFiles owns remote file inventory
-        ↓
-App composes feature components
-        ↓
-feature components own only local UI workflow state
-        ↓
-small reusable primitives provide consistent behavior/styling
-```
-
-Final completion gate:
-
-```text
-[ ] no old/new parallel UI paths
-[ ] no browser prompt() flows
-[ ] no fake upload percentages
-[ ] no hidden-at-mobile global error channel
-[ ] ScriptTree semantics and keyboard behavior preserved
-[ ] generated contract check passes
-[ ] frontend typecheck/build passes
-[ ] reducer/component tests pass
-[ ] relevant backend tests pass
-[ ] Playwright critical workflows pass
-[ ] Axe representative states pass
-[ ] responsive desktop/tablet/phone checks pass
-[ ] runtime dependencies are minimal and justified
-[ ] dead SQL/global CSS from replaced paths is removed
-```
-
----
-
-## 12. Major deletions/refactors to expect
-
-This work is successful only if the codebase becomes simpler after the UI improvement. The implementation should therefore plan to remove, not merely hide, the following once replacements are proven:
-
-| Current implementation | Replacement | Delete afterward |
-|---|---|---|
-| inline top-bar file/folder inputs | `SourceUpload` | upload labels/hidden inputs and obsolete upload CSS |
-| `<select multiple>` source picker | explicit source-selection UI | multiple-select layout CSS |
-| App-wide `busy` | operation-specific states | global busy branches |
-| App-wide `message` + responsive-hidden output | in-place status + Sonner | state, wrappers, `.status-message` |
-| inline file-tabs code and `handleTabKeys` in App | `FileTabs` | old inline rendering/helper |
-| browser `prompt()` SQL adds | controlled Dialog forms | all prompt calls |
-| duplicated file chips | `FileReferences` | both local duplicate helpers |
-| duplicated operation diagnostics | `OperationDiagnostics` | both local duplicate helpers |
-| controlled React mirror of `<details>` open state | native `defaultOpen` | `Panel` state |
-| custom compact inspector backdrop/modal behavior | Radix compact sheet using shared inspector content | old backdrop and compact modal CSS/path |
-| stale SQL layout selectors | current SQL editor styles only | confirmed unused selectors |
-| frontend scope-kind naming | backend `ScopeView.label` | scope-kind interpretation in React |
-| frontend workspace path/suffix classification | explicit workspace-file contract metadata | `.endsWith('.txt')` / `startsWith('generated/')` semantic branching |
-
-Do not touch unrelated compiler/runtime/CLI code for stylistic consistency.
-
----
-
-## 13. Meaningful deviations from the earlier Watermelon plan
-
-The previous research was directionally useful but broader than the current repository needs. The implementation should deliberately deviate in these areas:
-
-1. **No Tailwind/shadcn migration.** The existing CSS token system, responsive rules, focus styling, reduced-motion behavior, and workbench density are already viable. Adding a second styling framework would increase complexity and leave legacy CSS in place during a long migration.
-2. **No Motion dependency.** Current CSS transitions are sufficient. Watermelon motion is aesthetic reference only.
-3. **No generic UI file for every catalog primitive.** Create Button/Badge/Dialog/Tooltip because they have concrete reuse. Keep native select/checkbox/textarea/table/details until richer behavior is justified.
-4. **File tabs remain domain-specific.** They include close/status/focus behavior that generic Tabs do not model cleanly. Generic Tabs are appropriate only for a true mode switch such as SQL sections.
-5. **Sheet is a Dialog presentation, not a second abstraction.** The compact inspector can use the same accessible overlay primitive styled responsively.
-6. **Dropdown Menu is conditional on actual header density.** It is not mandatory simply because Watermelon ranks it highly.
-7. **Combobox is deferred.** A checkbox list is simpler for current source selection; add search only if real source counts demand it.
-8. **Labeled Progress is not used as a percentage today.** The current upload API cannot report byte progress. Use truthful indeterminate state.
-9. **The existing state layer is preserved.** No context/store rewrite is needed.
-10. **Structured SQL cleanup is promoted in priority.** The current browser prompts and stale CSS are more concrete maintainability problems than several visual primitives proposed in the earlier plan.
-11. **Backend contract cleanup is added.** The current React suffix/path classification and scope-kind naming should be eliminated before polishing the corresponding UI.
-12. **Deletion is a named phase.** Old upload/status/inspector/SQL paths and obsolete CSS must be removed after parity rather than retained as fallbacks.
-
----
-
-## 14. Out of scope for this refactor
-
-Unless a separate requirement is approved, do not include:
-
-- authentication/Supabase work;
-- execution of generated workflows;
+Do not create `features/`, `controllers/`, `services/`, `providers/`, or additional index/barrel layers merely to imitate a larger frontend architecture. Add structure only when current file ownership becomes clearer because of it.
+
+## 5. Watermelon adoption boundary after repository validation
+
+### Adopt/adapt
+
+- **Command Search:** interaction model for Ctrl/Cmd+K, implemented with `cmdk` and current application actions.
+- **Button / Button Group:** consistent sizing/variants/grouping where current controls repeat the same semantics.
+- **Badge:** counts/status/metadata where text chips already exist.
+- **Tabs:** only for a true mode switch such as dense SQL sections if implementation testing confirms it improves navigation.
+- **Tooltip:** icon-only controls and truncated meaning, never as the accessible label itself.
+- **Dialog:** SQL add forms and dirty-close confirmation.
+- **Sheet:** responsive presentation of the same Dialog infrastructure for the compact inspector; not a separate abstraction.
+- **Collapsible:** prefer native `<details>` unless controlled behavior becomes necessary.
+- **Form controls:** visual/interaction guidance; keep native controls where sufficient.
+- **Sonner:** one transient feedback channel.
+- **File Upload:** drag/drop, queue/status, validation, retry interaction model; no copied simulated-progress implementation.
+- **Table:** visual guidance only; keep native CSV table.
+- **Extended Toolbar ideas:** grouping/hierarchy only; avoid decorative pulse/spring effects.
+
+### Explicitly avoid/defer
+
+- Watermelon generic Tree Menu as a `ScriptTree` replacement;
+- marketing/showcase blocks;
+- finance/dashboard widgets unrelated to SQLPathFinder;
+- decorative shimmer/gooey/morphing controls;
+- Motion dependency for ordinary workbench state transitions;
+- Tailwind/shadcn migration;
+- generic data-grid framework;
+- generic Combobox until source counts justify it;
+- fake upload percentage/progress;
+- copied Watermelon demo state/fixtures.
+
+## 6. Dependency policy
+
+Runtime dependencies should be introduced at the step where they become real production consumers, not all at once.
+
+Expected justified additions, subject to implementation-time verification:
+
+| Dependency | Step | Reason |
+|---|---:|---|
+| `radix-ui` | 3 | accessible Dialog/Tooltip and possibly Tabs primitives without building focus management manually |
+| `lucide-react` | 3 | consistent accessible icon set for compact controls; replaces CSS/text glyph hacks |
+| `cmdk` | 6 | command palette filtering/keyboard list behavior |
+| `sonner` | 10 | one lightweight transient toast channel |
+
+Expected browser-test dependencies:
+
+| Dependency | Step | Reason |
+|---|---:|---|
+| `@playwright/test` | 1 | keyboard, focus, responsive, end-to-end workbench regression |
+| `@axe-core/playwright` | 1 | automated representative accessibility checks |
+
+Do not keep any of these if the final implementation no longer imports/uses them.
+
+## 7. Out of scope
+
+Unless separately approved, this refactor does not include:
+
+- Supabase/authentication work;
+- replacing anonymous workspace/session architecture;
+- executing generated workflows;
 - router/deep-link architecture;
-- persisted user preferences/favorites/recent commands;
+- persisted user preferences, favorites, or recent-command history;
 - backend workspace-file deletion;
-- arbitrary extension/plugin command registration;
-- a visual workflow graph replacing ScriptTree;
+- arbitrary command plugins/extensions;
+- visual workflow graph replacement for `ScriptTree`;
 - a general data-grid system;
-- theme system redesign;
-- unrelated compiler/runtime refactors;
-- cosmetic rewriting of unaffected backend code.
+- a theme-system redesign;
+- unrelated compiler/runtime/CLI refactors;
+- stylistic rewriting of unaffected Python code.
 
-These can be added later against the cleaner boundaries if they become real product requirements.
+## 8. Overall definition of done
 
----
+The entire refactor is complete only when **all** of the following are true.
 
-## 15. Recommended review/commit cadence
+### Functionality
 
-Keep changes easy to review and revert. A sensible series is:
+- Upload files and folder-relative files works.
+- Drag/drop file intake works.
+- Supported files are validated against backend-owned policy.
+- Failed queued uploads can be retried without confusing successful files.
+- Translatable sources are selected using contract metadata, not filename inference.
+- Translation still opens the expected generated documents.
+- Generated file and workspace ZIP downloads remain available.
+- Document tabs switch and close correctly.
+- Dirty close cannot silently discard edits.
+- Search/expand/collapse/select behavior in `ScriptTree` is preserved.
+- Parameter editing, undo, redo, preview, apply, conflict reload, CSV preview, workspace projection, and structured SQL editing continue to work.
+- Ctrl/Cmd+K command palette can navigate and execute enabled workbench actions.
+- Structured SQL add-selection/filter/join no longer uses browser prompts.
+
+### Maintainability
+
+- `App.tsx` is an orchestration/composition root, not the implementation owner for file inventory, tab keyboard algorithms, upload queue behavior, or reusable feature presentation.
+- `workspaceState.ts` remains focused on document/editor state.
+- `useWorkspace.ts` remains focused on document/API controller behavior.
+- remote workspace-file inventory has one owner.
+- source-intake state has one owner if shared by upload UI and commands.
+- command derivation has one registry/path.
+- shared components exist only for demonstrated reuse or meaningful accessibility/state behavior.
+- there are no pass-through wrappers created solely for architectural appearance.
+
+### Redundant-code removal
+
+- old hidden top-bar upload implementation is deleted;
+- old multiple-select source picker is deleted;
+- old global status message path is deleted;
+- custom compact inspector backdrop path is deleted;
+- duplicated operation file-reference/diagnostic presentation is deleted;
+- browser prompt SQL paths are deleted;
+- unused SQL CSS/selectors are deleted;
+- CSS for deleted markup is deleted;
+- dead imports/helpers are deleted;
+- temporary migration aliases/adapters are deleted;
+- old and new implementations do not run in parallel.
+
+### Separation of concerns
+
+- compiler/domain semantics are backend-owned;
+- workspace policy/file classification is backend-owned;
+- Pydantic/generated contracts remain the only domain-model bridge;
+- `api.ts` remains transport-focused;
+- React does not parse SQL semantics;
+- React does not infer source/generated roles from paths/suffixes;
+- React does not map compiler scope kinds to user-facing semantics;
+- presentation components receive explicit data/actions rather than discovering backend rules.
+
+### Responsive behavior
+
+The full critical workflow is usable at:
 
 ```text
-1. test: characterize current frontend interactions
-2. refactor(api): expose workspace file/capability presentation metadata
-3. refactor(ui): add minimal shared primitives and remove duplicated editor UI
-4. refactor(ui): extract header, file tabs, and change toolbar
-5. feat(ui): add command palette
-6. feat(ui): replace source upload workflow
-7. refactor(ui): make context inspector accessible/responsive
-8. refactor(ui): replace structured SQL prompt flows and clean SQL CSS
-9. feat(ui): unify transient feedback and dirty-close protection
-10. refactor(ui): responsive/accessibility cleanup and legacy deletion
-11. test(ui): finalize E2E/accessibility gates
-12. refactor(ui): final dependency/dead-code simplification
+1440×900
+1024×768
+768×1024
+390×844
+320×568
 ```
 
-A phase may need more than one commit, but do not mix unrelated backend/compiler refactors into the same review.
+At those sizes:
 
-The architecture should be considered successful when the user-facing UI is more capable while the implementation has fewer ad-hoc state paths, fewer duplicated components/styles, fewer frontend semantic assumptions, and no legacy UI left running beside its replacement.
+- no unintended document-level horizontal overflow exists;
+- file tabs have intentional contained overflow;
+- workbench controls remain reachable;
+- inspector uses the intended persistent/right-sheet/bottom-sheet presentation;
+- upload queue/source list fits or scrolls correctly;
+- command palette fits;
+- SQL forms fit or scroll within their overlay;
+- root layout fixes, not one-off breakpoint hacks, account for the behavior.
+
+### Accessibility
+
+- `ScriptTree` keyboard behavior remains covered and working;
+- command palette is fully keyboard-operable;
+- file tabs retain correct tab keyboard semantics;
+- dialogs/sheets trap focus, close with Escape, and return focus;
+- icon-only controls have accessible names;
+- tooltips are supplemental only;
+- focus-visible styling remains clear;
+- status is not color-only;
+- durable errors are exposed in context;
+- transient feedback does not steal focus;
+- reduced-motion preference is respected;
+- representative axe tests report no serious/critical violations;
+- a keyboard-only smoke workflow passes.
+
+### Tests/build
+
+From a clean dependency install where practical:
+
+- generated contract check passes;
+- TypeScript typecheck passes;
+- existing reducer tests pass;
+- production frontend build passes;
+- browser E2E tests pass;
+- axe checks pass;
+- relevant Python UI/API tests pass;
+- relevant SQL editor/domain tests pass;
+- no new warnings are introduced by the changed build/test paths.
+
+### Dependency cleanliness
+
+- every runtime dependency has a real production consumer;
+- every browser-test dependency has an executed test/script;
+- no Tailwind/shadcn/Motion/react-icons package remains accidentally;
+- no unused Watermelon code/assets remain;
+- lockfile is current;
+- experimental packages are removed before completion.
+
+### No unnecessary compatibility paths
+
+- no feature flag selects old/new upload;
+- no `ContextSidebar` alias remains if `Inspector` replaced it;
+- no old dialog/backdrop implementation remains;
+- no legacy prompt path remains;
+- no duplicate command registry remains;
+- no compatibility adapter exists without a documented active consumer.
+
+### Simpler than before
+
+The refactor is not complete merely because the UI looks better. The final implementation must make the main workflows easier to trace and maintain:
+
+```text
+user action
+   ↓
+feature component / command
+   ↓
+focused hook or existing workspace controller
+   ↓
+typed api.ts call or workspace reducer action
+   ↓
+backend-owned semantics / explicit state
+   ↓
+rendered result
+```
+
+A final reviewer should be able to confirm that migrated responsibilities have fewer ad-hoc state paths, less duplicated UI/CSS, fewer frontend semantic assumptions, and no old implementation retained beside the new one.
+
+## 9. Recommended commit sequence
+
+The execution should remain reviewable approximately as follows:
+
+```text
+1.  test(ui): add browser regression harness
+2.  test(ui): characterize current workbench workflows
+3.  refactor(api): expose workspace presentation metadata
+4.  refactor(ui): add minimal accessible primitives
+5.  refactor(ui): deduplicate operation presentation
+6.  refactor(ui): isolate workspace file inventory state
+7.  refactor(ui): extract file tabs and change toolbar
+8.  refactor(ui): simplify workbench root layout
+9.  feat(ui): add keyboard command palette
+10. refactor(ui): add source intake state and upload queue
+11. feat(ui): replace workspace upload and source selection
+12. refactor(ui): unify responsive file inspector
+13. refactor(ui): replace structured SQL prompt flows
+14. refactor(ui): remove obsolete structured SQL styles
+15. feat(ui): unify transient feedback and scoped loading states
+16. feat(ui): protect dirty tab close with shared dialog
+17. refactor(ui): harden responsive and accessible workbench behavior
+18. refactor(ui): remove superseded UI paths and dead styles
+19. chore(ui): remove unused frontend dependencies          # only if needed
+20. docs(ui): update final architecture notes               # only if implementation deviated
+```
+
+This sequence is guidance, not a requirement to create twenty commits. Combine adjacent commits when the resulting diff remains small and cohesive; split any step whose behavior and cleanup become too large to review confidently. Never combine unrelated compiler/runtime refactors into these commits.
