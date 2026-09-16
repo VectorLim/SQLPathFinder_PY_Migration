@@ -110,6 +110,7 @@
   .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
   .topbar .source-status { grid-column: 1 / -1; grid-row: 2; margin-left: 0; max-width: none; }
   .source-intake { gap: 8px; padding: 8px; }
+  .source-intake--has-queue { max-height: min(48dvh, 360px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .source-intake__heading { align-items: flex-start; }
   .source-intake__hint { text-align: right; }
   .source-intake__buttons button, .translate-selected { min-height: 44px; }
