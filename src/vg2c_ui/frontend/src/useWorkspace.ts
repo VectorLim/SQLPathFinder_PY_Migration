@@ -59,7 +59,7 @@ export function useWorkspace() {
     } catch (error) {
       dispatch({
         type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
-        conflict: false, message: errorMessage(error, 'Reload failed'),
+        conflict: tab.status === 'conflict', message: errorMessage(error, 'Reload failed'),
       })
       throw error
     }
