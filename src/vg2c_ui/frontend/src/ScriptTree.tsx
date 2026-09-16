@@ -10,7 +10,7 @@ import type {
   WorkspaceProjectionView,
 } from './contracts.generated'
 import { OperationEditor } from './OperationEditor'
-import { formatOperationLabel, formatScopeLabel } from './operationLabels'
+import { formatOperationLabel } from './operationLabels'
 
 type ScriptItem = StepView | ScopeView
 interface Props {
@@ -68,7 +68,7 @@ export function ScriptTree({ tabId, document, projection, search, expandedScopes
 }
 
 function TreeLabel({ item }: { item: ScriptItem }) {
-  if (item.node_kind !== 'step') return <span className="tree-label"><strong>{formatScopeLabel(item)}</strong><small>Blocks {item.start_index + 1}–{item.end_index + 1}</small></span>
+  if (item.node_kind !== 'step') return <span className="tree-label"><strong>{item.label}</strong><small>Blocks {item.start_index + 1}–{item.end_index + 1}</small></span>
   const label = formatOperationLabel(item)
   return <span className="tree-label"><strong>{label.primary}</strong>{label.secondary && <small>{label.secondary}</small>}</span>
 }
@@ -78,7 +78,7 @@ function ScopeSummary({ scope, document, artifacts }: { scope: ScopeView; docume
   const ids = new Set(nested.map((step) => step.id))
   const inputs = unique(artifacts.filter((artifact) => artifact.consumer_step_ids.some((id) => ids.has(id))).map((artifact) => artifact.path))
   const outputs = unique(artifacts.filter((artifact) => artifact.producer_step_ids.some((id) => ids.has(id))).map((artifact) => artifact.path))
-  return <section className="scope-summary" aria-label={`${formatScopeLabel(scope)} summary`}><span>{nested.length} nested operation{nested.length === 1 ? '' : 's'}</span>{inputs.length > 0 && <small>Reads {inputs.slice(0, 3).join(', ')}{inputs.length > 3 ? ` +${inputs.length - 3}` : ''}</small>}{outputs.length > 0 && <small>Produces {outputs.slice(0, 3).join(', ')}{outputs.length > 3 ? ` +${outputs.length - 3}` : ''}</small>}</section>
+  return <section className="scope-summary" aria-label={`${scope.label} summary`}><span>{nested.length} nested operation{nested.length === 1 ? '' : 's'}</span>{inputs.length > 0 && <small>Reads {inputs.slice(0, 3).join(', ')}{inputs.length > 3 ? ` +${inputs.length - 3}` : ''}</small>}{outputs.length > 0 && <small>Produces {outputs.slice(0, 3).join(', ')}{outputs.length > 3 ? ` +${outputs.length - 3}` : ''}</small>}</section>
 }
 
 function filesForStep(artifacts: DocumentView['artifacts'], stepId: string) {
@@ -110,7 +110,7 @@ export function ancestorScopeIds(document: DocumentView, itemId: string): string
 function searchVisibility(document: DocumentView, query: string): Set<string> {
   const result = new Set<string>()
   for (const item of [...document.scopes, ...document.steps]) {
-    const text = item.node_kind === 'step' ? [formatOperationLabel(item).primary, formatOperationLabel(item).secondary, item.description, item.display_label].filter(Boolean).join(' ') : formatScopeLabel(item)
+    const text = item.node_kind === 'step' ? [formatOperationLabel(item).primary, formatOperationLabel(item).secondary, item.description, item.display_label].filter(Boolean).join(' ') : item.label
     if (text.toLowerCase().includes(query)) { result.add(item.id); for (const ancestor of ancestorScopeIds(document, item.id)) result.add(ancestor) }
   }
   return result
