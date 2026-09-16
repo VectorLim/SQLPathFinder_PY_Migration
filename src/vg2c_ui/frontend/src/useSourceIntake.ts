@@ -9,6 +9,7 @@ import type {
 } from './contracts.generated'
 
 export type UploadQueueStatus = 'queued' | 'uploading' | 'uploaded' | 'failed'
+export type IntakeNotice = { tone: 'info' | 'error'; message: string }
 
 export interface UploadQueueItem {
   id: number
@@ -23,10 +24,10 @@ export interface UploadQueueItem {
 interface Args {
   files: WorkspaceFileView[]
   loadingFiles: boolean
+  inventoryError: Error | null
   policy: WorkspaceUploadPolicyView | null
   refreshFiles: () => Promise<WorkspaceFileView[]>
   translateSources: (paths: string[]) => Promise<BatchTranslationResponse>
-  onStatus: (message: string) => void
   onDiagnostics: (diagnostics: DiagnosticView[]) => void
 }
 
@@ -37,6 +38,7 @@ export interface SourceIntakeController {
   queuedCount: number
   completedCount: number
   hasGeneratedFiles: boolean
+  notice: IntakeNotice | null
   policy: WorkspaceUploadPolicyView | null
   uploading: boolean
   translating: boolean
@@ -56,11 +58,12 @@ export interface SourceIntakeController {
   translateSelected: () => Promise<void>
 }
 
-export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, translateSources, onStatus, onDiagnostics }: Args): SourceIntakeController {
+export function useSourceIntake({ files, loadingFiles, inventoryError, policy, refreshFiles, translateSources, onDiagnostics }: Args): SourceIntakeController {
   const [queue, setQueue] = useState<UploadQueueItem[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [translating, setTranslating] = useState(false)
+  const [localNotice, setLocalNotice] = useState<IntakeNotice | null>(null)
   const nextId = useRef(1)
   const sourceSelectionInitialized = useRef(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -73,6 +76,9 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   const canStage = Boolean(policy) && !uploading
   const canUploadQueued = queuedCount > 0 && !uploading
   const canTranslate = selectedSources.length > 0 && !translating && !uploading
+  const notice = inventoryError
+    ? { tone: 'error' as const, message: inventoryError.message || 'Could not load workspace files.' }
+    : localNotice
 
   useEffect(() => {
     if (loadingFiles) return
@@ -99,9 +105,10 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   function stageFiles(incoming: File[]) {
     if (!incoming.length) return
     if (!policy) {
-      onStatus('Upload policy is still loading.')
+      setLocalNotice({ tone: 'error', message: 'Upload policy is still loading.' })
       return
     }
+    setLocalNotice(null)
     setQueue((current) => {
       const next = [...current]
       const reserved = next.filter((item) => item.status === 'queued' || item.status === 'uploading')
@@ -138,6 +145,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   async function uploadItems(items: UploadQueueItem[]) {
     if (!items.length || uploading) return
     setUploading(true)
+    setLocalNotice(null)
     let succeeded = 0
     let failed = 0
     const newSources: string[] = []
@@ -161,8 +169,9 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
       }
       await refreshFiles().catch(() => undefined)
       if (newSources.length) setSelectedSources((current) => [...new Set([...current, ...newSources])])
-      if (failed) onStatus(`${succeeded} uploaded; ${failed} failed. Review the upload queue.`)
-      else onStatus(`${succeeded} file${succeeded === 1 ? '' : 's'} uploaded.`)
+      setLocalNotice(failed
+        ? { tone: 'error', message: `${succeeded} uploaded; ${failed} failed. Review the upload queue.` }
+        : { tone: 'info', message: `${succeeded} file${succeeded === 1 ? '' : 's'} uploaded.` })
     } finally {
       setUploading(false)
     }
@@ -184,6 +193,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
     const validationError = validateStagedFile(item.file, item.path, policy, knownPaths, inputCount, workspaceBytes)
     if (validationError) {
       setQueue((current) => updateQueueItem(current, id, { error: validationError, retryable: false }))
+      setLocalNotice({ tone: 'error', message: validationError })
       return
     }
     await uploadItems([item])
@@ -206,16 +216,19 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   async function translateSelected() {
     if (!canTranslate) return
     setTranslating(true)
-    onStatus('Translating…')
+    setLocalNotice(null)
     try {
       const response = await translateSources(selectedSources)
       await refreshFiles().catch(() => undefined)
       onDiagnostics(response.diagnostics)
-      onStatus(response.documents.length
-        ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.`
-        : 'No scripts were translated.')
+      setLocalNotice({
+        tone: 'info',
+        message: response.documents.length
+          ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.`
+          : 'No scripts were translated.',
+      })
     } catch (reason) {
-      onStatus(errorMessage(reason, 'Translation failed'))
+      setLocalNotice({ tone: 'error', message: errorMessage(reason, 'Translation failed') })
     } finally {
       setTranslating(false)
     }
@@ -228,6 +241,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
     queuedCount,
     completedCount,
     hasGeneratedFiles,
+    notice,
     policy,
     uploading,
     translating,
