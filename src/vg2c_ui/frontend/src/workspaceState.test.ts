@@ -26,7 +26,7 @@ assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.status, 'dirty')
 
 const projection = workspaceProjectionRequest(state)
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ parameter_id: 'p1', value: 'draft' }])
-assert.deepEqual(projection.documents.find((item) => item.document.id === 'b')?.changes, [])
+assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
 
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const a = state.tabs.find((tab) => tab.document.id === 'a')!
