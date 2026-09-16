@@ -96,8 +96,9 @@ export function CommandPalette({ open, commands, onClose }: Props) {
           aria-controls={RESULTS_ID}
           aria-activedescendant={activeId ? commandItemId(activeId) : undefined}
         />
+        <span className="sr-only" role="status">{filtered.length} matching command{filtered.length === 1 ? '' : 's'}.</span>
       </label>
-      <div id={RESULTS_ID} className="command-results" role="group" aria-label="Command results" aria-live="polite">
+      <div id={RESULTS_ID} className="command-results" role="group" aria-label="Command results">
         {GROUPS.map((group) => {
           const items = filtered.filter((command) => command.group === group)
           if (!items.length) return null
