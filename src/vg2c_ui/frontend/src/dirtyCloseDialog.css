@@ -50,6 +50,6 @@
 
 @media (max-width: 430px) {
   .dirty-close-card { padding: 16px; }
-  .dirty-close-actions { flex-direction: column-reverse; }
+  .dirty-close-actions { flex-direction: column; }
   .dirty-close-actions button { width: 100%; min-height: 44px; }
 }
