@@ -11,9 +11,9 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
   const hasActionableQueue = intake.queue.some((item) => item.status !== 'uploaded')
 
   useEffect(() => {
-    if (hasActionableQueue) setCompactCollapsed(false)
+    if (hasActionableQueue || intake.translationDiagnostics.length) setCompactCollapsed(false)
     else setCompactCollapsed(intake.hasGeneratedFiles)
-  }, [hasActionableQueue, intake.hasGeneratedFiles])
+  }, [hasActionableQueue, intake.hasGeneratedFiles, intake.translationDiagnostics.length])
 
   function filesSelected(event: ChangeEvent<HTMLInputElement>) {
     intake.stageFiles(Array.from(event.currentTarget.files ?? []))
@@ -95,6 +95,13 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
       </div>
 
       {intake.notice && <p className={`source-intake__notice source-intake__notice--${intake.notice.tone}`}>{intake.notice.message}</p>}
+
+      {intake.translationDiagnostics.length > 0 && <div className="source-intake__diagnostics" aria-label="Translation failures">
+        {intake.translationDiagnostics.map((diagnostic, index) => <p key={`${diagnostic.code}-${index}`}>
+          <strong>{diagnostic.code}</strong>
+          <span>{diagnostic.message}</span>
+        </p>)}
+      </div>}
 
       {intake.queue.length > 0 && <div className="upload-queue" aria-label="Upload queue">
         <div className="upload-queue__header"><strong>Upload queue</strong>{intake.completedCount > 0 && <button className="text-button" type="button" onClick={intake.clearCompleted}>Clear completed</button>}</div>
