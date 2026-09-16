@@ -39,6 +39,11 @@ export function CommandPalette({ open, commands, onClose }: Props) {
       : enabled[0]?.id ?? null)
   }, [enabledSignature])
 
+  useEffect(() => {
+    if (!open || !activeId) return
+    modal.dialogRef.current?.querySelector<HTMLElement>('.command-item.is-active')?.scrollIntoView({ block: 'nearest' })
+  }, [open, activeId])
+
   function execute(command: WorkbenchCommand) {
     if (command.disabled) return
     modal.requestClose()
