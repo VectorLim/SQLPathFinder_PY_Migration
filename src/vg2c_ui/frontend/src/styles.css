@@ -67,13 +67,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.status-message {
-  margin-left: auto;
-  max-width: 310px;
-  color: var(--header-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
 
 .tabs {
   display: flex;
@@ -276,6 +269,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .operation-state { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
 .operation-state--warning { background: var(--warning); }
 .operation-state--unsupported { background: var(--subtle); }
+.operation-warning { color: var(--danger); font-size: 12px; font-weight: 800; line-height: 1; text-align: center; }
 .tree-branch { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; }
 .tree-branch.is-open { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
 .tree-branch__inner { min-height: 0; overflow: hidden; }
@@ -371,7 +365,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .file-chip-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; align-items: start; }
 .file-chip-row strong { padding-top: 3px; color: var(--text); font-size: 11px; }
 .file-chip-row > div { display: flex; flex-wrap: wrap; gap: 5px; }
-.file-chip-row code, .header-chips code {
+.file-chip-row code {
   max-width: 100%;
   overflow: hidden;
   border-radius: 5px;
@@ -512,11 +506,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .artifact-meta { display: flex; flex-wrap: wrap; gap: 4px; margin: 7px 0 0 34px; }
 .artifact-meta span { border-radius: 99px; padding: 2px 5px; color: var(--text); background: var(--surface-subtle); font-size: 8px; }
 .artifact-meta .warning-chip { color: var(--warning); background: var(--warning-soft); }
-.header-summary { margin: 8px 0 0 34px; }
-.header-summary > small { display: block; margin-bottom: 4px; color: var(--muted); font-size: 9px; font-weight: 650; }
-.header-chips { display: flex; flex-wrap: wrap; gap: 3px; }
-.header-chips code { padding: 2px 4px; font-size: 8px; }
-.header-chips span, .header-status { color: var(--subtle); font-size: 9px; }
 .flow-divider { display: flex; align-items: center; gap: 7px; margin: 17px 0 3px; color: var(--subtle); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .flow-divider::before, .flow-divider::after { content: ""; height: 1px; flex: 1; background: var(--line-soft); }
 .dependency-row {
@@ -602,7 +591,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .context-toggle { display: inline-flex; }
-  .status-message { min-width: 0; }
   .brand { min-width: auto; }
 }
 
