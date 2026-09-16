@@ -98,14 +98,13 @@ export function App() {
     catch (error) { setMessage(errorMessage(error, 'Reload failed')) }
   }
 
-  const queuedCount = intake.queue.filter((item) => item.status === 'queued').length
   const commands = buildCommands({
     tabs: state.tabs,
     active,
     workspace: {
       canStage: intake.canStage,
-      queuedCount: intake.uploading ? 0 : queuedCount,
-      canTranslate: intake.selectedSources.length > 0 && !intake.uploading && !intake.translating,
+      queuedCount: intake.canUploadQueued ? intake.queuedCount : 0,
+      canTranslate: intake.canTranslate,
       openFiles: intake.openFiles,
       openFolder: intake.openFolder,
       uploadQueued: () => { void intake.uploadQueued() },
