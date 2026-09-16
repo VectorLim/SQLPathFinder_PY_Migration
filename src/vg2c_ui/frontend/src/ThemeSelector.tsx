@@ -1,3 +1,5 @@
+import './themeSelector.css'
+
 import { THEMES, type ThemePreference } from './theme'
 
 interface Props {
