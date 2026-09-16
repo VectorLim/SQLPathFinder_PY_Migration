@@ -103,7 +103,6 @@ export function App() {
         return
       }
       if ((event.target as HTMLElement | null)?.closest('.command-dialog')) return
-      if (event.key === 'Escape' && contextOpen && !commandOpen) { setContextOpen(false); return }
       if (!(event.ctrlKey || event.metaKey) || !active) return
       const key = event.key.toLowerCase()
       if (key === 'z') {
@@ -159,7 +158,6 @@ export function App() {
       </div>
     </section>
 
-    <button className={`context-backdrop${contextOpen ? ' is-open' : ''}`} type="button" aria-label="Close file context" tabIndex={contextOpen ? 0 : -1} onClick={() => setContextOpen(false)} />
     <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch((error) => setMessage(errorMessage(error, 'CSV preview failed')))} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
     </section>
 

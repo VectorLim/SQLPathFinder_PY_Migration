@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import type {
   ArtifactView,
@@ -22,15 +22,59 @@ interface Props {
 
 interface Section { id: string; title: string; defaultOpen?: boolean; content: ReactNode }
 
-export function ContextSidebar({ document, documents, projection, csv, csvArtifactPath, open, onClose, onPreviewCsv, onActivateDocument }: Props) {
+export function ContextSidebar(props: Props) {
+  const compact = useCompactInspector()
+  if (compact) return <CompactContextDialog {...props} />
+  return <aside id="file-context" className="context-sidebar" aria-label="File context">
+    <ContextContent {...props} showClose={false} />
+  </aside>
+}
+
+function CompactContextDialog(props: Props) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (props.open && !dialog.open) {
+      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      dialog.showModal()
+    } else if (!props.open && dialog.open) {
+      dialog.close()
+    }
+  }, [props.open])
+
+  function closeDialog() {
+    dialogRef.current?.close()
+  }
+
+  return <dialog
+    ref={dialogRef}
+    id="file-context"
+    className="context-dialog"
+    aria-labelledby="file-context-title"
+    onClose={() => {
+      props.onClose()
+      const opener = openerRef.current
+      openerRef.current = null
+      queueMicrotask(() => opener?.focus())
+    }}
+    onClick={(event) => { if (event.target === event.currentTarget) closeDialog() }}
+  >
+    <ContextContent {...props} showClose onRequestClose={closeDialog} />
+  </dialog>
+}
+
+function ContextContent({ document, documents, projection, csv, csvArtifactPath, onPreviewCsv, onActivateDocument, showClose, onRequestClose }: Props & { showClose: boolean; onRequestClose?: () => void }) {
   const sections: Section[] = document ? [
     { id: 'data-flow', title: 'Data Flow', defaultOpen: true, content: <DataFlowSection document={document} documents={documents} projection={projection} csv={csv} csvArtifactPath={csvArtifactPath} onPreviewCsv={onPreviewCsv} onActivateDocument={onActivateDocument} /> },
     { id: 'file-details', title: 'File Details', content: <FileDetails document={document} /> },
   ] : []
-  return <aside id="file-context" className={`context-sidebar${open ? ' is-open' : ''}`} aria-label="File context">
-    <header className="context-sidebar__header"><div><span className="eyebrow">Current file</span><h2 title={document?.output_path}>{document ? baseName(document.output_path) : 'Context'}</h2></div><button className="icon-button context-close" type="button" onClick={onClose} aria-label="Close context sidebar">×</button></header>
+  return <>
+    <header className="context-sidebar__header"><div><span className="eyebrow">Current file</span><h2 id="file-context-title" title={document?.output_path}>{document ? baseName(document.output_path) : 'Context'}</h2></div>{showClose && <button className="icon-button context-close" type="button" onClick={onRequestClose} aria-label="Close file context">×</button>}</header>
     <div className="context-sidebar__body">{!document && <p className="empty-copy">Open a translated script to inspect its context.</p>}{sections.map((section) => <Panel key={section.id} section={section} />)}</div>
-  </aside>
+  </>
 }
 
 function Panel({ section }: { section: Section }) {
@@ -81,3 +125,16 @@ function dependencyRows(activeId: string, documents: DocumentView[], projection:
 function DependencyGroup({ title, rows, empty, onActivateDocument }: { title: string; rows: DependencyRow[]; empty: string; onActivateDocument: (id: string) => void }) { return <section className="flow-group dependency-group"><h3>{title}<span>{rows.length}</span></h3>{rows.length ? rows.map((row) => <button className="dependency-row" key={row.documentId} type="button" onClick={() => onActivateDocument(row.documentId)} title={row.sourcePath}><span aria-hidden="true">↗</span><span><strong>{row.fileName}</strong><small>{row.artifactPaths.map(baseName).join(', ')}</small></span></button>) : <p className="flow-empty">{empty}</p>}</section> }
 function FileDetails({ document }: { document: DocumentView }) { return <dl className="file-details"><div><dt>Source</dt><dd title={document.source_path}>{document.source_path}</dd></div><div><dt>Generated</dt><dd title={document.output_path}>{document.output_path}</dd></div><div><dt>Revision</dt><dd>{document.revision}</dd></div><div><dt>Operations</dt><dd>{document.steps.length}</dd></div><div><dt>Diagnostics</dt><dd>{document.diagnostics.length}</dd></div></dl> }
 function CsvTable({ preview }: { preview: CsvPreviewView }) { return <div className="csv-preview"><small>{preview.size_bytes.toLocaleString()} bytes{preview.truncated ? ' · truncated' : ''}</small><div className="table-scroll"><table><thead><tr>{preview.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table></div></div> }
+
+function useCompactInspector(): boolean {
+  const query = '(max-width: 1100px)'
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const update = () => setMatches(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  return matches
+}
