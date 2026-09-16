@@ -1,6 +1,6 @@
 import type { TabState } from './workspaceState'
 import { getChangeActionState } from './workspaceGuards'
-import { baseName, formatOperationLabel, formatScopeLabel } from './operationLabels'
+import { baseName, formatOperationLabel } from './operationLabels'
 
 export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
 
@@ -93,11 +93,10 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
 
   if (active) {
     for (const scope of active.document.scopes) {
-      const label = formatScopeLabel(scope)
       commands.push({
         id: `navigation.item:${scope.id}`,
         group: 'Navigation',
-        label: `Go to ${label}`,
+        label: `Go to ${scope.label}`,
         keywords: [scope.scope_kind, `${scope.start_index + 1}`, `${scope.end_index + 1}`],
         run: () => actions.selectItem(scope.id),
       })
