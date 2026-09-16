@@ -210,6 +210,13 @@ export interface WorkspaceFileView {
   translatable: boolean
 }
 
+export interface WorkspaceUploadPolicyView {
+  allowed_upload_suffixes: Array<string>
+  max_upload_bytes: number
+  max_file_count: number
+  max_workspace_bytes: number
+}
+
 export interface SqlSpanView {
   start: number
   end: number

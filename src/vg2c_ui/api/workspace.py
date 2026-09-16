@@ -13,6 +13,7 @@ from vg2c_ui.api.models import (
     WorkspaceFileView,
     WorkspaceProjectionRequest,
     WorkspaceProjectionView,
+    WorkspaceUploadPolicyView,
 )
 from vg2c_ui.services.document_store import DocumentStore, get_document_store
 from vg2c_ui.services.workspaces import (
@@ -46,6 +47,17 @@ def project_workspace(
         ) from exc
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/policy", response_model=WorkspaceUploadPolicyView)
+def workspace_upload_policy(request: Request) -> WorkspaceUploadPolicyView:
+    manager = get_workspace_manager(request)
+    return WorkspaceUploadPolicyView(
+        allowed_upload_suffixes=sorted(manager.allowed_upload_suffixes),
+        max_upload_bytes=manager.max_upload_bytes,
+        max_file_count=manager.max_file_count,
+        max_workspace_bytes=manager.max_workspace_bytes,
+    )
 
 
 @router.get("/files", response_model=list[WorkspaceFileView])

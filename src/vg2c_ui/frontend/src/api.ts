@@ -12,6 +12,7 @@ import type {
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
   WorkspaceFileView,
+  WorkspaceUploadPolicyView,
 } from './contracts.generated'
 
 export class ApiError extends Error {
@@ -78,10 +79,23 @@ export async function uploadWorkspaceFiles(files: File[]): Promise<WorkspaceFile
   return response.json() as Promise<WorkspaceFileView[]>
 }
 
+export async function uploadWorkspaceFile(file: File): Promise<WorkspaceFileView> {
+  const saved = await uploadWorkspaceFiles([file])
+  const result = saved[0]
+  if (!result) throw new Error('Upload completed without a saved workspace file.')
+  return result
+}
+
 export async function listWorkspaceFiles(): Promise<WorkspaceFileView[]> {
   const response = await fetch('/api/workspace/files')
   if (!response.ok) await throwApiError(response)
   return response.json() as Promise<WorkspaceFileView[]>
+}
+
+export async function getWorkspaceUploadPolicy(): Promise<WorkspaceUploadPolicyView> {
+  const response = await fetch('/api/workspace/policy')
+  if (!response.ok) await throwApiError(response)
+  return response.json() as Promise<WorkspaceUploadPolicyView>
 }
 
 export function workspaceDownloadUrl(path: string): string {

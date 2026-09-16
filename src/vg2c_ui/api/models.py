@@ -217,6 +217,13 @@ class WorkspaceFileView(BaseModel):
     translatable: bool
 
 
+class WorkspaceUploadPolicyView(BaseModel):
+    allowed_upload_suffixes: list[str]
+    max_upload_bytes: int
+    max_file_count: int
+    max_workspace_bytes: int
+
+
 class SqlSpanView(BaseModel):
     start: int
     end: int
@@ -336,6 +343,7 @@ CONTRACT_MODELS = (
     ProjectedDocumentView,
     WorkspaceProjectionView,
     WorkspaceFileView,
+    WorkspaceUploadPolicyView,
     SqlSpanView,
     SqlSelectionView,
     SqlSourceView,
