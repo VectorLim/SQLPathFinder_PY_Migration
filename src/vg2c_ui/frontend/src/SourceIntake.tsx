@@ -30,7 +30,7 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
     ? 'Uploading…'
     : intake.translating
       ? 'Translating…'
-      : [
+      : intake.notice?.message ?? [
           intake.queuedCount ? `${intake.queuedCount} queued` : null,
           intake.selectedSources.length ? `${intake.selectedSources.length} selected` : null,
         ].filter(Boolean).join(' · ') || 'Upload or select sources'
@@ -49,6 +49,7 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
       accept={accept}
       onChange={filesSelected}
     />
+    {intake.notice && <span className="sr-only" role={intake.notice.tone === 'error' ? 'alert' : 'status'}>{intake.notice.message}</span>}
 
     <button
       className="source-intake__compact-toggle"
@@ -92,6 +93,8 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
         </div>
         <button className="primary-button translate-selected" type="button" onClick={() => void intake.translateSelected()} disabled={!intake.canTranslate}>{intake.translating ? 'Translating…' : 'Translate selected'}</button>
       </div>
+
+      {intake.notice && <p className={`source-intake__notice source-intake__notice--${intake.notice.tone}`}>{intake.notice.message}</p>}
 
       {intake.queue.length > 0 && <div className="upload-queue" aria-label="Upload queue">
         <div className="upload-queue__header"><strong>Upload queue</strong>{intake.completedCount > 0 && <button className="text-button" type="button" onClick={intake.clearCompleted}>Clear completed</button>}</div>
