@@ -1,5 +1,6 @@
 .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
 .app-shell--with-intake.app-shell--no-tabs { grid-template-rows: auto auto minmax(0, 1fr); }
+.app-shell--with-intake.app-shell--no-tabs > .empty-state { min-height: 0; }
 
 .source-intake-shell { min-width: 0; }
 .source-intake__compact-toggle { display: none; }
