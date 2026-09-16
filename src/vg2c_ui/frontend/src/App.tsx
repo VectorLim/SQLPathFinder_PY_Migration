@@ -24,7 +24,7 @@ export function App() {
   const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
-  const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
+  const [message, setMessage] = useState('Ready.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
@@ -32,16 +32,12 @@ export function App() {
   const intake = useSourceIntake({
     files: fileInventory.files,
     loadingFiles: fileInventory.loading,
+    inventoryError: fileInventory.error,
     policy: fileInventory.policy,
     refreshFiles: fileInventory.refresh,
     translateSources: workspace.translate,
-    onStatus: setMessage,
     onDiagnostics: setBatchDiagnostics,
   })
-
-  useEffect(() => {
-    if (fileInventory.error) setMessage(fileInventory.error.message || 'Could not load workspace files')
-  }, [fileInventory.error])
 
   const hasUnsavedWorkspaceChanges = state.tabs.some(hasUnsavedChanges)
   useEffect(() => {
@@ -157,7 +153,7 @@ export function App() {
   return <main className="app-shell app-shell--with-intake">
     <header className="topbar">
       <div className="brand"><span>PYTHON</span>PathFinder</div>
-      <output className="status-message source-status" aria-live="polite">{message}</output>
+      <output className="status-message" aria-live="polite">{message}</output>
       <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
       <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
