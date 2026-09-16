@@ -26,7 +26,7 @@ assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.status, 'dirty')
 
 const projection = workspaceProjectionRequest(state)
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ parameter_id: 'p1', value: 'draft' }])
-assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
+assert.deepEqual(projection.documents.find((item) => item.document.id === 'b')?.changes, [])
 
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const a = state.tabs.find((tab) => tab.document.id === 'a')!
@@ -140,27 +140,29 @@ assert.equal(availability.canPreview, false, 'conflict requires reload before an
 assert.equal(availability.canReload, true, 'conflicted tab should enable reload')
 
 actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p2', value: 'newer' })
-assert.equal(actionsState.tabs[0].mutationError, null, 'editing again should clear the prior mutation error')
 actionsTab = actionsState.tabs[0]
-actionsState = workspaceReducer(actionsState, {
-  type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
-  requestId: 'actions-preview-2', baseVersion: actionsTab.edits.version, status: 'validating',
-})
-assert.equal(actionsState.tabs[0].mutationError, null, 'new mutation should begin without stale feedback')
+availability = getChangeActionState(actionsTab)
+assert.equal(actionsTab.status, 'conflict', 'editing must not bypass an unresolved external conflict')
+assert.equal(actionsTab.mutationError, 'File changed externally', 'conflict feedback should remain until reload starts')
+assert.equal(availability.canPreview, false, 'editing during conflict must not reopen preview')
+assert.equal(availability.canReload, true, 'reload must remain available after additional draft edits')
 
-actionsTab = actionsState.tabs[0]
-actionsState = workspaceReducer(actionsState, {
-  type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
-  requestId: 'actions-preview-2', baseVersion: actionsTab.edits.version, conflict: true,
-  message: 'Conflict',
-})
-actionsTab = actionsState.tabs[0]
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
   requestId: 'actions-reload', baseVersion: actionsTab.edits.version, status: actionsTab.status,
 })
+assert.equal(actionsState.tabs[0].mutationError, null, 'reload start should clear the prior conflict message')
 availability = getChangeActionState(actionsState.tabs[0])
 assert.equal(availability.canReload, false, 'pending reload must block reload re-entry')
-assert.equal(actionsState.tabs[0].mutationError, null, 'reload start should clear the conflict message')
+
+actionsTab = actionsState.tabs[0]
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-reload', baseVersion: actionsTab.edits.version, conflict: true,
+  message: 'Reload failed',
+})
+assert.equal(actionsState.tabs[0].status, 'conflict', 'failed conflict reload must stay in conflict state')
+assert.equal(actionsState.tabs[0].mutationError, 'Reload failed')
+assert.equal(getChangeActionState(actionsState.tabs[0]).canReload, true, 'failed conflict reload must remain retryable')
 
 console.log('workspaceState tests passed')
