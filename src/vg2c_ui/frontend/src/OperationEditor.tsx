@@ -7,6 +7,7 @@ import type {
   StepView,
 } from './contracts.generated'
 import { formatOperationLabel } from './operationLabels'
+import { FileReferences, OperationDiagnostics } from './OperationPresentation'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
 
 interface Props {
@@ -49,7 +50,7 @@ function GenericOperationEditor({ step, values, files, diagnostics = [], onEdit 
         <span className={`state-pill${step.read_only ? ' state-pill--readonly' : ''}`}>{step.read_only ? 'Read only' : `${editableCount} editable`}</span>
       </header>
       {step.description && <p className="operation-description">{step.description}</p>}
-      {diagnostics.length > 0 && <div className="operation-diagnostics" role="alert">{diagnostics.map((item) => <p key={`${item.code}-${item.artifact}`}><strong>{item.code.replaceAll('_', ' ')}</strong><span>{item.message}</span></p>)}</div>}
+      <OperationDiagnostics diagnostics={diagnostics} />
       <div className="parameter-grid">
         {step.parameters.length ? step.parameters.map((parameter) => <ParameterEditor
           key={parameter.id}
@@ -59,7 +60,7 @@ function GenericOperationEditor({ step, values, files, diagnostics = [], onEdit 
           onChange={(value) => onEdit(parameter, value)}
         />) : <p className="empty-copy">No configurable values are exposed by this utility.</p>}
       </div>
-      {(files.inputs.length > 0 || files.outputs.length > 0) && <div className="operation-io">{files.inputs.length > 0 && <FileChips label="Reads" paths={files.inputs} />}{files.outputs.length > 0 && <FileChips label="Produces" paths={files.outputs} />}</div>}
+      <FileReferences files={files} />
       {step.validation_state === 'unsupported' && <p className="read-only-note">This operation is not safely editable.</p>}
       <details className="generated-details"><summary>Generated information</summary><dl>
         <div><dt>Function</dt><dd><code>{step.function_name}</code></dd></div>
@@ -87,6 +88,5 @@ function ParameterEditor({ parameter, value, disabled, onChange }: { parameter: 
   </label>
 }
 
-function FileChips({ label, paths }: { label: string; paths: string[] }) { return <div className="file-chip-row"><strong>{label}</strong><div>{paths.map((path) => <code key={path} title={path}>{path}</code>)}</div></div> }
 function formatValue(value: unknown, source: string): string { if (value === null || value === undefined) return source; return typeof value === 'string' ? value : JSON.stringify(value, null, 2) }
 function humanize(value: string): string { return value.replaceAll('_', ' ').replace(/(^|\s)\S/g, (match) => match.toUpperCase()) }

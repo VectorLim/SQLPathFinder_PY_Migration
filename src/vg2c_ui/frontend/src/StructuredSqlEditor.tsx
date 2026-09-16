@@ -12,6 +12,7 @@ import type {
   StepView,
 } from './contracts.generated'
 import { formatOperationLabel } from './operationLabels'
+import { FileReferences, OperationDiagnostics } from './OperationPresentation'
 
 interface Props {
   tabId: string
@@ -69,8 +70,8 @@ export function StructuredSqlEditor({ tabId, step, values, files, diagnostics, i
         <span className={`state-pill${step.read_only ? ' state-pill--readonly' : ''}`}>{step.read_only ? 'Read only' : 'Structured SQL'}</span>
       </header>
       {step.description && <p className="operation-description">{step.description}</p>}
-      <FileSummary files={files} />
-      <Diagnostics diagnostics={diagnostics} />
+      <FileReferences files={files} />
+      <OperationDiagnostics diagnostics={diagnostics} />
       {error && <p className="sql-edit-error" role="alert">{error}</p>}
       {busy && !model && <p className="empty-copy">Loading structured SQL…</p>}
       {model && !step.read_only && (
@@ -166,9 +167,3 @@ function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { va
   useEffect(() => setDraft(value), [value])
   return <input aria-label={ariaLabel} placeholder={placeholder} disabled={disabled} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { const next = draft.trim(); if (next !== value.trim()) void onCommit(next) }} />
 }
-
-function FileSummary({ files }: { files: { inputs: string[]; outputs: string[] } }) {
-  return <div className="operation-io">{files.inputs.length > 0 && <FileChips label="Reads" paths={files.inputs} />}{files.outputs.length > 0 && <FileChips label="Produces" paths={files.outputs} />}</div>
-}
-function FileChips({ label, paths }: { label: string; paths: string[] }) { return <div className="file-chip-row"><strong>{label}</strong><div>{paths.map((path) => <code key={path} title={path}>{path}</code>)}</div></div> }
-function Diagnostics({ diagnostics }: { diagnostics: DependencyIssueView[] }) { return diagnostics.length ? <div className="operation-diagnostics" role="alert">{diagnostics.map((item) => <p key={`${item.code}-${item.artifact}`}><strong>{item.code.replaceAll('_', ' ')}</strong><span>{item.message}</span></p>)}</div> : null }
