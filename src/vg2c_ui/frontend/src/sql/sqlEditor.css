@@ -177,8 +177,8 @@
   .sql-section > header { align-items: flex-start; }
   .sql-row { align-items: stretch; }
   .sql-row input,
-  .sql-row select,
-  .sql-row button { flex: 1 1 100%; width: 100%; }
+  .sql-row select { flex: 1 1 100%; width: 100%; }
+  .sql-row button { flex: 1 1 72px; }
   .sql-add-panel { grid-template-columns: 1fr; }
   .sql-add-panel__actions > button { flex: 1 1 auto; }
 }
