@@ -63,18 +63,31 @@
 .source-option input { flex: 0 0 auto; }
 .source-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .translate-selected { margin-top: 8px; }
-.source-intake__notice {
-  grid-column: 1 / -1;
+.source-intake__notice,
+.source-intake__diagnostics p {
   margin: 0;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--danger);
   border-radius: 0 7px 7px 0;
   padding: 7px 9px;
   color: var(--text);
-  background: var(--accent-soft);
+  background: var(--danger-soft);
   font-size: 10px;
   line-height: 1.4;
 }
+.source-intake__notice {
+  grid-column: 1 / -1;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .source-intake__notice--error { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+.source-intake__diagnostics {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 5px;
+}
+.source-intake__diagnostics p { display: grid; gap: 2px; }
+.source-intake__diagnostics strong { color: var(--danger); font-size: 9px; letter-spacing: .03em; }
+.source-intake__diagnostics span { overflow-wrap: anywhere; }
 .upload-queue {
   grid-column: 1 / -1;
   min-width: 0;
@@ -134,7 +147,7 @@
   .source-intake__compact-action { flex: 0 0 auto; color: var(--accent-strong); font-size: 10px; font-weight: 700; }
   .source-intake-shell.is-compact-collapsed .source-intake { display: none; }
   .source-intake { grid-template-columns: 1fr; padding: 10px 12px; }
-  .upload-queue { grid-column: 1; }
+  .upload-queue, .source-intake__diagnostics { grid-column: 1; }
 }
 
 @media (max-width: 640px) {
