@@ -1,4 +1,5 @@
 import type { TabState } from './workspaceState'
+import { getChangeActionState } from './workspaceGuards'
 import { baseName, formatOperationLabel, formatScopeLabel } from './operationLabels'
 
 export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
@@ -122,14 +123,14 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
     run: actions.openInspector,
   })
 
-  const editCount = active ? Object.keys(active.edits.values).length : 0
+  const changeActions = getChangeActionState(active)
   commands.push(
     {
       id: 'editing.undo',
       group: 'Editing',
       label: 'Undo change',
       shortcut: 'Ctrl/⌘+Z',
-      disabled: !active?.edits.history.length,
+      disabled: !changeActions.canUndo,
       run: actions.undo,
     },
     {
@@ -137,7 +138,7 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
       group: 'Editing',
       label: 'Redo change',
       shortcut: 'Ctrl/⌘+Y',
-      disabled: !active?.edits.future.length,
+      disabled: !changeActions.canRedo,
       run: actions.redo,
     },
     {
@@ -145,7 +146,7 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
       group: 'Editing',
       label: 'Preview changes',
       shortcut: 'Ctrl/⌘+S',
-      disabled: !active || !editCount || active.status === 'validating' || !active.document.synchronized,
+      disabled: !changeActions.canPreview,
       run: actions.validate,
     },
     {
@@ -153,14 +154,14 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
       group: 'Editing',
       label: 'Apply validated changes',
       shortcut: 'Ctrl/⌘+S',
-      disabled: !active?.preview?.valid || active?.status === 'saving',
+      disabled: !changeActions.canApply,
       run: actions.apply,
     },
     {
       id: 'editing.reload',
       group: 'Editing',
       label: 'Reload conflicted document',
-      disabled: active?.status !== 'conflict',
+      disabled: !changeActions.canReload,
       run: actions.reload,
     },
   )
