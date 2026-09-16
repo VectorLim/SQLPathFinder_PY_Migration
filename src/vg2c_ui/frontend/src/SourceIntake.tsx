@@ -131,7 +131,7 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
           {intake.queue.map((item) => <article className={`upload-item upload-item--${item.status}`} key={item.id}>
             <div className="upload-item__copy"><strong title={item.path}>{item.path}</strong><small>{formatBytes(item.file.size)} · {statusLabel(item.status)}</small>{item.error && <span role="alert">{item.error}</span>}</div>
             <div className="upload-item__actions">
-              {item.status === 'failed' && item.retryable && <button type="button" onClick={() => void intake.retry(item.id)} disabled={intake.uploading}>Retry</button>}
+              {item.status === 'failed' && item.retryable && <button type="button" onClick={() => void intake.retry(item.id)} disabled={intake.loadingFiles || intake.uploading || intake.translating}>Retry</button>}
               {(item.status === 'queued' || item.status === 'failed') && <button type="button" onClick={() => intake.remove(item.id)} disabled={intake.uploading}>Remove</button>}
             </div>
           </article>)}
