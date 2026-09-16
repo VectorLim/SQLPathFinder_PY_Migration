@@ -20,6 +20,24 @@
 .context-dialog::backdrop { background: var(--overlay-soft); }
 .context-dialog .context-close { display: grid; place-items: center; }
 
+.dependency-issue {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 9px 9px 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--danger-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dependency-issue strong {
+  color: var(--danger);
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+
 @media (max-width: 640px) {
   .context-dialog {
     inset: auto 0 0;

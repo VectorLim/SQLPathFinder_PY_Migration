@@ -1,3 +1,5 @@
+import './operationPresentation.css'
+
 import type { DependencyIssueView } from './contracts.generated'
 
 interface Files {
