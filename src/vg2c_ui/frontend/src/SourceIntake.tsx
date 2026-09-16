@@ -30,10 +30,12 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
     ? 'Uploading…'
     : intake.translating
       ? 'Translating…'
-      : intake.notice?.message ?? [
-          intake.queuedCount ? `${intake.queuedCount} queued` : null,
-          intake.selectedSources.length ? `${intake.selectedSources.length} selected` : null,
-        ].filter(Boolean).join(' · ') || 'Upload or select sources'
+      : intake.loadingFiles
+        ? 'Loading workspace files…'
+        : intake.notice?.message ?? [
+            intake.queuedCount ? `${intake.queuedCount} queued` : null,
+            intake.selectedSources.length ? `${intake.selectedSources.length} selected` : null,
+          ].filter(Boolean).join(' · ') || 'Upload or select sources'
   const shellClassName = [
     'source-intake-shell',
     compactCollapsed ? 'is-compact-collapsed' : '',
@@ -86,15 +88,19 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
           <div><span className="eyebrow">Translation</span><strong>Select VG2 sources</strong></div>
           <span className="source-intake__hint">{intake.selectedSources.length} selected</span>
         </div>
-        <div className="source-list" role="group" aria-label="Sources selected for translation">
-          {intake.sources.length ? intake.sources.map((file) => <label className="source-option" key={file.path}>
-            <input
-              type="checkbox"
-              checked={intake.selectedSources.includes(file.path)}
-              onChange={(event) => intake.toggleSource(file.path, event.target.checked)}
-            />
-            <span title={file.path}>{file.path}</span>
-          </label>) : <p className="empty-copy">Upload a source file to begin.</p>}
+        <div className="source-list" role="group" aria-label="Sources selected for translation" aria-busy={intake.loadingFiles}>
+          {intake.loadingFiles
+            ? <p className="empty-copy">Loading workspace files…</p>
+            : intake.sources.length
+              ? intake.sources.map((file) => <label className="source-option" key={file.path}>
+                  <input
+                    type="checkbox"
+                    checked={intake.selectedSources.includes(file.path)}
+                    onChange={(event) => intake.toggleSource(file.path, event.target.checked)}
+                  />
+                  <span title={file.path}>{file.path}</span>
+                </label>)
+              : <p className="empty-copy">Upload a source file to begin.</p>}
         </div>
         <button className="primary-button translate-selected" type="button" onClick={() => void intake.translateSelected()} disabled={!intake.canTranslate}>{intake.translating ? 'Translating…' : 'Translate selected'}</button>
       </div>
