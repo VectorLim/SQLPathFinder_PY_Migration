@@ -5,7 +5,6 @@ import { App } from './App'
 import { initializeTheme } from './theme'
 import './styles.css'
 import './theme.css'
-import './contextInspector.css'
 
 initializeTheme()
 
