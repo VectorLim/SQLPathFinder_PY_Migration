@@ -67,20 +67,13 @@ export function previewCsv(sourcePath: string, csvPath: string): Promise<CsvPrev
   return post('/api/documents/preview-csv', { source_path: sourcePath, csv_path: csvPath })
 }
 
-export async function uploadWorkspaceFiles(files: File[]): Promise<WorkspaceFileView[]> {
+export async function uploadWorkspaceFile(file: File): Promise<WorkspaceFileView> {
   const body = new FormData()
-  for (const file of files) {
-    const relativePath = file.webkitRelativePath || file.name
-    body.append('files', file)
-    body.append('paths', relativePath)
-  }
+  body.append('files', file)
+  body.append('paths', file.webkitRelativePath || file.name)
   const response = await fetch('/api/workspace/files', { method: 'POST', body })
   if (!response.ok) await throwApiError(response)
-  return response.json() as Promise<WorkspaceFileView[]>
-}
-
-export async function uploadWorkspaceFile(file: File): Promise<WorkspaceFileView> {
-  const saved = await uploadWorkspaceFiles([file])
+  const saved = await response.json() as WorkspaceFileView[]
   const result = saved[0]
   if (!result) throw new Error('Upload completed without a saved workspace file.')
   return result
