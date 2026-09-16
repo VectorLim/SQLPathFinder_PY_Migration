@@ -1,4 +1,4 @@
-.theme-selector { flex: 0 0 auto; margin-left: 2px; }
+.theme-selector { flex: 0 0 auto; margin-left: auto; }
 .theme-selector select {
   min-height: 34px;
   border: 1px solid color-mix(in srgb, var(--header-muted) 48%, transparent);
