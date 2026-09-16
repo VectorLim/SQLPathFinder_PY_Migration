@@ -1,3 +1,5 @@
+import './changeToolbar.css'
+
 import type { TabState, TabStatus } from './workspaceState'
 import { getChangeActionState } from './workspaceGuards'
 
@@ -16,6 +18,7 @@ export function ChangeToolbar({ tab, onUndo, onRedo, onValidate, onApply, onRelo
     <div className="change-status">
       <strong>{actions.editCount ? `${actions.editCount} unsaved change${actions.editCount === 1 ? '' : 's'}` : 'No pending changes'}</strong>
       <small>{statusCopy(tab.status)}</small>
+      {tab.mutationError && <span className="change-error" role="alert">{tab.mutationError}</span>}
     </div>
     <div className="toolbar-group" role="group" aria-label="Change actions">
       <button type="button" onClick={onUndo} disabled={!actions.canUndo}>Undo</button>
