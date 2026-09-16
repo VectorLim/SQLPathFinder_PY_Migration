@@ -85,7 +85,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, p
     : localNotice
 
   useEffect(() => {
-    if (loadingFiles) return
+    if (loadingFiles || inventoryError) return
     const available = new Set(sources.map((file) => file.path))
     setSelectedSources((current) => {
       if (!sourceSelectionInitialized.current) {
@@ -94,7 +94,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, p
       }
       return current.filter((path) => available.has(path))
     })
-  }, [loadingFiles, sourceSignature])
+  }, [inventoryError, loadingFiles, sourceSignature])
 
   function openFiles() {
     if (!canStage) return
