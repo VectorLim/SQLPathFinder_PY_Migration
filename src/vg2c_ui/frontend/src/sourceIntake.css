@@ -112,7 +112,11 @@
   .source-intake { gap: 8px; padding: 8px; }
   .source-intake__heading { align-items: flex-start; }
   .source-intake__hint { text-align: right; }
-  .source-intake__buttons button { flex: 1 1 auto; min-height: 40px; }
+  .source-intake__buttons button, .translate-selected { min-height: 44px; }
+  .source-intake__buttons button { flex: 1 1 auto; }
   .source-list { max-height: 100px; }
+  .source-option { min-height: 44px; padding-block: 4px; }
+  .source-option input { width: 18px; height: 18px; }
   .upload-queue__items { grid-template-columns: 1fr; max-height: 180px; }
+  .source-intake .upload-item__actions button, .source-intake .upload-queue__header .text-button { min-height: 44px; }
 }
