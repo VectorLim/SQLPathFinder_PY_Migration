@@ -1,5 +1,8 @@
 .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
 
+.source-intake-shell { min-width: 0; }
+.source-intake__compact-toggle { display: none; }
+
 .source-intake {
   display: grid;
   grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr);
@@ -109,8 +112,34 @@
 @media (max-width: 640px) {
   .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
   .topbar .source-status { grid-column: 1 / -1; grid-row: 2; margin-left: 0; max-width: none; }
-  .source-intake { gap: 8px; padding: 8px; }
-  .source-intake--has-queue { max-height: min(48dvh, 360px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .source-intake__compact-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 7px 12px;
+    color: var(--text);
+    background: var(--panel);
+    text-align: left;
+  }
+  .source-intake__compact-toggle > span:first-child { display: grid; min-width: 0; gap: 1px; }
+  .source-intake__compact-toggle strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .source-intake__compact-toggle small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  .source-intake__compact-action { flex: 0 0 auto; color: var(--accent-strong); font-size: 10px; font-weight: 700; }
+  .source-intake-shell.is-compact-collapsed .source-intake { display: none; }
+  .source-intake {
+    gap: 8px;
+    max-height: min(48dvh, 360px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 8px;
+    scrollbar-width: thin;
+  }
   .source-intake__heading { align-items: flex-start; }
   .source-intake__hint { text-align: right; }
   .source-intake__buttons button, .translate-selected { min-height: 44px; }
