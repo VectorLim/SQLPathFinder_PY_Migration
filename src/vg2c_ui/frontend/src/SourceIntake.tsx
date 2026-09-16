@@ -31,7 +31,8 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
     intake.stageFiles(Array.from(event.dataTransfer.files))
   }
 
-  const compactMessage = intake.notice?.message ?? intake.policyError?.message ?? null
+  const policyErrorMessage = intake.policyError?.message || 'Could not load workspace upload policy.'
+  const compactMessage = intake.notice?.message ?? (intake.policyError ? policyErrorMessage : null)
   const compactError = intake.notice ? intake.notice.tone === 'error' : Boolean(intake.policyError)
   const compactSummary = intake.uploading
     ? 'Uploading…'
@@ -64,7 +65,7 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
       onChange={filesSelected}
     />
     {intake.notice && <span className="sr-only" role={intake.notice.tone === 'error' ? 'alert' : 'status'}>{intake.notice.message}</span>}
-    {intake.policyError && <span className="sr-only" role="alert">{intake.policyError.message || 'Could not load workspace upload policy.'}</span>}
+    {intake.policyError && !intake.notice && <span className="sr-only" role="alert">{policyErrorMessage}</span>}
 
     <button
       className="source-intake__compact-toggle"
@@ -89,7 +90,7 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
           <button className="primary-button" type="button" onClick={() => void intake.uploadQueued()} disabled={!intake.canUploadQueued}>{intake.uploading ? 'Uploading…' : `Upload queued${intake.queuedCount ? ` (${intake.queuedCount})` : ''}`}</button>
         </div>
         {intake.policyError
-          ? <p className="source-intake__policy source-intake__policy--error">{intake.policyError.message || 'Could not load workspace upload policy.'}</p>
+          ? <p className="source-intake__policy source-intake__policy--error">{policyErrorMessage}</p>
           : !intake.policy && <p className="source-intake__policy">Loading upload policy…</p>}
       </div>
 
