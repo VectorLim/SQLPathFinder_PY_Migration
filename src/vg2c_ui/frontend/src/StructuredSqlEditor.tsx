@@ -47,14 +47,16 @@ export function StructuredSqlEditor({ tabId, step, values, files, diagnostics, i
     return () => { cancelled = true }
   }, [tabId, parameter?.id, typeof effectiveSql === 'string' ? effectiveSql : ''])
 
-  async function act(action: SqlActionRequest['action'], args: Record<string, unknown>) {
-    if (!parameter) return
+  async function act(action: SqlActionRequest['action'], args: Record<string, unknown>): Promise<boolean> {
+    if (!parameter) return false
     setBusy(true)
     try {
       setModel(await runAction(tabId, parameter.id, action, args))
       setError('')
+      return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'SQL update failed.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -108,8 +110,9 @@ function SelectionAddForm({ disabled, onAction, onClose }: AddFormProps) {
     event.preventDefault()
     const next = expression.trim()
     if (!next) return
-    void onAction('add-selection', { expression: next })
-    onClose()
+    void onAction('add-selection', { expression: next }).then((success) => {
+      if (success) onClose()
+    })
   }
   return <form className="sql-add-panel" onSubmit={submit}>
     <label><span className="sr-only">Selected expression</span><input autoFocus value={expression} disabled={disabled} onChange={(event) => setExpression(event.target.value)} placeholder="Selected expression" /></label>
@@ -147,8 +150,9 @@ function FilterAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!left.trim() || !right.trim() || !operator) return
-    void onAction('add-filter', { left: left.trim(), operator, right: right.trim(), connector })
-    onClose()
+    void onAction('add-filter', { left: left.trim(), operator, right: right.trim(), connector }).then((success) => {
+      if (success) onClose()
+    })
   }
   return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
     <div className="sql-add-panel__row">
@@ -192,8 +196,9 @@ function JoinAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps) 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!joinType || !source.trim() || !left.trim() || !operator || !right.trim()) return
-    void onAction('add-join', { join_type: joinType, source: source.trim(), left: left.trim(), right: right.trim(), operator })
-    onClose()
+    void onAction('add-join', { join_type: joinType, source: source.trim(), left: left.trim(), right: right.trim(), operator }).then((success) => {
+      if (success) onClose()
+    })
   }
   return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
     <div className="sql-add-panel__row">
@@ -225,12 +230,12 @@ function JoinRow({ item, model, disabled, onAction }: { item: SqlJoinView; model
   </div>
 }
 
-type ActionFn = (action: SqlActionRequest['action'], args: Record<string, unknown>) => Promise<void>
+type ActionFn = (action: SqlActionRequest['action'], args: Record<string, unknown>) => Promise<boolean>
 interface SectionProps { model: SqlModelView; onAction: ActionFn; disabled: boolean }
 interface AddFormProps { disabled: boolean; onAction: ActionFn; onClose: () => void }
 interface ModelAddFormProps extends AddFormProps { model: SqlModelView }
 
-function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { value: string; disabled: boolean; ariaLabel: string; placeholder?: string; onCommit: (value: string) => Promise<void> }) {
+function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { value: string; disabled: boolean; ariaLabel: string; placeholder?: string; onCommit: (value: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return <input aria-label={ariaLabel} placeholder={placeholder} disabled={disabled} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { const next = draft.trim(); if (next !== value.trim()) void onCommit(next) }} />
