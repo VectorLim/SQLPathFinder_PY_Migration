@@ -40,6 +40,7 @@ export interface SourceIntakeController {
   notice: IntakeNotice | null
   translationDiagnostics: DiagnosticView[]
   policy: WorkspaceUploadPolicyView | null
+  loadingFiles: boolean
   uploading: boolean
   translating: boolean
   canStage: boolean
@@ -253,6 +254,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     notice,
     translationDiagnostics,
     policy,
+    loadingFiles,
     uploading,
     translating,
     canStage,
