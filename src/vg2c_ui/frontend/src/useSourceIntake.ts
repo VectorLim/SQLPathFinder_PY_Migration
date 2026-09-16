@@ -36,6 +36,7 @@ export interface SourceIntakeController {
   queue: UploadQueueItem[]
   queuedCount: number
   completedCount: number
+  hasGeneratedFiles: boolean
   policy: WorkspaceUploadPolicyView | null
   uploading: boolean
   translating: boolean
@@ -68,6 +69,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   const sourceSignature = sources.map((file) => file.path).join('|')
   const queuedCount = queue.filter((item) => item.status === 'queued').length
   const completedCount = queue.filter((item) => item.status === 'uploaded').length
+  const hasGeneratedFiles = files.some((file) => file.role === 'generated')
   const canStage = Boolean(policy) && !uploading
   const canUploadQueued = queuedCount > 0 && !uploading
   const canTranslate = selectedSources.length > 0 && !translating && !uploading
@@ -225,6 +227,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
     queue,
     queuedCount,
     completedCount,
+    hasGeneratedFiles,
     policy,
     uploading,
     translating,
