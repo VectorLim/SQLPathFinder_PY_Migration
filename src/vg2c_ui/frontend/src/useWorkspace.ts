@@ -57,7 +57,10 @@ export function useWorkspace() {
       dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document })
       return document
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: false })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: false, message: errorMessage(error, 'Reload failed'),
+      })
       throw error
     }
   }, [])
@@ -80,7 +83,11 @@ export function useWorkspace() {
       dispatch({ type: 'preview-result', tabId, instanceId, requestId, baseVersion: version, preview })
       return preview
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: error instanceof ApiError && error.status === 409 })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not validate changes'),
+      })
       throw error
     }
   }, [])
@@ -99,7 +106,11 @@ export function useWorkspace() {
       dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document: result.document })
       return result
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: error instanceof ApiError && error.status === 409 })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not apply changes'),
+      })
       throw error
     }
   }, [])
@@ -112,10 +123,13 @@ export function useWorkspace() {
     dispatch({ type: 'csv-loading', tabId, instanceId, requestId, path })
     try {
       const csv = await previewCsv(tab.document.source_path, path)
-      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv })
+      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv, error: null })
       return csv
     } catch (error) {
-      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv: null })
+      dispatch({
+        type: 'csv-result', tabId, instanceId, requestId, csv: null,
+        error: errorMessage(error, 'CSV preview failed'),
+      })
       throw error
     }
   }, [])
@@ -206,4 +220,8 @@ export function useWorkspace() {
 
 function mutationId(tabId: string, instanceId: number, sequence: number): string {
   return `${tabId}:${instanceId}:mutation:${sequence}`
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
