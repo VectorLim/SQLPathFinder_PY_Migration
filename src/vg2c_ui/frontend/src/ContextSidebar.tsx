@@ -18,6 +18,7 @@ interface Props {
   csv: CsvPreviewView | null
   csvArtifactPath: string | null
   csvError: string | null
+  csvLoading: boolean
   open: boolean
   onClose: () => void
   onPreviewCsv: (path: string) => void
@@ -48,9 +49,9 @@ function CompactContextDialog(props: Props) {
   </dialog>
 }
 
-function ContextContent({ document, documents, projection, csv, csvArtifactPath, csvError, onPreviewCsv, onActivateDocument, showClose, onRequestClose }: Props & { showClose: boolean; onRequestClose?: () => void }) {
+function ContextContent({ document, documents, projection, csv, csvArtifactPath, csvError, csvLoading, onPreviewCsv, onActivateDocument, showClose, onRequestClose }: Props & { showClose: boolean; onRequestClose?: () => void }) {
   const sections: Section[] = document ? [
-    { id: 'data-flow', title: 'Data Flow', defaultOpen: true, content: <DataFlowSection document={document} documents={documents} projection={projection} csv={csv} csvArtifactPath={csvArtifactPath} csvError={csvError} onPreviewCsv={onPreviewCsv} onActivateDocument={onActivateDocument} /> },
+    { id: 'data-flow', title: 'Data Flow', defaultOpen: true, content: <DataFlowSection document={document} documents={documents} projection={projection} csv={csv} csvArtifactPath={csvArtifactPath} csvError={csvError} csvLoading={csvLoading} onPreviewCsv={onPreviewCsv} onActivateDocument={onActivateDocument} /> },
     { id: 'file-details', title: 'File Details', content: <FileDetails document={document} /> },
   ] : []
   return <>
@@ -63,7 +64,7 @@ function Panel({ section }: { section: Section }) {
   return <details className="context-section" defaultOpen={Boolean(section.defaultOpen)}><summary><span>{section.title}</span></summary><div className="context-section__content">{section.content}</div></details>
 }
 
-function DataFlowSection({ document, documents, projection, csv, csvArtifactPath, csvError, onPreviewCsv, onActivateDocument }: Omit<Props, 'open' | 'onClose'> & { document: DocumentView }) {
+function DataFlowSection({ document, documents, projection, csv, csvArtifactPath, csvError, csvLoading, onPreviewCsv, onActivateDocument }: Omit<Props, 'open' | 'onClose'> & { document: DocumentView }) {
   const artifacts = projection?.documents.find((item) => item.document_id === document.id)?.artifacts ?? document.artifacts
   const inputs = artifacts.filter((artifact) => artifact.is_external_input)
   const outputs = artifacts.filter((artifact) => artifact.is_output)
@@ -73,10 +74,10 @@ function DataFlowSection({ document, documents, projection, csv, csvArtifactPath
   return <div className="data-flow">
     <p className="context-help">Dependencies reflect compiler projection for every open tab, including unsaved drafts.</p>
     {issues.length > 0 && <section className="flow-group dependency-issues"><h3>Dependency issues<span>{issues.length}</span></h3><div className="flow-list">{issues.map((item) => <article className="dependency-issue" key={`${item.code}-${item.step_id}-${item.artifact}`}><strong>{item.code.replaceAll('_', ' ')}</strong><span>{item.message}</span></article>)}</div></section>}
-    <FlowGroup title="Required inputs" items={inputs} empty="No external file inputs detected.">{inputs.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} direction="input" csv={csvArtifactPath === artifact.path ? csv : null} csvError={csvArtifactPath === artifact.path ? csvError : null} onPreviewCsv={onPreviewCsv} invalid={issues.some((item) => item.artifact === artifact.path)} />)}</FlowGroup>
+    <FlowGroup title="Required inputs" items={inputs} empty="No external file inputs detected.">{inputs.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} direction="input" csv={csvArtifactPath === artifact.path ? csv : null} csvError={csvArtifactPath === artifact.path ? csvError : null} csvLoading={csvArtifactPath === artifact.path && csvLoading} onPreviewCsv={onPreviewCsv} invalid={issues.some((item) => item.artifact === artifact.path)} />)}</FlowGroup>
     <DependencyGroup title="Upstream open files" rows={upstream} empty="No open translated file produces these inputs." onActivateDocument={onActivateDocument} />
     <div className="flow-divider" aria-hidden="true"><span>current script</span></div>
-    <FlowGroup title="Produced files" items={outputs} empty="No file outputs detected.">{outputs.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} direction="output" csv={csvArtifactPath === artifact.path ? csv : null} csvError={csvArtifactPath === artifact.path ? csvError : null} onPreviewCsv={onPreviewCsv} invalid={issues.some((item) => item.artifact === artifact.path)} />)}</FlowGroup>
+    <FlowGroup title="Produced files" items={outputs} empty="No file outputs detected.">{outputs.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} direction="output" csv={csvArtifactPath === artifact.path ? csv : null} csvError={csvArtifactPath === artifact.path ? csvError : null} csvLoading={csvArtifactPath === artifact.path && csvLoading} onPreviewCsv={onPreviewCsv} invalid={issues.some((item) => item.artifact === artifact.path)} />)}</FlowGroup>
     <DependencyGroup title="Downstream open files" rows={downstream} empty="No open translated file depends on these outputs." onActivateDocument={onActivateDocument} />
   </div>
 }
@@ -85,8 +86,8 @@ function FlowGroup({ title, items, empty, children }: { title: string; items: Ar
   return <section className="flow-group"><h3>{title}<span>{items.length}</span></h3>{items.length ? <div className="flow-list">{children}</div> : <p className="flow-empty">{empty}</p>}</section>
 }
 
-function ArtifactRow({ artifact, direction, csv, csvError, onPreviewCsv, invalid }: { artifact: ArtifactView; direction: 'input' | 'output'; csv: CsvPreviewView | null; csvError: string | null; onPreviewCsv: (path: string) => void; invalid: boolean }) {
-  return <article className={`artifact-row${invalid ? ' artifact-row--invalid' : ''}`}><div className="artifact-row__top"><span className={`flow-icon flow-icon--${direction}`} aria-hidden="true">{direction === 'input' ? '↓' : '↑'}</span><div className="artifact-name"><strong>{artifact.label}</strong><small>{artifact.path}</small></div><button className="text-button" type="button" onClick={() => onPreviewCsv(artifact.path)}>Preview</button></div><div className="artifact-meta">{artifact.conditional && <span>conditional</span>}{artifact.in_loop && <span>loop output</span>}{!artifact.order_valid && <span className="warning-chip">order warning</span>}{invalid && <span className="error-chip">dependency error</span>}</div>{csvError && <p className="csv-preview-error" role="alert">{csvError}</p>}{csv && <CsvTable preview={csv} />}</article>
+function ArtifactRow({ artifact, direction, csv, csvError, csvLoading, onPreviewCsv, invalid }: { artifact: ArtifactView; direction: 'input' | 'output'; csv: CsvPreviewView | null; csvError: string | null; csvLoading: boolean; onPreviewCsv: (path: string) => void; invalid: boolean }) {
+  return <article className={`artifact-row${invalid ? ' artifact-row--invalid' : ''}`} aria-busy={csvLoading}><div className="artifact-row__top"><span className={`flow-icon flow-icon--${direction}`} aria-hidden="true">{direction === 'input' ? '↓' : '↑'}</span><div className="artifact-name"><strong>{artifact.label}</strong><small>{artifact.path}</small></div><button className="text-button" type="button" onClick={() => onPreviewCsv(artifact.path)} disabled={csvLoading}>{csvLoading ? 'Previewing…' : 'Preview'}</button></div><div className="artifact-meta">{artifact.conditional && <span>conditional</span>}{artifact.in_loop && <span>loop output</span>}{!artifact.order_valid && <span className="warning-chip">order warning</span>}{invalid && <span className="error-chip">dependency error</span>}</div>{csvError && <p className="csv-preview-error" role="alert">{csvError}</p>}{csv && <CsvTable preview={csv} />}</article>
 }
 
 interface DependencyRow { documentId: string; fileName: string; sourcePath: string; artifactPaths: string[] }
