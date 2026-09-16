@@ -9,7 +9,7 @@ interface Props {
   onClose: () => void
 }
 
-const GROUPS: CommandGroup[] = ['Navigation', 'Editing', 'View']
+const GROUPS: CommandGroup[] = ['Workspace', 'Navigation', 'Editing', 'View']
 
 export function CommandPalette({ open, commands, onClose }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -56,8 +56,8 @@ export function CommandPalette({ open, commands, onClose }: Props) {
 
   function execute(command: WorkbenchCommand) {
     if (command.disabled) return
-    command.run()
     requestClose()
+    queueMicrotask(command.run)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {

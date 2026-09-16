@@ -1,7 +1,7 @@
 import type { TabState } from './workspaceState'
 import { baseName, formatOperationLabel, formatScopeLabel } from './operationLabels'
 
-export type CommandGroup = 'Navigation' | 'Editing' | 'View'
+export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
 
 export interface WorkbenchCommand {
   id: string
@@ -26,14 +26,58 @@ interface CommandActions {
   collapseAll: () => void
 }
 
+interface WorkspaceCommands {
+  canStage: boolean
+  queuedCount: number
+  canTranslate: boolean
+  openFiles: () => void
+  openFolder: () => void
+  uploadQueued: () => void
+  translateSelected: () => void
+}
+
 interface BuildCommandsInput {
   tabs: TabState[]
   active: TabState | null
   actions: CommandActions
+  workspace: WorkspaceCommands
 }
 
-export function buildCommands({ tabs, active, actions }: BuildCommandsInput): WorkbenchCommand[] {
-  const commands: WorkbenchCommand[] = []
+export function buildCommands({ tabs, active, actions, workspace }: BuildCommandsInput): WorkbenchCommand[] {
+  const commands: WorkbenchCommand[] = [
+    {
+      id: 'workspace.upload-files',
+      group: 'Workspace',
+      label: 'Upload files',
+      keywords: ['browse', 'source', 'data'],
+      disabled: !workspace.canStage,
+      run: workspace.openFiles,
+    },
+    {
+      id: 'workspace.upload-folder',
+      group: 'Workspace',
+      label: 'Upload folder',
+      keywords: ['browse', 'directory', 'workspace'],
+      disabled: !workspace.canStage,
+      run: workspace.openFolder,
+    },
+    {
+      id: 'workspace.upload-queued',
+      group: 'Workspace',
+      label: workspace.queuedCount ? `Upload queued files (${workspace.queuedCount})` : 'Upload queued files',
+      keywords: ['queue', 'send'],
+      disabled: !workspace.queuedCount,
+      run: workspace.uploadQueued,
+    },
+    {
+      id: 'workspace.translate-selected',
+      group: 'Workspace',
+      label: 'Translate selected sources',
+      keywords: ['compile', 'generate', 'python'],
+      disabled: !workspace.canTranslate,
+      run: workspace.translateSelected,
+    },
+  ]
 
   for (const tab of tabs) {
     const name = baseName(tab.document.output_path || tab.document.source_path)

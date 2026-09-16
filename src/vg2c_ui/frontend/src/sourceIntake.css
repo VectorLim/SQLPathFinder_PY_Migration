@@ -1,0 +1,118 @@
+.app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
+
+.source-intake {
+  display: grid;
+  grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr);
+  gap: 12px 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.source-intake__upload, .source-intake__sources {
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.source-intake__upload { border-style: dashed; }
+.source-intake__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.source-intake__heading > div { min-width: 0; }
+.source-intake__heading strong { display: block; margin-top: 2px; color: var(--ink); font-size: 12px; }
+.source-intake__hint, .source-intake__policy { color: var(--muted); font-size: 10px; }
+.source-intake__buttons { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.source-intake button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--control-bg, var(--panel));
+  font-size: 11px;
+  font-weight: 650;
+}
+.source-intake button:hover:not(:disabled) { border-color: var(--line-strong, var(--subtle)); background: var(--control-hover, var(--surface)); }
+.source-intake .primary-button { border-color: var(--accent); color: var(--on-accent, #fff); background: var(--accent); }
+.source-intake .primary-button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
+.source-intake__policy { margin: 7px 0 0; }
+.source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  max-height: 74px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.source-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(100%, 310px);
+  color: var(--text);
+  font-size: 10px;
+}
+.source-option input { flex: 0 0 auto; }
+.source-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.translate-selected { margin-top: 8px; }
+.upload-queue {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 9px;
+}
+.upload-queue__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.upload-queue__header strong { color: var(--text); font-size: 11px; }
+.upload-queue__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+.upload-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: var(--control-bg, var(--panel));
+}
+.upload-item--failed { border-color: var(--danger-line, var(--danger)); background: var(--danger-soft); }
+.upload-item--uploaded { border-color: var(--success-line, var(--success)); background: var(--success-soft); }
+.upload-item__copy { display: grid; min-width: 0; gap: 1px; }
+.upload-item__copy strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.upload-item__copy small { color: var(--muted); font-size: 9px; }
+.upload-item__copy > span { margin-top: 2px; color: var(--danger); font-size: 9px; line-height: 1.35; }
+.upload-item__actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.upload-item__actions button { min-height: 28px; padding: 0 7px; font-size: 9px; }
+.source-intake .text-button { min-height: 28px; border-color: transparent; color: var(--accent-strong); background: transparent; }
+
+@media (max-width: 1100px) {
+  .topbar .source-status { display: block; max-width: min(46vw, 420px); }
+}
+
+@media (max-width: 820px) {
+  .source-intake { grid-template-columns: 1fr; padding: 10px 12px; }
+  .upload-queue { grid-column: 1; }
+}
+
+@media (max-width: 640px) {
+  .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
+  .topbar .source-status { max-width: none; }
+  .source-intake { gap: 8px; padding: 8px; }
+  .source-intake__heading { align-items: flex-start; }
+  .source-intake__hint { text-align: right; }
+  .source-intake__buttons button { flex: 1 1 auto; min-height: 40px; }
+  .source-list { max-height: 100px; }
+  .upload-queue__items { grid-template-columns: 1fr; max-height: 180px; }
+}

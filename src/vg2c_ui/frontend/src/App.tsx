@@ -1,6 +1,6 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useState } from 'react'
 
-import { uploadWorkspaceFiles, workspaceDownloadUrl } from './api'
+import { workspaceDownloadUrl } from './api'
 import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
@@ -9,6 +9,8 @@ import type { ChangePreviewView, DiagnosticView, ParameterView } from './contrac
 import { FileTabs } from './FileTabs'
 import { baseName } from './operationLabels'
 import { ancestorScopeIds, ScriptTree } from './ScriptTree'
+import { SourceIntake } from './SourceIntake'
+import { useSourceIntake } from './useSourceIntake'
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceFiles } from './useWorkspaceFiles'
 
@@ -16,48 +18,24 @@ export function App() {
   const workspace = useWorkspace()
   const fileInventory = useWorkspaceFiles()
   const { state, active, dispatch } = workspace
-  const [sourcePaths, setSourcePaths] = useState<string[]>([])
   const [search, setSearch] = useState('')
-  const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
-
-  useEffect(() => {
-    const files = fileInventory.files
-    setSourcePaths((current) => current.length
-      ? current.filter((path) => files.some((file) => file.path === path && file.translatable))
-      : files.filter((file) => file.translatable).map((file) => file.path))
-  }, [fileInventory.files])
+  const intake = useSourceIntake({
+    files: fileInventory.files,
+    loadingFiles: fileInventory.loading,
+    policy: fileInventory.policy,
+    refreshFiles: fileInventory.refresh,
+    translateSources: workspace.translate,
+    onStatus: setMessage,
+    onDiagnostics: setBatchDiagnostics,
+  })
 
   useEffect(() => {
     if (fileInventory.error) setMessage(fileInventory.error.message || 'Could not load workspace files')
   }, [fileInventory.error])
-
-  async function upload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? [])
-    if (!files.length) return
-    setBusy(true); setMessage('Uploading…')
-    try {
-      const saved = await uploadWorkspaceFiles(files)
-      await fileInventory.refresh()
-      const sources = saved.filter((item) => item.translatable).map((item) => item.path)
-      setSourcePaths((current) => [...new Set([...current, ...sources])])
-      setMessage(`${saved.length} file${saved.length === 1 ? '' : 's'} uploaded.`)
-    } catch (error) { setMessage(errorMessage(error, 'Upload failed')) } finally { setBusy(false); event.target.value = '' }
-  }
-
-  async function translate() {
-    if (!sourcePaths.length) return
-    setBusy(true); setMessage('Translating…')
-    try {
-      const response = await workspace.translate(sourcePaths)
-      await fileInventory.refresh()
-      setBatchDiagnostics(response.diagnostics)
-      setMessage(response.documents.length ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.` : 'No scripts were translated.')
-    } catch (error) { setMessage(errorMessage(error, 'Translation failed')) } finally { setBusy(false) }
-  }
 
   function selectItem(id: string) {
     if (!active) return
@@ -87,9 +65,19 @@ export function App() {
     catch (error) { setMessage(errorMessage(error, 'Reload failed')) }
   }
 
+  const queuedCount = intake.queue.filter((item) => item.status === 'queued').length
   const commands = buildCommands({
     tabs: state.tabs,
     active,
+    workspace: {
+      canStage: intake.canStage,
+      queuedCount: intake.uploading ? 0 : queuedCount,
+      canTranslate: intake.selectedSources.length > 0 && !intake.uploading && !intake.translating,
+      openFiles: intake.openFiles,
+      openFolder: intake.openFolder,
+      uploadQueued: () => { void intake.uploadQueued() },
+      translateSelected: () => { void intake.translateSelected() },
+    },
     actions: {
       activateDocument: (id) => dispatch({ type: 'activate', tabId: id }),
       selectItem,
@@ -111,9 +99,9 @@ export function App() {
         setCommandOpen(true)
         return
       }
+      if ((event.target as HTMLElement | null)?.closest('.command-dialog')) return
       if (event.key === 'Escape' && contextOpen && !commandOpen) { setContextOpen(false); return }
       if (!(event.ctrlKey || event.metaKey) || !active) return
-      if ((event.target as HTMLElement | null)?.closest('.translate-box')) return
       const key = event.key.toLowerCase()
       if (key === 'z') {
         event.preventDefault()
@@ -132,11 +120,16 @@ export function App() {
 
   const diagnostics = active ? [...active.document.diagnostics, ...batchDiagnostics] : batchDiagnostics
   const documents = state.tabs.map((tab) => tab.document)
-  const uploadedSources = fileInventory.files.filter((file) => file.translatable)
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
 
-  return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span>PYTHON</span>PathFinder</div><div className="translate-box"><label className="upload-button">Upload files<input aria-label="Upload VG2 source and data files" type="file" multiple onChange={(event) => void upload(event)} /></label><label className="upload-button">Upload folder<input aria-label="Upload a VG2 workspace folder" type="file" multiple ref={(node) => node?.setAttribute('webkitdirectory', '')} onChange={(event) => void upload(event)} /></label><select aria-label="VG2 source files" multiple value={sourcePaths} onChange={(event) => setSourcePaths(Array.from(event.target.selectedOptions, (option) => option.value))}>{uploadedSources.map((file) => <option key={file.path} value={file.path}>{file.path}</option>)}</select><button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourcePaths.length}>{busy ? 'Working…' : 'Translate'}</button></div><output className="status-message" aria-live="polite">{message}</output><div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div></header>
+  return <main className="app-shell app-shell--with-intake">
+    <header className="topbar">
+      <div className="brand"><span>PYTHON</span>PathFinder</div>
+      <output className="status-message source-status" aria-live="polite">{message}</output>
+      <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
+    </header>
+
+    <SourceIntake intake={intake} />
 
     <FileTabs
       tabs={state.tabs}
@@ -156,7 +149,7 @@ export function App() {
         onReload={() => executeCommand(commands, 'editing.reload')}
       />}
 
-      <div className="editor-scroll">{active ? <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} /> : <div className="empty-state"><strong>No translated file open</strong><span>Open or translate a VG2 source file to begin.</span></div>}
+      <div className="editor-scroll">{active ? <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} /> : <div className="empty-state"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></div>}
         {active?.preview && <ChangePreview preview={active.preview} />}
         <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
       </div>
