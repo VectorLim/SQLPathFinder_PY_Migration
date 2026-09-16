@@ -34,8 +34,13 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
           intake.queuedCount ? `${intake.queuedCount} queued` : null,
           intake.selectedSources.length ? `${intake.selectedSources.length} selected` : null,
         ].filter(Boolean).join(' · ') || 'Upload or select sources'
+  const shellClassName = [
+    'source-intake-shell',
+    compactCollapsed ? 'is-compact-collapsed' : '',
+    intake.notice?.tone === 'error' ? 'has-error' : '',
+  ].filter(Boolean).join(' ')
 
-  return <section className={`source-intake-shell${compactCollapsed ? ' is-compact-collapsed' : ''}`} aria-label="Workspace source intake">
+  return <section className={shellClassName} aria-label="Workspace source intake">
     <input ref={intake.fileInputRef} className="sr-only" tabIndex={-1} type="file" multiple accept={accept} onChange={filesSelected} />
     <input
       ref={(node) => {
