@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import type {
   ArtifactView,
@@ -7,6 +7,7 @@ import type {
   WorkspaceProjectionView,
 } from './contracts.generated'
 import { baseName } from './operationLabels'
+import { useModalDialog } from './useModalDialog'
 
 interface Props {
   document: DocumentView | null
@@ -31,38 +32,16 @@ export function ContextSidebar(props: Props) {
 }
 
 function CompactContextDialog(props: Props) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const openerRef = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (props.open && !dialog.open) {
-      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      dialog.showModal()
-    } else if (!props.open && dialog.open) {
-      dialog.close()
-    }
-  }, [props.open])
-
-  function closeDialog() {
-    dialogRef.current?.close()
-  }
-
+  const modal = useModalDialog(props.open, props.onClose)
   return <dialog
-    ref={dialogRef}
+    ref={modal.dialogRef}
     id="file-context"
     className="context-dialog"
     aria-labelledby="file-context-title"
-    onClose={() => {
-      props.onClose()
-      const opener = openerRef.current
-      openerRef.current = null
-      queueMicrotask(() => opener?.focus())
-    }}
-    onClick={(event) => { if (event.target === event.currentTarget) closeDialog() }}
+    onClose={modal.handleClose}
+    onClick={modal.handleBackdropClick}
   >
-    <ContextContent {...props} showClose onRequestClose={closeDialog} />
+    <ContextContent {...props} showClose onRequestClose={modal.requestClose} />
   </dialog>
 }
 
@@ -99,13 +78,16 @@ function DataFlowSection({ document, documents, projection, csv, csvArtifactPath
   </div>
 }
 
-function FlowGroup({ title, items, empty, children }: { title: string; items: ArtifactView[]; empty: string; children: ReactNode }) { return <section className="flow-group"><h3>{title}<span>{items.length}</span></h3>{items.length ? <div className="flow-list">{children}</div> : <p className="flow-empty">{empty}</p>}</section> }
+function FlowGroup({ title, items, empty, children }: { title: string; items: ArtifactView[]; empty: string; children: ReactNode }) {
+  return <section className="flow-group"><h3>{title}<span>{items.length}</span></h3>{items.length ? <div className="flow-list">{children}</div> : <p className="flow-empty">{empty}</p>}</section>
+}
 
 function ArtifactRow({ artifact, direction, csv, onPreviewCsv, invalid }: { artifact: ArtifactView; direction: 'input' | 'output'; csv: CsvPreviewView | null; onPreviewCsv: (path: string) => void; invalid: boolean }) {
   return <article className={`artifact-row${invalid ? ' artifact-row--invalid' : ''}`}><div className="artifact-row__top"><span className={`flow-icon flow-icon--${direction}`} aria-hidden="true">{direction === 'input' ? '↓' : '↑'}</span><div className="artifact-name"><strong>{artifact.label}</strong><small>{artifact.path}</small></div><button className="text-button" type="button" onClick={() => onPreviewCsv(artifact.path)}>Preview</button></div><div className="artifact-meta">{artifact.conditional && <span>conditional</span>}{artifact.in_loop && <span>loop output</span>}{!artifact.order_valid && <span className="warning-chip">order warning</span>}{invalid && <span className="error-chip">dependency error</span>}</div>{csv && <CsvTable preview={csv} />}</article>
 }
 
 interface DependencyRow { documentId: string; fileName: string; sourcePath: string; artifactPaths: string[] }
+
 function dependencyRows(activeId: string, documents: DocumentView[], projection: WorkspaceProjectionView | null, direction: 'upstream' | 'downstream'): DependencyRow[] {
   if (!projection) return []
   const grouped = new Map<string, string[]>()
@@ -122,9 +104,17 @@ function dependencyRows(activeId: string, documents: DocumentView[], projection:
   })
 }
 
-function DependencyGroup({ title, rows, empty, onActivateDocument }: { title: string; rows: DependencyRow[]; empty: string; onActivateDocument: (id: string) => void }) { return <section className="flow-group dependency-group"><h3>{title}<span>{rows.length}</span></h3>{rows.length ? rows.map((row) => <button className="dependency-row" key={row.documentId} type="button" onClick={() => onActivateDocument(row.documentId)} title={row.sourcePath}><span aria-hidden="true">↗</span><span><strong>{row.fileName}</strong><small>{row.artifactPaths.map(baseName).join(', ')}</small></span></button>) : <p className="flow-empty">{empty}</p>}</section> }
-function FileDetails({ document }: { document: DocumentView }) { return <dl className="file-details"><div><dt>Source</dt><dd title={document.source_path}>{document.source_path}</dd></div><div><dt>Generated</dt><dd title={document.output_path}>{document.output_path}</dd></div><div><dt>Revision</dt><dd>{document.revision}</dd></div><div><dt>Operations</dt><dd>{document.steps.length}</dd></div><div><dt>Diagnostics</dt><dd>{document.diagnostics.length}</dd></div></dl> }
-function CsvTable({ preview }: { preview: CsvPreviewView }) { return <div className="csv-preview"><small>{preview.size_bytes.toLocaleString()} bytes{preview.truncated ? ' · truncated' : ''}</small><div className="table-scroll"><table><thead><tr>{preview.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table></div></div> }
+function DependencyGroup({ title, rows, empty, onActivateDocument }: { title: string; rows: DependencyRow[]; empty: string; onActivateDocument: (id: string) => void }) {
+  return <section className="flow-group dependency-group"><h3>{title}<span>{rows.length}</span></h3>{rows.length ? rows.map((row) => <button className="dependency-row" key={row.documentId} type="button" onClick={() => onActivateDocument(row.documentId)} title={row.sourcePath}><span aria-hidden="true">↗</span><span><strong>{row.fileName}</strong><small>{row.artifactPaths.map(baseName).join(', ')}</small></span></button>) : <p className="flow-empty">{empty}</p>}</section>
+}
+
+function FileDetails({ document }: { document: DocumentView }) {
+  return <dl className="file-details"><div><dt>Source</dt><dd title={document.source_path}>{document.source_path}</dd></div><div><dt>Generated</dt><dd title={document.output_path}>{document.output_path}</dd></div><div><dt>Revision</dt><dd>{document.revision}</dd></div><div><dt>Operations</dt><dd>{document.steps.length}</dd></div><div><dt>Diagnostics</dt><dd>{document.diagnostics.length}</dd></div></dl>
+}
+
+function CsvTable({ preview }: { preview: CsvPreviewView }) {
+  return <div className="csv-preview"><small>{preview.size_bytes.toLocaleString()} bytes{preview.truncated ? ' · truncated' : ''}</small><div className="table-scroll"><table><thead><tr>{preview.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table></div></div>
+}
 
 function useCompactInspector(): boolean {
   const query = '(max-width: 1100px)'

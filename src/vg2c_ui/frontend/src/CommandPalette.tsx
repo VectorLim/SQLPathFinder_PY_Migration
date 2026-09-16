@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import type { CommandGroup, WorkbenchCommand } from './commands'
+import { useModalDialog } from './useModalDialog'
 import './commandPalette.css'
 
 interface Props {
@@ -12,9 +13,8 @@ interface Props {
 const GROUPS: CommandGroup[] = ['Workspace', 'Navigation', 'Editing', 'View']
 
 export function CommandPalette({ open, commands, onClose }: Props) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const openerRef = useRef<HTMLElement | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const modal = useModalDialog(open, onClose, { onOpened: () => inputRef.current?.focus() })
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
 
@@ -30,16 +30,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
   const enabledSignature = enabled.map((command) => command.id).join('|')
 
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) {
-      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      setQuery('')
-      dialog.showModal()
-      queueMicrotask(() => inputRef.current?.focus())
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
+    if (open) setQuery('')
   }, [open])
 
   useEffect(() => {
@@ -48,15 +39,9 @@ export function CommandPalette({ open, commands, onClose }: Props) {
       : enabled[0]?.id ?? null)
   }, [enabledSignature])
 
-  function requestClose() {
-    const dialog = dialogRef.current
-    if (dialog?.open) dialog.close()
-    else onClose()
-  }
-
   function execute(command: WorkbenchCommand) {
     if (command.disabled) return
-    requestClose()
+    modal.requestClose()
     queueMicrotask(command.run)
   }
 
@@ -78,16 +63,11 @@ export function CommandPalette({ open, commands, onClose }: Props) {
   }
 
   return <dialog
-    ref={dialogRef}
+    ref={modal.dialogRef}
     className="command-dialog"
     aria-labelledby="command-dialog-title"
-    onClose={() => {
-      onClose()
-      const opener = openerRef.current
-      openerRef.current = null
-      queueMicrotask(() => opener?.focus())
-    }}
-    onClick={(event) => { if (event.target === event.currentTarget) requestClose() }}
+    onClose={modal.handleClose}
+    onClick={modal.handleBackdropClick}
   >
     <div className="command-panel">
       <header className="command-header">
@@ -95,7 +75,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
           <span className="eyebrow">Workbench</span>
           <h2 id="command-dialog-title">Commands</h2>
         </div>
-        <button className="icon-button" type="button" onClick={requestClose} aria-label="Close command palette">×</button>
+        <button className="icon-button" type="button" onClick={modal.requestClose} aria-label="Close command palette">×</button>
       </header>
       <label className="command-search">
         <span className="sr-only">Search commands</span>

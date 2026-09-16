@@ -1,0 +1,55 @@
+.dirty-close-dialog {
+  width: min(440px, calc(100vw - 24px));
+  max-width: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.dirty-close-dialog::backdrop { background: var(--overlay); }
+
+.dirty-close-card { padding: 18px; }
+.dirty-close-card h2 {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+}
+.dirty-close-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dirty-close-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.dirty-close-actions button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--control-bg);
+  font-size: 11px;
+  font-weight: 650;
+}
+.dirty-close-actions button:hover { border-color: var(--line-strong); background: var(--control-hover); }
+.dirty-close-actions .danger-button {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@media (max-width: 430px) {
+  .dirty-close-card { padding: 16px; }
+  .dirty-close-actions { flex-direction: column-reverse; }
+  .dirty-close-actions button { width: 100%; min-height: 42px; }
+}

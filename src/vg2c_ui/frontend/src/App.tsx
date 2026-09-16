@@ -6,6 +6,7 @@ import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
 import { ContextSidebar } from './ContextSidebar'
 import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
+import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs } from './FileTabs'
 import { baseName } from './operationLabels'
 import { ancestorScopeIds, ScriptTree } from './ScriptTree'
@@ -15,6 +16,7 @@ import { useSourceIntake } from './useSourceIntake'
 import { useTheme } from './theme'
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceFiles } from './useWorkspaceFiles'
+import { hasUnsavedChanges } from './workspaceGuards'
 
 export function App() {
   const workspace = useWorkspace()
@@ -26,6 +28,7 @@ export function App() {
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
+  const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const intake = useSourceIntake({
     files: fileInventory.files,
     loadingFiles: fileInventory.loading,
@@ -40,10 +43,37 @@ export function App() {
     if (fileInventory.error) setMessage(fileInventory.error.message || 'Could not load workspace files')
   }, [fileInventory.error])
 
+  const hasUnsavedWorkspaceChanges = state.tabs.some(hasUnsavedChanges)
+  useEffect(() => {
+    if (!hasUnsavedWorkspaceChanges) return
+    function beforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [hasUnsavedWorkspaceChanges])
+
   function selectItem(id: string) {
     if (!active) return
     dispatch({ type: 'select', tabId: active.document.id, itemId: id })
     for (const scopeId of ancestorScopeIds(active.document, id)) dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId, expanded: true })
+  }
+
+  function requestCloseTab(id: string) {
+    const tab = state.tabs.find((candidate) => candidate.document.id === id)
+    if (!tab) return
+    if (hasUnsavedChanges(tab)) {
+      setPendingCloseId(id)
+      return
+    }
+    dispatch({ type: 'close', tabId: id })
+  }
+
+  function discardAndCloseTab(id: string) {
+    dispatch({ type: 'close', tabId: id })
+    setPendingCloseId(null)
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.tabs [role="tab"][tabindex="0"]')?.focus())
   }
 
   async function validateActive() {
@@ -123,6 +153,7 @@ export function App() {
   const diagnostics = active ? [...active.document.diagnostics, ...batchDiagnostics] : batchDiagnostics
   const documents = state.tabs.map((tab) => tab.document)
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
+  const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
 
   return <main className="app-shell app-shell--with-intake">
     <header className="topbar">
@@ -138,7 +169,7 @@ export function App() {
       tabs={state.tabs}
       activeId={state.activeId}
       onActivate={(id) => dispatch({ type: 'activate', tabId: id })}
-      onClose={(id) => dispatch({ type: 'close', tabId: id })}
+      onClose={requestCloseTab}
     />
 
     <section className="workspace" id="script-workspace" role="tabpanel" aria-label="Translated script editor"><section className="editor-pane"><div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" disabled={!active} /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active?.document.scopes.length}>Expand all</button><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active?.document.scopes.length}>Collapse all</button></div><button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K">Commands <kbd>Ctrl/⌘ K</kbd></button><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context">File context</button></div>
@@ -162,6 +193,7 @@ export function App() {
     </section>
 
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
+    <DirtyCloseDialog tab={pendingCloseTab} onCancel={() => setPendingCloseId(null)} onDiscard={discardAndCloseTab} />
   </main>
 }
 
