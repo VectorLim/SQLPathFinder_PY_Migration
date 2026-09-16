@@ -188,5 +188,30 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 @media (max-width: 780px) {
   .theme-selector { margin-left: 0; justify-self: start; }
-  .workspace-downloads { justify-self: end; }
+  .workspace-downloads {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    flex-wrap: nowrap;
+    max-width: none;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 640px) {
+  .editor-toolbar { flex-wrap: nowrap; }
+  .search-field { flex: 1 1 0; min-width: 135px; }
+  .command-trigger, .context-toggle { flex: 0 0 auto; }
+  .operation-editor { min-width: 0; max-width: calc(100% - 10px); }
+  .operation-editor__header { flex-wrap: wrap; }
+  .operation-editor__header > div { flex: 1 1 220px; min-width: 0; }
+}
+
+@media (max-width: 430px) {
+  .change-toolbar .toolbar-group {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .change-toolbar .toolbar-group button { flex: 1 1 auto; }
+  .operation-editor { max-width: 100%; }
 }

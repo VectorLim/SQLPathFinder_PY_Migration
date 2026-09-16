@@ -16,11 +16,10 @@ export function initializeTheme(): ThemeName {
 
 export function useTheme() {
   const [preference, setPreferenceState] = useState<ThemePreference>(readThemePreference)
-  const [effectiveTheme, setEffectiveTheme] = useState<ThemeName>(() => resolveTheme(preference))
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => setEffectiveTheme(applyTheme(preference))
+    const apply = () => { applyTheme(preference) }
     apply()
     if (preference !== 'system') return
     media.addEventListener('change', apply)
@@ -32,7 +31,7 @@ export function useTheme() {
     try { window.localStorage.setItem(STORAGE_KEY, next) } catch { /* storage is optional */ }
   }
 
-  return { preference, effectiveTheme, setPreference }
+  return { preference, setPreference }
 }
 
 export function readThemePreference(): ThemePreference {
