@@ -20,9 +20,8 @@
 .context-dialog::backdrop { background: var(--overlay-soft); }
 .context-dialog .context-close { display: grid; place-items: center; min-width: 44px; width: 44px; min-height: 44px; }
 
-.dependency-issue {
-  display: grid;
-  gap: 2px;
+.dependency-issue,
+.csv-preview-error {
   margin: 0;
   border-left: 3px solid var(--danger);
   border-radius: 0 9px 9px 0;
@@ -32,11 +31,13 @@
   font-size: 12px;
   line-height: 1.4;
 }
+.dependency-issue { display: grid; gap: 2px; }
 .dependency-issue strong {
   color: var(--danger);
   font-size: 10px;
   letter-spacing: .04em;
 }
+.csv-preview-error { margin-top: 8px; color: var(--danger); }
 
 @media (max-width: 640px) {
   .context-dialog {
