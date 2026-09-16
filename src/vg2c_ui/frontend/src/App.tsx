@@ -24,7 +24,6 @@ export function App() {
   const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
-  const [message, setMessage] = useState('Ready.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
@@ -72,26 +71,16 @@ export function App() {
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.tabs [role="tab"][tabindex="0"]')?.focus())
   }
 
-  async function validateActive() {
-    if (!active) return
-    try {
-      const preview = await workspace.validate(active.document.id)
-      if (preview) setMessage(preview.valid ? 'Changes are valid. Review the diff, then apply.' : 'Validation found problems.')
-    } catch (error) { setMessage(errorMessage(error, 'Could not validate changes')) }
+  function validateActive() {
+    if (active) void workspace.validate(active.document.id).catch(() => undefined)
   }
 
-  async function applyActive() {
-    if (!active) return
-    try {
-      const result = await workspace.apply(active.document.id)
-      if (result) setMessage('Changes applied atomically to generated Python.')
-    } catch (error) { setMessage(errorMessage(error, 'Could not apply changes')) }
+  function applyActive() {
+    if (active) void workspace.apply(active.document.id).catch(() => undefined)
   }
 
-  async function reloadActive() {
-    if (!active) return
-    try { await workspace.reload(active.document.id); setMessage('Reloaded document; unsaved drafts were cleared.') }
-    catch (error) { setMessage(errorMessage(error, 'Reload failed')) }
+  function reloadActive() {
+    if (active) void workspace.reload(active.document.id).catch(() => undefined)
   }
 
   const commands = buildCommands({
@@ -112,9 +101,9 @@ export function App() {
       openInspector: () => setContextOpen(true),
       undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
       redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
-      validate: () => { void validateActive() },
-      apply: () => { void applyActive() },
-      reload: () => { void reloadActive() },
+      validate: validateActive,
+      apply: applyActive,
+      reload: reloadActive,
       expandAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true }),
       collapseAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false }),
     },
@@ -153,7 +142,6 @@ export function App() {
   return <main className="app-shell app-shell--with-intake">
     <header className="topbar">
       <div className="brand"><span>PYTHON</span>PathFinder</div>
-      <output className="status-message" aria-live="polite">{message}</output>
       <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
       <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
@@ -184,7 +172,7 @@ export function App() {
       </div>
     </section>
 
-    <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch((error) => setMessage(errorMessage(error, 'CSV preview failed')))} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
+    <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} csvError={active?.csvError ?? null} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch(() => undefined)} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
     </section>
 
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
@@ -193,4 +181,3 @@ export function App() {
 }
 
 function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}<pre>{preview.diff || 'No textual change.'}</pre></div></details> }
-function errorMessage(error: unknown, fallback: string): string { return error instanceof Error ? error.message : fallback }
