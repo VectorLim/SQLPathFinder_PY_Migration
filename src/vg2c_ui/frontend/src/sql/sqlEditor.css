@@ -173,12 +173,16 @@
 }
 
 @media (max-width: 640px) {
+  .sql-operation-editor { --sql-control-height: 44px; }
   .sql-structured-sections { gap: 14px; }
   .sql-section > header { align-items: flex-start; }
+  .sql-section button,
+  .sql-add-panel button { min-height: 44px; }
   .sql-row { align-items: stretch; }
   .sql-row input,
   .sql-row select { flex: 1 1 100%; width: 100%; }
   .sql-row button { flex: 1 1 72px; }
   .sql-add-panel { grid-template-columns: 1fr; }
   .sql-add-panel__actions > button { flex: 1 1 auto; }
+  .raw-sql-details > summary { display: flex; align-items: center; min-height: 44px; }
 }
