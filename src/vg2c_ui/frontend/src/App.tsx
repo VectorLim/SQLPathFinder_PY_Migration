@@ -48,6 +48,13 @@ export function App() {
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [hasUnsavedWorkspaceChanges])
 
+  const activeDocumentId = active?.document.id ?? null
+  useEffect(() => {
+    if (activeDocumentId) return
+    setContextOpen(false)
+    setSearch('')
+  }, [activeDocumentId])
+
   function selectItem(id: string) {
     if (!active) return
     dispatch({ type: 'select', tabId: active.document.id, itemId: id })
@@ -133,7 +140,6 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut)
   })
 
-  const diagnostics = active?.document.diagnostics ?? []
   const documents = state.tabs.map((tab) => tab.document)
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
@@ -155,29 +161,36 @@ export function App() {
       onClose={requestCloseTab}
     />}
 
-    <section className="workspace" id="script-workspace" role="tabpanel" aria-label={active ? undefined : 'Translated script editor'} aria-labelledby={active ? fileTabId(active.document.id) : undefined}><section className="editor-pane"><div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" disabled={!active} /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active?.document.scopes.length}>Expand all</button><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active?.document.scopes.length}>Collapse all</button></div><button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K">Commands <kbd>Ctrl/⌘ K</kbd></button><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context"><span className="context-toggle__icon" aria-hidden="true">☷</span><span className="context-toggle__label">File context</span></button></div>
+    {active ? <section className="workspace" id="script-workspace" role="tabpanel" aria-labelledby={fileTabId(active.document.id)}>
+      <section className="editor-pane">
+        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.scopes.length}>Expand all</button><button type="button" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.scopes.length}>Collapse all</button></div><button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K">Commands <kbd>Ctrl/⌘ K</kbd></button><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} aria-expanded={contextOpen} aria-controls="file-context"><span className="context-toggle__icon" aria-hidden="true">☷</span><span className="context-toggle__label">File context</span></button></div>
 
-      {active && <ChangeToolbar
-        tab={active}
-        onUndo={() => executeCommand(commands, 'editing.undo')}
-        onRedo={() => executeCommand(commands, 'editing.redo')}
-        onValidate={() => executeCommand(commands, 'editing.preview')}
-        onApply={() => executeCommand(commands, 'editing.apply')}
-        onReload={() => executeCommand(commands, 'editing.reload')}
-      />}
+        <ChangeToolbar
+          tab={active}
+          onUndo={() => executeCommand(commands, 'editing.undo')}
+          onRedo={() => executeCommand(commands, 'editing.redo')}
+          onValidate={() => executeCommand(commands, 'editing.preview')}
+          onApply={() => executeCommand(commands, 'editing.apply')}
+          onReload={() => executeCommand(commands, 'editing.reload')}
+        />
 
-      <div className="editor-scroll">{active ? <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} /> : <div className="empty-state"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></div>}
-        {active?.preview && <ChangePreview preview={active.preview} />}
-        <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
-      </div>
-    </section>
+        <div className="editor-scroll">
+          <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} />
+          {active.preview && <ChangePreview preview={active.preview} />}
+          <DocumentDiagnostics diagnostics={active.document.diagnostics} />
+        </div>
+      </section>
 
-    <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} csvError={active?.csvError ?? null} csvLoading={Boolean(active?.csvRequestId)} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch(() => undefined)} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
-    </section>
+      <ContextSidebar document={active.document} documents={documents} projection={state.projection} csv={active.csv ?? null} csvArtifactPath={active.csvArtifactPath ?? null} csvError={active.csvError ?? null} csvLoading={Boolean(active.csvRequestId)} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => void workspace.loadCsv(active.document.id, path).catch(() => undefined)} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
+    </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
 
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
     <DirtyCloseDialog tab={pendingCloseTab} onCancel={() => setPendingCloseId(null)} onDiscard={discardAndCloseTab} />
   </main>
+}
+
+function DocumentDiagnostics({ diagnostics }: { diagnostics: { level: string; code: string; message: string; location: string | null }[] }) {
+  return <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
 }
 
 function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}<pre>{preview.diff || 'No textual change.'}</pre></div></details> }
