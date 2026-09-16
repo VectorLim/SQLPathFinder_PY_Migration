@@ -10,6 +10,10 @@ interface Props {
   onClose: (id: string) => void
 }
 
+export function fileTabId(documentId: string): string {
+  return `file-tab-${encodeURIComponent(documentId)}`
+}
+
 export function FileTabs({ tabs, activeId, onActivate, onClose }: Props) {
   return <nav className="tabs" aria-label="Open translated files" role="tablist">
     {tabs.map((tab, index) => {
@@ -17,6 +21,7 @@ export function FileTabs({ tabs, activeId, onActivate, onClose }: Props) {
       const name = baseName(tab.document.output_path || tab.document.source_path)
       return <div className={`tab${active ? ' is-active' : ''}`} key={tab.document.id}>
         <button
+          id={fileTabId(tab.document.id)}
           type="button"
           role="tab"
           aria-selected={active}
