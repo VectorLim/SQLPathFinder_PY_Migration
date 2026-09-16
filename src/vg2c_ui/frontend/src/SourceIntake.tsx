@@ -5,6 +5,7 @@ import './sourceIntake.css'
 
 export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
   const accept = intake.policy?.allowed_upload_suffixes.join(',')
+  const className = `source-intake${intake.queue.length ? ' source-intake--has-queue' : ''}`
 
   function filesSelected(event: ChangeEvent<HTMLInputElement>) {
     intake.stageFiles(Array.from(event.currentTarget.files ?? []))
@@ -17,7 +18,7 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
     intake.stageFiles(Array.from(event.dataTransfer.files))
   }
 
-  return <section className="source-intake" aria-label="Workspace source intake">
+  return <section className={className} aria-label="Workspace source intake">
     <input ref={intake.fileInputRef} className="sr-only" tabIndex={-1} type="file" multiple accept={accept} onChange={filesSelected} />
     <input
       ref={(node) => {
