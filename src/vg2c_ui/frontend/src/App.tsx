@@ -5,7 +5,7 @@ import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
 import { ContextSidebar } from './ContextSidebar'
-import type { ChangePreviewView, ParameterView } from './contracts.generated'
+import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
 import { baseName } from './operationLabels'
@@ -189,7 +189,7 @@ export function App() {
   </main>
 }
 
-function DocumentDiagnostics({ diagnostics }: { diagnostics: { level: string; code: string; message: string; location: string | null }[] }) {
+function DocumentDiagnostics({ diagnostics }: { diagnostics: DiagnosticView[] }) {
   return <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
 }
 
