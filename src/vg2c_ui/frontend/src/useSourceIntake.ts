@@ -26,6 +26,7 @@ interface Args {
   loadingFiles: boolean
   inventoryError: Error | null
   policy: WorkspaceUploadPolicyView | null
+  policyError: Error | null
   refreshFiles: () => Promise<WorkspaceFileView[]>
   translateSources: (paths: string[]) => Promise<BatchTranslationResponse>
 }
@@ -39,6 +40,7 @@ export interface SourceIntakeController {
   notice: IntakeNotice | null
   translationDiagnostics: DiagnosticView[]
   policy: WorkspaceUploadPolicyView | null
+  policyError: Error | null
   loadingFiles: boolean
   uploading: boolean
   translating: boolean
@@ -58,7 +60,7 @@ export interface SourceIntakeController {
   translateSelected: () => Promise<void>
 }
 
-export function useSourceIntake({ files, loadingFiles, inventoryError, policy, refreshFiles, translateSources }: Args): SourceIntakeController {
+export function useSourceIntake({ files, loadingFiles, inventoryError, policy, policyError, refreshFiles, translateSources }: Args): SourceIntakeController {
   const [queue, setQueue] = useState<UploadQueueItem[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
@@ -76,7 +78,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   const inventoryReady = !loadingFiles && !inventoryError
   const busy = uploading || translating
   const canStage = Boolean(policy) && inventoryReady && !busy
-  const canUploadQueued = queuedCount > 0 && inventoryReady && !busy
+  const canUploadQueued = queuedCount > 0 && Boolean(policy) && inventoryReady && !busy
   const canTranslate = selectedSources.length > 0 && inventoryReady && !busy
   const notice = inventoryError
     ? { tone: 'error' as const, message: inventoryError.message || 'Could not load workspace files.' }
@@ -142,7 +144,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   }
 
   async function uploadItems(items: UploadQueueItem[]) {
-    if (!items.length || !inventoryReady || busy) return
+    if (!items.length || !inventoryReady || !policy || busy) return
     setUploading(true)
     setLocalNotice(null)
     setTranslationDiagnostics([])
@@ -258,6 +260,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     notice,
     translationDiagnostics,
     policy,
+    policyError,
     loadingFiles,
     uploading,
     translating,

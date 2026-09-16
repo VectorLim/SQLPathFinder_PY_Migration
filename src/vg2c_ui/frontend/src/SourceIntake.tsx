@@ -85,7 +85,9 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
           <button type="button" onClick={intake.openFolder} disabled={!intake.canStage}>Upload folder</button>
           <button className="primary-button" type="button" onClick={() => void intake.uploadQueued()} disabled={!intake.canUploadQueued}>{intake.uploading ? 'Uploading…' : `Upload queued${intake.queuedCount ? ` (${intake.queuedCount})` : ''}`}</button>
         </div>
-        {!intake.policy && <p className="source-intake__policy">Loading upload policy…</p>}
+        {intake.policyError
+          ? <p className="source-intake__policy source-intake__policy--error" role="alert">{intake.policyError.message || 'Could not load workspace upload policy.'}</p>
+          : !intake.policy && <p className="source-intake__policy">Loading upload policy…</p>}
       </div>
 
       <div className="source-intake__sources">

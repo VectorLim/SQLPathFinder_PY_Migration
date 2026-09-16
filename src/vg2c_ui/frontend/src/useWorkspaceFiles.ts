@@ -7,18 +7,19 @@ export function useWorkspaceFiles() {
   const [files, setFiles] = useState<WorkspaceFileView[]>([])
   const [policy, setPolicy] = useState<WorkspaceUploadPolicyView | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+  const [inventoryError, setInventoryError] = useState<Error | null>(null)
+  const [policyError, setPolicyError] = useState<Error | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const next = await listWorkspaceFiles()
       setFiles(next)
-      setError(null)
+      setInventoryError(null)
       return next
     } catch (reason) {
       const nextError = reason instanceof Error ? reason : new Error('Could not load workspace files')
-      setError(nextError)
+      setInventoryError(nextError)
       throw nextError
     } finally {
       setLoading(false)
@@ -32,13 +33,17 @@ export function useWorkspaceFiles() {
   useEffect(() => {
     let cancelled = false
     void getWorkspaceUploadPolicy()
-      .then((next) => { if (!cancelled) setPolicy(next) })
+      .then((next) => {
+        if (cancelled) return
+        setPolicy(next)
+        setPolicyError(null)
+      })
       .catch((reason) => {
         if (cancelled) return
-        setError(reason instanceof Error ? reason : new Error('Could not load workspace upload policy'))
+        setPolicyError(reason instanceof Error ? reason : new Error('Could not load workspace upload policy'))
       })
     return () => { cancelled = true }
   }, [])
 
-  return { files, policy, loading, error, refresh }
+  return { files, policy, loading, inventoryError, policyError, refresh }
 }

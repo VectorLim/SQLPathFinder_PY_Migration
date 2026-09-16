@@ -30,8 +30,9 @@ export function App() {
   const intake = useSourceIntake({
     files: fileInventory.files,
     loadingFiles: fileInventory.loading,
-    inventoryError: fileInventory.error,
+    inventoryError: fileInventory.inventoryError,
     policy: fileInventory.policy,
+    policyError: fileInventory.policyError,
     refreshFiles: fileInventory.refresh,
     translateSources: workspace.translate,
   })

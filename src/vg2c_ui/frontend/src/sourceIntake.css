@@ -44,6 +44,7 @@
 .source-intake .primary-button { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
 .source-intake .primary-button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
 .source-intake__policy { margin: 7px 0 0; }
+.source-intake__policy--error { color: var(--danger); }
 .source-list {
   display: flex;
   flex-wrap: wrap;
