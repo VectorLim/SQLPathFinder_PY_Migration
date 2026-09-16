@@ -143,7 +143,7 @@ export function App() {
         executeCommand(commands, 'editing.redo')
       } else if (key === 's') {
         event.preventDefault()
-        executeCommand(commands, active.preview?.valid ? 'editing.apply' : 'editing.preview')
+        if (!executeCommand(commands, 'editing.apply')) executeCommand(commands, 'editing.preview')
       }
     }
     window.addEventListener('keydown', shortcut)
