@@ -1,4 +1,4 @@
-import type { ScopeView, StepView } from './contracts.generated'
+import type { StepView } from './contracts.generated'
 
 export interface OperationLabel {
   primary: string
@@ -10,10 +10,6 @@ export function formatOperationLabel(step: StepView): OperationLabel {
   if (step.csv_outputs.length) return { primary, secondary: concisePaths(step.csv_outputs, 'output', 'outputs') }
   if (step.csv_inputs.length) return { primary, secondary: concisePaths(step.csv_inputs, 'input', 'inputs') }
   return { primary, secondary: null }
-}
-
-export function formatScopeLabel(scope: ScopeView): string {
-  return scope.label
 }
 
 export function baseName(path: string): string {
