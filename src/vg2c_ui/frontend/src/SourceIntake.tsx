@@ -3,22 +3,17 @@ import { useEffect, useState, type ChangeEvent, type DragEvent } from 'react'
 import { formatBytes, type SourceIntakeController } from './useSourceIntake'
 import './sourceIntake.css'
 
-interface Props {
-  intake: SourceIntakeController
-  preferCompactCollapsed?: boolean
-}
-
 const CONTENT_ID = 'source-intake-content'
 
-export function SourceIntake({ intake, preferCompactCollapsed = false }: Props) {
-  const [compactCollapsed, setCompactCollapsed] = useState(preferCompactCollapsed)
+export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
+  const [compactCollapsed, setCompactCollapsed] = useState(intake.hasGeneratedFiles)
   const accept = intake.policy?.allowed_upload_suffixes.join(',')
   const hasActionableQueue = intake.queue.some((item) => item.status !== 'uploaded')
 
   useEffect(() => {
     if (hasActionableQueue) setCompactCollapsed(false)
-    else setCompactCollapsed(preferCompactCollapsed)
-  }, [hasActionableQueue, preferCompactCollapsed])
+    else setCompactCollapsed(intake.hasGeneratedFiles)
+  }, [hasActionableQueue, intake.hasGeneratedFiles])
 
   function filesSelected(event: ChangeEvent<HTMLInputElement>) {
     intake.stageFiles(Array.from(event.currentTarget.files ?? []))
