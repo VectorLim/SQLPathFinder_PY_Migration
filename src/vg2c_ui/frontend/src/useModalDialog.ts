@@ -2,7 +2,6 @@ import { useEffect, useRef, type MouseEvent } from 'react'
 
 interface Options {
   onOpened?: () => void
-  restoreFocus?: boolean
 }
 
 export function useModalDialog(open: boolean, onClose: () => void, options: Options = {}) {
@@ -10,11 +9,9 @@ export function useModalDialog(open: boolean, onClose: () => void, options: Opti
   const openerRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
   const onOpenedRef = useRef(options.onOpened)
-  const restoreFocusRef = useRef(options.restoreFocus ?? true)
 
   onCloseRef.current = onClose
   onOpenedRef.current = options.onOpened
-  restoreFocusRef.current = options.restoreFocus ?? true
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -36,10 +33,6 @@ export function useModalDialog(open: boolean, onClose: () => void, options: Opti
 
   function handleClose() {
     onCloseRef.current()
-    if (!restoreFocusRef.current) {
-      openerRef.current = null
-      return
-    }
     const opener = openerRef.current
     openerRef.current = null
     queueMicrotask(() => { if (opener?.isConnected) opener.focus() })
