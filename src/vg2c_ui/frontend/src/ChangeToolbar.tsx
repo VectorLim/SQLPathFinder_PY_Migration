@@ -1,4 +1,5 @@
 import type { TabState, TabStatus } from './workspaceState'
+import { getChangeActionState } from './workspaceGuards'
 
 interface Props {
   tab: TabState
@@ -10,18 +11,18 @@ interface Props {
 }
 
 export function ChangeToolbar({ tab, onUndo, onRedo, onValidate, onApply, onReload }: Props) {
-  const editCount = Object.keys(tab.edits.values).length
+  const actions = getChangeActionState(tab)
   return <div className="change-toolbar">
     <div className="change-status">
-      <strong>{editCount ? `${editCount} unsaved change${editCount === 1 ? '' : 's'}` : 'No pending changes'}</strong>
+      <strong>{actions.editCount ? `${actions.editCount} unsaved change${actions.editCount === 1 ? '' : 's'}` : 'No pending changes'}</strong>
       <small>{statusCopy(tab.status)}</small>
     </div>
     <div className="toolbar-group" role="group" aria-label="Change actions">
-      <button type="button" onClick={onUndo} disabled={!tab.edits.history.length}>Undo</button>
-      <button type="button" onClick={onRedo} disabled={!tab.edits.future.length}>Redo</button>
-      <button type="button" onClick={onValidate} disabled={!editCount || tab.status === 'validating' || !tab.document.synchronized}>Preview changes</button>
-      <button className="primary-button" type="button" onClick={onApply} disabled={!tab.preview?.valid || tab.status === 'saving'}>Apply changes</button>
-      {tab.status === 'conflict' && <button type="button" onClick={onReload}>Reload</button>}
+      <button type="button" onClick={onUndo} disabled={!actions.canUndo}>Undo</button>
+      <button type="button" onClick={onRedo} disabled={!actions.canRedo}>Redo</button>
+      <button type="button" onClick={onValidate} disabled={!actions.canPreview}>Preview changes</button>
+      <button className="primary-button" type="button" onClick={onApply} disabled={!actions.canApply}>Apply changes</button>
+      {tab.status === 'conflict' && <button type="button" onClick={onReload} disabled={!actions.canReload}>Reload</button>}
     </div>
   </div>
 }
