@@ -2,6 +2,8 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { uploadWorkspaceFiles, workspaceDownloadUrl } from './api'
 import { ChangeToolbar } from './ChangeToolbar'
+import { CommandPalette } from './CommandPalette'
+import { buildCommands, executeCommand } from './commands'
 import { ContextSidebar } from './ContextSidebar'
 import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
 import { FileTabs } from './FileTabs'
@@ -20,6 +22,7 @@ export function App() {
   const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
   const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
 
   useEffect(() => {
     const files = fileInventory.files
@@ -84,15 +87,44 @@ export function App() {
     catch (error) { setMessage(errorMessage(error, 'Reload failed')) }
   }
 
+  const commands = buildCommands({
+    tabs: state.tabs,
+    active,
+    actions: {
+      activateDocument: (id) => dispatch({ type: 'activate', tabId: id }),
+      selectItem,
+      openInspector: () => setContextOpen(true),
+      undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
+      redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
+      validate: () => { void validateActive() },
+      apply: () => { void applyActive() },
+      reload: () => { void reloadActive() },
+      expandAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true }),
+      collapseAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false }),
+    },
+  })
+
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
-      if (event.key === 'Escape' && contextOpen) { setContextOpen(false); return }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen(true)
+        return
+      }
+      if (event.key === 'Escape' && contextOpen && !commandOpen) { setContextOpen(false); return }
       if (!(event.ctrlKey || event.metaKey) || !active) return
       if ((event.target as HTMLElement | null)?.closest('.translate-box')) return
       const key = event.key.toLowerCase()
-      if (key === 'z') { event.preventDefault(); dispatch({ type: event.shiftKey ? 'redo' : 'undo', tabId: active.document.id }) }
-      else if (key === 'y') { event.preventDefault(); dispatch({ type: 'redo', tabId: active.document.id }) }
-      else if (key === 's') { event.preventDefault(); if (active.preview?.valid) void applyActive(); else void validateActive() }
+      if (key === 'z') {
+        event.preventDefault()
+        executeCommand(commands, event.shiftKey ? 'editing.redo' : 'editing.undo')
+      } else if (key === 'y') {
+        event.preventDefault()
+        executeCommand(commands, 'editing.redo')
+      } else if (key === 's') {
+        event.preventDefault()
+        if (!executeCommand(commands, 'editing.apply')) executeCommand(commands, 'editing.preview')
+      }
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
@@ -113,15 +145,15 @@ export function App() {
       onClose={(id) => dispatch({ type: 'close', tabId: id })}
     />
 
-    <section className="workspace" id="script-workspace" role="tabpanel" aria-label="Translated script editor"><section className="editor-pane"><div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" disabled={!active} /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active?.document.scopes.length}>Expand all</button><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active?.document.scopes.length}>Collapse all</button></div><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context">File context</button></div>
+    <section className="workspace" id="script-workspace" role="tabpanel" aria-label="Translated script editor"><section className="editor-pane"><div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" disabled={!active} /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active?.document.scopes.length}>Expand all</button><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active?.document.scopes.length}>Collapse all</button></div><button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K">Commands <kbd>Ctrl/⌘ K</kbd></button><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context">File context</button></div>
 
       {active && <ChangeToolbar
         tab={active}
-        onUndo={() => dispatch({ type: 'undo', tabId: active.document.id })}
-        onRedo={() => dispatch({ type: 'redo', tabId: active.document.id })}
-        onValidate={() => void validateActive()}
-        onApply={() => void applyActive()}
-        onReload={() => void reloadActive()}
+        onUndo={() => executeCommand(commands, 'editing.undo')}
+        onRedo={() => executeCommand(commands, 'editing.redo')}
+        onValidate={() => executeCommand(commands, 'editing.preview')}
+        onApply={() => executeCommand(commands, 'editing.apply')}
+        onReload={() => executeCommand(commands, 'editing.reload')}
       />}
 
       <div className="editor-scroll">{active ? <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} /> : <div className="empty-state"><strong>No translated file open</strong><span>Open or translate a VG2 source file to begin.</span></div>}
@@ -133,6 +165,8 @@ export function App() {
     <button className={`context-backdrop${contextOpen ? ' is-open' : ''}`} type="button" aria-label="Close file context" tabIndex={contextOpen ? 0 : -1} onClick={() => setContextOpen(false)} />
     <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch((error) => setMessage(errorMessage(error, 'CSV preview failed')))} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
     </section>
+
+    <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
   </main>
 }
 
