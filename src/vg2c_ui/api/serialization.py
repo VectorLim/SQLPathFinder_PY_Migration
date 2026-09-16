@@ -412,13 +412,24 @@ def _scope_views(
                 id=f"scope-{scope.scope_id}",
                 node_kind=node_kind,
                 scope_kind=scope.kind,
-                label=scope.kind.replace("-", " ").title(),
+                label=_scope_label(scope.kind),
                 start_index=scope.start_index,
                 end_index=scope.end_index,
                 parent_scope_id=_scope_view_id(parent_by_scope[scope.scope_id], scope_by_id),
             )
         )
     return sorted(scopes, key=lambda item: (item.start_index, item.id))
+
+
+def _scope_label(kind: str) -> str:
+    labels = {
+        "if": "Condition",
+        "if-branch": "True branch",
+        "else-branch": "Else branch",
+        "macro": "For each macro row",
+        "loop": "For each row",
+    }
+    return labels.get(kind, kind.replace("-", " ").title())
 
 
 def _diagnostic_level(value: str) -> str:
