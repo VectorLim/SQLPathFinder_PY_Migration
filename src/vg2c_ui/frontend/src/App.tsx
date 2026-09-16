@@ -10,13 +10,16 @@ import { FileTabs } from './FileTabs'
 import { baseName } from './operationLabels'
 import { ancestorScopeIds, ScriptTree } from './ScriptTree'
 import { SourceIntake } from './SourceIntake'
+import { ThemeSelector } from './ThemeSelector'
 import { useSourceIntake } from './useSourceIntake'
+import { useTheme } from './theme'
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceFiles } from './useWorkspaceFiles'
 
 export function App() {
   const workspace = useWorkspace()
   const fileInventory = useWorkspaceFiles()
+  const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
@@ -126,6 +129,7 @@ export function App() {
     <header className="topbar">
       <div className="brand"><span>PYTHON</span>PathFinder</div>
       <output className="status-message source-status" aria-live="polite">{message}</output>
+      <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
       <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
 
