@@ -11,9 +11,9 @@ export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
   const hasActionableQueue = intake.queue.some((item) => item.status !== 'uploaded')
 
   useEffect(() => {
-    if (hasActionableQueue || intake.translationDiagnostics.length) setCompactCollapsed(false)
+    if (hasActionableQueue) setCompactCollapsed(false)
     else setCompactCollapsed(intake.hasGeneratedFiles)
-  }, [hasActionableQueue, intake.hasGeneratedFiles, intake.translationDiagnostics.length])
+  }, [hasActionableQueue, intake.hasGeneratedFiles])
 
   function filesSelected(event: ChangeEvent<HTMLInputElement>) {
     intake.stageFiles(Array.from(event.currentTarget.files ?? []))
