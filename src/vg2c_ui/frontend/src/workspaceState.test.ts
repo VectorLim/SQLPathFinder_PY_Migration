@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { getChangeActionState } from './workspaceGuards.ts'
 import { initialWorkspaceState, workspaceProjectionRequest, workspaceReducer } from './workspaceState.ts'
 import type { DocumentView } from './contracts.generated.ts'
 
@@ -86,5 +87,56 @@ const csvInstance = reopened.tabs[0].instanceId
 reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', path: 'a.csv' })
 reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: oldInstance, requestId: 'csv-new', csv: null })
 assert.equal(reopened.tabs[0].csvRequestId, 'csv-new', 'CSV result from a prior tab instance must be ignored')
+
+let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
+actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p1', value: 'draft' })
+let actionsTab = actionsState.tabs[0]
+let availability = getChangeActionState(actionsTab)
+assert.equal(availability.canPreview, true, 'dirty synchronized tab should be previewable')
+assert.equal(availability.canApply, false, 'unvalidated draft must not be applicable')
+
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-preview', baseVersion: actionsTab.edits.version, status: 'validating',
+})
+actionsTab = actionsState.tabs[0]
+availability = getChangeActionState(actionsTab)
+assert.equal(availability.canPreview, false, 'pending validation must block a second preview mutation')
+assert.equal(availability.canApply, false, 'pending validation must block apply')
+
+actionsState = workspaceReducer(actionsState, {
+  type: 'preview-result', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-preview', baseVersion: actionsTab.edits.version,
+  preview: { valid: true, diff: 'valid', issues: [] },
+})
+actionsTab = actionsState.tabs[0]
+availability = getChangeActionState(actionsTab)
+assert.equal(availability.canApply, true, 'fresh valid preview should enable apply')
+
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-conflict', baseVersion: actionsTab.edits.version, status: 'saving',
+})
+actionsTab = actionsState.tabs[0]
+availability = getChangeActionState(actionsTab)
+assert.equal(availability.canPreview, false, 'pending apply must block preview')
+assert.equal(availability.canApply, false, 'pending apply must block re-entry')
+
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-conflict', baseVersion: actionsTab.edits.version, conflict: true,
+})
+actionsTab = actionsState.tabs[0]
+availability = getChangeActionState(actionsTab)
+assert.equal(availability.canApply, false, 'stale valid preview must not remain applicable after conflict')
+assert.equal(availability.canPreview, false, 'conflict requires reload before another preview')
+assert.equal(availability.canReload, true, 'conflicted tab should enable reload')
+
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-reload', baseVersion: actionsTab.edits.version, status: actionsTab.status,
+})
+availability = getChangeActionState(actionsState.tabs[0])
+assert.equal(availability.canReload, false, 'pending reload must block reload re-entry')
 
 console.log('workspaceState tests passed')
