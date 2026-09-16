@@ -1,5 +1,7 @@
 import './dirtyCloseDialog.css'
 
+import { useRef } from 'react'
+
 import { baseName } from './operationLabels'
 import type { TabState } from './workspaceState'
 import { useModalDialog } from './useModalDialog'
@@ -11,7 +13,8 @@ interface Props {
 }
 
 export function DirtyCloseDialog({ tab, onCancel, onDiscard }: Props) {
-  const modal = useModalDialog(Boolean(tab), onCancel, { restoreFocus: false })
+  const keepEditingRef = useRef<HTMLButtonElement>(null)
+  const modal = useModalDialog(Boolean(tab), onCancel, { onOpened: () => keepEditingRef.current?.focus() })
   if (!tab) return <dialog ref={modal.dialogRef} className="dirty-close-dialog" />
 
   const name = baseName(tab.document.output_path || tab.document.source_path)
@@ -38,7 +41,7 @@ export function DirtyCloseDialog({ tab, onCancel, onDiscard }: Props) {
         {changeCount} unapplied change{changeCount === 1 ? '' : 's'} will be discarded.
       </p>
       <div className="dirty-close-actions">
-        <button type="button" onClick={modal.requestClose}>Keep editing</button>
+        <button ref={keepEditingRef} type="button" onClick={modal.requestClose}>Keep editing</button>
         <button className="danger-button" type="button" onClick={discard}>Discard changes</button>
       </div>
     </div>
