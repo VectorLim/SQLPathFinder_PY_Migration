@@ -28,7 +28,6 @@ interface Args {
   policy: WorkspaceUploadPolicyView | null
   refreshFiles: () => Promise<WorkspaceFileView[]>
   translateSources: (paths: string[]) => Promise<BatchTranslationResponse>
-  onDiagnostics: (diagnostics: DiagnosticView[]) => void
 }
 
 export interface SourceIntakeController {
@@ -39,6 +38,7 @@ export interface SourceIntakeController {
   completedCount: number
   hasGeneratedFiles: boolean
   notice: IntakeNotice | null
+  translationDiagnostics: DiagnosticView[]
   policy: WorkspaceUploadPolicyView | null
   uploading: boolean
   translating: boolean
@@ -58,12 +58,13 @@ export interface SourceIntakeController {
   translateSelected: () => Promise<void>
 }
 
-export function useSourceIntake({ files, loadingFiles, inventoryError, policy, refreshFiles, translateSources, onDiagnostics }: Args): SourceIntakeController {
+export function useSourceIntake({ files, loadingFiles, inventoryError, policy, refreshFiles, translateSources }: Args): SourceIntakeController {
   const [queue, setQueue] = useState<UploadQueueItem[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [translating, setTranslating] = useState(false)
   const [localNotice, setLocalNotice] = useState<IntakeNotice | null>(null)
+  const [translationDiagnostics, setTranslationDiagnostics] = useState<DiagnosticView[]>([])
   const nextId = useRef(1)
   const sourceSelectionInitialized = useRef(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -217,16 +218,24 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     if (!canTranslate) return
     setTranslating(true)
     setLocalNotice(null)
+    setTranslationDiagnostics([])
     try {
       const response = await translateSources(selectedSources)
       await refreshFiles().catch(() => undefined)
-      onDiagnostics(response.diagnostics)
-      setLocalNotice({
-        tone: 'info',
-        message: response.documents.length
-          ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.`
-          : 'No scripts were translated.',
-      })
+      setTranslationDiagnostics(response.diagnostics)
+      if (response.diagnostics.length) {
+        setLocalNotice({
+          tone: 'error',
+          message: `${response.documents.length} translated; ${response.diagnostics.length} source${response.diagnostics.length === 1 ? '' : 's'} failed.`,
+        })
+      } else {
+        setLocalNotice({
+          tone: 'info',
+          message: response.documents.length
+            ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.`
+            : 'No scripts were translated.',
+        })
+      }
     } catch (reason) {
       setLocalNotice({ tone: 'error', message: errorMessage(reason, 'Translation failed') })
     } finally {
@@ -242,6 +251,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     completedCount,
     hasGeneratedFiles,
     notice,
+    translationDiagnostics,
     policy,
     uploading,
     translating,
