@@ -26,9 +26,11 @@ export interface TabState {
   edits: EditState
   preview: ChangePreviewView | null
   mutationRequestId: string | null
+  mutationError: string | null
   csv: CsvPreviewView | null
   csvArtifactPath: string | null
   csvRequestId: string | null
+  csvError: string | null
 }
 
 export interface WorkspaceState {
@@ -51,9 +53,9 @@ export type WorkspaceAction =
   | { type: 'mutation-started'; tabId: string; instanceId: number; requestId: string; baseVersion: number; status: TabStatus }
   | { type: 'preview-result'; tabId: string; instanceId: number; requestId: string; baseVersion: number; preview: ChangePreviewView }
   | { type: 'replace-document'; tabId: string; instanceId: number; requestId: string; baseVersion: number; document: DocumentView }
-  | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean }
+  | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean; message: string }
   | { type: 'csv-loading'; tabId: string; instanceId: number; requestId: string; path: string }
-  | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null }
+  | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null; error: string | null }
   | { type: 'projection'; projection: WorkspaceProjectionView | null }
 
 export const initialWorkspaceState: WorkspaceState = { tabs: [], activeId: null, projection: null, nextInstanceId: 1 }
@@ -93,13 +95,13 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 }
 
 function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merge-documents' | 'activate' | 'close' | 'projection' }>): TabState {
-  if (action.type === 'select') return { ...tab, selectedId: action.itemId, csv: null }
+  if (action.type === 'select') return { ...tab, selectedId: action.itemId, csv: null, csvError: null }
   if (action.type === 'toggle-scope') {
     const next = new Set(tab.expandedScopeIds)
     const expand = action.expanded ?? !next.has(action.scopeId)
     if (expand) next.add(action.scopeId)
     else next.delete(action.scopeId)
-    return { ...tab, selectedId: action.scopeId, expandedScopeIds: next, csv: null }
+    return { ...tab, selectedId: action.scopeId, expandedScopeIds: next, csv: null, csvError: null }
   }
   if (action.type === 'set-all-scopes') {
     return {
@@ -142,11 +144,11 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   }
   if (action.type === 'mutation-started') {
     if (action.instanceId !== tab.instanceId || action.baseVersion !== tab.edits.version) return tab
-    return { ...tab, status: action.status, mutationRequestId: action.requestId }
+    return { ...tab, status: action.status, mutationRequestId: action.requestId, mutationError: null }
   }
   if (action.type === 'preview-result') {
     if (!ownsMutation(tab, action)) return tab
-    return { ...tab, preview: action.preview, mutationRequestId: null, status: action.preview.valid ? 'valid' : 'invalid' }
+    return { ...tab, preview: action.preview, mutationRequestId: null, mutationError: null, status: action.preview.valid ? 'valid' : 'invalid' }
   }
   if (action.type === 'replace-document') {
     if (!ownsMutation(tab, action)) return tab
@@ -154,15 +156,20 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   }
   if (action.type === 'mutation-error') {
     if (!ownsMutation(tab, action)) return tab
-    return { ...tab, mutationRequestId: null, status: action.conflict ? 'conflict' : 'error' }
+    return {
+      ...tab,
+      mutationRequestId: null,
+      mutationError: action.message,
+      status: action.conflict ? 'conflict' : 'error',
+    }
   }
   if (action.type === 'csv-loading') {
     if (action.instanceId !== tab.instanceId) return tab
-    return { ...tab, csvRequestId: action.requestId, csvArtifactPath: action.path, csv: null }
+    return { ...tab, csvRequestId: action.requestId, csvArtifactPath: action.path, csv: null, csvError: null }
   }
   if (action.type === 'csv-result') {
     if (action.instanceId !== tab.instanceId || tab.csvRequestId !== action.requestId) return tab
-    return { ...tab, csvRequestId: null, csv: action.csv }
+    return { ...tab, csvRequestId: null, csv: action.csv, csvError: action.error }
   }
   return tab
 }
@@ -192,9 +199,11 @@ function createTab(document: DocumentView, previous: TabState | undefined, insta
     edits: emptyEdits(),
     preview: null,
     mutationRequestId: null,
+    mutationError: null,
     csv: null,
     csvArtifactPath: null,
     csvRequestId: null,
+    csvError: null,
   }
 }
 
@@ -208,6 +217,7 @@ function withEditState(tab: TabState, edits: EditState): TabState {
     edits,
     preview: null,
     mutationRequestId: null,
+    mutationError: null,
     status: Object.keys(edits.values).length ? 'dirty' : 'ready',
   }
 }
