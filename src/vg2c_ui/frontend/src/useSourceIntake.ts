@@ -75,9 +75,11 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   const queuedCount = queue.filter((item) => item.status === 'queued').length
   const completedCount = queue.filter((item) => item.status === 'uploaded').length
   const hasGeneratedFiles = files.some((file) => file.role === 'generated')
-  const canStage = Boolean(policy) && !uploading
-  const canUploadQueued = queuedCount > 0 && !uploading
-  const canTranslate = selectedSources.length > 0 && !translating && !uploading
+  const inventoryReady = !loadingFiles && !inventoryError
+  const busy = uploading || translating
+  const canStage = Boolean(policy) && inventoryReady && !busy
+  const canUploadQueued = queuedCount > 0 && inventoryReady && !busy
+  const canTranslate = selectedSources.length > 0 && inventoryReady && !busy
   const notice = inventoryError
     ? { tone: 'error' as const, message: inventoryError.message || 'Could not load workspace files.' }
     : localNotice
@@ -105,11 +107,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   }
 
   function stageFiles(incoming: File[]) {
-    if (!incoming.length) return
-    if (!policy) {
-      setLocalNotice({ tone: 'error', message: 'Upload policy is still loading.' })
-      return
-    }
+    if (!incoming.length || !canStage || !policy) return
     setLocalNotice(null)
     setQueue((current) => {
       const next = [...current]
@@ -145,7 +143,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   }
 
   async function uploadItems(items: UploadQueueItem[]) {
-    if (!items.length || uploading) return
+    if (!items.length || !inventoryReady || busy) return
     setUploading(true)
     setLocalNotice(null)
     let succeeded = 0
@@ -185,7 +183,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   }
 
   async function retry(id: number) {
-    if (uploading || !policy) return
+    if (!policy || !inventoryReady || busy) return
     const item = queue.find((candidate) => candidate.id === id)
     if (!item || item.status !== 'failed' || !item.retryable) return
     const refreshed = await refreshFiles().catch(() => files)
