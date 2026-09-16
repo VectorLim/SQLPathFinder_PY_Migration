@@ -627,7 +627,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .tree-controls { display: none; }
   .change-toolbar { align-items: stretch; flex-direction: column; gap: 6px; }
   .change-toolbar .toolbar-group { overflow-x: auto; padding-bottom: 1px; }
-  .change-toolbar button { flex: 0 0 auto; min-height: 40px; }
+  .change-toolbar button { flex: 0 0 auto; min-height: 44px; }
   .change-status { min-width: 0; }
   .script-tree { padding-top: 12px; }
   .tree-row { min-height: 50px; }
@@ -641,13 +641,14 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 @media (max-width: 640px) {
   .topbar { gap: 7px; }
   .brand { font-size: 14px; }
-  .tabs { padding-left: 7px; padding-right: 7px; }
-  .tab { min-width: 138px; max-width: 210px; }
+  .tabs { padding: 0 7px; }
+  .tab { min-width: 138px; max-width: 210px; height: 44px; }
+  .tab-close { flex-basis: 44px; width: 44px; height: 44px; }
   .editor-toolbar { gap: 7px; flex-wrap: nowrap; }
   .search-field { flex: 1 1 0; min-width: 135px; }
-  .editor-toolbar button { min-height: 40px; }
+  .editor-toolbar button, .search-field input { min-height: 44px; }
   .command-trigger, .context-toggle { flex: 0 0 auto; }
-  .context-toggle { width: 42px; padding-inline: 0; justify-content: center; }
+  .context-toggle { width: 44px; padding-inline: 0; justify-content: center; }
   .context-toggle__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
   .script-tree { padding-left: 8px; padding-right: 8px; }
   .tree-row { grid-template-columns: 30px minmax(0, 1fr) 10px; padding-right: 7px; }
@@ -658,6 +659,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .operation-editor__header > div { flex: 1 1 220px; min-width: 0; }
   .operation-editor h3 { font-size: 16px; }
   .state-pill { padding: 3px 6px; }
+  .parameter input:not([type="checkbox"]), .parameter textarea, .parameter select, .checkbox-field { min-height: 44px; }
   .scope-summary { margin-left: 20px; }
   .file-chip-row { grid-template-columns: 1fr; gap: 4px; }
   .context-sidebar__header { min-height: 58px; }
