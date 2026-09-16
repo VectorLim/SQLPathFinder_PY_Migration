@@ -73,5 +73,7 @@
 @media (max-width: 640px) {
   .command-dialog { width: calc(100vw - 16px); max-height: 82dvh; border-radius: 12px; }
   .command-panel { max-height: 82dvh; }
+  .command-search input, .command-item { min-height: 44px; }
+  .command-header .icon-button { min-width: 44px; min-height: 44px; }
   .command-trigger kbd { display: none; }
 }
