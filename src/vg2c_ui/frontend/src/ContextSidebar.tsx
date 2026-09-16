@@ -12,7 +12,7 @@ import { baseName } from './operationLabels'
 import { useModalDialog } from './useModalDialog'
 
 interface Props {
-  document: DocumentView | null
+  document: DocumentView
   documents: DocumentView[]
   projection: WorkspaceProjectionView | null
   csv: CsvPreviewView | null
@@ -50,13 +50,13 @@ function CompactContextDialog(props: Props) {
 }
 
 function ContextContent({ document, documents, projection, csv, csvArtifactPath, csvError, csvLoading, onPreviewCsv, onActivateDocument, showClose, onRequestClose }: Props & { showClose: boolean; onRequestClose?: () => void }) {
-  const sections: Section[] = document ? [
+  const sections: Section[] = [
     { id: 'data-flow', title: 'Data Flow', defaultOpen: true, content: <DataFlowSection document={document} documents={documents} projection={projection} csv={csv} csvArtifactPath={csvArtifactPath} csvError={csvError} csvLoading={csvLoading} onPreviewCsv={onPreviewCsv} onActivateDocument={onActivateDocument} /> },
     { id: 'file-details', title: 'File Details', content: <FileDetails document={document} /> },
-  ] : []
+  ]
   return <>
-    <header className="context-sidebar__header"><div><span className="eyebrow">Current file</span><h2 id="file-context-title" title={document?.output_path}>{document ? baseName(document.output_path) : 'Context'}</h2></div>{showClose && <button className="icon-button context-close" type="button" onClick={onRequestClose} aria-label="Close file context">×</button>}</header>
-    <div className="context-sidebar__body">{!document && <p className="empty-copy">Open a translated script to inspect its context.</p>}{sections.map((section) => <Panel key={section.id} section={section} />)}</div>
+    <header className="context-sidebar__header"><div><span className="eyebrow">Current file</span><h2 id="file-context-title" title={document.output_path}>{baseName(document.output_path)}</h2></div>{showClose && <button className="icon-button context-close" type="button" onClick={onRequestClose} aria-label="Close file context">×</button>}</header>
+    <div className="context-sidebar__body">{sections.map((section) => <Panel key={section.id} section={section} />)}</div>
   </>
 }
 
@@ -64,7 +64,7 @@ function Panel({ section }: { section: Section }) {
   return <details className="context-section" defaultOpen={Boolean(section.defaultOpen)}><summary><span>{section.title}</span></summary><div className="context-section__content">{section.content}</div></details>
 }
 
-function DataFlowSection({ document, documents, projection, csv, csvArtifactPath, csvError, csvLoading, onPreviewCsv, onActivateDocument }: Omit<Props, 'open' | 'onClose'> & { document: DocumentView }) {
+function DataFlowSection({ document, documents, projection, csv, csvArtifactPath, csvError, csvLoading, onPreviewCsv, onActivateDocument }: Omit<Props, 'open' | 'onClose'>) {
   const artifacts = projection?.documents.find((item) => item.document_id === document.id)?.artifacts ?? document.artifacts
   const inputs = artifacts.filter((artifact) => artifact.is_external_input)
   const outputs = artifacts.filter((artifact) => artifact.is_output)
