@@ -97,7 +97,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
           aria-activedescendant={activeId ? commandItemId(activeId) : undefined}
         />
       </label>
-      <div id={RESULTS_ID} className="command-results" aria-live="polite">
+      <div id={RESULTS_ID} className="command-results" role="group" aria-label="Command results" aria-live="polite">
         {GROUPS.map((group) => {
           const items = filtered.filter((command) => command.group === group)
           if (!items.length) return null
