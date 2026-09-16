@@ -11,6 +11,7 @@ interface Props {
 }
 
 const GROUPS: CommandGroup[] = ['Workspace', 'Navigation', 'Editing', 'View']
+const RESULTS_ID = 'command-results'
 
 export function CommandPalette({ open, commands, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -92,9 +93,11 @@ export function CommandPalette({ open, commands, onClose }: Props) {
           onKeyDown={handleKeyDown}
           placeholder="Search files, operations, and actions…"
           autoComplete="off"
+          aria-controls={RESULTS_ID}
+          aria-activedescendant={activeId ? commandItemId(activeId) : undefined}
         />
       </label>
-      <div className="command-results" aria-live="polite">
+      <div id={RESULTS_ID} className="command-results" aria-live="polite">
         {GROUPS.map((group) => {
           const items = filtered.filter((command) => command.group === group)
           if (!items.length) return null
@@ -102,6 +105,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
             <h3 id={`command-group-${group.toLowerCase()}`}>{group}</h3>
             <div>
               {items.map((command) => <button
+                id={commandItemId(command.id)}
                 key={command.id}
                 className={`command-item${activeId === command.id && !command.disabled ? ' is-active' : ''}`}
                 type="button"
@@ -119,4 +123,8 @@ export function CommandPalette({ open, commands, onClose }: Props) {
       </div>
     </div>
   </dialog>
+}
+
+function commandItemId(id: string): string {
+  return `command-item-${encodeURIComponent(id)}`
 }
