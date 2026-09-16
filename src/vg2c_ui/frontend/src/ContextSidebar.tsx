@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import type {
   ArtifactView,
@@ -34,8 +34,7 @@ export function ContextSidebar({ document, documents, projection, csv, csvArtifa
 }
 
 function Panel({ section }: { section: Section }) {
-  const [expanded, setExpanded] = useState(Boolean(section.defaultOpen))
-  return <details className="context-section" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary><span>{section.title}</span></summary><div className="context-section__content">{section.content}</div></details>
+  return <details className="context-section" defaultOpen={Boolean(section.defaultOpen)}><summary><span>{section.title}</span></summary><div className="context-section__content">{section.content}</div></details>
 }
 
 function DataFlowSection({ document, documents, projection, csv, csvArtifactPath, onPreviewCsv, onActivateDocument }: Omit<Props, 'open' | 'onClose'> & { document: DocumentView }) {
