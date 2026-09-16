@@ -1,4 +1,5 @@
 .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
+.app-shell--with-intake.app-shell--no-tabs { grid-template-rows: auto auto minmax(0, 1fr); }
 
 .source-intake-shell { min-width: 0; }
 .source-intake__compact-toggle { display: none; }
@@ -153,7 +154,6 @@
 }
 
 @media (max-width: 640px) {
-  .app-shell--with-intake { grid-template-rows: auto auto 44px minmax(0, 1fr); }
   .source-intake {
     gap: 8px;
     max-height: min(48dvh, 360px);
