@@ -186,7 +186,12 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     if (!policy || !inventoryReady || busy) return
     const item = queue.find((candidate) => candidate.id === id)
     if (!item || item.status !== 'failed' || !item.retryable) return
-    const refreshed = await refreshFiles().catch(() => files)
+    let refreshed: WorkspaceFileView[]
+    try {
+      refreshed = await refreshFiles()
+    } catch {
+      return
+    }
     const knownPaths = new Set(refreshed.map((file) => file.path))
     const inputCount = refreshed.filter((file) => file.role !== 'generated').length
     const workspaceBytes = refreshed.reduce((total, file) => total + file.size_bytes, 0)
