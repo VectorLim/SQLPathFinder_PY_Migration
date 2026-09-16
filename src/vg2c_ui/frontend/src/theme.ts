@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 
 export const THEMES = [
-  { id: 'light', label: 'Light', colorScheme: 'light' },
-  { id: 'dark', label: 'Dark', colorScheme: 'dark' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
 ] as const
 
 export type ThemeName = typeof THEMES[number]['id']
@@ -49,8 +49,6 @@ function resolveTheme(preference: ThemePreference): ThemeName {
 
 function applyTheme(preference: ThemePreference): ThemeName {
   const theme = resolveTheme(preference)
-  const definition = THEMES.find((item) => item.id === theme) ?? THEMES[0]
   document.documentElement.dataset.theme = theme
-  document.documentElement.style.colorScheme = definition.colorScheme
   return theme
 }
