@@ -5,15 +5,20 @@ import './sourceIntake.css'
 
 const CONTENT_ID = 'source-intake-content'
 
-export function SourceIntake({ intake }: { intake: SourceIntakeController }) {
-  const [compactCollapsed, setCompactCollapsed] = useState(intake.hasGeneratedFiles)
+interface Props {
+  intake: SourceIntakeController
+  hasOpenDocument: boolean
+}
+
+export function SourceIntake({ intake, hasOpenDocument }: Props) {
+  const [compactCollapsed, setCompactCollapsed] = useState(hasOpenDocument)
   const accept = intake.policy?.allowed_upload_suffixes.join(',')
   const hasActionableQueue = intake.queue.some((item) => item.status !== 'uploaded')
 
   useEffect(() => {
     if (hasActionableQueue) setCompactCollapsed(false)
-    else setCompactCollapsed(intake.hasGeneratedFiles)
-  }, [hasActionableQueue, intake.hasGeneratedFiles])
+    else setCompactCollapsed(hasOpenDocument)
+  }, [hasActionableQueue, hasOpenDocument])
 
   function filesSelected(event: ChangeEvent<HTMLInputElement>) {
     intake.stageFiles(Array.from(event.currentTarget.files ?? []))

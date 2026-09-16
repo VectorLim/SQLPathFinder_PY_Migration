@@ -144,7 +144,7 @@ export function App() {
       <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
 
-    <SourceIntake intake={intake} />
+    <SourceIntake intake={intake} hasOpenDocument={Boolean(active)} />
 
     <FileTabs
       tabs={state.tabs}

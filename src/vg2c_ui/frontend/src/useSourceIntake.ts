@@ -36,7 +36,6 @@ export interface SourceIntakeController {
   queue: UploadQueueItem[]
   queuedCount: number
   completedCount: number
-  hasGeneratedFiles: boolean
   notice: IntakeNotice | null
   translationDiagnostics: DiagnosticView[]
   policy: WorkspaceUploadPolicyView | null
@@ -74,7 +73,6 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   const sourceSignature = sources.map((file) => file.path).join('|')
   const queuedCount = queue.filter((item) => item.status === 'queued').length
   const completedCount = queue.filter((item) => item.status === 'uploaded').length
-  const hasGeneratedFiles = files.some((file) => file.role === 'generated')
   const inventoryReady = !loadingFiles && !inventoryError
   const busy = uploading || translating
   const canStage = Boolean(policy) && inventoryReady && !busy
@@ -109,6 +107,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   function stageFiles(incoming: File[]) {
     if (!incoming.length || !canStage || !policy) return
     setLocalNotice(null)
+    setTranslationDiagnostics([])
     setQueue((current) => {
       const next = [...current]
       const reserved = next.filter((item) => item.status === 'queued' || item.status === 'uploading')
@@ -146,6 +145,7 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     if (!items.length || !inventoryReady || busy) return
     setUploading(true)
     setLocalNotice(null)
+    setTranslationDiagnostics([])
     let succeeded = 0
     let failed = 0
     const newSources: string[] = []
@@ -213,6 +213,8 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
   }
 
   function toggleSource(path: string, selected: boolean) {
+    setLocalNotice(null)
+    setTranslationDiagnostics([])
     setSelectedSources((current) => selected
       ? [...new Set([...current, path])]
       : current.filter((item) => item !== path))
@@ -253,7 +255,6 @@ export function useSourceIntake({ files, loadingFiles, inventoryError, policy, r
     queue,
     queuedCount,
     completedCount,
-    hasGeneratedFiles,
     notice,
     translationDiagnostics,
     policy,
