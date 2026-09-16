@@ -33,12 +33,12 @@
   border-radius: 7px;
   padding: 0 10px;
   color: var(--text);
-  background: var(--control-bg, var(--panel));
+  background: var(--control-bg);
   font-size: 11px;
   font-weight: 650;
 }
-.source-intake button:hover:not(:disabled) { border-color: var(--line-strong, var(--subtle)); background: var(--control-hover, var(--surface)); }
-.source-intake .primary-button { border-color: var(--accent); color: var(--on-accent, #fff); background: var(--accent); }
+.source-intake button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--control-hover); }
+.source-intake .primary-button { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
 .source-intake .primary-button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
 .source-intake__policy { margin: 7px 0 0; }
 .source-list {
@@ -85,10 +85,10 @@
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   padding: 7px 8px;
-  background: var(--control-bg, var(--panel));
+  background: var(--control-bg);
 }
-.upload-item--failed { border-color: var(--danger-line, var(--danger)); background: var(--danger-soft); }
-.upload-item--uploaded { border-color: var(--success-line, var(--success)); background: var(--success-soft); }
+.upload-item--failed { border-color: var(--danger-line); background: var(--danger-soft); }
+.upload-item--uploaded { border-color: var(--success-line); background: var(--success-soft); }
 .upload-item__copy { display: grid; min-width: 0; gap: 1px; }
 .upload-item__copy strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .upload-item__copy small { color: var(--muted); font-size: 9px; }
