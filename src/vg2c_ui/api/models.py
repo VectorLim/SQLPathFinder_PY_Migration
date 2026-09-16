@@ -213,6 +213,8 @@ class WorkspaceFileView(BaseModel):
     path: str
     size_bytes: int
     modified_at: float
+    role: Literal["source", "data", "generated"]
+    translatable: bool
 
 
 class SqlSpanView(BaseModel):

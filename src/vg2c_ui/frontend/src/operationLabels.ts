@@ -13,12 +13,7 @@ export function formatOperationLabel(step: StepView): OperationLabel {
 }
 
 export function formatScopeLabel(scope: ScopeView): string {
-  if (scope.scope_kind === 'if') return 'Condition'
-  if (scope.scope_kind === 'if-branch') return 'True branch'
-  if (scope.scope_kind === 'else-branch') return 'Else branch'
-  if (scope.scope_kind === 'macro') return 'For each macro row'
-  if (scope.scope_kind === 'loop') return 'For each row'
-  return scope.label || humanize(scope.scope_kind)
+  return scope.label
 }
 
 export function baseName(path: string): string {
@@ -28,10 +23,6 @@ export function baseName(path: string): string {
 function concisePaths(paths: string[], singular: string, plural: string): string {
   const first = `“${shorten(baseName(paths[0]), 46)}”`
   return paths.length === 1 ? `${singular}: ${first}` : `${plural}: ${first} +${paths.length - 1}`
-}
-
-function humanize(value: string): string {
-  return value.replace(/[_-]+/g, ' ').trim().replace(/(^|\s)\S/g, (value) => value.toUpperCase())
 }
 
 function shorten(value: string, length: number): string {

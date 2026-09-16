@@ -120,5 +120,9 @@ __all__ = ["router"]
 
 def _file_view(item) -> WorkspaceFileView:
     return WorkspaceFileView(
-        path=item.path, size_bytes=item.size_bytes, modified_at=item.modified_at
+        path=item.path,
+        size_bytes=item.size_bytes,
+        modified_at=item.modified_at,
+        role=item.role,
+        translatable=item.translatable,
     )

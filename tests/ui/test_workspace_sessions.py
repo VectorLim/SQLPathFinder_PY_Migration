@@ -26,6 +26,8 @@ def test_workspace_uploads_are_isolated_and_document_paths_are_relative(tmp_path
 
     uploaded = _upload(manager, first)
     assert uploaded.path == "inputs/script_short.txt"
+    assert uploaded.role == "source"
+    assert uploaded.translatable is True
     assert [item.path for item in manager.list_files(first)] == ["inputs/script_short.txt"]
     assert manager.list_files(second) == []
 
@@ -37,6 +39,29 @@ def test_workspace_uploads_are_isolated_and_document_paths_are_relative(tmp_path
     assert manager.resolve_file(second, "inputs/script_short.txt") != manager.resolve_file(
         first, "inputs/script_short.txt"
     )
+
+    files = {item.path: item for item in manager.list_files(first)}
+    assert files["inputs/script_short.txt"].role == "source"
+    assert files["inputs/script_short.txt"].translatable is True
+    assert files["generated/inputs/script_short.py"].role == "generated"
+    assert files["generated/inputs/script_short.py"].translatable is False
+
+
+def test_workspace_file_classification_is_backend_owned(tmp_path: Path):
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    workspace, _ = manager.resolve_or_create(None)
+    (workspace.root / "inputs" / "table.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    (workspace.root / "inputs" / "nested").mkdir()
+    (workspace.root / "inputs" / "nested" / "other.txt").write_text("script", encoding="utf-8")
+    (workspace.root / "generated" / "report.csv").write_text("a\n1\n", encoding="utf-8")
+
+    files = {item.path: item for item in manager.list_files(workspace)}
+    assert files["inputs/table.csv"].role == "data"
+    assert files["inputs/table.csv"].translatable is False
+    assert files["inputs/nested/other.txt"].role == "source"
+    assert files["inputs/nested/other.txt"].translatable is True
+    assert files["generated/report.csv"].role == "generated"
+    assert files["generated/report.csv"].translatable is False
 
 
 def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):

@@ -206,6 +206,8 @@ export interface WorkspaceFileView {
   path: string
   size_bytes: number
   modified_at: number
+  role: 'source' | 'data' | 'generated'
+  translatable: boolean
 }
 
 export interface SqlSpanView {

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import { ContextSidebar } from './ContextSidebar'
-import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
+import type { ChangePreviewView, DiagnosticView, ParameterView, WorkspaceFileView } from './contracts.generated'
 import { listWorkspaceFiles, uploadWorkspaceFiles, workspaceDownloadUrl } from './api'
 import { baseName } from './operationLabels'
 import { ancestorScopeIds, ScriptTree } from './ScriptTree'
@@ -11,7 +11,7 @@ import type { TabStatus, TabState } from './workspaceState'
 export function App() {
   const workspace = useWorkspace()
   const { state, active, dispatch } = workspace
-  const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ path: string, size_bytes: number }>>([])
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileView[]>([])
   const [sourcePaths, setSourcePaths] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
@@ -28,7 +28,7 @@ export function App() {
     setWorkspaceFiles(files)
     setSourcePaths((current) => current.length
       ? current.filter((path) => files.some((file) => file.path === path))
-      : files.filter((file) => file.path.toLowerCase().endsWith('.txt')).map((file) => file.path))
+      : files.filter((file) => file.translatable).map((file) => file.path))
   }
 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
@@ -38,7 +38,7 @@ export function App() {
     try {
       const saved = await uploadWorkspaceFiles(files)
       await refreshWorkspaceFiles()
-      const sources = saved.filter((item) => item.path.toLowerCase().endsWith('.txt')).map((item) => item.path)
+      const sources = saved.filter((item) => item.translatable).map((item) => item.path)
       setSourcePaths((current) => [...new Set([...current, ...sources])])
       setMessage(`${saved.length} file${saved.length === 1 ? '' : 's'} uploaded.`)
     } catch (error) { setMessage(errorMessage(error, 'Upload failed')) } finally { setBusy(false); event.target.value = '' }
@@ -101,8 +101,8 @@ export function App() {
   const editCount = active ? Object.keys(active.edits.values).length : 0
   const documents = state.tabs.map((tab) => tab.document)
 
-  const uploadedSources = workspaceFiles.filter((file) => file.path.toLowerCase().endsWith('.txt'))
-  const generatedFiles = workspaceFiles.filter((file) => file.path.startsWith('generated/'))
+  const uploadedSources = workspaceFiles.filter((file) => file.translatable)
+  const generatedFiles = workspaceFiles.filter((file) => file.role === 'generated')
 
   return <main className="app-shell">
     <header className="topbar"><div className="brand"><span>PYTHON</span>PathFinder</div><div className="translate-box"><label className="upload-button">Upload files<input aria-label="Upload VG2 source and data files" type="file" multiple onChange={(event) => void upload(event)} /></label><label className="upload-button">Upload folder<input aria-label="Upload a VG2 workspace folder" type="file" multiple ref={(node) => node?.setAttribute('webkitdirectory', '')} onChange={(event) => void upload(event)} /></label><select aria-label="VG2 source files" multiple value={sourcePaths} onChange={(event) => setSourcePaths(Array.from(event.target.selectedOptions, (option) => option.value))}>{uploadedSources.map((file) => <option key={file.path} value={file.path}>{file.path}</option>)}</select><button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourcePaths.length}>{busy ? 'Working…' : 'Translate'}</button></div><output className="status-message" aria-live="polite">{message}</output><div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div></header>
