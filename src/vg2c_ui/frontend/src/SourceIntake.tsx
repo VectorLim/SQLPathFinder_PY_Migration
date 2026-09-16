@@ -31,20 +31,22 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
     intake.stageFiles(Array.from(event.dataTransfer.files))
   }
 
+  const compactMessage = intake.notice?.message ?? intake.policyError?.message ?? null
+  const compactError = intake.notice ? intake.notice.tone === 'error' : Boolean(intake.policyError)
   const compactSummary = intake.uploading
     ? 'Uploading…'
     : intake.translating
       ? 'Translating…'
       : intake.loadingFiles
         ? 'Loading workspace files…'
-        : intake.notice?.message ?? [
+        : compactMessage ?? [
             intake.queuedCount ? `${intake.queuedCount} queued` : null,
             intake.selectedSources.length ? `${intake.selectedSources.length} selected` : null,
           ].filter(Boolean).join(' · ') || 'Upload or select sources'
   const shellClassName = [
     'source-intake-shell',
     compactCollapsed ? 'is-compact-collapsed' : '',
-    intake.notice?.tone === 'error' ? 'has-error' : '',
+    compactError ? 'has-error' : '',
   ].filter(Boolean).join(' ')
 
   return <section className={shellClassName} aria-label="Workspace source intake">
