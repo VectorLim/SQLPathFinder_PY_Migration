@@ -5,7 +5,7 @@ import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
 import { ContextSidebar } from './ContextSidebar'
-import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
+import type { ChangePreviewView, ParameterView } from './contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
 import { baseName } from './operationLabels'
@@ -24,7 +24,6 @@ export function App() {
   const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
-  const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
   const [contextOpen, setContextOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
@@ -35,7 +34,6 @@ export function App() {
     policy: fileInventory.policy,
     refreshFiles: fileInventory.refresh,
     translateSources: workspace.translate,
-    onDiagnostics: setBatchDiagnostics,
   })
 
   const hasUnsavedWorkspaceChanges = state.tabs.some(hasUnsavedChanges)
@@ -134,7 +132,7 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut)
   })
 
-  const diagnostics = active ? [...active.document.diagnostics, ...batchDiagnostics] : batchDiagnostics
+  const diagnostics = active?.document.diagnostics ?? []
   const documents = state.tabs.map((tab) => tab.document)
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
