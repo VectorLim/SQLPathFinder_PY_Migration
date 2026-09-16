@@ -85,8 +85,13 @@ assert.equal(reopened.tabs[0].preview, null, 'closed tab response must not leak 
 
 const csvInstance = reopened.tabs[0].instanceId
 reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', path: 'a.csv' })
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: oldInstance, requestId: 'csv-new', csv: null })
+reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: oldInstance, requestId: 'csv-new', csv: null, error: 'stale csv error' })
 assert.equal(reopened.tabs[0].csvRequestId, 'csv-new', 'CSV result from a prior tab instance must be ignored')
+assert.equal(reopened.tabs[0].csvError, null, 'stale CSV errors must not leak into a reopened document')
+reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', csv: null, error: 'CSV preview failed' })
+assert.equal(reopened.tabs[0].csvError, 'CSV preview failed', 'current CSV error should stay with the tab/artifact request')
+reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-retry', path: 'a.csv' })
+assert.equal(reopened.tabs[0].csvError, null, 'starting a new CSV request should clear the prior CSV error')
 
 let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
 actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p1', value: 'draft' })
@@ -125,18 +130,37 @@ assert.equal(availability.canApply, false, 'pending apply must block re-entry')
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
   requestId: 'actions-conflict', baseVersion: actionsTab.edits.version, conflict: true,
+  message: 'File changed externally',
 })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
+assert.equal(actionsTab.mutationError, 'File changed externally', 'mutation errors should stay on the affected tab')
 assert.equal(availability.canApply, false, 'stale valid preview must not remain applicable after conflict')
 assert.equal(availability.canPreview, false, 'conflict requires reload before another preview')
 assert.equal(availability.canReload, true, 'conflicted tab should enable reload')
 
+actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p2', value: 'newer' })
+assert.equal(actionsState.tabs[0].mutationError, null, 'editing again should clear the prior mutation error')
+actionsTab = actionsState.tabs[0]
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-preview-2', baseVersion: actionsTab.edits.version, status: 'validating',
+})
+assert.equal(actionsState.tabs[0].mutationError, null, 'new mutation should begin without stale feedback')
+
+actionsTab = actionsState.tabs[0]
+actionsState = workspaceReducer(actionsState, {
+  type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
+  requestId: 'actions-preview-2', baseVersion: actionsTab.edits.version, conflict: true,
+  message: 'Conflict',
+})
+actionsTab = actionsState.tabs[0]
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
   requestId: 'actions-reload', baseVersion: actionsTab.edits.version, status: actionsTab.status,
 })
 availability = getChangeActionState(actionsState.tabs[0])
 assert.equal(availability.canReload, false, 'pending reload must block reload re-entry')
+assert.equal(actionsState.tabs[0].mutationError, null, 'reload start should clear the conflict message')
 
 console.log('workspaceState tests passed')
