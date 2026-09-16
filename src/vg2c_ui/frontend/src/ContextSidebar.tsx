@@ -1,3 +1,5 @@
+import './contextInspector.css'
+
 import { useEffect, useState, type ReactNode } from 'react'
 
 import type {
