@@ -212,13 +212,14 @@ function emptyEdits(): EditState {
 }
 
 function withEditState(tab: TabState, edits: EditState): TabState {
+  const conflict = tab.status === 'conflict'
   return {
     ...tab,
     edits,
     preview: null,
     mutationRequestId: null,
-    mutationError: null,
-    status: Object.keys(edits.values).length ? 'dirty' : 'ready',
+    mutationError: conflict ? tab.mutationError : null,
+    status: conflict ? 'conflict' : Object.keys(edits.values).length ? 'dirty' : 'ready',
   }
 }
 
