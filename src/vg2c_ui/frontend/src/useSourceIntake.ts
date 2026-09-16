@@ -34,10 +34,14 @@ export interface SourceIntakeController {
   sources: WorkspaceFileView[]
   selectedSources: string[]
   queue: UploadQueueItem[]
+  queuedCount: number
+  completedCount: number
   policy: WorkspaceUploadPolicyView | null
   uploading: boolean
   translating: boolean
   canStage: boolean
+  canUploadQueued: boolean
+  canTranslate: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
   folderInputRef: React.RefObject<HTMLInputElement | null>
   openFiles: () => void
@@ -62,6 +66,11 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const sources = files.filter((file) => file.translatable)
   const sourceSignature = sources.map((file) => file.path).join('|')
+  const queuedCount = queue.filter((item) => item.status === 'queued').length
+  const completedCount = queue.filter((item) => item.status === 'uploaded').length
+  const canStage = Boolean(policy) && !uploading
+  const canUploadQueued = queuedCount > 0 && !uploading
+  const canTranslate = selectedSources.length > 0 && !translating && !uploading
 
   useEffect(() => {
     if (loadingFiles) return
@@ -76,12 +85,12 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   }, [loadingFiles, sourceSignature])
 
   function openFiles() {
-    if (!policy || uploading) return
+    if (!canStage) return
     fileInputRef.current?.click()
   }
 
   function openFolder() {
-    if (!policy || uploading) return
+    if (!canStage) return
     folderInputRef.current?.click()
   }
 
@@ -158,6 +167,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   }
 
   async function uploadQueued() {
+    if (!canUploadQueued) return
     await uploadItems(queue.filter((item) => item.status === 'queued'))
   }
 
@@ -192,7 +202,7 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
   }
 
   async function translateSelected() {
-    if (!selectedSources.length || translating || uploading) return
+    if (!canTranslate) return
     setTranslating(true)
     onStatus('Translating…')
     try {
@@ -213,10 +223,14 @@ export function useSourceIntake({ files, loadingFiles, policy, refreshFiles, tra
     sources,
     selectedSources,
     queue,
+    queuedCount,
+    completedCount,
     policy,
     uploading,
     translating,
-    canStage: Boolean(policy) && !uploading,
+    canStage,
+    canUploadQueued,
+    canTranslate,
     fileInputRef,
     folderInputRef,
     openFiles,
@@ -267,7 +281,7 @@ function fileSuffix(name: string): string {
   return index >= 0 ? name.slice(index).toLowerCase() : ''
 }
 
-function formatBytes(value: number): string {
+export function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
   return `${Math.round(value / (1024 * 1024))} MB`
