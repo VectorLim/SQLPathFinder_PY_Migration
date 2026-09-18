@@ -224,9 +224,10 @@ function EmailContext({
       const enabled = operation.bindings.find((binding) => binding.name === 'enabled')
       const subject = operation.bindings.find((binding) => binding.name === 'subject')
       const to = operation.bindings.find((binding) => binding.name === 'to')
+      const isEnabled = enabled ? Boolean(effectiveBindingValue(values, enabled)) : true
       return <article key={operation.id} className="email-row">
-        <label className="checkbox-field"><input type="checkbox" checked={selected.has(operation.id)} onChange={(event) => setSelected((current) => toggleSet(current, operation.id, event.target.checked))} /><span className="sr-only">Select {operation.display_name}</span></label>
-        <label className="checkbox-field email-enabled"><input type="checkbox" checked={enabled ? Boolean(effectiveBindingValue(values, enabled)) : true} disabled={!enabled?.editable} onChange={(event) => enabled && onEdit(enabled, event.target.checked)} /><span>Enabled</span></label>
+        <label className="checkbox-field"><input type="checkbox" aria-label={`Select ${operation.display_name}`} checked={selected.has(operation.id)} onChange={(event) => setSelected((current) => toggleSet(current, operation.id, event.target.checked))} /></label>
+        <label className="checkbox-field email-enabled"><input type="checkbox" aria-label={`Enable ${operation.display_name}`} checked={isEnabled} disabled={!enabled?.editable} onChange={(event) => enabled && onEdit(enabled, event.target.checked)} /><span>{isEnabled ? 'On' : 'Off'}</span></label>
         <button type="button" className="email-summary" onClick={(event) => onNavigate(operation.id, event.detail === 0)}>
           <strong>{String(subject ? effectiveBindingValue(values, subject) : 'Send Email')}</strong>
           <small>To: {String(to ? effectiveBindingValue(values, to) : 'Not set')}</small>
