@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Code2, RotateCcw } from 'lucide-react'
+import { useState } from 'react'
 
 import type {
   ChangePreviewView,
+  ConditionOperatorView,
   HtmlPreviewView,
   SemanticBindingView,
   SemanticOperationView,
@@ -10,10 +10,11 @@ import type {
   SqlModelView,
   SymbolView,
 } from './contracts.generated'
-import { SchemaValueField, type FieldDraftProps } from './ParameterField'
-import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
-import { StructuredSqlEditor } from './StructuredSqlEditor'
-import { RESET_VALUE, effectiveBindingValue, type FieldPath } from './workspaceState'
+import { ConditionEditor } from './ConditionEditor'
+import type { FieldDraftProps } from './ParameterField'
+import { SemanticBindingField } from './SemanticBindingField'
+import { ValidationMessage } from './shared/SemanticControls'
+import type { FieldPath } from './workspaceState'
 
 interface Props extends FieldDraftProps {
   tabId: string
@@ -22,6 +23,7 @@ interface Props extends FieldDraftProps {
   saving: boolean
   knownFiles: string[]
   symbols: SymbolView[]
+  conditionOperators: ConditionOperatorView[]
   onUploadFile: (file: File) => Promise<string>
   onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
   validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
@@ -42,6 +44,7 @@ export function SemanticOperationEditor({
   saving,
   knownFiles,
   symbols,
+  conditionOperators,
   onUploadFile,
   onEdit,
   validateBinding,
@@ -54,6 +57,20 @@ export function SemanticOperationEditor({
   const normal = operation.bindings.filter((binding) => binding.visibility === 'normal')
   const advanced = operation.bindings.filter((binding) => binding.visibility === 'advanced')
   const readOnly = operation.validation_state === 'unsupported'
+  const bindingProps = {
+    tabId,
+    values,
+    readOnly,
+    knownFiles,
+    symbols,
+    onUploadFile,
+    onEdit,
+    validateBinding,
+    inspectSql,
+    runSqlAction,
+    drafts,
+    onDraft,
+  }
 
   return <section className="operation-editor semantic-operation-editor" aria-label={`Configure ${operation.display_name}`}>
     <header className="operation-editor__header">
@@ -67,176 +84,41 @@ export function SemanticOperationEditor({
       </span>
     </header>
 
-    {operation.validation_state === 'unresolved' && <ValidationMessage message="One or more values reference an unresolved symbol." />}
+    {operation.capabilities.includes('condition-editor')
+      ? <ConditionEditor
+          operation={operation}
+          values={values}
+          symbols={symbols}
+          operators={conditionOperators}
+          saving={saving}
+          onEdit={onEdit}
+        />
+      : <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
+          {normal.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
+          {!normal.length && !advanced.length && <p className="empty-copy">
+            {readOnly ? 'This operation is visible for context but has no safe editor.' : 'No configurable values.'}
+          </p>}
+        </fieldset>}
 
-    <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
-      {operation.capabilities.includes('condition-editor')
-        ? <ConditionEditor operation={operation} values={values} symbols={symbols} onEdit={onEdit} />
-        : normal.map((binding) => <BindingField
-            key={binding.id}
-            tabId={tabId}
-            binding={binding}
-            values={values}
-            readOnly={readOnly}
-            knownFiles={knownFiles}
-            symbols={symbols}
-            onUploadFile={onUploadFile}
-            drafts={drafts}
-            onDraft={onDraft}
-            onEdit={onEdit}
-            validateBinding={validateBinding}
-            inspectSql={inspectSql}
-            runSqlAction={runSqlAction}
-          />)}
-      {!operation.capabilities.includes('condition-editor') && normal.length === 0 && <p className="empty-copy">No configurable values.</p>}
-    </fieldset>
+    {operation.capabilities.includes('html-preview')
+      && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
 
-    {operation.kind === 'html_report.layout' && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
-
-    {advanced.length > 0 && <details className="advanced-settings">
+    {advanced.length > 0 && !operation.capabilities.includes('condition-editor') && <details className="advanced-settings">
       <summary>Advanced</summary>
-      <div className="parameter-grid">{advanced.map((binding) => <BindingField
-        key={binding.id}
-        tabId={tabId}
-        binding={binding}
-        values={values}
-        readOnly={readOnly}
-        knownFiles={knownFiles}
-        symbols={symbols}
-        onUploadFile={onUploadFile}
-        drafts={drafts}
-        onDraft={onDraft}
-        onEdit={onEdit}
-        validateBinding={validateBinding}
-        inspectSql={inspectSql}
-        runSqlAction={runSqlAction}
-      />)}</div>
+      <div className="parameter-grid">
+        {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
+      </div>
     </details>}
 
-    {operation.comments.length > 0 && <details className="operation-comments"><summary>Comments</summary>{operation.comments.map((comment, index) => <p key={index}>{comment}</p>)}</details>}
+    {operation.validation_state === 'unresolved'
+      && !operation.capabilities.includes('condition-editor')
+      && <ValidationMessage message="One or more values reference an unresolved symbol." />}
+
+    {operation.comments.length > 0 && <details className="operation-comments">
+      <summary>Comments</summary>
+      {operation.comments.map((comment, index) => <p key={index}>{comment}</p>)}
+    </details>}
   </section>
-}
-
-function BindingField({
-  tabId,
-  binding,
-  values,
-  readOnly,
-  knownFiles,
-  symbols,
-  onUploadFile,
-  drafts,
-  onDraft,
-  onEdit,
-  validateBinding,
-  inspectSql,
-  runSqlAction,
-}: Omit<Props, 'operation' | 'saving' | 'previewHtml'> & { binding: SemanticBindingView; readOnly: boolean }) {
-  const value = effectiveBindingValue(values, binding)
-  const disabled = readOnly || !binding.editable
-  const reset = binding.resettable && binding.id in values
-    ? <button type="button" className="icon-button" aria-label={`Reset ${binding.display_label}`} title="Reset value" onClick={() => onEdit(binding, RESET_VALUE)}><RotateCcw size={14} aria-hidden="true" /></button>
-    : null
-
-  if (binding.capabilities.includes('embedded-python')) {
-    return <div className="parameter semantic-binding"><div className="parameter-field__meta"><strong>{binding.display_label}</strong>{reset}</div><EmbeddedPythonEditor tabId={tabId} binding={binding} value={String(value ?? '')} disabled={disabled} validateBinding={validateBinding} onCommit={(next) => onEdit(binding, next)} /></div>
-  }
-
-  if (binding.capabilities.includes('structured-sql')) {
-    return <div className="parameter semantic-binding"><StructuredSqlEditor tabId={tabId} binding={binding} values={values} readOnly={disabled} inspect={inspectSql} runAction={runSqlAction} onReset={() => onEdit(binding, RESET_VALUE)} /></div>
-  }
-
-  const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
-  const body = isFileBinding && binding.value_schema?.kind === 'list'
-    ? <FileListSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
-    : isFileBinding
-      ? <FileSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
-    : binding.capabilities.includes('symbol-or-literal')
-      ? <SymbolSelector label={binding.display_label} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
-      : binding.value_schema
-        ? <SchemaValueField
-            schema={binding.value_schema}
-            value={value}
-            onChange={(next, cleared) => onEdit(binding, next, cleared)}
-            label={binding.display_label}
-            bindingId={binding.id}
-            path={[]}
-            multiline={false}
-            drafts={drafts}
-            onDraft={onDraft}
-          />
-        : <input aria-label={binding.display_label} disabled={disabled} value={String(value ?? '')} onChange={(event) => onEdit(binding, event.target.value)} />
-
-  return <div className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`}>
-    <div className="parameter-field__meta"><strong>{binding.display_label}{binding.required ? ' *' : ''}</strong>{reset}</div>
-    {binding.required ? body : <OptionalValue
-      label={binding.display_label}
-      enabled={value !== null && value !== undefined}
-      disabled={disabled}
-      onEnabledChange={(enabled) => onEdit(binding, enabled ? binding.value ?? binding.default ?? '' : null)}
-    >{body}</OptionalValue>}
-    {disabled && binding.read_only_reason && <small>{binding.read_only_reason}</small>}
-    {binding.validation_state === 'unresolved' && <ValidationMessage message="This value does not resolve to a known symbol." />}
-  </div>
-}
-
-function ConditionEditor({
-  operation,
-  values,
-  symbols,
-  onEdit,
-}: {
-  operation: SemanticOperationView
-  values: Record<string, unknown>
-  symbols: SymbolView[]
-  onEdit: Props['onEdit']
-}) {
-  const bindings = useMemo(() => new Map(operation.bindings.map((binding) => [binding.name, binding])), [operation.bindings])
-  const get = (name: string) => bindings.get(name)
-  const value = (name: string) => {
-    const binding = get(name)
-    return binding ? effectiveBindingValue(values, binding) : null
-  }
-  const secondEnabled = ['conj', 'lhs2', 'op2', 'rhs2'].some((name) => value(name) !== null && value(name) !== undefined && value(name) !== '')
-
-  const symbolField = (name: string) => {
-    const binding = get(name)
-    if (!binding) return null
-    return <div className="parameter semantic-binding" key={binding.id}>
-      <SymbolSelector label={binding.display_label} value={value(name)} symbols={symbols} disabled={!binding.editable} onChange={(next) => onEdit(binding, next)} />
-      {binding.validation_state === 'unresolved' && <ValidationMessage message="Unknown symbol. Choose a known symbol or enter a literal value." />}
-    </div>
-  }
-
-  const choiceField = (name: string) => {
-    const binding = get(name)
-    if (!binding) return null
-    const choices = binding.value_schema?.choices ?? []
-    return <label className="parameter semantic-binding" key={binding.id}>{binding.display_label}
-      <select value={String(value(name) ?? '')} disabled={!binding.editable} onChange={(event) => onEdit(binding, event.target.value || null)}>
-        {!binding.required && <option value="">Not set</option>}
-        {choices.map((choice) => <option key={String(choice)} value={String(choice)}>{String(choice)}</option>)}
-      </select>
-    </label>
-  }
-
-  function setSecond(enabled: boolean) {
-    for (const name of ['conj', 'lhs2', 'op2', 'rhs2']) {
-      const binding = get(name)
-      if (!binding) continue
-      if (!enabled) onEdit(binding, null)
-      else if (name === 'conj') onEdit(binding, 'AND')
-      else if (name === 'op2') onEdit(binding, binding.value_schema?.choices[0] ?? null)
-      else onEdit(binding, '')
-    }
-  }
-
-  return <div className="condition-editor">
-    <div className="condition-clause">{symbolField('lhs')}{choiceField('op')}{symbolField('rhs')}</div>
-    <OptionalValue label="Add second condition" enabled={secondEnabled} onEnabledChange={setSecond}>
-      <div className="condition-clause condition-clause--secondary">{choiceField('conj')}{symbolField('lhs2')}{choiceField('op2')}{symbolField('rhs2')}</div>
-    </OptionalValue>
-  </div>
 }
 
 function HtmlPreviewPanel({
@@ -258,6 +140,7 @@ function HtmlPreviewPanel({
       setPreview(await previewHtml(tabId, operationId))
       setError('')
     } catch (reason) {
+      setPreview(null)
       setError(reason instanceof Error ? reason.message : 'HTML preview failed.')
     } finally {
       setLoading(false)
@@ -265,72 +148,28 @@ function HtmlPreviewPanel({
   }
 
   return <section className="html-preview">
-    <header><div><strong>Report Preview</strong><small>Rendered safely from the current draft without running the workflow.</small></div><button type="button" disabled={loading} onClick={() => void load()}>{loading ? 'Rendering…' : 'Preview'}</button></header>
+    <header>
+      <div>
+        <strong>Report Preview</strong>
+        <small>Rendered safely from the current draft without running the workflow.</small>
+      </div>
+      <button type="button" disabled={loading} onClick={() => void load()}>{loading ? 'Rendering…' : 'Preview'}</button>
+    </header>
     {error && <ValidationMessage message={error} />}
     {preview && <>
-      <p className={`html-preview__state html-preview__state--${preview.state}`}><strong>{preview.state === 'exact' ? 'Exact preview' : preview.state === 'approximate' ? 'Approximate preview' : 'Preview unavailable'}</strong>{preview.message ? ` — ${preview.message}` : ''}</p>
+      <p className={`html-preview__state html-preview__state--${preview.state}`}>
+        <strong>{preview.state === 'exact' ? 'Exact preview' : preview.state === 'approximate' ? 'Approximate preview' : 'Preview unavailable'}</strong>
+        {preview.message ? ` — ${preview.message}` : ''}
+      </p>
       {preview.output_path && <small>Output: {preview.output_path}</small>}
       {preview.html && <iframe title="HTML report preview" sandbox="" srcDoc={sandboxHtml(preview.html)} />}
     </>}
   </section>
 }
 
-function EmbeddedPythonEditor({
-  tabId,
-  binding,
-  value,
-  disabled,
-  validateBinding,
-  onCommit,
-}: {
-  tabId: string
-  binding: SemanticBindingView
-  value: string
-  disabled: boolean
-  validateBinding: Props['validateBinding']
-  onCommit: (value: string) => void
-}) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const [draft, setDraft] = useState(value)
-  const [issues, setIssues] = useState<string[]>([])
-  const [validating, setValidating] = useState(false)
-  useEffect(() => setDraft(value), [value])
-
-  async function save() {
-    setValidating(true)
-    try {
-      const preview = await validateBinding(tabId, binding.id, draft)
-      if (!preview.valid) {
-        setIssues(preview.issues.map((issue) => issue.message))
-        return
-      }
-      setIssues([])
-      onCommit(draft)
-      dialogRef.current?.close()
-    } catch (error) {
-      setIssues([error instanceof Error ? error.message : 'Could not validate embedded Python.'])
-    } finally {
-      setValidating(false)
-    }
-  }
-
-  return <>
-    <button type="button" className="field-command" disabled={disabled} onClick={() => { setIssues([]); setDraft(value); dialogRef.current?.showModal() }}><Code2 size={15} aria-hidden="true" />Edit Python</button>
-    <dialog ref={dialogRef} className="embedded-python-dialog" aria-labelledby={`${binding.id}-title`}>
-      <form method="dialog" className="dialog-card" onSubmit={(event) => event.preventDefault()}>
-        <header><h3 id={`${binding.id}-title`}>Embedded Python</h3><p>Edit only the Python embedded in this source block. Generated application Python remains hidden.</p></header>
-        <textarea aria-label="Embedded Python source" value={draft} onChange={(event) => setDraft(event.target.value)} rows={18} spellCheck={false} />
-        {issues.map((issue, index) => <ValidationMessage key={index} message={issue} />)}
-        <footer className="dialog-actions">
-          <button type="button" onClick={() => dialogRef.current?.close()}>Cancel</button>
-          <button type="button" className="primary-button" disabled={validating} onClick={() => void save()}>{validating ? 'Validating…' : 'Validate & Save'}</button>
-        </footer>
-      </form>
-    </dialog>
-  </>
-}
-
 function sandboxHtml(html: string): string {
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`
-  return /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${csp}`) : `${csp}${html}`
+  return /<head(?:\s[^>]*)?>/i.test(html)
+    ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${csp}`)
+    : `${csp}${html}`
 }
