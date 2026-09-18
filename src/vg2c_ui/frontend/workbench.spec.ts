@@ -3,9 +3,17 @@ import { writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { DocumentView } from './src/contracts.generated'
 
-async function pane(page: Page, name: string) {
-  const button = page.getByRole('navigation', { name: 'Workbench views' }).getByRole('button', { name, exact: true })
-  if (await button.isVisible()) await button.click()
+async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
+  const target = page.getByRole('region', { name, exact: true }).or(page.getByRole('tree', { name: 'Script Logic' }))
+  if (await target.first().isVisible().catch(() => false)) return
+  const tabs = page.getByRole('navigation', { name: 'Workbench views' })
+  const tabButton = tabs.getByRole('button', { name, exact: true })
+  if (await tabButton.isVisible().catch(() => false)) {
+    await tabButton.click()
+    return
+  }
+  const visibility = page.locator('.workbench-pane-controls').getByRole('button', { name, exact: true })
+  if (await visibility.isVisible().catch(() => false)) await visibility.click()
 }
 
 async function translate(page: Page) {
@@ -39,7 +47,7 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   await expect(output).toHaveValue('renamed.csv')
 
-  const expression = page.getByRole('textbox', { name: 'Selected expression', exact: true }).first()
+  const expression = page.getByRole('textbox', { name: 'Column expression', exact: true }).first()
   await expect(expression).toBeEnabled()
   await expression.fill('2')
   await expression.press('Tab')
@@ -48,7 +56,17 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await expect(expression).toHaveValue('1')
   await expect(output).toHaveValue('renamed.csv')
 
+  await expect(page.getByText('Generated information', { exact: true })).toHaveCount(0)
+  const advanced = page.getByText('Advanced', { exact: true }).last()
+  if (await advanced.isVisible().catch(() => false)) {
+    await advanced.click()
+    const rawSql = page.getByText('View raw SQL', { exact: true })
+    if (await rawSql.isVisible().catch(() => false)) await rawSql.click()
+  }
+
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
+  await expect(page.getByText('Validated Python diff', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Changes validated', { exact: true })).toBeVisible()
   const apply = page.getByRole('button', { name: 'Apply', exact: true })
   await expect(apply).toBeEnabled()
   let releaseSave!: () => void
@@ -64,14 +82,14 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   const reopened = await page.request.post('/api/documents/open', { data: { source_path: 'inputs/workbench.txt', output_path: 'generated/inputs/workbench.py' } })
   expect(reopened.ok()).toBeTruthy()
   const reopenedDocument: DocumentView = await reopened.json()
-  expect(reopenedDocument.steps.flatMap((step) => step.operations).flatMap((operation) => operation.parameters).find((parameter) => parameter.name === 'output')?.value).toBe('renamed.csv')
+  expect(reopenedDocument.semantic_operations.flatMap((operation) => operation.bindings).find((binding) => binding.name === 'output')?.value).toBe('renamed.csv')
 
-  await pane(page, 'File Flow')
-  await page.getByRole('button', { name: 'Preview on-disk renamed.csv', exact: true }).click()
+  await pane(page, 'Context')
+  await page.getByRole('button', { name: 'Preview CSV', exact: true }).first().click()
   await expect(page.locator('.on-disk-preview [role=alert]')).toBeVisible()
   const session = (await page.context().cookies()).find((cookie) => cookie.name === 'vg2c_workspace')!
   await writeFile(join(process.env.VG2C_TEST_ROOT!, 'workspaces', session.value, dirname(reopenedDocument.output_path), 'renamed.csv'), 'value\nverified\n')
-  await page.getByRole('button', { name: 'Preview on-disk renamed.csv', exact: true }).click()
+  await page.getByRole('button', { name: 'Preview CSV', exact: true }).first().click()
   await expect(page.getByRole('cell', { name: 'verified', exact: true })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('file-flow.png'), fullPage: true })
 
