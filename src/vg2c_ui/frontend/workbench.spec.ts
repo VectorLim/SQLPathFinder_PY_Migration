@@ -34,9 +34,9 @@ async function translate(page: Page) {
     'workbench.txt',
     '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem').first().click()
+  await page.getByRole('treeitem', { name: /out\.csv/i }).click()
   await pane(page, 'Configuration')
-  await expect(page.getByLabel('Output', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Output file', { exact: true })).toBeVisible()
   const tabs = await page.locator('.tabs').boundingBox()
   expect(tabs?.height).toBe(44)
   const intake = await page.getByRole('region', { name: 'Workspace source intake' }).boundingBox()
@@ -55,7 +55,7 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
     await separator.press('ArrowRight')
     expect(Number(await separator.getAttribute('aria-valuenow'))).toBeGreaterThan(before)
   }
-  const output = page.getByLabel('Output', { exact: true })
+  const output = page.getByLabel('Output file', { exact: true })
   await output.fill('renamed.csv')
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(output).toHaveValue('out.csv')
@@ -129,7 +129,7 @@ test('Email context limits bulk edits to enable state and accepts image attachme
     'email.txt',
     '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" "person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem').first().click()
+  await page.getByRole('treeitem', { name: /Send Email/i }).click()
 
   await pane(page, 'Context')
   await page.getByRole('tab', { name: /Email/ }).click()
@@ -169,7 +169,7 @@ test('Embedded Python edits stay modal and must validate before commit', async (
     'embedded.txt',
     '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=embedded.py\n</OPTIONS>\nprint("before")\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem').first().click()
+  await page.getByRole('treeitem', { name: /Embedded Python/i }).click()
   await pane(page, 'Configuration')
 
   await page.getByRole('button', { name: 'Edit Python', exact: true }).click()
@@ -194,7 +194,7 @@ test('HTML preview renders the current draft without exposing generated Python',
     'report.txt',
     '<OPTIONS>\n/REPORT=HTML-LAYOUT\n/INSTANCE=101\n</OPTIONS>\n:FILE:preview.html\n:TITLE:Preview\n<h1>Hello Preview</h1>\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem').first().click()
+  await page.getByRole('treeitem', { name: /Generate HTML Report/i }).click()
   await pane(page, 'Configuration')
 
   const preview = page.locator('.html-preview')
