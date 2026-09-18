@@ -138,6 +138,7 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('file-flow.png'), fullPage: true })
 
   await pane(page, 'Configuration')
+  await expect(page.getByRole('tablist', { name: 'Query configuration' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
   const panes = await page.locator('.workbench-pane:visible').evaluateAll((elements) => elements.map((element) => { const rect = element.getBoundingClientRect(); return { left: rect.left, right: rect.right } }))
   for (let index = 1; index < panes.length; index++) expect(panes[index].left).toBeGreaterThanOrEqual(panes[index - 1].right - 1)
