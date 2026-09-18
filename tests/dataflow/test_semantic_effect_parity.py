@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from vg2c import compile_document
-from vg2c.dataflow import analyze
+from vg2c.dataflow.analyzer import analyze
 from vg2c.workflow import project_workflow
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
