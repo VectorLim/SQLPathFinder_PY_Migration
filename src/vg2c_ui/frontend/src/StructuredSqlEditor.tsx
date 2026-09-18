@@ -82,6 +82,14 @@ export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect,
         {tab === 'filters' && <Filters model={model} onAction={act} disabled={busy || readOnly} />}
         {tab === 'joins' && <Joins model={model} onAction={act} disabled={busy || readOnly} />}
       </div>
+      {model.before_statement.trim() && <details className="sql-source-context">
+        <summary>Before query</summary>
+        <pre>{model.before_statement}</pre>
+      </details>}
+      {model.after_statement.trim() && <details className="sql-source-context">
+        <summary>After query</summary>
+        <pre>{model.after_statement}</pre>
+      </details>}
       {model.read_only_reason && <p className="read-only-note">{model.read_only_reason}</p>}
       <details className="sql-advanced">
         <summary>Advanced</summary>
