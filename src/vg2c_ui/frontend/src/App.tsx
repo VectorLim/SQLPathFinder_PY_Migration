@@ -198,7 +198,7 @@ export function App() {
               onUploadFile={async (file) => { const saved = await uploadWorkspaceFile(file); await fileInventory.refresh(); return saved.path }}
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
               onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
-              validateBinding={workspace.previewBinding}
+              validateBinding={workspace.validateCandidate}
               previewHtml={workspace.previewHtmlOperation}
               inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
             /> : <p className="pane-empty">Select an operation to configure it.</p>}
