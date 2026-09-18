@@ -418,6 +418,22 @@ class DocumentStore:
         """Remove host paths from API responses for browser workspaces."""
         if not self.expose_relative_paths:
             return view
+        semantic_operations = [
+            operation.model_copy(
+                update={
+                    "source_span": operation.source_span.model_copy(
+                        update={
+                            "file": (
+                                self._relative_display(operation.source_span.file)
+                                if operation.source_span.file
+                                else None
+                            )
+                        }
+                    )
+                }
+            )
+            for operation in view.semantic_operations
+        ]
         steps = [
             step.model_copy(
                 update={
@@ -440,6 +456,7 @@ class DocumentStore:
                 "source_path": self._relative_display(view.source_path),
                 "output_path": self._relative_display(view.output_path),
                 "steps": steps,
+                "semantic_operations": semantic_operations,
             }
         )
 
@@ -485,7 +502,8 @@ def _issue_view(issue: ValidationIssue) -> ValidationIssueView:
         level=issue.level,
         code=issue.code,
         message=issue.message,
-        parameter_id=issue.parameter_id,
+        binding_id=issue.binding_id,
+        parameter_id=issue.binding_id,
     )
 
 
