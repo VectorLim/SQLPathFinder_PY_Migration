@@ -43,11 +43,11 @@ class FileResource:
 @dataclass(frozen=True, slots=True)
 class WorkflowProjection:
     changes: ChangeProjection
-    operations: tuple[WorkflowOperation, ...]
-    bindings: tuple[EditableBinding, ...]
-    symbols: tuple[Symbol, ...]
     effects: tuple[FileEffect, ...]
-    files: tuple[FileResource, ...]
+    operations: tuple[WorkflowOperation, ...] = ()
+    bindings: tuple[EditableBinding, ...] = ()
+    symbols: tuple[Symbol, ...] = ()
+    files: tuple[FileResource, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
