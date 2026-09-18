@@ -129,19 +129,24 @@ export function OptionalValue({
   enabled,
   disabled = false,
   onEnabledChange,
+  action,
   children,
 }: {
   label: string
   enabled: boolean
   disabled?: boolean
   onEnabledChange: (enabled: boolean) => void
+  action?: ReactNode
   children: ReactNode
 }) {
   return <div className="optional-value">
-    <label className="checkbox-field">
-      <input type="checkbox" checked={enabled} disabled={disabled} onChange={(event) => onEnabledChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
+    <div className="optional-value__header">
+      <label className="checkbox-field">
+        <input type="checkbox" checked={enabled} disabled={disabled} onChange={(event) => onEnabledChange(event.target.checked)} />
+        <span>{label}</span>
+      </label>
+      {action}
+    </div>
     {enabled && children}
   </div>
 }
