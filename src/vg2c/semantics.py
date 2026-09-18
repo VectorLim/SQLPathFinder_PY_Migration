@@ -550,6 +550,25 @@ def _build_symbols(
                     )
 
     references: dict[str, list[SymbolReference]] = {}
+    operation_by_binding = {
+        binding.id: operation
+        for operation in operations
+        for binding in operation.bindings
+    }
+
+    for step in result.emitted.steps:
+        for parameter in step.parameters:
+            operation = operation_by_binding.get(parameter.id)
+            if operation is None:
+                continue
+            for name in parameter.symbol_names:
+                key = normalize_macro_name(name).upper()
+                if key not in symbols:
+                    add(name, "unresolved", "unknown")
+                references.setdefault(key, []).append(
+                    SymbolReference(operation.id, parameter.id)
+                )
+
     for operation in operations:
         for binding in operation.bindings:
             if not binding.id.startswith("global:"):
