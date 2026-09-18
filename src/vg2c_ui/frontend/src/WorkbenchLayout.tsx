@@ -22,8 +22,8 @@ export function WorkbenchLayout({
   const [width, setWidth] = useState(1400)
   const [logicWidth, setLogicWidth] = useState(360)
   const [configWidth, setConfigWidth] = useState(460)
-  const [manualConfigCollapsed, setManualConfigCollapsed] = useState(false)
-  const [manualContextCollapsed, setManualContextCollapsed] = useState(false)
+  const [configVisibility, setConfigVisibility] = useState<boolean | null>(null)
+  const [contextVisibility, setContextVisibility] = useState<boolean | null>(null)
 
   useEffect(() => {
     const root = rootRef.current
@@ -34,15 +34,15 @@ export function WorkbenchLayout({
   }, [])
 
   useEffect(() => {
-    if (activePane === 'config') setManualConfigCollapsed(false)
-    if (activePane === 'context') setManualContextCollapsed(false)
+    if (activePane === 'config') setConfigVisibility(true)
+    if (activePane === 'context') setContextVisibility(true)
   }, [activePane])
 
   const narrow = width < 720
   const autoConfigCollapsed = width < 1200
   const autoContextCollapsed = width < 930
-  const showConfig = !manualConfigCollapsed && !autoConfigCollapsed
-  const showContext = !manualContextCollapsed && !autoContextCollapsed
+  const showConfig = configVisibility ?? !autoConfigCollapsed
+  const showContext = contextVisibility ?? !autoContextCollapsed
 
   function resizeLogic(delta: number) {
     setLogicWidth((current) => clamp(current + delta, 260, 560))
@@ -68,10 +68,10 @@ export function WorkbenchLayout({
     </> : <>
       <div className="workbench-pane-controls" aria-label="Pane visibility">
         <span>Script Logic</span>
-        <button type="button" aria-pressed={showConfig} title={autoConfigCollapsed ? 'Configuration is hidden automatically at this width' : undefined} onClick={() => setManualConfigCollapsed((value) => !value)} disabled={autoConfigCollapsed}>
+        <button type="button" aria-pressed={showConfig} title={autoConfigCollapsed && configVisibility === null ? 'Configuration is hidden automatically at this width' : undefined} onClick={() => setConfigVisibility(!showConfig)}>
           {showConfig ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />} Configuration
         </button>
-        <button type="button" aria-pressed={showContext} title={autoContextCollapsed ? 'Context is hidden automatically at this width' : undefined} onClick={() => setManualContextCollapsed((value) => !value)} disabled={autoContextCollapsed}>
+        <button type="button" aria-pressed={showContext} title={autoContextCollapsed && contextVisibility === null ? 'Context is hidden automatically at this width' : undefined} onClick={() => setContextVisibility(!showContext)}>
           {showContext ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />} Context
         </button>
       </div>
