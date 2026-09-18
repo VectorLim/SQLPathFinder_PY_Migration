@@ -28,7 +28,7 @@ export function ParameterField({ parameter, values, disabled, onChange, drafts, 
   </fieldset>
 }
 
-interface ValueProps extends FieldDraftProps {
+export interface SchemaValueProps extends FieldDraftProps {
   schema: ValueSchemaView
   value: unknown
   onChange: (value: unknown, clearDraftPaths?: FieldPath[]) => void
@@ -38,7 +38,7 @@ interface ValueProps extends FieldDraftProps {
   multiline?: boolean
 }
 
-export function SchemaValueField(props: ValueProps) {
+export function SchemaValueField(props: SchemaValueProps) {
   const { schema, value, label, parameterId, path, drafts, onDraft } = props
   const onChange = (next: unknown, clearDraftPaths: FieldPath[] = [path]) => props.onChange(next, clearDraftPaths)
   const id = useId()
