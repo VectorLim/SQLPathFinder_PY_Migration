@@ -79,7 +79,7 @@ function FileContext({ document, csv, csvPath, csvError, csvLoading, onNavigate,
     && file.consumer_refs.length > 0
     && ['external', 'missing', 'dynamic', 'possible'].includes(file.status))
   return <div className="context-section file-context">
-    <header><h3>File Flow</h3><p>Ordered file operations, including fan-in when several inputs produce one output.</p></header>
+    <header><p>Ordered file operations, including fan-in when several inputs produce one output.</p></header>
     {lifecycle.length
       ? lifecycle.map((effect) => <FileEffectRow key={effect.id} document={document} effect={effect} onNavigate={onNavigate} onPreview={onPreview} />)
       : <p className="empty-copy">No file lifecycle changes.</p>}
@@ -211,9 +211,9 @@ function EmailContext({
     for (const { binding } of items) onEdit(binding, enabled)
   }
 
-  if (!operations.length) return <div className="context-section"><h3>Email</h3><p className="empty-copy">This script does not send email.</p></div>
+  if (!operations.length) return <div className="context-section"><p className="empty-copy context-empty-copy">This script does not send email.</p></div>
   return <div className="context-section email-context">
-    <header><h3>Email</h3><p>Review Send Email actions. Bulk editing is limited to enable/disable.</p></header>
+    <header><p>Review Send Email actions. Bulk editing is limited to enable/disable.</p></header>
     <div className="email-bulk-actions">
       <button type="button" disabled={!selected.size} onClick={() => setMany(editableEnabled.filter(({ operation }) => selected.has(operation.id)), true)}>Enable selected</button>
       <button type="button" disabled={!selected.size} onClick={() => setMany(editableEnabled.filter(({ operation }) => selected.has(operation.id)), false)}>Disable selected</button>
