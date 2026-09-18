@@ -73,14 +73,6 @@ export function useWorkspace() {
     dispatch({ type: 'edit', tabId, bindingId: binding.id, value, clearDraftPaths })
   }, [])
 
-  const previewBinding = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
-    const tab = tabById(stateRef.current, tabId)
-    if (!tab) throw new Error('Document is no longer open.')
-    const changes = draftChanges(tab).filter((change) => change.binding_id !== bindingId)
-    changes.push({ binding_id: bindingId, value, reset: false })
-    return previewChanges({ ...documentSnapshot(tab.document), changes })
-  }, [])
-
   const validateCandidate = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
@@ -173,7 +165,7 @@ export function useWorkspace() {
     const instanceId = tab.instanceId
     const model = await inspectSql({
       ...documentSnapshot(tab.document),
-      parameter_id: parameterId,
+      parameter_id: bindingId,
       changes: draftChanges(tab),
     })
     const current = tabById(stateRef.current, tabId)
@@ -195,7 +187,7 @@ export function useWorkspace() {
     const instanceId = tab.instanceId
     const response = await applySqlAction({
       ...documentSnapshot(tab.document),
-      parameter_id: parameterId,
+      parameter_id: bindingId,
       changes: draftChanges(tab),
       action,
       arguments: args,
@@ -243,7 +235,6 @@ export function useWorkspace() {
     edit,
     validateCandidate,
     validate,
-    previewBinding,
     apply,
     loadCsv,
     previewHtmlOperation,
