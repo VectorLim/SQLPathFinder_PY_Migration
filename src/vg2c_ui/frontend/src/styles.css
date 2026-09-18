@@ -624,6 +624,19 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .context-section > header, .required-inputs, .on-disk-preview { padding: var(--space-3); }
 .context-section > header h3, .required-inputs h3 { margin: 0; font-size: var(--text-sm); }
 .context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.file-effect-row { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.file-effect-row > header { display: flex; align-items: center; gap: var(--space-2); }
+.file-effect-row > header .state-pill { margin-left: auto; }
+.file-effect-operation { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--accent-strong); text-align: left; font-weight: 650; }
+.file-effect-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.file-endpoints { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
+.file-endpoint { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: 11px; }
+.file-endpoint > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-endpoint button { padding: 2px 5px; font-size: 10px; }
+.file-endpoint--missing, .file-endpoint--dynamic, .file-endpoint--possible { border-color: var(--warning); }
+.file-endpoint--deleted { color: var(--danger); }
+.file-flow-arrow { color: var(--muted); }
+.file-effect-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-xs); }
 .file-resource-row, .email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
 .file-resource-row header, .symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
 .file-resource-row header span, .symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
