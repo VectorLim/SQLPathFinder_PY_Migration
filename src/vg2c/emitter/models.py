@@ -36,6 +36,7 @@ class CodeExpr:
     source: str
     value: Any = _UNSET
     global_names: tuple[str, ...] = ()
+    symbol_names: tuple[str, ...] = ()
 
     @property
     def has_value(self) -> bool:
@@ -134,6 +135,7 @@ class RenderedArgument:
     definition: ParameterDefinition | None
     source_range: SourceRange
     global_names: tuple[str, ...] = ()
+    symbol_names: tuple[str, ...] = ()
 
 
 class RenderedCall(str):
@@ -177,6 +179,7 @@ class EmittedParameter:
     definition: ParameterDefinition | None
     artifact_role: ArtifactRole | None
     source_range: SourceRange | None
+    symbol_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -567,6 +570,7 @@ def finalize_steps(
                             step_start + argument.source_range.start_offset,
                             step_start + argument.source_range.end_offset,
                         ),
+                        symbol_names=argument.symbol_names,
                     )
                 )
                 parameters.extend(
@@ -651,6 +655,7 @@ def _adjust_argument_for_indentation(
         definition=argument.definition,
         source_range=SourceRange(call_start + start, call_start + end),
         global_names=argument.global_names,
+        symbol_names=argument.symbol_names,
     )
 
 
@@ -677,6 +682,7 @@ def _render_argument(value: Any) -> tuple[str, dict[str, Any]]:
             _value_metadata(value.value) if value.has_value else _dynamic_metadata()
         )
         metadata["global_names"] = value.global_names
+        metadata["symbol_names"] = value.symbol_names
         return value.source, metadata
     return repr(value), _value_metadata(value)
 
