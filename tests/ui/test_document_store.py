@@ -167,7 +167,7 @@ def test_parameter_change_uses_core_preview_apply_and_reopens_with_effective_val
         store.preview(batch)
 
 
-def test_apply_persists_only_validated_changes_in_v2_sidecar(tmp_path):
+def test_apply_persists_only_validated_changes_in_v3_sidecar(tmp_path):
     source = _copy_fixture(tmp_path)
     store = DocumentStore(tmp_path)
     document = store.translate(str(source)).view
@@ -176,10 +176,10 @@ def test_apply_persists_only_validated_changes_in_v2_sidecar(tmp_path):
 
     sidecar = read_sidecar(Path(applied.document.output_path))
     assert sidecar is not None
-    assert sidecar.schema_version == SIDECAR_VERSION == 2
+    assert sidecar.schema_version == SIDECAR_VERSION == 3
     assert sidecar.source_hash == applied.document.source_hash
     assert sidecar.output_hash == applied.document.output_hash
-    assert [(item.parameter_id, item.value) for item in sidecar.changes] == [
+    assert [(item.binding_id, item.value) for item in sidecar.changes] == [
         (parameter.id, "persisted edit")
     ]
     assert "steps" not in sidecar.model_dump()
