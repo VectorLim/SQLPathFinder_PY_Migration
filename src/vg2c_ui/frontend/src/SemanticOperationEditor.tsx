@@ -270,7 +270,7 @@ function HtmlPreviewPanel({
     {preview && <>
       <p className={`html-preview__state html-preview__state--${preview.state}`}><strong>{preview.state === 'exact' ? 'Exact preview' : preview.state === 'approximate' ? 'Approximate preview' : 'Preview unavailable'}</strong>{preview.message ? ` — ${preview.message}` : ''}</p>
       {preview.output_path && <small>Output: {preview.output_path}</small>}
-      {preview.html && <iframe title="HTML report preview" sandbox="" srcDoc={preview.html} />}
+      {preview.html && <iframe title="HTML report preview" sandbox="" srcDoc={sandboxHtml(preview.html)} />}
     </>}
   </section>
 }
@@ -328,4 +328,9 @@ function EmbeddedPythonEditor({
       </form>
     </dialog>
   </>
+}
+
+function sandboxHtml(html: string): string {
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`
+  return /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${csp}`) : `${csp}${html}`
 }
