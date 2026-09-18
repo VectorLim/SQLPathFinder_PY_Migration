@@ -7,14 +7,12 @@ type SecondaryPane = Exclude<WorkbenchPane, 'logic'>
 export function WorkbenchLayout({
   activePane,
   onActivePaneChange,
-  actions,
   logic,
   configuration,
   context,
 }: {
   activePane: WorkbenchPane
   onActivePaneChange: (pane: WorkbenchPane) => void
-  actions: ReactNode
   logic: ReactNode
   configuration: ReactNode
   context: ReactNode
@@ -82,7 +80,6 @@ export function WorkbenchLayout({
   }
 
   return <div ref={rootRef} className="adaptive-workbench">
-    {actions}
     {narrow ? <>
       <nav className="pane-tabs adaptive-pane-tabs" aria-label="Workbench views">
         {([
