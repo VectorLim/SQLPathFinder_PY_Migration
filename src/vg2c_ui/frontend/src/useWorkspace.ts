@@ -8,6 +8,7 @@ import {
   openDocument,
   previewChanges,
   previewCsv,
+  previewHtml,
   projectWorkspace,
   translateBatch,
 } from './api'
@@ -126,6 +127,16 @@ export function useWorkspace() {
     }
   }, [])
 
+  const previewHtmlOperation = useCallback(async (tabId: string, operationId: string) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) throw new Error('Document is no longer open.')
+    return previewHtml({
+      ...documentSnapshot(tab.document),
+      operation_id: operationId,
+      changes: draftChanges(tab),
+    })
+  }, [])
+
   const loadCsv = useCallback(async (tabId: string, effectId: string, endpoint: FileEndpointView) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab || !endpoint.path) return null
@@ -224,6 +235,7 @@ export function useWorkspace() {
     previewBinding,
     apply,
     loadCsv,
+    previewHtmlOperation,
     inspectStructuredSql,
     runSqlAction,
   }
