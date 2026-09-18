@@ -340,6 +340,7 @@ def symbol_views(symbols) -> list[SymbolView]:
             kind=item.kind,
             value_state=item.value_state,
             value=item.value,
+            condition_value=item.condition_value,
             introduction=(
                 OperationReferenceView(
                     operation_id=item.introduction.operation_id,
