@@ -391,7 +391,7 @@ def _leaf_operations(
                         display_label=_binding_label(parameter.name),
                         schema=definition_parameter.schema if definition_parameter else None,
                         value=binding_value,
-                        default=definition_parameter.default if definition_parameter else None,
+                        default=parameter.value,
                         required=definition_parameter.required if definition_parameter else True,
                         capabilities=tuple(dict.fromkeys(capabilities)),
                         validation_state="valid" if parameter.editable else "warning",
