@@ -157,7 +157,7 @@ function renderBindingControl({
       label={binding.display_label}
       bindingId={binding.id}
       path={[]}
-      multiline={false}
+      multiline={binding.capabilities.includes('multiline')}
       drafts={drafts}
       onDraft={onDraft}
     />
