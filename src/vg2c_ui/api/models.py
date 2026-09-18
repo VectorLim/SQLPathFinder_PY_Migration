@@ -235,19 +235,24 @@ class DocumentView(BaseModel):
 
 
 class SemanticChangeRequest(BaseModel):
-    binding_id: str | None = None
-    parameter_id: str = ""
+    binding_id: str
     value: Any = None
     reset: bool = False
 
 
-class ParameterChangeRequest(SemanticChangeRequest):
-    """Deprecated v4 transport name retained until the frontend consumes v5 bindings."""
+class ParameterChangeRequest(BaseModel):
+    """Legacy v4 request accepted during the frontend migration window."""
 
+    parameter_id: str
+    value: Any = None
+    reset: bool = False
+
+
+SemanticChangeInput = SemanticChangeRequest | ParameterChangeRequest
 
 
 class DocumentSnapshot(BaseModel):
-    schema_version: Literal[5]
+    schema_version: Literal[4, 5]
     source_path: str
     output_path: str
     source_hash: str
@@ -257,7 +262,7 @@ class DocumentSnapshot(BaseModel):
 
 
 class ChangeBatch(DocumentSnapshot):
-    changes: list[SemanticChangeRequest] = Field(min_length=1)
+    changes: list[SemanticChangeInput] = Field(min_length=1)
 
 
 class ValidationIssueView(BaseModel):
@@ -295,7 +300,7 @@ class CsvPreviewRequest(DocumentSnapshot):
     effect_id: str
     endpoint_id: str
     expected_path: str
-    changes: list[SemanticChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class BatchTranslationRequest(BaseModel):
@@ -310,7 +315,7 @@ class BatchTranslationResponse(BaseModel):
 
 class WorkspaceDocumentRequest(DocumentSnapshot):
     document_id: str
-    changes: list[SemanticChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class WorkspaceProjectionRequest(BaseModel):
@@ -442,7 +447,7 @@ class SqlModelView(BaseModel):
 
 class SqlModelRequest(DocumentSnapshot):
     parameter_id: str
-    changes: list[SemanticChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class SqlActionRequest(SqlModelRequest):
