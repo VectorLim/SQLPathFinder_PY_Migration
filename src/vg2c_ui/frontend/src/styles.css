@@ -604,13 +604,16 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .semantic-tree-row[aria-expanded="true"] .tree-toggle svg { transform: rotate(90deg); }
 .semantic-tree-row .tree-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .semantic-operation-editor .operation-editor__header { align-items: flex-start; }
-.semantic-binding { display: grid; gap: var(--space-2); }
+.semantic-binding { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-inline-size: 0; }
 .semantic-binding > .parameter-field__meta > strong, .field-label { font-size: var(--text-sm); color: var(--ink); }
 .semantic-file-selector { display: grid; gap: var(--space-2); }
 .semantic-file-selector label { display: grid; gap: var(--space-1); font-size: var(--text-xs); }
 .semantic-file-list { display: grid; gap: var(--space-2); }
 .semantic-file-list .field-command-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .optional-value { display: grid; gap: var(--space-2); }
+.optional-value__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 32px; }
+.optional-value__header .checkbox-field { flex: 1; min-width: 0; font-size: var(--text-sm); font-weight: 600; }
+.optional-value__header .icon-button { flex: 0 0 auto; }
 .condition-editor, .condition-clause { display: grid; gap: var(--space-3); }
 .condition-clause { grid-template-columns: minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
 .condition-clause--secondary { grid-template-columns: minmax(100px, .45fr) minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
@@ -657,6 +660,18 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .embedded-python-dialog header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
 .embedded-python-dialog textarea { width: 100%; min-height: 320px; resize: vertical; font-family: var(--font-mono); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.embedded-python-dialog .dialog-actions button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  color: var(--text);
+  background: var(--control-bg);
+  font-weight: 650;
+}
+.embedded-python-dialog .dialog-actions button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--control-hover); }
+.embedded-python-dialog .dialog-actions .primary-button { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
+.embedded-python-dialog .dialog-actions .primary-button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
 
 .html-preview { display: grid; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .html-preview > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
