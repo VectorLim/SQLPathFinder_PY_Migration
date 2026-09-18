@@ -81,6 +81,7 @@ class PipelineContext(UtilitySpec):
         crosstab: dict | None = None,
         node: str | None = None,
     ):
+        """Run a SQL query and save its result to the selected output file."""
         sql = self.macro.substitute(sql)
         effective_node = (
             node
