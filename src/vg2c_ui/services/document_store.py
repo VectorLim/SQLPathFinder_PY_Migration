@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import wraps
@@ -288,13 +289,26 @@ class DocumentStore:
                         html="",
                         message=f"HTML preview could not resolve a workspace resource: {exc}",
                     )
-                state = "approximate" if preview_macro.approximate else "exact"
+                has_external_resources = bool(
+                    re.search(
+                        r"""(?:src|href)\s*=\s*["'](?!data:|#)""",
+                        html,
+                        flags=re.IGNORECASE,
+                    )
+                )
+                state = (
+                    "approximate"
+                    if preview_macro.approximate or has_external_resources
+                    else "exact"
+                )
                 message = None
                 if preview_macro.missing_inputs:
                     state = "error"
                     message = "Missing preview input: " + ", ".join(sorted(preview_macro.missing_inputs))
-                elif state == "approximate":
+                elif preview_macro.approximate:
                     message = "Preview contains runtime values that cannot be resolved before execution."
+                elif has_external_resources:
+                    message = "External report resources are blocked in preview."
                 return HtmlPreviewView(
                     state=state,
                     html=html,
