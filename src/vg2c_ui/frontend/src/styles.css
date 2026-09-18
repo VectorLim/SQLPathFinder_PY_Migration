@@ -725,16 +725,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .sql-parameter-heading strong { color: var(--ink); font-size: var(--text-sm); }
 .configuration-pane .sql-join-row, .configuration-pane .sql-add-panel { border-radius: var(--radius-sm); }
 
-@media (max-width: 1199px) {
-  .pane-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 44px; border-bottom: 1px solid var(--line); }
-  .pane-tabs button { display: flex; align-items: center; justify-content: center; gap: var(--space-2); border: 0; border-bottom: 2px solid transparent; padding: var(--space-2); background: var(--panel); color: var(--muted); font-size: var(--text-xs); }
-  .pane-tabs button[aria-pressed="true"] { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
-  .workbench-panes { display: flex; }
-  .workbench-pane { flex: 1; border: 0; }
-  .workbench--logic .configuration-pane, .workbench--logic .flow-pane, .workbench--config .logic-pane, .workbench--config .flow-pane, .workbench--flow .logic-pane, .workbench--flow .configuration-pane { display: none; }
-  .configuration-pane .operation-editor { padding: var(--space-4); }
-}
-
 @media (max-width: 640px) {
   .workbench-actions .change-toolbar { flex-direction: row; flex-wrap: wrap; }
   .workbench-actions .change-toolbar .toolbar-group { margin: 0; flex: 1; justify-content: flex-end; }
@@ -743,4 +733,81 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .pane-tabs svg { flex: 0 0 16px; }
   .flow-row__activate { min-height: 44px; }
   .flow-preview-button { min-height: 36px; }
+}
+
+
+/* Semantic workbench */
+.adaptive-workbench { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+.adaptive-workbench-panes { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.workbench-panes--single { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.workbench-panes--single > .workbench-pane { flex: 1; border: 0; }
+.workbench-pane-controls { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line-soft); background: var(--surface); font-size: var(--text-xs); }
+.workbench-pane-controls > span { margin-right: auto; color: var(--muted); }
+.workbench-pane-controls button { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--muted); }
+.pane-separator { min-width: 6px; cursor: col-resize; background: var(--line-soft); touch-action: none; }
+.pane-separator:hover, .pane-separator:focus-visible { background: var(--accent); outline: none; }
+.adaptive-pane-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 44px; border-bottom: 1px solid var(--line); }
+.adaptive-pane-tabs button { border: 0; border-bottom: 2px solid transparent; background: var(--panel); color: var(--muted); }
+.adaptive-pane-tabs button[aria-pressed="true"] { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+.semantic-tree-row .tree-toggle svg { transition: transform var(--motion-fast); }
+.semantic-tree-row[aria-expanded="true"] .tree-toggle svg { transform: rotate(90deg); }
+.semantic-tree-row .tree-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.semantic-operation-editor .operation-editor__header { align-items: flex-start; }
+.semantic-binding { display: grid; gap: var(--space-2); }
+.semantic-binding > .parameter-field__meta > strong, .field-label { font-size: var(--text-sm); color: var(--ink); }
+.semantic-file-selector { display: grid; gap: var(--space-2); }
+.semantic-file-selector label { display: grid; gap: var(--space-1); font-size: var(--text-xs); }
+.semantic-file-list { display: grid; gap: var(--space-2); }
+.semantic-file-list .field-command-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.optional-value { display: grid; gap: var(--space-2); }
+.condition-editor, .condition-clause { display: grid; gap: var(--space-3); }
+.condition-clause { grid-template-columns: minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
+.condition-clause--secondary { grid-template-columns: minmax(100px, .45fr) minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
+.advanced-settings, .operation-comments { margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
+
+.context-workbench-pane .pane-scroll { background: var(--panel); }
+.context-pane { min-height: 100%; }
+.context-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: var(--panel); }
+.context-tabs button { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--text-xs); }
+.context-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.context-section > header, .required-inputs, .on-disk-preview { padding: var(--space-3); }
+.context-section > header h3, .required-inputs h3 { margin: 0; font-size: var(--text-sm); }
+.context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.file-resource-row, .email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.file-resource-row header, .symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
+.file-resource-row header span, .symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
+.file-resource-row p, .symbol-row p { margin: var(--space-1) 0; color: var(--muted); font-size: var(--text-xs); }
+.operation-references { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+.operation-references button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--accent-strong); font-size: 11px; }
+.email-bulk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.email-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.email-summary { display: grid; gap: 2px; min-width: 0; border: 0; background: transparent; text-align: left; }
+.email-summary strong, .email-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.globals-context .search-field { display: block; padding: var(--space-2) var(--space-3); }
+.state-pill--missing, .state-pill--dynamic, .state-pill--possible { color: var(--warning); }
+
+.embedded-python-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0; background: var(--panel); color: var(--ink); }
+.embedded-python-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.embedded-python-dialog .dialog-card { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.embedded-python-dialog header h3 { margin: 0; }
+.embedded-python-dialog header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.embedded-python-dialog textarea { width: 100%; min-height: 320px; resize: vertical; font-family: var(--font-mono); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+.html-preview { display: grid; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.html-preview > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.html-preview > header div { display: grid; gap: 2px; }
+.html-preview > header small { color: var(--muted); }
+.html-preview__state { margin: 0; font-size: var(--text-xs); }
+.html-preview__state--error { color: var(--danger); }
+.html-preview__state--approximate { color: var(--warning); }
+.html-preview iframe { width: 100%; min-height: 360px; border: 1px solid var(--line); background: white; }
+
+@media (max-width: 860px) {
+  .condition-clause, .condition-clause--secondary { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .semantic-tree-row .tree-toggle svg { transition: none; }
 }
