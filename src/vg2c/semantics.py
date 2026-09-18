@@ -86,6 +86,13 @@ class Symbol:
     introduction: OperationReference | None = None
     references: tuple[SymbolReference, ...] = ()
 
+    @property
+    def condition_value(self) -> str | None:
+        """Canonical condition token for selectable runtime macro symbols."""
+        if self.kind in {"macro", "macro-row"}:
+            return f"VAR({self.display_name})"
+        return None
+
 
 @dataclass(frozen=True, slots=True)
 class SemanticModel:
@@ -208,6 +215,13 @@ def _control_operation(
                 schema = ValueSchema("string", nullable=True, choices=("AND", "OR"))
             else:
                 schema = ValueSchema("string", nullable=name.endswith("2"))
+            capability = (
+                "condition-operator"
+                if name in {"op", "op2"}
+                else "condition-connector"
+                if name == "conj"
+                else "symbol-or-literal"
+            )
             bindings.append(
                 EditableBinding(
                     id=binding_id,
@@ -218,6 +232,7 @@ def _control_operation(
                     value=value,
                     default=getattr(payload, name),
                     required=name in {"lhs", "op", "rhs"},
+                    capabilities=(capability,),
                     source_kind="condition",
                 )
             )
