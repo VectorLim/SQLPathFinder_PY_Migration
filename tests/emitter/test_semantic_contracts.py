@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
+from vg2c.operands import IfThen
 from vg2c.semantics import CONDITION_OPERATORS, build_semantic_model
 
 
@@ -233,3 +236,33 @@ def test_macro_placeholder_reference_is_captured_before_python_rendering(tmp_pat
     assert count.introduction is not None
     assert {ref.operation_id for ref in count.references} >= {wait.id}
     assert all(ref.binding_id for ref in count.references)
+
+
+@pytest.mark.parametrize(
+    ("code", "symbol", "operand_type"),
+    CONDITION_OPERATORS,
+)
+def test_all_condition_operators_keep_authoritative_rendering(code, symbol, operand_type):
+    lhs = "VAR(COUNT)" if operand_type == "string" else "COUNT"
+    expression = IfThen(lhs, code, "10", None, None, None, None, "")._build_condition_expr()
+
+    assert f" {symbol} " in expression
+    assert "ctx.macro.named('COUNT')" in expression
+    if operand_type == "numeric":
+        assert expression == f"int(ctx.macro.named('COUNT')) {symbol} int('10')"
+    else:
+        assert expression == f"ctx.macro.named('COUNT') {symbol} '10'"
+
+
+def test_condition_operand_characterization_covers_placeholder_literal_empty_and_or():
+    placeholder = IfThen("<<<NAME>>>", "EQS", "ready", None, None, None, None, "")
+    assert placeholder._build_condition_expr() == "ctx.macro.named('NAME') == 'ready'"
+
+    empty = IfThen("", "EQS", "", None, None, None, None, "")
+    assert empty._build_condition_expr() == "'' == ''"
+
+    compound = IfThen("VAR(A)", "EQS", "x", "OR", "B", "GT", "1", "")
+    assert compound._build_condition_expr() == (
+        "ctx.macro.named('A') == 'x' or "
+        "int(ctx.macro.named('B')) > int('1')"
+    )
