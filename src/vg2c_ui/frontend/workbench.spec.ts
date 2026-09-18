@@ -28,13 +28,32 @@ async function uploadAndTranslate(page: Page, name: string, source: string) {
   await expect(page.getByRole('treeitem').first()).toBeVisible()
 }
 
+
+async function currentDocument(page: Page, name: string): Promise<DocumentView> {
+  const response = await page.request.post('/api/documents/open', { data: { source_path: `inputs/${name}` } })
+  expect(response.ok()).toBeTruthy()
+  return response.json() as Promise<DocumentView>
+}
+
+async function selectSemanticOperation(
+  page: Page,
+  name: string,
+  predicate: (operation: DocumentView['semantic_operations'][number]) => boolean,
+): Promise<DocumentView['semantic_operations'][number]> {
+  const document = await currentDocument(page, name)
+  const operation = document.semantic_operations.find(predicate)
+  expect(operation, 'Expected semantic operation was not present in the translated document.').toBeTruthy()
+  await page.locator(`[data-semantic-tree-item="${operation!.id}"]`).click()
+  return operation!
+}
+
 async function translate(page: Page) {
   await uploadAndTranslate(
     page,
     'workbench.txt',
     '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem', { name: /out\.csv/i }).click()
+  await selectSemanticOperation(page, 'workbench.txt', (operation) => operation.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
   await pane(page, 'Configuration')
   await expect(page.getByLabel('Output file', { exact: true })).toBeVisible()
   const tabs = await page.locator('.tabs').boundingBox()
@@ -129,7 +148,7 @@ test('Email context limits bulk edits to enable state and accepts image attachme
     'email.txt',
     '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" "person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem', { name: /Send Email/i }).click()
+  await selectSemanticOperation(page, 'email.txt', (operation) => operation.capabilities.includes('email'))
 
   await pane(page, 'Context')
   await page.getByRole('tab', { name: /Email/ }).click()
@@ -170,7 +189,7 @@ test('Embedded Python edits stay modal and must validate before commit', async (
     'embedded.txt',
     '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=embedded.py\n</OPTIONS>\nprint("before")\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem', { name: /Embedded Python/i }).click()
+  await selectSemanticOperation(page, 'embedded.txt', (operation) => operation.capabilities.includes('embedded-python'))
   await pane(page, 'Configuration')
 
   await page.getByRole('button', { name: 'Edit Python', exact: true }).click()
@@ -196,7 +215,7 @@ test('HTML preview renders the current draft without exposing generated Python',
     'report.txt',
     '<OPTIONS>\n/REPORT=HTML-LAYOUT\n/INSTANCE=101\n</OPTIONS>\n:FILE:preview.html\n:TITLE:Preview\n<h1>Hello Preview</h1>\n<---- New Query ---->\n',
   )
-  await page.getByRole('treeitem', { name: /Generate HTML Report/i }).click()
+  await selectSemanticOperation(page, 'report.txt', (operation) => operation.capabilities.includes('html-preview'))
   await pane(page, 'Configuration')
 
   const preview = page.locator('.html-preview')
