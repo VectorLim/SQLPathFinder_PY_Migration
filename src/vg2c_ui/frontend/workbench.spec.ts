@@ -16,17 +16,24 @@ async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Contex
   if (await visibility.isVisible().catch(() => false)) await visibility.click()
 }
 
-async function translate(page: Page) {
+async function uploadAndTranslate(page: Page, name: string, source: string) {
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'Upload files', exact: true })).toBeEnabled()
   await page.locator('input[type=file]').first().setInputFiles({
-    name: 'workbench.txt', mimeType: 'text/plain',
-    buffer: Buffer.from('<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n'),
+    name, mimeType: 'text/plain', buffer: Buffer.from(source),
   })
   await page.getByRole('button', { name: /Upload queued/ }).click()
-  await page.getByRole('checkbox', { name: 'inputs/workbench.txt', exact: true }).check()
+  await page.getByRole('checkbox', { name: `inputs/${name}`, exact: true }).check()
   await page.getByRole('button', { name: 'Translate selected', exact: true }).click()
   await expect(page.getByRole('treeitem').first()).toBeVisible()
+}
+
+async function translate(page: Page) {
+  await uploadAndTranslate(
+    page,
+    'workbench.txt',
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n',
+  )
   await page.getByRole('treeitem').first().click()
   await pane(page, 'Configuration')
   await expect(page.getByLabel('Output', { exact: true })).toBeVisible()
@@ -102,4 +109,87 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
   await page.screenshot({ path: testInfo.outputPath('zoom-200.png'), fullPage: true })
   expect(errors).toEqual([])
+})
+
+test('Email context limits bulk edits to enable state and accepts image attachments', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await uploadAndTranslate(
+    page,
+    'email.txt',
+    '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" "person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n',
+  )
+  await page.getByRole('treeitem').first().click()
+
+  await pane(page, 'Context')
+  await page.getByRole('tab', { name: /Email/ }).click()
+  await expect(page.getByRole('button', { name: 'Enable selected', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Disable selected', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Enable all', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Disable all', exact: true }).click()
+
+  await pane(page, 'Configuration')
+  const attachments = page.getByRole('checkbox', { name: 'Set Attachments', exact: true })
+  await attachments.check()
+  await page.locator('.semantic-file-list input[type=file]').setInputFiles({
+    name: 'chart.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+  })
+  await expect(page.getByText('inputs/chart.png', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Preview', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.getByText('No pending changes', { exact: true })).toBeVisible()
+
+  const reopened = await page.request.post('/api/documents/open', {
+    data: { source_path: 'inputs/email.txt', output_path: 'generated/inputs/email.py' },
+  })
+  expect(reopened.ok()).toBeTruthy()
+  const document: DocumentView = await reopened.json()
+  const email = document.semantic_operations.find((operation) => operation.capabilities.includes('email'))
+  expect(email?.bindings.find((binding) => binding.name === 'enabled')?.value).toBe(false)
+  expect(email?.bindings.find((binding) => binding.name === 'attachments')?.value).toEqual(['inputs/chart.png'])
+})
+
+test('Embedded Python edits stay modal and must validate before commit', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await uploadAndTranslate(
+    page,
+    'embedded.txt',
+    '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=embedded.py\n</OPTIONS>\nprint("before")\n<---- New Query ---->\n',
+  )
+  await page.getByRole('treeitem').first().click()
+  await pane(page, 'Configuration')
+
+  await page.getByRole('button', { name: 'Edit Python', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  const source = dialog.getByRole('textbox', { name: 'Embedded Python source' })
+  await source.fill('if :')
+  await dialog.getByRole('button', { name: 'Update Python', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toBeVisible()
+
+  await source.fill('print("after")')
+  await dialog.getByRole('button', { name: 'Update Python', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Preview', exact: true }).click()
+  await expect(page.getByText('Changes validated', { exact: true })).toBeVisible()
+})
+
+test('HTML preview renders the current draft without exposing generated Python', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await uploadAndTranslate(
+    page,
+    'report.txt',
+    '<OPTIONS>\n/REPORT=HTML-LAYOUT\n/INSTANCE=101\n</OPTIONS>\n:FILE:preview.html\n:TITLE:Preview\n<h1>Hello Preview</h1>\n<---- New Query ---->\n',
+  )
+  await page.getByRole('treeitem').first().click()
+  await pane(page, 'Configuration')
+
+  const preview = page.locator('.html-preview')
+  await expect(preview).toBeVisible()
+  await preview.getByRole('button', { name: 'Preview', exact: true }).click()
+  await expect(preview.getByText('Exact preview', { exact: true })).toBeVisible()
+  await expect(preview.locator('iframe[title="HTML report preview"]')).toBeVisible()
+  await expect(page.getByText('Generated information', { exact: true })).toHaveCount(0)
 })
