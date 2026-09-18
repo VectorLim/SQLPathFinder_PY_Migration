@@ -109,7 +109,7 @@ function FileEffectRow({
   const outputs = effect.outputs
   return <article className="file-effect-row">
     <header>
-      <button type="button" className="file-effect-operation" onClick={(event) => onNavigate(effect.operation_id, event.detail === 0)}>
+      <button type="button" className="file-effect-operation" onClick={() => onNavigate(effect.operation_id, true)}>
         <ExternalLink size={13} />{operation?.display_name ?? humanizeEffect(effect.kind)}
       </button>
       <span className="state-pill">{humanizeEffect(effect.kind)}</span>
@@ -167,7 +167,7 @@ function RequiredFileRow({
     <div className="operation-references" aria-label="Used by">
       {refs.map((ref) => {
         const operation = document.semantic_operations.find((item) => item.id === ref.operation_id)
-        return <button key={`${ref.operation_id}:${ref.binding_id ?? ''}`} type="button" onClick={(event) => onNavigate(ref.operation_id, event.detail === 0)}><ExternalLink size={13} />{operation?.display_name ?? ref.operation_id}</button>
+        return <button key={`${ref.operation_id}:${ref.binding_id ?? ''}`} type="button" onClick={() => onNavigate(ref.operation_id, true)}><ExternalLink size={13} />{operation?.display_name ?? ref.operation_id}</button>
       })}
       {preview && <button type="button" onClick={() => onPreview(preview.effectId, preview.endpoint)}>Preview CSV</button>}
     </div>
