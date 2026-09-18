@@ -105,9 +105,9 @@ export function SemanticOperationEditor({
 
     {advanced.length > 0 && !operation.capabilities.includes('condition-editor') && <details className="advanced-settings">
       <summary>Advanced</summary>
-      <div className="parameter-grid">
+      <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
         {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
-      </div>
+      </fieldset>
     </details>}
 
     {operation.validation_state === 'unresolved'
