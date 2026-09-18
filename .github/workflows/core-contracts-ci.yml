@@ -1,0 +1,37 @@
+name: Core Contracts CI
+
+on:
+  push:
+    branches: [improv-core]
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install public test dependencies
+        run: python -m pip install pytest ruff fastapi pydantic uvicorn pandas keyring
+      - name: Core tests
+        env:
+          PYTHONPATH: src:.
+        run: pytest -q tests/resolver tests/emitter tests/dataflow tests/ui
+      - name: Contract check
+        env:
+          PYTHONPATH: src:.
+        run: python scripts/generate_frontend_contracts.py --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/vg2c_ui/frontend/package-lock.json
+      - name: Frontend contract/type/state tests
+        working-directory: src/vg2c_ui/frontend
+        run: |
+          npm ci
+          npm test
