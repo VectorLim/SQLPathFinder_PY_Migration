@@ -627,6 +627,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .context-section > header, .required-inputs, .on-disk-preview { padding: var(--space-3); }
 .context-section > header h3, .required-inputs h3 { margin: 0; font-size: var(--text-sm); }
 .context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.context-empty-copy { margin: 0; padding: var(--space-3); }
 .file-effect-row { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
 .file-effect-row > header { display: flex; align-items: center; gap: var(--space-2); }
 .file-effect-row > header .state-pill { margin-left: auto; }
