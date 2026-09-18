@@ -2,7 +2,7 @@ import './dirtyCloseDialog.css'
 
 import { useRef } from 'react'
 
-import { baseName } from './operationLabels'
+import { baseName } from './pathDisplay'
 import type { TabState } from './workspaceState'
 import { useModalDialog } from './useModalDialog'
 
