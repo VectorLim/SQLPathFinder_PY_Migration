@@ -35,7 +35,14 @@ def open_document(payload: DocumentReference, request: Request) -> DocumentView:
 
 @router.post("/preview-html", response_model=HtmlPreviewView)
 def preview_html(payload: HtmlPreviewRequest, request: Request) -> HtmlPreviewView:
-    return _store(request).preview_html(payload)
+    try:
+        return _store(request).preview_html(payload)
+    except RevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/preview-csv", response_model=CsvPreviewView)
