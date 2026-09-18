@@ -177,3 +177,22 @@ print("before")
     invalid = project_changes(result, [SemanticChange(source.id, "if :")])
     assert not invalid.valid
     assert any(issue.code == "invalid-python" for issue in invalid.issues)
+
+
+def test_shared_generated_global_records_each_semantic_operation_reference(tmp_path):
+    mail = (
+        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+        '"person@example.com" "Report" "Body"\n</OPTIONS>\n'
+        '<---- New Query ---->\n'
+    )
+    result = _compile(tmp_path, mail + mail)
+    model = build_semantic_model(result)
+
+    email_operations = [op for op in model.operations if op.display_name == "Send Email"]
+    recipient = next(symbol for symbol in model.symbols if symbol.display_name == "EMAIL_TO")
+
+    assert len(email_operations) == 2
+    assert {ref.operation_id for ref in recipient.references} == {
+        op.id for op in email_operations
+    }
+    assert {ref.binding_id for ref in recipient.references} == {"global:EMAIL_TO"}
