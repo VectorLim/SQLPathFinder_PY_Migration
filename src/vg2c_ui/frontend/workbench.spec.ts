@@ -146,7 +146,7 @@ test('Email context limits bulk edits to enable state and accepts image attachme
     mimeType: 'image/png',
     buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
   })
-  await expect(page.getByText('inputs/chart.png', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Attachments 1', { exact: true })).toHaveValue('inputs/chart.png')
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
   await page.getByRole('button', { name: 'Apply', exact: true }).click()
