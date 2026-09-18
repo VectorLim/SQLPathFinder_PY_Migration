@@ -4,8 +4,6 @@ import type {
   CsvPreviewView,
   DocumentView,
   DocumentSnapshot,
-  ParameterChangeRequest,
-  ParameterView,
   SemanticBindingView,
   SemanticChangeRequest,
   WorkspaceProjectionRequest,
@@ -16,11 +14,6 @@ export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' |
 
 export const RESET_VALUE = Symbol('reset-to-generated')
 export type FieldPath = Array<string | number>
-
-export function effectiveParameterValue(values: Record<string, unknown>, parameter: ParameterView): unknown {
-  const value = Object.hasOwn(values, parameter.id) ? values[parameter.id] : parameter.value
-  return value === RESET_VALUE ? parameter.generated_value : value
-}
 
 export function effectiveBindingValue(values: Record<string, unknown>, binding: SemanticBindingView): unknown {
   const value = Object.hasOwn(values, binding.id) ? values[binding.id] : binding.value
@@ -43,7 +36,7 @@ export interface TabState {
   expandedScopeIds: Set<string>
   status: TabStatus
   edits: EditState
-  fieldDrafts: Record<string, { parameterId: string; text: string; error: string }>
+  fieldDrafts: Record<string, { bindingId: string; text: string; error: string }>
   preview: ChangePreviewView | null
   mutationRequestId: string | null
   mutationError: string | null
@@ -70,7 +63,7 @@ export type WorkspaceAction =
   | { type: 'navigate-operation'; tabId: string; operationId: string; focus?: boolean }
   | { type: 'toggle-scope'; tabId: string; scopeId: string; expanded?: boolean }
   | { type: 'set-all-scopes'; tabId: string; expanded: boolean }
-  | { type: 'edit'; tabId: string; parameterId: string; value: unknown; clearDraftPaths?: FieldPath[]; baseVersion?: number; instanceId?: number }
+  | { type: 'edit'; tabId: string; bindingId: string; value: unknown; clearDraftPaths?: FieldPath[]; baseVersion?: number; instanceId?: number }
   | { type: 'field-draft'; tabId: string; key: string; draft: TabState['fieldDrafts'][string] | null }
   | { type: 'undo'; tabId: string }
   | { type: 'redo'; tabId: string }
@@ -159,13 +152,13 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   if (action.type === 'edit') {
     if (action.instanceId !== undefined && action.instanceId !== tab.instanceId) return tab
     if (action.baseVersion !== undefined && action.baseVersion !== tab.edits.version) return tab
-    const values = { ...tab.edits.values, [action.parameterId]: action.value }
+    const values = { ...tab.edits.values, [action.bindingId]: action.value }
     const fieldDrafts = Object.fromEntries(Object.entries(tab.fieldDrafts).filter(([key, draft]) => {
-      if (draft.parameterId !== action.parameterId) return true
+      if (draft.bindingId !== action.bindingId) return true
       if (action.value === RESET_VALUE) return false
       if (!action.clearDraftPaths?.length) return true
       const path: FieldPath = JSON.parse(key)
-      return !action.clearDraftPaths.some((prefix) => [action.parameterId, ...prefix].every((part, index) => path[index] === part))
+      return !action.clearDraftPaths.some((prefix) => [action.bindingId, ...prefix].every((part, index) => path[index] === part))
     }))
     return withEditState({ ...tab, fieldDrafts }, {
       values,
