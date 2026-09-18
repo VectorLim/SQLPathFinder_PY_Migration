@@ -305,6 +305,7 @@ class DocumentStore:
         return SqlActionResponse(
             change=SemanticChangeRequest(
                 binding_id=change.binding_id,
+                parameter_id=change.binding_id,
                 value=change.value,
             ),
             model=sql_model_view(
