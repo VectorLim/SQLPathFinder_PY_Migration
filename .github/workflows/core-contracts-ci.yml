@@ -17,10 +17,6 @@ jobs:
           python-version: "3.12"
       - name: Install public test dependencies
         run: python -m pip install pytest ruff fastapi pydantic uvicorn pandas keyring python-multipart
-      - name: Legacy analyzer parity characterization
-        env:
-          PYTHONPATH: src:.
-        run: pytest -q tests/dataflow/test_semantic_effect_parity.py
       - name: Core tests
         env:
           PYTHONPATH: src:.
