@@ -96,7 +96,7 @@ export function SemanticBindingField({
     onDraft,
   })
 
-  return <div className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`}>
+  return <fieldset className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`} disabled={disabled}>
     <div className="parameter-field__meta"><strong>{binding.display_label}{binding.required ? ' *' : ''}</strong>{reset}</div>
     {binding.required ? body : <OptionalValue
       label={`Set ${binding.display_label}`}
@@ -106,7 +106,7 @@ export function SemanticBindingField({
     >{body}</OptionalValue>}
     {disabled && binding.read_only_reason && <small>{binding.read_only_reason}</small>}
     {binding.validation_state === 'unresolved' && <ValidationMessage message="This value does not resolve to a known symbol." />}
-  </div>
+  </fieldset>
 }
 
 function renderBindingControl({
