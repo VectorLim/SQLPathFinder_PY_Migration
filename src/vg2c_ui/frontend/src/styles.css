@@ -192,8 +192,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   color: var(--on-accent);
   background: var(--accent);
 }
-.context-toggle { display: none; align-items: center; gap: 6px; }
-.context-toggle__icon { font-size: 16px; line-height: 1; }
 .change-toolbar {
   justify-content: space-between;
   min-height: 54px;
@@ -417,45 +415,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .diagnostic--error { border-color: var(--danger); }
 .diagnostic small { margin-left: 8px; color: var(--muted); }
 
-.context-sidebar {
-  position: relative;
-  z-index: 20;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
-  border-left: 1px solid var(--line);
-  background: var(--panel);
-}
-.context-sidebar__header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 62px;
-  padding: 12px 15px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.context-sidebar__header > div { min-width: 0; }
-.context-sidebar__header h2 { margin: 3px 0 0; overflow: hidden; color: var(--ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.context-close { display: none; width: 36px; min-width: 36px; padding: 0; font-size: 19px; }
-.context-sidebar__body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .context-section { border-bottom: 1px solid var(--line-soft); }
-.context-section > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 45px;
-  padding: 10px 15px;
-  list-style: none;
-  font-size: 12px;
-}
-.context-section > summary::-webkit-details-marker { display: none; }
-.context-section > summary::after { content: "›"; margin-left: auto; color: var(--muted); font-size: 18px; transform: rotate(90deg); }
-.context-section:not([open]) > summary::after { transform: rotate(0); }
-.context-section__content { padding: 0 14px 16px; }
-.context-help { margin: 0 0 14px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .csv-preview { margin: 9px 0 0 34px; }
 .csv-preview > small { color: var(--muted); font-size: 8px; }
 .table-scroll { max-height: 250px; overflow: auto; margin-top: 5px; border: 1px solid var(--line); border-radius: 6px; }
@@ -494,7 +454,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
-  .context-toggle { display: inline-flex; }
   .brand { min-width: auto; }
 }
 
@@ -539,9 +498,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .editor-toolbar { gap: 7px; flex-wrap: nowrap; }
   .search-field { flex: 1 1 0; min-width: 135px; }
   .editor-toolbar button, .search-field input { min-height: 44px; }
-  .command-trigger, .context-toggle { flex: 0 0 auto; }
-  .context-toggle { width: 44px; padding-inline: 0; justify-content: center; }
-  .context-toggle__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+  .command-trigger { flex: 0 0 auto; }
   .script-tree { padding-left: 8px; padding-right: 8px; }
   .tree-row { grid-template-columns: 30px minmax(0, 1fr) 10px; padding-right: 7px; }
   .tree-label strong { font-size: 13px; }
@@ -553,18 +510,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .state-pill { padding: 3px 6px; }
   .parameter input:not([type="checkbox"]), .parameter textarea, .parameter select, .checkbox-field { min-height: 44px; }
   .scope-summary { margin-left: 20px; }
-  .context-sidebar__header { min-height: 58px; }
-  .context-sidebar__header::before {
-    content: "";
-    position: absolute;
-    top: 7px;
-    left: 50%;
-    width: 40px;
-    height: 4px;
-    border-radius: 99px;
-    background: var(--line);
-    transform: translateX(-50%);
-  }
 }
 
 @media (max-width: 430px) {
