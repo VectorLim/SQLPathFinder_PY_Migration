@@ -5,8 +5,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from vg2c.dataflow import analyze
-from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dispatch
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter import emit
@@ -35,7 +33,6 @@ class CompilationResult:
 
     input_path: Path
     resolved: ResolvedProgram
-    analyzed: AnalyzedProgram
     dispatched: DispatchedProgram
     emitted: EmittedScript
     diagnostics: tuple[CompilationDiagnostic, ...]
@@ -70,8 +67,7 @@ def compile_document(input_path: Path) -> CompilationResult:
         parsed = parse(text, source=input_path)
         classified = classify(parsed)
         resolved = resolve(classified)
-        analyzed = analyze(resolved)
-        dispatched = dispatch(analyzed)
+        dispatched = dispatch(resolved)
         emitted = emit(dispatched)
     finally:
         compiler_logger.removeHandler(handler)
@@ -79,7 +75,6 @@ def compile_document(input_path: Path) -> CompilationResult:
     return CompilationResult(
         input_path=input_path.resolve(),
         resolved=resolved,
-        analyzed=analyzed,
         dispatched=dispatched,
         emitted=emitted,
         diagnostics=tuple(handler.items),
