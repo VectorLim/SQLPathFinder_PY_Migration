@@ -4,7 +4,6 @@ import csv
 import re
 from pathlib import Path
 
-from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
@@ -272,8 +271,7 @@ def test_html_report_fixture_flow_parity_order():
     parsed = parse(text, source=fixture)
     classified = classify(parsed)
     resolved = resolve(classified)
-    analyzed = analyze(resolved)
-    dispatched = dispatch(analyzed)
+    dispatched = dispatch(resolved)
     source = emit(dispatched).source
 
     methods = re.findall(r"ctx\.html_report\.(defer|run|layout|delete)\(", source)
