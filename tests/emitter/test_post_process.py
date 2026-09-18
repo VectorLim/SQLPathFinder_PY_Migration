@@ -54,7 +54,7 @@ def test_sql_filter_comments_use_final_step_lines() -> None:
     )
 
     dp: Any = DispatchedProgram(
-        analyzed=None,  # type: ignore[arg-type]
+        resolved=None,  # type: ignore[arg-type]
         dispatched=(block1, block2),
     )
     step_lines = {
