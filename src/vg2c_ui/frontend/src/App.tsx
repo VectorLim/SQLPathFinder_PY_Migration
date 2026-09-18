@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 
-import { uploadWorkspaceFile, workspaceDownloadUrl } from './api'
+import { uploadWorkspaceFile } from './api'
 import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
@@ -148,7 +148,6 @@ export function App() {
 
   const selectedOperation = active?.document.semantic_operations.find((operation) => operation.id === active.selectedId)
   const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
-  const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
   const hasTabs = state.tabs.length > 0
 
@@ -156,7 +155,7 @@ export function App() {
     <header className="topbar">
       <div className="brand"><span>SQL</span>PathFinder</div>
       <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
-      <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
+      <div className="workspace-downloads"><a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
 
     <SourceIntake intake={intake} hasOpenDocument={Boolean(active)} />
