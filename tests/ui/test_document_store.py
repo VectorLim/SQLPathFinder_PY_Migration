@@ -495,3 +495,10 @@ def test_csv_preview_does_not_guess_runtime_working_directory(tmp_path):
     )
     with pytest.raises(ValueError, match="working directory is unknown"):
         store.preview_csv(request)
+
+
+def test_normal_document_view_never_exposes_generated_python(tmp_path):
+    source = _copy_fixture(tmp_path)
+    document = DocumentStore(tmp_path).translate(str(source)).view
+
+    assert all(step.raw_code is None for step in document.steps)
