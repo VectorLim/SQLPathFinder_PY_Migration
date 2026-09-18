@@ -209,7 +209,7 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
             },
             indent=2,
         )
-        + "\\n",
+        + "\n",
         encoding="utf-8",
     )
 
