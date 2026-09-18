@@ -35,3 +35,11 @@ jobs:
         run: |
           npm ci
           npm test
+      - name: Frontend browser regression
+        working-directory: src/vg2c_ui/frontend
+        env:
+          VG2C_PYTHON: python
+          PYTHONPATH: ../../../src:../../..
+        run: |
+          npx playwright install --with-deps chromium firefox
+          npm run test:browser
