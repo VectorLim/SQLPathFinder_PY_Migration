@@ -1,6 +1,6 @@
 // Generated from vg2c_ui.api.models. DO NOT EDIT.
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export interface SourceSpanView {
   file: string | null
@@ -19,6 +19,73 @@ export interface ValueSchemaView {
   path: boolean
   prefix_items: Array<ValueSchemaView>
   tuple_value: boolean
+}
+
+export interface SemanticBindingView {
+  id: string
+  owner_operation_id: string
+  name: string
+  display_label: string
+  value: unknown
+  default: unknown
+  required: boolean
+  visibility: 'normal' | 'advanced' | 'internal'
+  capabilities: Array<string>
+  validation_state: 'valid' | 'warning' | 'unresolved' | 'unsupported'
+  resettable: boolean
+  editable: boolean
+  read_only_reason: string | null
+  value_schema: ValueSchemaView | null
+}
+
+export interface SemanticOperationView {
+  id: string
+  kind: string
+  display_name: string
+  description: string
+  parent_operation_id: string | null
+  branch: 'true' | 'false' | null
+  source_span: SourceSpanView
+  bindings: Array<SemanticBindingView>
+  capabilities: Array<string>
+  comments: Array<string>
+  validation_state: 'valid' | 'warning' | 'unresolved' | 'unsupported'
+  visibility: 'normal' | 'advanced' | 'internal'
+}
+
+export interface OperationReferenceView {
+  operation_id: string
+  binding_id: string | null
+}
+
+export interface SymbolReferenceView {
+  operation_id: string
+  binding_id: string
+}
+
+export interface SymbolView {
+  id: string
+  display_name: string
+  kind: 'global' | 'macro' | 'macro-row' | 'unresolved'
+  value_state: 'known' | 'runtime' | 'unknown'
+  value: unknown
+  introduction: OperationReferenceView | null
+  references: Array<SymbolReferenceView>
+}
+
+export interface FileResourceView {
+  id: string
+  path: string | null
+  status: 'workspace' | 'generated' | 'external' | 'missing' | 'dynamic' | 'possible'
+  producer_refs: Array<OperationReferenceView>
+  consumer_refs: Array<OperationReferenceView>
+  lifecycle_refs: Array<OperationReferenceView>
+}
+
+export interface ConditionOperatorView {
+  code: string
+  symbol: string
+  operand_type: 'string' | 'numeric'
 }
 
 export interface ParameterView {
@@ -111,6 +178,7 @@ export interface DiagnosticView {
 
 export interface FileEndpointView {
   id: string
+  binding_id: string | null
   parameter_id: string | null
   path: string | null
   expression: string | null
@@ -152,16 +220,28 @@ export interface DocumentView {
   artifacts: Array<ArtifactView>
   diagnostics: Array<DiagnosticView>
   effects: Array<FileEffectView>
+  semantic_operations: Array<SemanticOperationView>
+  files: Array<FileResourceView>
+  symbols: Array<SymbolView>
+  condition_operators: Array<ConditionOperatorView>
+}
+
+export interface SemanticChangeRequest {
+  binding_id: string | null
+  parameter_id: string
+  value: unknown
+  reset: boolean
 }
 
 export interface ParameterChangeRequest {
+  binding_id: string | null
   parameter_id: string
   value: unknown
   reset: boolean
 }
 
 export interface DocumentSnapshot {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
@@ -171,20 +251,21 @@ export interface DocumentSnapshot {
 }
 
 export interface ChangeBatch {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface ValidationIssueView {
   level: 'warning' | 'error'
   code: string
   message: string
+  binding_id: string | null
   parameter_id: string | null
 }
 
@@ -212,7 +293,7 @@ export interface DocumentReference {
 }
 
 export interface CsvPreviewRequest {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
@@ -222,7 +303,7 @@ export interface CsvPreviewRequest {
   effect_id: string
   endpoint_id: string
   expected_path: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface BatchTranslationRequest {
@@ -236,7 +317,7 @@ export interface BatchTranslationResponse {
 }
 
 export interface WorkspaceDocumentRequest {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
@@ -244,7 +325,7 @@ export interface WorkspaceDocumentRequest {
   revision: string
   compiler_hash: string
   document_id: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface WorkspaceProjectionRequest {
@@ -375,7 +456,7 @@ export interface SqlModelView {
 }
 
 export interface SqlModelRequest {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
@@ -383,11 +464,11 @@ export interface SqlModelRequest {
   revision: string
   compiler_hash: string
   parameter_id: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface SqlActionRequest {
-  schema_version: 4
+  schema_version: 5
   source_path: string
   output_path: string
   source_hash: string
@@ -395,13 +476,13 @@ export interface SqlActionRequest {
   revision: string
   compiler_hash: string
   parameter_id: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
   action: string
   arguments: Record<string, unknown>
 }
 
 export interface SqlActionResponse {
-  change: ParameterChangeRequest
+  change: SemanticChangeRequest
   model: SqlModelView
 }
 
