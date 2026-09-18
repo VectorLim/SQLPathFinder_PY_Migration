@@ -305,6 +305,25 @@ export interface CsvPreviewRequest {
   changes: Array<SemanticChangeRequest | ParameterChangeRequest>
 }
 
+export interface HtmlPreviewRequest {
+  schema_version: 4 | 5
+  source_path: string
+  output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
+  operation_id: string
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+}
+
+export interface HtmlPreviewView {
+  state: 'exact' | 'approximate' | 'error'
+  html: string
+  output_path: string | null
+  message: string | null
+}
+
 export interface BatchTranslationRequest {
   source_paths: Array<string>
   out_dir: string | null
