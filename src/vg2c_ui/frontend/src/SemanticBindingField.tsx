@@ -9,7 +9,7 @@ import type {
   ValueSchemaView,
 } from './contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
-import { SchemaValueField, type FieldDraftProps } from './SchemaValueField'
+import { defaultSchemaValue, SchemaValueField, type FieldDraftProps } from './SchemaValueField'
 import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
 import { effectiveBindingValue, RESET_VALUE, type FieldPath } from './workspaceState'
@@ -169,15 +169,6 @@ function enabledValue(binding: SemanticBindingView, schema: ValueSchemaView | nu
   if (binding.value !== null && binding.value !== undefined) return binding.value
   if (binding.default !== null && binding.default !== undefined) return binding.default
   if (!schema) return ''
-  return defaultValue({ ...schema, nullable: false })
+  return defaultSchemaValue({ ...schema, nullable: false })
 }
 
-function defaultValue(schema: ValueSchemaView): unknown {
-  if (schema.choices.length) return schema.choices[0]
-  if (schema.kind === 'boolean') return false
-  if (schema.kind === 'integer' || schema.kind === 'number') return 0
-  if (schema.kind === 'list') return schema.tuple_value ? schema.prefix_items.map(defaultValue) : []
-  if (schema.kind === 'object') return Object.fromEntries(schema.required_keys.map((key) => [key, defaultValue(schema.properties[key])]))
-  if (schema.kind === 'union') return schema.variants[0] ? defaultValue(schema.variants[0]) : ''
-  return ''
-}
