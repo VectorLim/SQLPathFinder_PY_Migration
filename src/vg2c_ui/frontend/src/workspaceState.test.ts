@@ -5,7 +5,7 @@ import type { DocumentView } from './contracts.generated.ts'
 
 function doc(id: string): DocumentView {
   return {
-    schema_version: 4,
+    schema_version: 5,
     id,
     source_path: `${id}.txt`,
     output_path: `${id}.py`,
@@ -16,6 +16,7 @@ function doc(id: string): DocumentView {
     synchronized: true,
     read_only_reason: null,
     steps: [], scopes: [], artifacts: [], diagnostics: [], effects: [],
+    semantic_operations: [], files: [], symbols: [], condition_operators: [],
   }
 }
 
@@ -26,20 +27,15 @@ assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.edits.values.p1,
 assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.status, 'dirty')
 
 const projection = workspaceProjectionRequest(state)
-assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ parameter_id: 'p1', value: 'draft', reset: false }])
+assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', reset: false }])
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
 
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const navigationDoc = doc('navigation')
-navigationDoc.scopes = [{ id: 'scope-a', node_kind: 'loop', scope_kind: 'loop', label: 'Loop', start_index: 0, end_index: 1, parent_scope_id: null }]
-navigationDoc.steps = [{
-  id: 'step-a', node_kind: 'step', function_name: 'step_a', block_index: 0,
-  source_span: { file: null, start_line: 1, end_line: 2 }, functional_kind: 'TEST', display_label: 'Test', description: '',
-  parent_scope_id: 'scope-a', branch: null,
-  validation_state: 'valid', raw_code: null, read_only: false,
-  operations: [],
-}]
-navigationDoc.steps[0].operations = ['operation-a', 'operation-b'].map((id) => ({ id, utility: { name: 'probe', class_name: 'Probe', module: 'test', title: 'Probe', description: '', method: 'run', method_description: null, return_type: null, capabilities: [], supported_mutations: [] }, parameters: [] }))
+navigationDoc.semantic_operations = [
+  { id: 'scope-a', kind: 'loop', display_name: 'Loop', description: '', parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal' },
+  ...['operation-a', 'operation-b'].map((id) => ({ id, kind: 'probe', display_name: 'Probe', description: '', parent_operation_id: 'scope-a', branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid' as const, visibility: 'normal' as const })),
+]
 let navigation = workspaceReducer(state, { type: 'merge-documents', documents: [navigationDoc] })
 navigation = workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b', focus: true })
 const navigationTab = navigation.tabs.find((tab) => tab.document.id === 'navigation')!
@@ -50,7 +46,7 @@ assert.equal(navigationTab.revealFocus, true)
 assert.equal(workspaceReducer(navigation, { type: 'toggle-scope', tabId: 'navigation', scopeId: 'scope-a', expanded: true }).tabs.at(-1)?.selectedId, 'operation-b')
 assert.equal(workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b' }).tabs.at(-1)?.revealVersion, 2)
 const resetState = workspaceReducer(state, { type: 'edit', tabId: 'a', parameterId: 'p1', value: RESET_VALUE })
-assert.deepEqual(draftChanges(resetState.tabs[0]), [{ parameter_id: 'p1', value: null, reset: true }])
+assert.deepEqual(draftChanges(resetState.tabs[0]), [{ binding_id: 'p1', value: null, reset: true }])
 assert.equal(workspaceReducer(resetState, { type: 'undo', tabId: 'a' }).tabs[0].edits.values.p1, 'draft')
 let invalidFields = workspaceReducer(state, { type: 'field-draft', tabId: 'a', key: 'number', draft: { parameterId: 'numeric', text: '', error: 'Enter a number' } })
 invalidFields = workspaceReducer(invalidFields, { type: 'edit', tabId: 'a', parameterId: 'other', value: 'changed' })
