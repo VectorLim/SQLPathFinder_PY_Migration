@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from shutil import copyfile
 from types import SimpleNamespace
@@ -21,7 +22,7 @@ from vg2c_ui.services.document_store import (
     PathOutsideWorkspace,
     RevisionConflict,
 )
-from vg2c_ui.services.sidecar import SIDECAR_VERSION, read_sidecar
+from vg2c_ui.services.sidecar import SIDECAR_VERSION, read_sidecar, sidecar_path
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 
@@ -185,6 +186,50 @@ def test_apply_persists_only_validated_changes_in_v3_sidecar(tmp_path):
     assert "steps" not in sidecar.model_dump()
     assert "source_path" not in sidecar.model_dump()
     assert "output_path" not in sidecar.model_dump()
+
+
+def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
+    source = _copy_fixture(tmp_path)
+    store = DocumentStore(tmp_path)
+    document = store.translate(str(source)).view
+    parameter = _editable_string(document)
+    applied = store.apply(_batch(document, parameter.id, "legacy edit")).document
+    output = Path(applied.output_path)
+    path = sidecar_path(output)
+    current = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "source_hash": current["source_hash"],
+                "output_hash": current["output_hash"],
+                "changes": [
+                    {"parameter_id": parameter.id, "value": "legacy edit"}
+                ],
+            },
+            indent=2,
+        )
+        + "\\n",
+        encoding="utf-8",
+    )
+
+    reopened = store.open_document(source, output).view
+    assert reopened.synchronized
+    reopened_parameter = next(
+        item
+        for step in reopened.steps
+        for operation in step.operations
+        for item in operation.parameters
+        if item.id == parameter.id
+    )
+    assert reopened_parameter.value == "legacy edit"
+
+    upgraded = store.apply(_batch(reopened, parameter.id, "upgraded edit")).document
+    payload = json.loads(sidecar_path(Path(upgraded.output_path)).read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 3
+    assert payload["changes"] == [
+        {"binding_id": parameter.id, "value": "upgraded edit"}
+    ]
 
 
 def test_external_python_change_becomes_read_only_without_semantic_reparse(tmp_path):
