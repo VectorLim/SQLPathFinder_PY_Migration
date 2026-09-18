@@ -366,7 +366,7 @@ def file_resources(effects: Iterable[FileEffect]) -> tuple[FileResource, ...]:
             dict.fromkeys(
                 OperationReference(effect.operation_id, endpoint.binding_id)
                 for effect, endpoint in items
-                if effect.kind in {"copy", "move", "append", "delete"}
+                if effect.kind in {"write", "copy", "move", "transform", "append", "delete"}
             )
         )
         statuses = {endpoint.status for _, endpoint in items}
