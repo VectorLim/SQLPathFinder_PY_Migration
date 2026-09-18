@@ -71,7 +71,7 @@ export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect,
   return <section className="sql-operation-editor" aria-label="Structured SQL">
     <header className="sql-parameter-heading">
       <strong>Query</strong>
-      <button className="icon-button" type="button" aria-label="Reset query" title="Reset query" disabled={readOnly || !(binding.id in values)} onClick={onReset}><RotateCcw size={14} /></button>
+      <button className="icon-button" type="button" aria-label="Reset SQL to generated value" title="Reset SQL to generated value" disabled={readOnly || !(binding.id in values)} onClick={onReset}><RotateCcw size={14} /></button>
     </header>
     {error && <p className="sql-edit-error" role="alert">{error}</p>}
     {busy && !model && <p className="empty-copy">Loading structured SQL…</p>}
