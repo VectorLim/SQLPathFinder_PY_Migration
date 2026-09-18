@@ -83,7 +83,8 @@ export function SemanticBindingField({
   }
 
   const schema = binding.value_schema
-  const controlSchema = !binding.required && schema?.nullable ? { ...schema, nullable: false } : schema
+  const nullable = Boolean(schema?.nullable)
+  const controlSchema = nullable && schema ? { ...schema, nullable: false } : schema
   const body = renderBindingControl({
     binding,
     value,
@@ -98,18 +99,18 @@ export function SemanticBindingField({
   })
 
   return <fieldset className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`} disabled={disabled}>
-    {binding.required
-      ? <>
-          <div className="parameter-field__meta"><strong>{binding.display_label} *</strong>{reset}</div>
-          {body}
-        </>
-      : <OptionalValue
-          label={binding.display_label}
+    {nullable
+      ? <OptionalValue
+          label={`${binding.display_label}${binding.required ? ' *' : ''}`}
           enabled={value !== null && value !== undefined}
           disabled={disabled}
           action={reset}
           onEnabledChange={(enabled) => onEdit(binding, enabled ? enabledValue(binding, schema) : null)}
-        >{body}</OptionalValue>}
+        >{body}</OptionalValue>
+      : <>
+          <div className="parameter-field__meta"><strong>{binding.display_label}{binding.required ? ' *' : ''}</strong>{reset}</div>
+          {body}
+        </>}
     {disabled && binding.read_only_reason && <small>{binding.read_only_reason}</small>}
     {binding.validation_state === 'unresolved' && <ValidationMessage message="This value does not resolve to a known symbol." />}
   </fieldset>
@@ -140,13 +141,13 @@ function renderBindingControl({
 }) {
   const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
   if (isFileBinding && schema?.kind === 'list') {
-    return <FileListSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
+    return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
   }
   if (isFileBinding) {
-    return <FileSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+    return <FileSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
   }
   if (binding.capabilities.includes('symbol-or-literal')) {
-    return <SymbolSelector label={binding.display_label} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+    return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
   }
   if (schema) {
     return <SchemaValueField
