@@ -31,7 +31,7 @@ export function SchemaValueField(props: SchemaValueProps) {
     const selected = Math.max(0, schema.variants.findIndex((variant) => matches(variant, value)))
     return <div className="union-field"><select aria-label={`${label} type`} value={selected} onChange={(event) => onChange(defaultValue(schema.variants[Number(event.target.value)]))}>{schema.variants.map((variant, index) => <option key={index} value={index}>{variant.tuple_value ? 'Fixed sequence' : humanize(variant.kind)}</option>)}</select>{schema.variants[selected] && <SchemaValueField {...props} schema={schema.variants[selected]} />}</div>
   }
-  if (schema.kind === 'boolean') return <label className="checkbox-field"><input id={id} aria-label={label} type="checkbox" checked={value === true} onChange={(event) => onChange(event.target.checked)} /><span>{value ? 'Enabled' : 'Disabled'}</span></label>
+  if (schema.kind === 'boolean') return <label className="checkbox-field"><input id={id} aria-label={label} type="checkbox" checked={value === true} onChange={(event) => onChange(event.target.checked)} /><span>{value ? 'On' : 'Off'}</span></label>
   if (schema.kind === 'integer' || schema.kind === 'number') {
     const draft = drafts[key]
     return <div className="numeric-field"><input id={id} aria-label={label} type="text" inputMode={schema.kind === 'integer' ? 'numeric' : 'decimal'} value={draft?.text ?? String(value ?? '')} aria-invalid={Boolean(draft)} aria-describedby={draft ? `${id}-error` : undefined} onChange={(event) => {
