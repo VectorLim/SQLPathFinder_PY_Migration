@@ -69,6 +69,7 @@ export interface SymbolView {
   kind: 'global' | 'macro' | 'macro-row' | 'unresolved'
   value_state: 'known' | 'runtime' | 'unknown'
   value: unknown
+  condition_value: string | null
   introduction: OperationReferenceView | null
   references: Array<SymbolReferenceView>
 }
