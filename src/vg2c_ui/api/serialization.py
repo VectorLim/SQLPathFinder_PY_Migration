@@ -196,7 +196,7 @@ def document_view(
                 parent_scope_id=_scope_view_id(parent_scope, scope_by_id),
                 branch=branch_by_scope.get(parent_scope),
                 validation_state="unsupported" if step_read_only else "valid",
-                raw_code=emitted_step.source if step_read_only else None,
+                raw_code=None,
                 read_only=step_read_only,
                 operations=operations,
             )
@@ -224,7 +224,7 @@ def document_view(
                 description="Compiler source/control operation",
                 read_only=True,
                 validation_state="unsupported",
-                raw_code=block.resolved_body,
+                raw_code=None,
                 parent_scope_id=_scope_view_id(block.scope_id, scope_by_id),
                 operations=[OperationView(id=effect.operation_id, utility=utility)],
             )
