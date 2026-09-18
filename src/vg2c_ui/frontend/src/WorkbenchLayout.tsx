@@ -81,7 +81,13 @@ export function WorkbenchLayout({
       >
         {logic}
         {showConfig && <><PaneSeparator label="Resize Script Logic and Configuration" value={logicWidth} min={260} max={560} onDelta={resizeLogic} />{configuration}</>}
-        {showContext && <><PaneSeparator label="Resize Configuration and Context" value={configWidth} min={320} max={680} onDelta={resizeConfig} />{context}</>}
+        {showContext && <><PaneSeparator
+          label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'}
+          value={showConfig ? configWidth : logicWidth}
+          min={showConfig ? 320 : 260}
+          max={showConfig ? 680 : 560}
+          onDelta={showConfig ? resizeConfig : resizeLogic}
+        />{context}</>}
       </div>
     </>}
   </div>
