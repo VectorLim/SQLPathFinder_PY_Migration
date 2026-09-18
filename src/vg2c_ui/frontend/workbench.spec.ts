@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import type { DocumentView } from './src/contracts.generated'
 
 async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
-  const target = name === 'Script Logic' ? page.getByRole('tree', { name: 'Script Logic' }) : page.getByRole('region', { name, exact: true })
+  const target = page.locator(name === 'Script Logic' ? '#pane-logic' : name === 'Configuration' ? '#pane-config' : '#pane-context')
   if (await target.isVisible().catch(() => false)) return
   const tabs = page.getByRole('navigation', { name: 'Workbench views' })
   const tabButton = tabs.getByRole('button', { name, exact: true })
