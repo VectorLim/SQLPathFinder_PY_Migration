@@ -75,7 +75,6 @@ export function SemanticOperationEditor({
   return <section className="operation-editor semantic-operation-editor" aria-label={`Configure ${operation.display_name}`}>
     <header className="operation-editor__header">
       <div>
-        <span className="eyebrow">Configuration</span>
         <h3>{operation.display_name}</h3>
         {operation.description && <p className="operation-description">{operation.description}</p>}
       </div>
