@@ -461,6 +461,8 @@ export interface SqlModelView {
   join_types: Array<string>
   logical_connectors: Array<string>
   statement_span: SqlSpanView
+  before_statement: string
+  after_statement: string
   selections: Array<SqlSelectionView>
   filters: Array<SqlPredicateView>
   joins: Array<SqlJoinView>
