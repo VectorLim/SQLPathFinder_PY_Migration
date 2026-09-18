@@ -172,7 +172,7 @@ function GlobalsContext({ symbols, onNavigate }: { symbols: SymbolView[]; onNavi
 }
 
 function isEmail(operation: SemanticOperationView): boolean {
-  return operation.display_name === 'Send Email' || operation.kind === 'email.send'
+  return operation.capabilities.includes('email')
 }
 
 function uniqueRefs<T extends { operation_id: string; binding_id: string | null }>(refs: T[]): T[] {
