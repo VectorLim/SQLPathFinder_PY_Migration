@@ -293,3 +293,56 @@ def test_rows_in_file_target_macro_is_editable(tmp_path):
 
     assert projected.valid
     assert "ctx.macro.set_named('TOTAL'," in projected.source
+
+
+def test_repeated_identical_condition_headers_keep_distinct_edit_ranges(tmp_path):
+    result = _compile(
+        tmp_path,
+        """<OPTIONS>
+/UTILITIES={ROWS-IN-FILE} "input.csv" "COUNT" "N"
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES={IF-THEN} "COUNT" "GT" "0" "" "" "" ""
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/CSV=first.txt
+</OPTIONS>
+first
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES={END-IF}
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES={IF-THEN} "COUNT" "GT" "0" "" "" "" ""
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/CSV=second.txt
+</OPTIONS>
+second
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES={END-IF}
+</OPTIONS>
+<---- New Query ---->
+""",
+    )
+    conditions = [
+        operation
+        for operation in build_semantic_model(result).operations
+        if operation.kind == "condition"
+    ]
+    assert len(conditions) == 2
+    assert conditions[0].source_range != conditions[1].source_range
+
+    rhs = next(binding for binding in conditions[1].bindings if binding.name == "rhs")
+    projected = project_changes(result, [SemanticChange(rhs.id, "1")])
+
+    assert projected.valid
+    assert projected.source.count("int(ctx.macro.named('COUNT')) > int('0')") == 1
+    assert projected.source.count("int(ctx.macro.named('COUNT')) > int('1')") == 1
