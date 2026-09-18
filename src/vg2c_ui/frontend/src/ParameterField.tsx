@@ -24,7 +24,7 @@ export function ParameterField({ parameter, values, disabled, onChange, drafts, 
   return <fieldset className={`parameter parameter-field${disabled ? ' parameter--readonly' : ''}`}>
     <legend>{humanize(parameter.name)}{parameter.required ? ' *' : ''}</legend>
     <div className="parameter-field__meta"><small>{parameter.id in values || parameter.overridden ? 'Override' : parameter.omitted ? 'Default' : 'Generated value'}</small><button type="button" className="icon-button" disabled={disabled || !(parameter.id in values || parameter.overridden)} aria-label={`Reset ${humanize(parameter.name)} to generated value`} title="Reset to generated value" onClick={() => onChange(RESET_VALUE)}><RotateCcw size={14} aria-hidden="true" /></button></div>
-    {disabled ? <><pre className="parameter-source">{parameter.source}</pre><small>{parameter.read_only_reason ?? 'Read only'}</small></> : <ValueField schema={schema} value={value} onChange={onChange} label={humanize(parameter.name)} parameterId={parameter.id} path={[]} multiline={parameter.editor_type === 'multiline'} drafts={drafts} onDraft={onDraft} />}
+    {disabled ? <><pre className="parameter-source">{parameter.source}</pre><small>{parameter.read_only_reason ?? 'Read only'}</small></> : <SchemaValueField schema={schema} value={value} onChange={onChange} label={humanize(parameter.name)} parameterId={parameter.id} path={[]} multiline={parameter.editor_type === 'multiline'} drafts={drafts} onDraft={onDraft} />}
   </fieldset>
 }
 
@@ -38,18 +38,18 @@ interface ValueProps extends FieldDraftProps {
   multiline?: boolean
 }
 
-function ValueField(props: ValueProps) {
+export function SchemaValueField(props: ValueProps) {
   const { schema, value, label, parameterId, path, drafts, onDraft } = props
   const onChange = (next: unknown, clearDraftPaths: FieldPath[] = [path]) => props.onChange(next, clearDraftPaths)
   const id = useId()
   const [newKey, setNewKey] = useState('')
   const key = JSON.stringify([parameterId, ...path])
-  const nested = (child: ValueSchemaView, item: unknown, name: string | number, change: ValueProps['onChange']) => <ValueField {...props} schema={child} value={item} path={[...path, name]} label={`${label} ${name}`} onChange={change} multiline={false} />
-  if (schema.nullable) return <div className="nullable-field"><label className="checkbox-field"><input type="checkbox" aria-label={`${label} enabled`} checked={value !== null} onChange={(event) => onChange(event.target.checked ? defaultValue({ ...schema, nullable: false }) : null)} /><span>{value === null ? 'Not set' : 'Set value'}</span></label>{value !== null && <ValueField {...props} schema={{ ...schema, nullable: false }} />}</div>
+  const nested = (child: ValueSchemaView, item: unknown, name: string | number, change: ValueProps['onChange']) => <SchemaValueField {...props} schema={child} value={item} path={[...path, name]} label={`${label} ${name}`} onChange={change} multiline={false} />
+  if (schema.nullable) return <div className="nullable-field"><label className="checkbox-field"><input type="checkbox" aria-label={`${label} enabled`} checked={value !== null} onChange={(event) => onChange(event.target.checked ? defaultValue({ ...schema, nullable: false }) : null)} /><span>{value === null ? 'Not set' : 'Set value'}</span></label>{value !== null && <SchemaValueField {...props} schema={{ ...schema, nullable: false }} />}</div>
   if (schema.choices.length) return <select id={id} aria-label={label} value={schema.choices.findIndex((choice) => Object.is(choice, value))} onChange={(event) => onChange(schema.choices[Number(event.target.value)])}>{schema.choices.map((choice, index) => <option key={index} value={index}>{String(choice)}</option>)}</select>
   if (schema.kind === 'union') {
     const selected = Math.max(0, schema.variants.findIndex((variant) => matches(variant, value)))
-    return <div className="union-field"><select aria-label={`${label} type`} value={selected} onChange={(event) => onChange(defaultValue(schema.variants[Number(event.target.value)]))}>{schema.variants.map((variant, index) => <option key={index} value={index}>{variant.tuple_value ? 'Fixed sequence' : humanize(variant.kind)}</option>)}</select>{schema.variants[selected] && <ValueField {...props} schema={schema.variants[selected]} />}</div>
+    return <div className="union-field"><select aria-label={`${label} type`} value={selected} onChange={(event) => onChange(defaultValue(schema.variants[Number(event.target.value)]))}>{schema.variants.map((variant, index) => <option key={index} value={index}>{variant.tuple_value ? 'Fixed sequence' : humanize(variant.kind)}</option>)}</select>{schema.variants[selected] && <SchemaValueField {...props} schema={schema.variants[selected]} />}</div>
   }
   if (schema.kind === 'boolean') return <label className="checkbox-field"><input id={id} aria-label={label} type="checkbox" checked={value === true} onChange={(event) => onChange(event.target.checked)} /><span>{value ? 'Enabled' : 'Disabled'}</span></label>
   if (schema.kind === 'integer' || schema.kind === 'number') {
