@@ -10,7 +10,7 @@ import type {
   SymbolView,
 } from './contracts.generated'
 import { SchemaValueField, type FieldDraftProps } from './ParameterField'
-import { FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
+import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
 import { RESET_VALUE, effectiveBindingValue, type FieldPath } from './workspaceState'
 
@@ -21,6 +21,7 @@ interface Props extends FieldDraftProps {
   saving: boolean
   knownFiles: string[]
   symbols: SymbolView[]
+  onUploadFile: (file: File) => Promise<string>
   onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
   validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
   inspectSql: (tabId: string, bindingId: string) => Promise<SqlModelView>
@@ -39,6 +40,7 @@ export function SemanticOperationEditor({
   saving,
   knownFiles,
   symbols,
+  onUploadFile,
   onEdit,
   validateBinding,
   inspectSql,
@@ -75,6 +77,7 @@ export function SemanticOperationEditor({
             readOnly={readOnly}
             knownFiles={knownFiles}
             symbols={symbols}
+            onUploadFile={onUploadFile}
             drafts={drafts}
             onDraft={onDraft}
             onEdit={onEdit}
@@ -95,6 +98,7 @@ export function SemanticOperationEditor({
         readOnly={readOnly}
         knownFiles={knownFiles}
         symbols={symbols}
+        onUploadFile={onUploadFile}
         drafts={drafts}
         onDraft={onDraft}
         onEdit={onEdit}
@@ -115,6 +119,7 @@ function BindingField({
   readOnly,
   knownFiles,
   symbols,
+  onUploadFile,
   drafts,
   onDraft,
   onEdit,
@@ -136,8 +141,11 @@ function BindingField({
     return <div className="parameter semantic-binding"><StructuredSqlEditor tabId={tabId} binding={binding} values={values} readOnly={disabled} inspect={inspectSql} runAction={runSqlAction} onReset={() => onEdit(binding, RESET_VALUE)} /></div>
   }
 
-  const body = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
-    ? <FileSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+  const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
+  const body = isFileBinding && binding.value_schema?.kind === 'list'
+    ? <FileListSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
+    : isFileBinding
+      ? <FileSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
     : binding.capabilities.includes('symbol-or-literal')
       ? <SymbolSelector label={binding.display_label} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
       : binding.value_schema
