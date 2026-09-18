@@ -17,6 +17,7 @@ class MacroState(EmitterUtility):
     """Stack of variable frames; lookups walk top-to-bottom."""
 
     utility_name = "macro"
+    semantic_visibility = "internal"
     handles = (Kind.MACRO_CONTROL,)
 
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
