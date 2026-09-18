@@ -11,7 +11,7 @@ import type {
   SymbolView,
 } from './contracts.generated'
 import { ConditionEditor } from './ConditionEditor'
-import { type FieldDraftProps } from './ParameterField'
+import type { FieldDraftProps } from './ParameterField'
 import { SemanticBindingField } from './SemanticBindingField'
 import { ValidationMessage } from './shared/SemanticControls'
 import type { FieldPath } from './workspaceState'
@@ -23,7 +23,7 @@ interface Props extends FieldDraftProps {
   saving: boolean
   knownFiles: string[]
   symbols: SymbolView[]
-  operators: ConditionOperatorView[]
+  conditionOperators: ConditionOperatorView[]
   onUploadFile: (file: File) => Promise<string>
   onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
   validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
@@ -44,7 +44,7 @@ export function SemanticOperationEditor({
   saving,
   knownFiles,
   symbols,
-  operators,
+  conditionOperators,
   onUploadFile,
   onEdit,
   validateBinding,
@@ -57,7 +57,7 @@ export function SemanticOperationEditor({
   const normal = operation.bindings.filter((binding) => binding.visibility === 'normal')
   const advanced = operation.bindings.filter((binding) => binding.visibility === 'advanced')
   const readOnly = operation.validation_state === 'unsupported'
-  const shared = {
+  const bindingProps = {
     tabId,
     values,
     readOnly,
@@ -84,21 +84,35 @@ export function SemanticOperationEditor({
       </span>
     </header>
 
-    <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
-      {operation.capabilities.includes('condition-editor')
-        ? <ConditionEditor operation={operation} values={values} symbols={symbols} operators={operators} saving={saving} onEdit={onEdit} />
-        : normal.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...shared} />)}
-      {!operation.capabilities.includes('condition-editor') && normal.length === 0 && <p className="empty-copy">No configurable values.</p>}
-    </fieldset>
+    {operation.capabilities.includes('condition-editor')
+      ? <ConditionEditor
+          operation={operation}
+          values={values}
+          symbols={symbols}
+          operators={conditionOperators}
+          saving={saving}
+          onEdit={onEdit}
+        />
+      : <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
+          {normal.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
+          {!normal.length && !advanced.length && <p className="empty-copy">
+            {readOnly ? 'This operation is visible for context but has no safe editor.' : 'No configurable values.'}
+          </p>}
+        </fieldset>}
 
-    {operation.kind === 'html_report.layout' && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
+    {operation.capabilities.includes('html-preview')
+      && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
 
-    {advanced.length > 0 && <details className="advanced-settings">
+    {advanced.length > 0 && !operation.capabilities.includes('condition-editor') && <details className="advanced-settings">
       <summary>Advanced</summary>
       <div className="parameter-grid">
-        {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...shared} />)}
+        {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
       </div>
     </details>}
+
+    {operation.validation_state === 'unresolved'
+      && !operation.capabilities.includes('condition-editor')
+      && <ValidationMessage message="One or more values reference an unresolved symbol." />}
 
     {operation.comments.length > 0 && <details className="operation-comments">
       <summary>Comments</summary>
@@ -126,6 +140,7 @@ function HtmlPreviewPanel({
       setPreview(await previewHtml(tabId, operationId))
       setError('')
     } catch (reason) {
+      setPreview(null)
       setError(reason instanceof Error ? reason.message : 'HTML preview failed.')
     } finally {
       setLoading(false)
@@ -134,7 +149,10 @@ function HtmlPreviewPanel({
 
   return <section className="html-preview">
     <header>
-      <div><strong>Report Preview</strong><small>Rendered safely from the current draft without running the workflow.</small></div>
+      <div>
+        <strong>Report Preview</strong>
+        <small>Rendered safely from the current draft without running the workflow.</small>
+      </div>
       <button type="button" disabled={loading} onClick={() => void load()}>{loading ? 'Rendering…' : 'Preview'}</button>
     </header>
     {error && <ValidationMessage message={error} />}
