@@ -12,13 +12,18 @@ from vg2c.utility_metadata import FileEffectDefinition, FileEffectKind, PathBase
 @dataclass(frozen=True, slots=True)
 class FileEndpoint:
     id: str
-    parameter_id: str | None
+    binding_id: str | None
     path: str | None
     expression: str | None
     path_base: PathBase
     phase: Literal["prior", "next", "deleted"]
     state_ids: tuple[str, ...] = ()
     status: Literal["known", "dynamic", "external", "missing", "possible"] = "known"
+
+    @property
+    def parameter_id(self) -> str | None:
+        """Compatibility alias for pre-v5 file-effect consumers."""
+        return self.binding_id
 
 
 @dataclass(frozen=True, slots=True)
