@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
 
 export type WorkbenchPane = 'logic' | 'config' | 'context'
@@ -100,7 +100,7 @@ function PaneSeparator({
   max: number
   onDelta: (delta: number) => void
 }) {
-  function pointerDown(event: React.PointerEvent<HTMLDivElement>) {
+  function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     const startX = event.clientX
     const target = event.currentTarget
     target.setPointerCapture(event.pointerId)
