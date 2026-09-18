@@ -1,31 +1,11 @@
 import { useId, useState } from 'react'
-import { Plus, RotateCcw, X } from 'lucide-react'
-import type { ParameterView, ValueSchemaView } from './contracts.generated'
-import { effectiveParameterValue, RESET_VALUE, type FieldPath, type TabState } from './workspaceState'
+import { Plus, X } from 'lucide-react'
+import type { ValueSchemaView } from './contracts.generated'
+import type { FieldPath, TabState } from './workspaceState'
 
 export interface FieldDraftProps {
   drafts: TabState['fieldDrafts']
   onDraft: (key: string, draft: TabState['fieldDrafts'][string] | null) => void
-}
-
-interface Props extends FieldDraftProps {
-  parameter: ParameterView
-  values: Record<string, unknown>
-  disabled: boolean
-  onChange: (value: unknown, clearDraftPaths?: FieldPath[]) => void
-}
-
-export function ParameterField({ parameter, values, disabled, onChange, drafts, onDraft }: Props) {
-  const value = effectiveParameterValue(values, parameter)
-  const schema = parameter.value_schema ?? {
-    kind: parameter.editor_type === 'multiline' ? 'string' : parameter.editor_type,
-    nullable: false, choices: [], items: null, properties: {}, required_keys: [], variants: [], path: false, prefix_items: [], tuple_value: false,
-  }
-  return <fieldset className={`parameter parameter-field${disabled ? ' parameter--readonly' : ''}`}>
-    <legend>{humanize(parameter.name)}{parameter.required ? ' *' : ''}</legend>
-    <div className="parameter-field__meta"><small>{parameter.id in values || parameter.overridden ? 'Override' : parameter.omitted ? 'Default' : 'Generated value'}</small><button type="button" className="icon-button" disabled={disabled || !(parameter.id in values || parameter.overridden)} aria-label={`Reset ${humanize(parameter.name)} to generated value`} title="Reset to generated value" onClick={() => onChange(RESET_VALUE)}><RotateCcw size={14} aria-hidden="true" /></button></div>
-    {disabled ? <><pre className="parameter-source">{parameter.source}</pre><small>{parameter.read_only_reason ?? 'Read only'}</small></> : <SchemaValueField schema={schema} value={value} onChange={onChange} label={humanize(parameter.name)} parameterId={parameter.id} path={[]} multiline={parameter.editor_type === 'multiline'} drafts={drafts} onDraft={onDraft} />}
-  </fieldset>
 }
 
 export interface SchemaValueProps extends FieldDraftProps {
@@ -33,18 +13,18 @@ export interface SchemaValueProps extends FieldDraftProps {
   value: unknown
   onChange: (value: unknown, clearDraftPaths?: FieldPath[]) => void
   label: string
-  parameterId: string
+  bindingId: string
   path: Array<string | number>
   multiline?: boolean
 }
 
 export function SchemaValueField(props: SchemaValueProps) {
-  const { schema, value, label, parameterId, path, drafts, onDraft } = props
+  const { schema, value, label, bindingId, path, drafts, onDraft } = props
   const onChange = (next: unknown, clearDraftPaths: FieldPath[] = [path]) => props.onChange(next, clearDraftPaths)
   const id = useId()
   const [newKey, setNewKey] = useState('')
-  const key = JSON.stringify([parameterId, ...path])
-  const nested = (child: ValueSchemaView, item: unknown, name: string | number, change: ValueProps['onChange']) => <SchemaValueField {...props} schema={child} value={item} path={[...path, name]} label={`${label} ${name}`} onChange={change} multiline={false} />
+  const key = JSON.stringify([bindingId, ...path])
+  const nested = (child: ValueSchemaView, item: unknown, name: string | number, change: SchemaValueProps['onChange']) => <SchemaValueField {...props} schema={child} value={item} path={[...path, name]} label={`${label} ${name}`} onChange={change} multiline={false} />
   if (schema.nullable) return <div className="nullable-field"><label className="checkbox-field"><input type="checkbox" aria-label={`${label} enabled`} checked={value !== null} onChange={(event) => onChange(event.target.checked ? defaultValue({ ...schema, nullable: false }) : null)} /><span>{value === null ? 'Not set' : 'Set value'}</span></label>{value !== null && <SchemaValueField {...props} schema={{ ...schema, nullable: false }} />}</div>
   if (schema.choices.length) return <select id={id} aria-label={label} value={schema.choices.findIndex((choice) => Object.is(choice, value))} onChange={(event) => onChange(schema.choices[Number(event.target.value)])}>{schema.choices.map((choice, index) => <option key={index} value={index}>{String(choice)}</option>)}</select>
   if (schema.kind === 'union') {
@@ -58,7 +38,7 @@ export function SchemaValueField(props: SchemaValueProps) {
       const text = event.target.value
       const number = Number(text)
       if (!text.trim() || !Number.isFinite(number) || text.endsWith('.') || schema.kind === 'integer' && !Number.isInteger(number)) {
-        onDraft(key, { parameterId, text, error: schema.kind === 'integer' ? 'Enter a whole number.' : 'Enter a finite number.' })
+        onDraft(key, { bindingId, text, error: schema.kind === 'integer' ? 'Enter a whole number.' : 'Enter a finite number.' })
       } else { onChange(number) }
     }} />{draft && <small id={`${id}-error`} className="validation-error" role="alert">{draft.error}</small>}</div>
   }
