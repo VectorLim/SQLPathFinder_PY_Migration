@@ -578,9 +578,15 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .configuration-pane .sql-join-row, .configuration-pane .sql-add-panel { border-radius: var(--radius-sm); }
 
 @media (max-width: 640px) {
-  .workbench-actions .change-toolbar { flex-direction: row; flex-wrap: wrap; }
-  .workbench-actions .change-toolbar .toolbar-group { margin: 0; flex: 1; justify-content: flex-end; }
-  .workbench-actions .change-toolbar .toolbar-group button { flex: 0 0 auto; }
+  .workbench-actions .change-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .workbench-actions .change-toolbar .toolbar-group {
+    display: grid;
+    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    width: 100%;
+    margin: 0;
+  }
+  .workbench-actions .change-toolbar .toolbar-group button { min-width: 0; width: 100%; }
   .pane-tabs button { gap: var(--space-1); padding-inline: var(--space-1); }
   .pane-tabs svg { flex: 0 0 16px; }
 }
