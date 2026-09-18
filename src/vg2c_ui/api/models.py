@@ -236,7 +236,6 @@ class DocumentView(BaseModel):
 
 class SemanticChangeRequest(BaseModel):
     binding_id: str
-    parameter_id: str | None = None
     value: Any = None
     reset: bool = False
 
