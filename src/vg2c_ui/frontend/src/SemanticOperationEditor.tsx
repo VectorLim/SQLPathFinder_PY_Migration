@@ -11,7 +11,7 @@ import type {
   SymbolView,
 } from './contracts.generated'
 import { ConditionEditor } from './ConditionEditor'
-import type { FieldDraftProps } from './ParameterField'
+import type { FieldDraftProps } from './SchemaValueField'
 import { SemanticBindingField } from './SemanticBindingField'
 import { ValidationMessage } from './shared/SemanticControls'
 import type { FieldPath } from './workspaceState'
