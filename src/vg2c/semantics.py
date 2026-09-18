@@ -113,12 +113,7 @@ def build_semantic_model(
     """Project one authoritative semantic model from resolver controls and emitted metadata."""
     values = values or {}
     block_by_index = {block.index: block for block in result.resolved.blocks}
-    scope_parent, scope_by_id = _scope_indexes(result.resolved.scope_tree)
-    structural_id = {
-        node.scope_id: _control_operation_id(node)
-        for node in scope_by_id.values()
-        if node.kind in {"if", "macro", "loop"}
-    }
+    control_ranges = _control_source_ranges(result)
 
     operations: list[WorkflowOperation] = []
     handled_blocks: set[int] = set()
@@ -134,6 +129,7 @@ def build_semantic_model(
                 parent_operation,
                 branch,
                 values,
+                control_ranges.get(node.scope_id),
             )
             operations.append(operation)
             handled_blocks.add(node.start_index)
@@ -182,11 +178,10 @@ def _control_operation(
     parent_operation_id: str | None,
     branch: Literal["true", "false"] | None,
     values: dict[str, Any],
+    source_range: SourceRange | None,
 ) -> WorkflowOperation:
     payload = node.control_payload
     operation_id = _control_operation_id(node)
-    header = payload.render_header() if payload is not None else ""
-    header_range = _find_workflow_source_range(result.emitted.source, header, node.start_index)
 
     if isinstance(payload, IfThen):
         names = ("lhs", "op", "rhs", "conj", "lhs2", "op2", "rhs2")
@@ -237,7 +232,7 @@ def _control_operation(
             bindings=tuple(bindings),
             capabilities=("condition-editor",),
             block_index=block.index,
-            source_range=header_range,
+            source_range=source_range,
         )
 
     if isinstance(payload, StartMacro):
@@ -264,7 +259,7 @@ def _control_operation(
             bindings=(binding,),
             capabilities=("file-input",),
             block_index=block.index,
-            source_range=header_range,
+            source_range=source_range,
         )
 
     if isinstance(payload, RunLoop):
@@ -298,7 +293,7 @@ def _control_operation(
             bindings=bindings,
             capabilities=("file-input", "file-output"),
             block_index=block.index,
-            source_range=header_range,
+            source_range=source_range,
         )
 
     return WorkflowOperation(
@@ -311,7 +306,7 @@ def _control_operation(
         source_span=block.span,
         validation_state="unsupported",
         block_index=block.index,
-        source_range=header_range,
+        source_range=source_range,
     )
 
 
@@ -649,14 +644,26 @@ def _control_operation_id(node: ScopeNode) -> str:
     return f"block-{node.start_index}:control:{suffix}"
 
 
-def _find_workflow_source_range(source: str, header: str, block_index: int) -> SourceRange | None:
-    if not header:
-        return None
+def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
+    """Locate control headers in emitted workflow order without parsing generated Python."""
+    source = result.emitted.source
     marker = source.find("# <vg2c:workflow:start>")
-    start = source.find(header, marker if marker >= 0 else 0)
-    if start < 0:
-        return None
-    return SourceRange(start, start + len(header))
+    cursor = marker if marker >= 0 else 0
+    ranges: dict[int, SourceRange] = {}
+
+    def visit(node: ScopeNode) -> None:
+        nonlocal cursor
+        if node.kind in {"if", "macro", "loop"} and node.control_payload is not None:
+            header = node.control_payload.render_header()
+            start = source.find(header, cursor)
+            if start >= 0:
+                ranges[node.scope_id] = SourceRange(start, start + len(header))
+                cursor = start + len(header)
+        for child in node.children:
+            visit(child)
+
+    visit(result.resolved.scope_tree)
+    return ranges
 
 
 def _row_count_path_range(
