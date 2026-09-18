@@ -121,7 +121,7 @@ src/vg2c_ui/services/document_store.py:
 
 src/vg2c_ui/services/sidecar.py currently persists only parameter_id/value pairs in sidecar version 2.
 
-This is a valuable safety boundary. The source VG2 file is not silently rewritten, and stale generated output becomes read-only. The refactor should preserve this invariant while generalizing the change model beyond plain emitted invocation parameters.
+This is a valuable safety boundary. The source VG2 file is not silently rewritten, and stale generated output becomes read-only. The refactor should preserve this invariant while broadening the set of compiler-owned bindings that the existing ParameterChange model can address.
 
 ### 2.5 File/dataflow models
 
@@ -851,7 +851,7 @@ Use the parser's statement span to derive:
 - one editable SELECT;
 - post-query statements.
 
-Known boilerplate such as standard DROP TABLE IF EXISTS should be classified as internal/implicit and hidden when the runtime already guarantees it.
+Known boilerplate such as standard DROP TABLE IF EXISTS should be classified as internal/implicit and hidden when the runtime already guarantees it. Likewise, do not expose a separate SET VALUE CSV control when the utility already derives or owns that value.
 
 If non-boilerplate pre/post statements have real user meaning, show a compact Pre-query/Post-query section using progressive disclosure.
 
