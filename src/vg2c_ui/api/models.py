@@ -77,6 +77,7 @@ class SymbolView(BaseModel):
     kind: Literal["global", "macro", "macro-row", "unresolved"]
     value_state: Literal["known", "runtime", "unknown"]
     value: Any = None
+    condition_value: str | None = None
     introduction: OperationReferenceView | None = None
     references: list[SymbolReferenceView] = Field(default_factory=list)
 
