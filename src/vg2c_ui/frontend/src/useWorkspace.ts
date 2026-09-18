@@ -70,7 +70,7 @@ export function useWorkspace() {
   }, [])
 
   const edit = useCallback((tabId: string, binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => {
-    dispatch({ type: 'edit', tabId, parameterId: binding.id, value, clearDraftPaths })
+    dispatch({ type: 'edit', tabId, bindingId: binding.id, value, clearDraftPaths })
   }, [])
 
   const previewBinding = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
@@ -167,7 +167,7 @@ export function useWorkspace() {
     }
   }, [])
 
-  const inspectStructuredSql = useCallback(async (tabId: string, parameterId: string): Promise<SqlModelView> => {
+  const inspectStructuredSql = useCallback(async (tabId: string, bindingId: string): Promise<SqlModelView> => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
     const instanceId = tab.instanceId
@@ -185,7 +185,7 @@ export function useWorkspace() {
 
   const runSqlAction = useCallback(async (
     tabId: string,
-    parameterId: string,
+    bindingId: string,
     action: SqlActionRequest['action'],
     args: Record<string, unknown>,
   ): Promise<SqlModelView> => {
@@ -208,7 +208,7 @@ export function useWorkspace() {
       type: 'edit',
       tabId,
       instanceId,
-      parameterId: response.change.binding_id,
+      bindingId: response.change.binding_id,
       value: response.change.value,
       baseVersion: version,
     })
