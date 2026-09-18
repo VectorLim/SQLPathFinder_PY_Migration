@@ -77,7 +77,7 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
     await separator.press('ArrowRight')
     expect(Number(await separator.getAttribute('aria-valuenow'))).toBeGreaterThan(before)
   }
-  const outputMode = page.getByLabel('Output file', { exact: true })
+  const outputMode = page.getByRole('combobox', { name: /Output file/i })
   await outputMode.selectOption('__manual__')
   let outputPath = page.getByLabel('Output file path', { exact: true })
   await outputPath.fill('renamed.csv')
