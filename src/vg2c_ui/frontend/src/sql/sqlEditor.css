@@ -202,3 +202,7 @@
 .sql-advanced { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); }
 .sql-advanced > summary, .raw-sql-details > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
 .raw-sql-details { margin-top: var(--space-2); }
+
+.sql-source-context { margin-top: var(--space-2); border-top: 1px solid var(--line-soft); padding-top: var(--space-2); }
+.sql-source-context > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); font-weight: 650; }
+.sql-source-context pre { max-height: 180px; margin: var(--space-2) 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
