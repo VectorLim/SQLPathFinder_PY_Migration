@@ -11,6 +11,7 @@ from vg2c import CompilationResult
 from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import ParameterChange
 from vg2c.kind import Kind
+from vg2c.semantics import CONDITION_OPERATORS
 from vg2c.operands import ScopeNode as CompilerScopeNode
 from vg2c.sql_editor import (
     FILTER_OPERATORS,
@@ -22,12 +23,17 @@ from vg2c.sql_editor.capability import parameter_capabilities
 from vg2c.workflow import project_workflow
 from vg2c_ui.api.models import (
     ArtifactView,
+    ConditionOperatorView,
     DiagnosticView,
     DocumentView,
     FileEffectView,
+    FileResourceView,
+    OperationReferenceView,
     OperationView,
     ParameterView,
     ScopeView,
+    SemanticBindingView,
+    SemanticOperationView,
     SourceSpanView,
     SqlEditCapabilitiesView,
     SqlJoinView,
@@ -37,6 +43,8 @@ from vg2c_ui.api.models import (
     SqlSourceView,
     SqlSpanView,
     StepView,
+    SymbolReferenceView,
+    SymbolView,
     UtilityView,
     ValueSchemaView,
 )
@@ -250,7 +258,106 @@ def document_view(
         artifacts=artifacts,
         diagnostics=diagnostics,
         effects=effect_views(workflow.effects),
+        semantic_operations=semantic_operation_views(workflow.operations),
+        files=file_resource_views(workflow.files),
+        symbols=symbol_views(workflow.symbols),
+        condition_operators=[
+            ConditionOperatorView(code=code, symbol=symbol, operand_type=operand_type)
+            for code, symbol, operand_type in CONDITION_OPERATORS
+        ],
     )
+
+
+def semantic_operation_views(operations) -> list[SemanticOperationView]:
+    return [
+        SemanticOperationView(
+            id=operation.id,
+            kind=operation.kind,
+            display_name=operation.display_name,
+            description=operation.description,
+            parent_operation_id=operation.parent_operation_id,
+            branch=operation.branch,
+            source_span=SourceSpanView(
+                file=str(operation.source_span.file) if operation.source_span.file else None,
+                start_line=operation.source_span.start_line,
+                end_line=operation.source_span.end_line,
+            ),
+            bindings=[
+                SemanticBindingView(
+                    id=binding.id,
+                    owner_operation_id=binding.owner_operation_id,
+                    name=binding.name,
+                    display_label=binding.display_label,
+                    value=binding.value,
+                    default=binding.default,
+                    required=binding.required,
+                    visibility=binding.visibility,
+                    capabilities=list(binding.capabilities),
+                    validation_state=binding.validation_state,
+                    resettable=binding.resettable,
+                    editable=binding.editable,
+                    read_only_reason=binding.read_only_reason,
+                    value_schema=_value_schema_view(binding.schema),
+                )
+                for binding in operation.bindings
+                if binding.visibility != "internal"
+            ],
+            capabilities=list(operation.capabilities),
+            comments=list(operation.comments),
+            validation_state=operation.validation_state,
+            visibility=operation.visibility,
+        )
+        for operation in operations
+        if operation.visibility != "internal"
+    ]
+
+
+def file_resource_views(files) -> list[FileResourceView]:
+    def ref_view(ref):
+        return OperationReferenceView(
+            operation_id=ref.operation_id,
+            binding_id=ref.binding_id,
+        )
+
+    return [
+        FileResourceView(
+            id=item.id,
+            path=item.path,
+            status=item.status,
+            producer_refs=[ref_view(ref) for ref in item.producer_refs],
+            consumer_refs=[ref_view(ref) for ref in item.consumer_refs],
+            lifecycle_refs=[ref_view(ref) for ref in item.lifecycle_refs],
+        )
+        for item in files
+    ]
+
+
+def symbol_views(symbols) -> list[SymbolView]:
+    return [
+        SymbolView(
+            id=item.id,
+            display_name=item.display_name,
+            kind=item.kind,
+            value_state=item.value_state,
+            value=item.value,
+            introduction=(
+                OperationReferenceView(
+                    operation_id=item.introduction.operation_id,
+                    binding_id=item.introduction.binding_id,
+                )
+                if item.introduction
+                else None
+            ),
+            references=[
+                SymbolReferenceView(
+                    operation_id=ref.operation_id,
+                    binding_id=ref.binding_id,
+                )
+                for ref in item.references
+            ],
+        )
+        for item in symbols
+    ]
 
 
 def effect_views(effects: Iterable[FileEffect]) -> list[FileEffectView]:
@@ -523,5 +630,8 @@ def _diagnostic_level(value: str) -> str:
 __all__ = [
     "MAX_DIAGNOSTICS",
     "document_view",
+    "file_resource_views",
+    "semantic_operation_views",
+    "symbol_views",
     "sql_model_view",
 ]
