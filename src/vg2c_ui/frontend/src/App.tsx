@@ -8,7 +8,6 @@ import { buildCommands, executeCommand } from './commands'
 import type { ChangePreviewView, DiagnosticView } from './contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
-import { baseName } from './operationLabels'
 import { SemanticScriptTree } from './SemanticScriptTree'
 import { SemanticOperationEditor } from './SemanticOperationEditor'
 import { ContextPane } from './ContextPane'
@@ -230,3 +229,7 @@ function DocumentDiagnostics({ diagnostics }: { diagnostics: DiagnosticView[] })
 }
 
 function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Changes validated' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}{preview.valid && <p className="empty-copy">The current draft is valid and ready to apply.</p>}</div></details> }
+
+function baseName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
+}
