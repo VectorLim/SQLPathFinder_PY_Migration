@@ -8,11 +8,11 @@ interface Props {
   binding: SemanticBindingView
   value: unknown
   disabled: boolean
-  validate: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
-  onChange: (value: string) => void
+  validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
+  onCommit: (value: string) => void
 }
 
-export function EmbeddedPythonEditor({ tabId, binding, value, disabled, validate, onChange }: Props) {
+export function EmbeddedPythonEditor({ tabId, binding, value, disabled, validateBinding, onCommit }: Props) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(String(value ?? ''))
   const [preview, setPreview] = useState<ChangePreviewView | null>(null)
@@ -28,7 +28,7 @@ export function EmbeddedPythonEditor({ tabId, binding, value, disabled, validate
   async function validateDraft() {
     setValidating(true)
     try {
-      const result = await validate(tabId, binding.id, draft)
+      const result = await validateBinding(tabId, binding.id, draft)
       setPreview(result)
       setError('')
       return result
@@ -43,7 +43,7 @@ export function EmbeddedPythonEditor({ tabId, binding, value, disabled, validate
   async function save() {
     const result = await validateDraft()
     if (!result?.valid) return
-    onChange(draft)
+    onCommit(draft)
     modal.requestClose()
   }
 
