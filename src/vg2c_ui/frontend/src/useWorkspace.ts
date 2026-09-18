@@ -72,6 +72,14 @@ export function useWorkspace() {
     dispatch({ type: 'edit', tabId, parameterId: binding.id, value, clearDraftPaths })
   }, [])
 
+  const previewBinding = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) throw new Error('Document is no longer open.')
+    const changes = draftChanges(tab).filter((change) => change.binding_id !== bindingId)
+    changes.push({ binding_id: bindingId, value, reset: false })
+    return previewChanges({ ...documentSnapshot(tab.document), changes })
+  }, [])
+
   const validate = useCallback(async (tabId: string) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) return null
@@ -213,6 +221,7 @@ export function useWorkspace() {
     reload,
     edit,
     validate,
+    previewBinding,
     apply,
     loadCsv,
     inspectStructuredSql,
