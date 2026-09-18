@@ -186,3 +186,19 @@
   .sql-add-panel__actions > button { flex: 1 1 auto; }
   .raw-sql-details > summary { display: flex; align-items: center; min-height: 44px; }
 }
+
+
+.sql-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--line); }
+.sql-tabs button { display: flex; justify-content: center; gap: var(--space-1); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); }
+.sql-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.sql-tabs button span { color: var(--muted); font-size: 11px; }
+.sql-tab-panel { min-width: 0; }
+.reorderable-list { display: grid; gap: var(--space-2); }
+.reorderable-item { border-radius: var(--radius-sm); }
+.reorderable-item[draggable="true"] { cursor: grab; }
+.reorderable-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sql-column-row { grid-template-columns: auto minmax(0, 1fr) minmax(100px, .4fr) auto; }
+.reorder-handle { color: var(--muted); font-size: var(--text-sm); user-select: none; }
+.sql-advanced { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); }
+.sql-advanced > summary, .raw-sql-details > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
+.raw-sql-details { margin-top: var(--space-2); }
