@@ -446,6 +446,8 @@ class SqlModelView(BaseModel):
     join_types: list[str]
     logical_connectors: list[str]
     statement_span: SqlSpanView
+    before_statement: str
+    after_statement: str
     selections: list[SqlSelectionView]
     filters: list[SqlPredicateView]
     joins: list[SqlJoinView]
