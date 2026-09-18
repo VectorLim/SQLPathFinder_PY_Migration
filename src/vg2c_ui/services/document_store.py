@@ -5,6 +5,7 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import wraps
+from types import SimpleNamespace
 from pathlib import Path
 from threading import RLock
 
@@ -18,6 +19,8 @@ from vg2c.editing import (
     apply_changes as apply_parameter_changes,
 )
 from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
+from vg2c.semantics import build_semantic_model
+from vg2c.utilities.html_report import HtmlReport
 from vg2c.workflow import (
     WorkflowDocument,
     project_workflow,
@@ -30,6 +33,8 @@ from vg2c_ui.api.models import (
     ChangeResultView,
     CsvPreviewView,
     CsvPreviewRequest,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
     DependencyIssueView,
     DependencyLinkView,
     DocumentView,
@@ -71,6 +76,24 @@ class PathOutsideWorkspace(ValueError):
 
 class RevisionConflict(RuntimeError):
     pass
+
+
+class _PreviewMacro:
+    def __init__(self, resolver) -> None:
+        self._resolver = resolver
+        self.approximate = False
+        self.missing_inputs: set[str] = set()
+
+    def resolve_file_path(self, value: str) -> Path:
+        path = self._resolver(value)
+        if not path.is_file():
+            self.missing_inputs.add(value)
+        return path
+
+    def substitute(self, value: str) -> str:
+        if "VAR(" in value or "{{" in value or "}}" in value:
+            self.approximate = True
+        return value
 
 
 _STORE_LOCK = RLock()
@@ -190,6 +213,99 @@ class DocumentStore:
                 )
             ),
             issues=tuple(_issue_view(issue) for issue in projected.issues),
+        )
+
+    @_serialized
+    def preview_html(self, request: HtmlPreviewRequest) -> HtmlPreviewView:
+        source, output, result, persisted = self._load_for_change(request)
+        merged = _merge_changes(persisted, _changes(request.changes))
+        projected = project_changes(result, merged)
+        if not projected.valid:
+            return HtmlPreviewView(
+                state="error",
+                html="",
+                message="HTML preview is unavailable until configuration errors are resolved.",
+            )
+
+        values = {item.binding_id: item.value for item in projected.values}
+        model = build_semantic_model(result, values)
+        target = next(
+            (item for item in model.operations if item.id == request.operation_id),
+            None,
+        )
+        if target is None or target.kind != "html_report.layout":
+            return HtmlPreviewView(
+                state="error",
+                html="",
+                message="Select a Generate HTML Report operation to preview.",
+            )
+
+        report = HtmlReport()
+        preview_macro = _PreviewMacro(self._resolve)
+        context = SimpleNamespace(macro=preview_macro)
+
+        for operation in model.operations:
+            if not operation.kind.startswith("html_report."):
+                continue
+            bindings = {item.name: item.value for item in operation.bindings}
+            if operation.kind == "html_report.run":
+                report.run(
+                    instance=bindings.get("instance"),
+                    prompt_text=bindings.get("prompt_text"),
+                    app_server_default=bindings.get("app_server_default"),
+                    template=bindings.get("template"),
+                )
+            elif operation.kind == "html_report.defer":
+                report.defer(
+                    id=str(bindings.get("id") or ""),
+                    instance=bindings.get("instance"),
+                    prompt_text=bindings.get("prompt_text"),
+                    app_server_default=bindings.get("app_server_default"),
+                    template=bindings.get("template"),
+                )
+            elif operation.kind == "html_report.delete":
+                report.delete(instance=bindings.get("instance"))
+            elif operation.id == request.operation_id:
+                template = bindings.get("template")
+                if not isinstance(template, str):
+                    return HtmlPreviewView(
+                        state="error",
+                        html="",
+                        message="HTML layout template is unavailable.",
+                    )
+                try:
+                    filename, html = report.render_layout(
+                        context,
+                        template,
+                        instance=bindings.get("instance"),
+                        css_resolver=self._resolve,
+                        write_css=False,
+                    )
+                    output_candidate = self._resolve(filename)
+                except (OSError, ValueError, PathOutsideWorkspace) as exc:
+                    return HtmlPreviewView(
+                        state="error",
+                        html="",
+                        message=f"HTML preview could not resolve a workspace resource: {exc}",
+                    )
+                state = "approximate" if preview_macro.approximate else "exact"
+                message = None
+                if preview_macro.missing_inputs:
+                    state = "error"
+                    message = "Missing preview input: " + ", ".join(sorted(preview_macro.missing_inputs))
+                elif state == "approximate":
+                    message = "Preview contains runtime values that cannot be resolved before execution."
+                return HtmlPreviewView(
+                    state=state,
+                    html=html,
+                    output_path=self._relative_display(str(output_candidate)),
+                    message=message,
+                )
+
+        return HtmlPreviewView(
+            state="error",
+            html="",
+            message="HTML layout operation could not be replayed safely.",
         )
 
     @_serialized
