@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 
 import type { SymbolView } from '../contracts.generated'
 
@@ -24,6 +24,7 @@ export function FileSelector({
   const known = [...new Set(files.filter(Boolean))].sort()
   const matched = known.includes(current)
   const [manual, setManual] = useState(!matched)
+  useEffect(() => setManual(!known.includes(current)), [current, known.join('\u0000')])
   const selectValue = manual ? '__manual__' : current
 
   return <div className="semantic-file-selector">
@@ -178,7 +179,7 @@ export function ReorderableList<T>({
     }
   }
 
-  return <div className="reorderable-list">
+  return <div className="reorderable-list" role="list">
     <span className="sr-only" aria-live="polite">{announcement}</span>
     {items.map((item, index) => <div
       key={getId(item)}
