@@ -521,7 +521,12 @@ def _build_symbols(
     for step in result.emitted.steps:
         for parameter in step.parameters:
             if parameter.id.startswith("global:"):
-                add(parameter.name, "global", "known", parameter.value)
+                add(
+                    parameter.id.removeprefix("global:"),
+                    "global",
+                    "known",
+                    parameter.value,
+                )
 
     for operation in operations:
         if operation.kind == "check-row-count":
