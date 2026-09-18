@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 
-import { workspaceDownloadUrl } from './api'
+import { uploadWorkspaceFile, workspaceDownloadUrl } from './api'
 import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
@@ -193,6 +193,7 @@ export function App() {
               tabId={active.document.id} operation={selectedOperation}
               values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
               knownFiles={knownFiles} symbols={active.document.symbols}
+              onUploadFile={async (file) => { const saved = await uploadWorkspaceFile(file); await fileInventory.refresh(); return saved.path }}
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
               onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
               validateBinding={workspace.previewBinding}
