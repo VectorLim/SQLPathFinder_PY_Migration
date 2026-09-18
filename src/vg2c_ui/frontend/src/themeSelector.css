@@ -12,11 +12,9 @@
 .theme-selector select:hover { border-color: color-mix(in srgb, var(--header-muted) 76%, transparent); }
 
 @media (max-width: 780px) {
-  .theme-selector { margin-left: 0; justify-self: start; }
+  .theme-selector { margin-left: auto; align-self: center; }
 }
 
 @media (max-width: 640px) {
-  .topbar > .brand { grid-column: 1; grid-row: 1; }
-  .theme-selector { grid-column: 2; grid-row: 1; align-self: center; justify-self: end; }
   .theme-selector select { min-height: 44px; }
 }
