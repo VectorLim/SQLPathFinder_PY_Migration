@@ -4,18 +4,18 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { RotateCcw } from 'lucide-react'
 
 import type {
-  ParameterView,
+  SemanticBindingView,
   SqlActionRequest,
   SqlJoinView,
   SqlModelView,
   SqlPredicateView,
   SqlSelectionView,
 } from './contracts.generated'
-import { effectiveParameterValue } from './workspaceState'
+import { effectiveBindingValue } from './workspaceState'
 
 interface Props {
   tabId: string
-  parameter: ParameterView
+  binding: SemanticBindingView
   readOnly: boolean
   onReset: () => void
   values: Record<string, unknown>
@@ -28,28 +28,26 @@ interface Props {
   ) => Promise<SqlModelView>
 }
 
-export function StructuredSqlEditor({ tabId, parameter, values, readOnly, inspect, runAction, onReset }: Props) {
-  const effectiveSql = effectiveParameterValue(values, parameter)
+export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect, runAction, onReset }: Props) {
+  const effectiveSql = effectiveBindingValue(values, binding)
   const [model, setModel] = useState<SqlModelView | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!parameter) return
     let cancelled = false
     setBusy(true)
-    void inspect(tabId, parameter.id)
+    void inspect(tabId, binding.id)
       .then((next) => { if (!cancelled) { setModel(next); setError('') } })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not inspect SQL.') })
       .finally(() => { if (!cancelled) setBusy(false) })
     return () => { cancelled = true }
-  }, [tabId, parameter?.id, values, typeof effectiveSql === 'string' ? effectiveSql : ''])
+  }, [tabId, binding.id, values, typeof effectiveSql === 'string' ? effectiveSql : ''])
 
   async function act(action: SqlActionRequest['action'], args: Record<string, unknown>): Promise<boolean> {
-    if (!parameter) return false
     setBusy(true)
     try {
-      setModel(await runAction(tabId, parameter.id, action, args))
+      setModel(await runAction(tabId, binding.id, action, args))
       setError('')
       return true
     } catch (reason) {
@@ -62,7 +60,7 @@ export function StructuredSqlEditor({ tabId, parameter, values, readOnly, inspec
 
   return (
     <section className="sql-operation-editor" aria-label="Structured SQL">
-      <header className="sql-parameter-heading"><strong>SQL</strong><button className="icon-button" type="button" aria-label="Reset SQL to generated value" title="Reset SQL to generated value" disabled={readOnly || !(parameter.id in values || parameter.overridden)} onClick={onReset}><RotateCcw size={14} /></button></header>
+      <header className="sql-parameter-heading"><strong>SQL</strong><button className="icon-button" type="button" aria-label="Reset SQL to generated value" title="Reset SQL to generated value" disabled={readOnly || !(binding.id in values)} onClick={onReset}><RotateCcw size={14} /></button></header>
       {error && <p className="sql-edit-error" role="alert">{error}</p>}
       {busy && !model && <p className="empty-copy">Loading structured SQL…</p>}
       {model && !readOnly && (
@@ -75,7 +73,7 @@ export function StructuredSqlEditor({ tabId, parameter, values, readOnly, inspec
       {model?.read_only_reason && <p className="read-only-note">{model.read_only_reason}</p>}
       <details className="raw-sql-details">
         <summary>Raw SQL</summary>
-        <pre className="raw-code raw-sql">{model?.source ?? String(effectiveSql ?? parameter.source)}</pre>
+        <pre className="raw-code raw-sql">{model?.source ?? String(effectiveSql ?? binding.value ?? '')}</pre>
         <small>Raw SQL is displayed only; structural changes are validated and transformed by vg2c.</small>
       </details>
     </section>
