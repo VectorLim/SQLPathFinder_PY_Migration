@@ -163,6 +163,8 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
     })).toBeTruthy()
     const tabFits = await page.locator('.adaptive-pane-tabs button').evaluateAll((buttons) => buttons.every((button) => button.scrollWidth <= button.clientWidth + 1))
     expect(tabFits).toBeTruthy()
+    const actionFits = await page.locator('.change-toolbar .toolbar-group button').evaluateAll((buttons) => buttons.every((button) => button.scrollWidth <= button.clientWidth + 1))
+    expect(actionFits).toBeTruthy()
   }
   await page.screenshot({ path: testInfo.outputPath('zoom-200.png'), fullPage: true })
   expect(errors).toEqual([])
