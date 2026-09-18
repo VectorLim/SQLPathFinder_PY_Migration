@@ -194,11 +194,11 @@ export function App() {
               key={`${active.instanceId}-${selectedOperation.id}`}
               tabId={active.document.id} operation={selectedOperation}
               values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
-              knownFiles={knownFiles} symbols={active.document.symbols}
+              knownFiles={knownFiles} symbols={active.document.symbols} conditionOperators={active.document.condition_operators}
               onUploadFile={async (file) => { const saved = await uploadWorkspaceFile(file); await fileInventory.refresh(); return saved.path }}
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
               onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
-              validateBinding={workspace.validateCandidate}
+              validateBinding={workspace.previewBinding}
               previewHtml={workspace.previewHtmlOperation}
               inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
             /> : <p className="pane-empty">Select an operation to configure it.</p>}
