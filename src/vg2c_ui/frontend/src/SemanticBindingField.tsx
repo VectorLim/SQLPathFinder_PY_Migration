@@ -1,7 +1,7 @@
 import { RotateCcw } from 'lucide-react'
 
 import type {
-  FileResourceView,
+  ChangePreviewView,
   SemanticBindingView,
   SqlActionRequest,
   SqlModelView,
@@ -10,7 +10,7 @@ import type {
 } from './contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
 import { SchemaValueField, type FieldDraftProps } from './ParameterField'
-import { FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
+import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
 import { effectiveBindingValue, RESET_VALUE, type FieldPath } from './workspaceState'
 
@@ -18,15 +18,12 @@ interface Props extends FieldDraftProps {
   tabId: string
   binding: SemanticBindingView
   values: Record<string, unknown>
-  saving: boolean
-  files: FileResourceView[]
+  readOnly: boolean
+  knownFiles: string[]
   symbols: SymbolView[]
+  onUploadFile: (file: File) => Promise<string>
   onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
-  validateCandidate: (tabId: string, bindingId: string, value: unknown) => Promise<{
-    valid: boolean
-    diff: string
-    issues: Array<{ code: string; message: string }>
-  }>
+  validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
   inspectSql: (tabId: string, bindingId: string) => Promise<SqlModelView>
   runSqlAction: (
     tabId: string,
@@ -40,26 +37,39 @@ export function SemanticBindingField({
   tabId,
   binding,
   values,
-  saving,
-  files,
+  readOnly,
+  knownFiles,
   symbols,
+  onUploadFile,
   onEdit,
-  validateCandidate,
+  validateBinding,
   inspectSql,
   runSqlAction,
   drafts,
   onDraft,
 }: Props) {
   const value = effectiveBindingValue(values, binding)
-  const disabled = saving || !binding.editable
-  const schema = binding.value_schema ?? dynamicSchema
-  const validationMessage = binding.read_only_reason
-    ?? (binding.validation_state === 'unresolved' ? 'This value does not resolve to a known symbol.' : null)
-    ?? (binding.validation_state === 'unsupported' ? 'This value cannot be edited safely.' : null)
+  const disabled = readOnly || !binding.editable
+  const reset = binding.resettable && Object.hasOwn(values, binding.id)
+    ? <button type="button" className="icon-button" aria-label={`Reset ${binding.display_label}`} title="Reset value" onClick={() => onEdit(binding, RESET_VALUE)}><RotateCcw size={14} aria-hidden="true" /></button>
+    : null
+
+  if (binding.capabilities.includes('embedded-python')) {
+    return <div className="parameter semantic-binding">
+      <div className="parameter-field__meta"><strong>{binding.display_label}</strong>{reset}</div>
+      <EmbeddedPythonEditor
+        tabId={tabId}
+        binding={binding}
+        value={String(value ?? '')}
+        disabled={disabled}
+        validateBinding={validateBinding}
+        onCommit={(next) => onEdit(binding, next)}
+      />
+    </div>
+  }
 
   if (binding.capabilities.includes('structured-sql')) {
-    return <fieldset className="parameter semantic-binding">
-      <legend>{binding.display_label}</legend>
+    return <div className="parameter semantic-binding">
       <StructuredSqlEditor
         tabId={tabId}
         binding={binding}
@@ -69,107 +79,98 @@ export function SemanticBindingField({
         runAction={runSqlAction}
         onReset={() => onEdit(binding, RESET_VALUE)}
       />
-      <ValidationMessage message={validationMessage} />
-    </fieldset>
-  }
-
-  if (binding.capabilities.includes('embedded-python')) {
-    return <fieldset className="parameter semantic-binding">
-      <legend>{binding.display_label}</legend>
-      <EmbeddedPythonEditor
-        tabId={tabId}
-        binding={binding}
-        value={value}
-        disabled={disabled}
-        validate={validateCandidate}
-        onChange={(next) => onEdit(binding, next)}
-      />
-      <ValidationMessage message={validationMessage} />
-    </fieldset>
-  }
-
-  const editor = binding.capabilities.some((capability) => capability === 'file-input' || capability === 'file-output')
-    && schema.kind === 'string'
-    ? <FileSelector
-        label={binding.display_label}
-        value={value}
-        files={files.flatMap((file) => file.path ? [file.path] : [])}
-        disabled={disabled}
-        onChange={(next) => onEdit(binding, next)}
-      />
-    : binding.capabilities.includes('symbol-or-literal') && schema.kind === 'string'
-      ? <SymbolSelector
-          label={binding.display_label}
-          value={value}
-          symbols={symbols}
-          disabled={disabled}
-          onChange={(next) => onEdit(binding, next)}
-        />
-      : <SchemaValueField
-          schema={schema}
-          value={value}
-          onChange={(next, cleared) => onEdit(binding, next, cleared)}
-          label={binding.display_label}
-          parameterId={binding.id}
-          path={[]}
-          drafts={drafts}
-          onDraft={onDraft}
-        />
-
-  const body = schema.nullable
-    ? <OptionalValue
-        label={binding.display_label}
-        enabled={value !== null}
-        disabled={disabled}
-        onEnabledChange={(enabled) => onEdit(binding, enabled ? defaultFor({ ...schema, nullable: false }) : null)}
-      >
-        {value !== null ? renderNonNullable(editor) : null}
-      </OptionalValue>
-    : editor
-
-  return <fieldset className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`} disabled={saving}>
-    <legend>{schema.nullable ? '' : binding.display_label}{binding.required ? ' *' : ''}</legend>
-    <div className="parameter-field__meta">
-      <small>{Object.hasOwn(values, binding.id) ? 'Override' : 'Current value'}</small>
-      <button
-        type="button"
-        className="icon-button"
-        disabled={disabled || !binding.resettable || !Object.hasOwn(values, binding.id)}
-        aria-label={`Reset ${binding.display_label}`}
-        title="Reset to generated/default value"
-        onClick={() => onEdit(binding, RESET_VALUE)}
-      >
-        <RotateCcw size={14} aria-hidden="true" />
-      </button>
     </div>
-    {body}
-    <ValidationMessage message={validationMessage} />
-  </fieldset>
+  }
+
+  const schema = binding.value_schema
+  const body = renderBindingControl({
+    binding,
+    value,
+    disabled,
+    schema,
+    knownFiles,
+    symbols,
+    onUploadFile,
+    onEdit,
+    drafts,
+    onDraft,
+  })
+
+  return <div className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`}>
+    <div className="parameter-field__meta"><strong>{binding.display_label}{binding.required ? ' *' : ''}</strong>{reset}</div>
+    {binding.required ? body : <OptionalValue
+      label={`Set ${binding.display_label}`}
+      enabled={value !== null && value !== undefined}
+      disabled={disabled}
+      onEnabledChange={(enabled) => onEdit(binding, enabled ? enabledValue(binding, schema) : null)}
+    >{body}</OptionalValue>}
+    {disabled && binding.read_only_reason && <small>{binding.read_only_reason}</small>}
+    {binding.validation_state === 'unresolved' && <ValidationMessage message="This value does not resolve to a known symbol." />}
+  </div>
 }
 
-function renderNonNullable(editor: JSX.Element): JSX.Element {
-  return editor
+function renderBindingControl({
+  binding,
+  value,
+  disabled,
+  schema,
+  knownFiles,
+  symbols,
+  onUploadFile,
+  onEdit,
+  drafts,
+  onDraft,
+}: {
+  binding: SemanticBindingView
+  value: unknown
+  disabled: boolean
+  schema: ValueSchemaView | null
+  knownFiles: string[]
+  symbols: SymbolView[]
+  onUploadFile: (file: File) => Promise<string>
+  onEdit: Props['onEdit']
+  drafts: Props['drafts']
+  onDraft: Props['onDraft']
+}) {
+  const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
+  if (isFileBinding && schema?.kind === 'list') {
+    return <FileListSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
+  }
+  if (isFileBinding) {
+    return <FileSelector label={binding.display_label} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+  }
+  if (binding.capabilities.includes('symbol-or-literal')) {
+    return <SymbolSelector label={binding.display_label} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+  }
+  if (schema) {
+    return <SchemaValueField
+      schema={schema}
+      value={value}
+      onChange={(next, cleared) => onEdit(binding, next, cleared)}
+      label={binding.display_label}
+      bindingId={binding.id}
+      path={[]}
+      multiline={false}
+      drafts={drafts}
+      onDraft={onDraft}
+    />
+  }
+  return <input aria-label={binding.display_label} disabled={disabled} value={String(value ?? '')} onChange={(event) => onEdit(binding, event.target.value)} />
 }
 
-const dynamicSchema: ValueSchemaView = {
-  kind: 'dynamic',
-  nullable: false,
-  choices: [],
-  items: null,
-  properties: {},
-  required_keys: [],
-  variants: [],
-  path: false,
-  prefix_items: [],
-  tuple_value: false,
+function enabledValue(binding: SemanticBindingView, schema: ValueSchemaView | null): unknown {
+  if (binding.value !== null && binding.value !== undefined) return binding.value
+  if (binding.default !== null && binding.default !== undefined) return binding.default
+  if (!schema) return ''
+  return defaultValue({ ...schema, nullable: false })
 }
 
-function defaultFor(schema: ValueSchemaView): unknown {
+function defaultValue(schema: ValueSchemaView): unknown {
   if (schema.choices.length) return schema.choices[0]
   if (schema.kind === 'boolean') return false
   if (schema.kind === 'integer' || schema.kind === 'number') return 0
-  if (schema.kind === 'list') return schema.tuple_value ? schema.prefix_items.map(defaultFor) : []
-  if (schema.kind === 'object') return Object.fromEntries(schema.required_keys.map((key) => [key, defaultFor(schema.properties[key])]))
-  if (schema.kind === 'union') return schema.variants[0] ? defaultFor(schema.variants[0]) : ''
+  if (schema.kind === 'list') return schema.tuple_value ? schema.prefix_items.map(defaultValue) : []
+  if (schema.kind === 'object') return Object.fromEntries(schema.required_keys.map((key) => [key, defaultValue(schema.properties[key])]))
+  if (schema.kind === 'union') return schema.variants[0] ? defaultValue(schema.variants[0]) : ''
   return ''
 }
