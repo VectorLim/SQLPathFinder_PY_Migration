@@ -3,6 +3,7 @@ import { Code2, RotateCcw } from 'lucide-react'
 
 import type {
   ChangePreviewView,
+  HtmlPreviewView,
   SemanticBindingView,
   SemanticOperationView,
   SqlActionRequest,
@@ -24,6 +25,7 @@ interface Props extends FieldDraftProps {
   onUploadFile: (file: File) => Promise<string>
   onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
   validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
+  previewHtml: (tabId: string, operationId: string) => Promise<HtmlPreviewView>
   inspectSql: (tabId: string, bindingId: string) => Promise<SqlModelView>
   runSqlAction: (
     tabId: string,
@@ -43,6 +45,7 @@ export function SemanticOperationEditor({
   onUploadFile,
   onEdit,
   validateBinding,
+  previewHtml,
   inspectSql,
   runSqlAction,
   drafts,
@@ -87,6 +90,8 @@ export function SemanticOperationEditor({
           />)}
       {!operation.capabilities.includes('condition-editor') && normal.length === 0 && <p className="empty-copy">No configurable values.</p>}
     </fieldset>
+
+    {operation.kind === 'html_report.layout' && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
 
     {advanced.length > 0 && <details className="advanced-settings">
       <summary>Advanced</summary>
@@ -232,6 +237,42 @@ function ConditionEditor({
       <div className="condition-clause condition-clause--secondary">{choiceField('conj')}{symbolField('lhs2')}{choiceField('op2')}{symbolField('rhs2')}</div>
     </OptionalValue>
   </div>
+}
+
+function HtmlPreviewPanel({
+  tabId,
+  operationId,
+  previewHtml,
+}: {
+  tabId: string
+  operationId: string
+  previewHtml: Props['previewHtml']
+}) {
+  const [preview, setPreview] = useState<HtmlPreviewView | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function load() {
+    setLoading(true)
+    try {
+      setPreview(await previewHtml(tabId, operationId))
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'HTML preview failed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <section className="html-preview">
+    <header><div><strong>Report Preview</strong><small>Rendered safely from the current draft without running the workflow.</small></div><button type="button" disabled={loading} onClick={() => void load()}>{loading ? 'Rendering…' : 'Preview'}</button></header>
+    {error && <ValidationMessage message={error} />}
+    {preview && <>
+      <p className={`html-preview__state html-preview__state--${preview.state}`}><strong>{preview.state === 'exact' ? 'Exact preview' : preview.state === 'approximate' ? 'Approximate preview' : 'Preview unavailable'}</strong>{preview.message ? ` — ${preview.message}` : ''}</p>
+      {preview.output_path && <small>Output: {preview.output_path}</small>}
+      {preview.html && <iframe title="HTML report preview" sandbox="" srcDoc={preview.html} />}
+    </>}
+  </section>
 }
 
 function EmbeddedPythonEditor({
