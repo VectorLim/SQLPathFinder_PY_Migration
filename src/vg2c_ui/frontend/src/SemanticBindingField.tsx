@@ -83,11 +83,12 @@ export function SemanticBindingField({
   }
 
   const schema = binding.value_schema
+  const controlSchema = !binding.required && schema?.nullable ? { ...schema, nullable: false } : schema
   const body = renderBindingControl({
     binding,
     value,
     disabled,
-    schema,
+    schema: controlSchema,
     knownFiles,
     symbols,
     onUploadFile,
