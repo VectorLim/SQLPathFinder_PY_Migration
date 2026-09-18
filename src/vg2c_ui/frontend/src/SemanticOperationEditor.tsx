@@ -131,7 +131,7 @@ function BindingField({
   validateBinding,
   inspectSql,
   runSqlAction,
-}: Omit<Props, 'operation' | 'saving'> & { binding: SemanticBindingView; readOnly: boolean }) {
+}: Omit<Props, 'operation' | 'saving' | 'previewHtml'> & { binding: SemanticBindingView; readOnly: boolean }) {
   const value = effectiveBindingValue(values, binding)
   const disabled = readOnly || !binding.editable
   const reset = binding.resettable && binding.id in values
@@ -159,7 +159,7 @@ function BindingField({
             value={value}
             onChange={(next, cleared) => onEdit(binding, next, cleared)}
             label={binding.display_label}
-            parameterId={binding.id}
+            bindingId={binding.id}
             path={[]}
             multiline={false}
             drafts={drafts}
