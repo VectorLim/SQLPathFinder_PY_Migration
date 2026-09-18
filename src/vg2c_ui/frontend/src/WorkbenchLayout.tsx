@@ -93,7 +93,6 @@ export function WorkbenchLayout({
       </div>
     </> : <>
       <div className="workbench-pane-controls" aria-label="Pane visibility">
-        <span>Script Logic</span>
         <button type="button" aria-pressed={showConfig} onClick={() => toggleSecondary('config')}>
           {showConfig ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />} Configuration
         </button>
