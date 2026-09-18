@@ -266,3 +266,17 @@ def test_condition_operand_characterization_covers_placeholder_literal_empty_and
         "ctx.macro.named('A') == 'x' or "
         "int(ctx.macro.named('B')) > int('1')"
     )
+
+
+def test_condition_bindings_and_symbols_are_frontend_ready(tmp_path):
+    result = _compile(tmp_path, _condition_source())
+    model = build_semantic_model(result)
+    condition = next(op for op in model.operations if op.kind == "condition")
+    by_name = {binding.name: binding for binding in condition.bindings}
+    count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
+
+    assert by_name["lhs"].capabilities == ("symbol-or-literal",)
+    assert by_name["rhs"].capabilities == ("symbol-or-literal",)
+    assert by_name["op"].capabilities == ("condition-operator",)
+    assert by_name["conj"].capabilities == ("condition-connector",)
+    assert count.condition_value == "VAR(COUNT)"
