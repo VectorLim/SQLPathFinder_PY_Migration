@@ -227,21 +227,20 @@ export interface DocumentView {
 }
 
 export interface SemanticChangeRequest {
-  binding_id: string | null
-  parameter_id: string
+  binding_id: string
+  parameter_id: string | null
   value: unknown
   reset: boolean
 }
 
 export interface ParameterChangeRequest {
-  binding_id: string | null
   parameter_id: string
   value: unknown
   reset: boolean
 }
 
 export interface DocumentSnapshot {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
@@ -251,14 +250,14 @@ export interface DocumentSnapshot {
 }
 
 export interface ChangeBatch {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  changes: Array<SemanticChangeRequest>
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
 }
 
 export interface ValidationIssueView {
@@ -293,7 +292,7 @@ export interface DocumentReference {
 }
 
 export interface CsvPreviewRequest {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
@@ -303,7 +302,7 @@ export interface CsvPreviewRequest {
   effect_id: string
   endpoint_id: string
   expected_path: string
-  changes: Array<SemanticChangeRequest>
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
 }
 
 export interface BatchTranslationRequest {
@@ -317,7 +316,7 @@ export interface BatchTranslationResponse {
 }
 
 export interface WorkspaceDocumentRequest {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
@@ -325,7 +324,7 @@ export interface WorkspaceDocumentRequest {
   revision: string
   compiler_hash: string
   document_id: string
-  changes: Array<SemanticChangeRequest>
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
 }
 
 export interface WorkspaceProjectionRequest {
@@ -456,7 +455,7 @@ export interface SqlModelView {
 }
 
 export interface SqlModelRequest {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
@@ -464,11 +463,11 @@ export interface SqlModelRequest {
   revision: string
   compiler_hash: string
   parameter_id: string
-  changes: Array<SemanticChangeRequest>
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
 }
 
 export interface SqlActionRequest {
-  schema_version: 5
+  schema_version: 4 | 5
   source_path: string
   output_path: string
   source_hash: string
@@ -476,7 +475,7 @@ export interface SqlActionRequest {
   revision: string
   compiler_hash: string
   parameter_id: string
-  changes: Array<SemanticChangeRequest>
+  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
   action: string
   arguments: Record<string, unknown>
 }
