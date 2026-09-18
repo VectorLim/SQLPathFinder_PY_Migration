@@ -137,6 +137,7 @@ test('Email context limits bulk edits to enable state and accepts image attachme
   await expect(page.getByRole('button', { name: 'Disable selected', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Enable all', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Disable all', exact: true }).click()
+  await page.screenshot({ path: testInfo.outputPath('email-context.png'), fullPage: true })
 
   await pane(page, 'Configuration')
   const attachments = page.getByRole('checkbox', { name: 'Set Attachments', exact: true })
@@ -179,6 +180,7 @@ test('Embedded Python edits stay modal and must validate before commit', async (
   await source.fill('if :')
   await dialog.getByRole('button', { name: 'Update Python', exact: true }).click()
   await expect(dialog.getByRole('alert')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('embedded-python-validation.png'), fullPage: true })
 
   await source.fill('print("after")')
   await dialog.getByRole('button', { name: 'Update Python', exact: true }).click()
@@ -203,4 +205,5 @@ test('HTML preview renders the current draft without exposing generated Python',
   await expect(preview.getByText('Exact preview', { exact: true })).toBeVisible()
   await expect(preview.locator('iframe[title="HTML report preview"]')).toBeVisible()
   await expect(page.getByText('Generated information', { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('html-preview.png'), fullPage: true })
 })
