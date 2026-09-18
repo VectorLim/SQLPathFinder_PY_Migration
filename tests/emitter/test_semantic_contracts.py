@@ -87,7 +87,8 @@ def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
     )
     assert projected.valid
     assert (
-        "ctx.macro.named('COUNT') <= 0 and ctx.macro.named('COUNT') != 10"
+        "int(ctx.macro.named('COUNT')) <= int('0') and "
+        "int(ctx.macro.named('COUNT')) != int('10')"
         in projected.source
     )
 
@@ -117,6 +118,12 @@ def test_macro_row_headers_are_exposed_as_symbols_when_input_is_static(tmp_path)
 </OPTIONS>
 <---- New Query ---->
 <OPTIONS>
+/WRITE-FILE=Y
+/CSV=inside.txt
+</OPTIONS>
+inside
+<---- New Query ---->
+<OPTIONS>
 /UTILITIES={END-MACRO}
 </OPTIONS>
 <---- New Query ---->
@@ -134,6 +141,12 @@ def test_control_file_bindings_edit_through_shared_renderer(tmp_path):
         """<OPTIONS>
 /UTILITIES={START-MACRO} "before.csv" "N"
 </OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/CSV=inside.txt
+</OPTIONS>
+inside
 <---- New Query ---->
 <OPTIONS>
 /UTILITIES={END-MACRO}
