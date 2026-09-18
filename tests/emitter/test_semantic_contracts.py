@@ -375,3 +375,31 @@ def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_pat
     assert projected.valid
     assert "enabled=False" in projected.source
 
+
+
+def test_required_parameter_default_is_generated_reset_value(tmp_path):
+    result = _compile(
+        tmp_path,
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n"
+        "SELECT 1 AS value\n"
+        "<---- New Query ---->\n",
+    )
+    model = build_semantic_model(result)
+    sql = next(
+        binding
+        for operation in model.operations
+        for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    overridden = build_semantic_model(result, {sql.id: "SELECT 2 AS value"})
+    overridden_sql = next(
+        binding
+        for operation in overridden.operations
+        for binding in operation.bindings
+        if binding.id == sql.id
+    )
+
+    assert sql.required
+    assert sql.default == "SELECT 1 AS value"
+    assert overridden_sql.value == "SELECT 2 AS value"
+    assert overridden_sql.default == "SELECT 1 AS value"
