@@ -34,6 +34,7 @@ from vg2c.utilities._emit_helpers import (
     to_code_expr,
 )
 from vg2c.utilities._runtime_helpers import strip_quotes
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class MailService(EmitterUtility):
@@ -110,7 +111,11 @@ class MailService(EmitterUtility):
         if len(payload) >= 5:
             attachments = cls._csv_items(payload[0])
             from_addr = strip_quotes(payload[1])
-            body = payload[3] if strip_quotes(payload[3]) else (body_fallback or payload[2])
+            body = (
+                payload[3]
+                if strip_quotes(payload[3])
+                else (body_fallback or payload[2])
+            )
 
             kwargs: dict[str, Any] = {
                 "to": to_code_expr(payload[4]),
@@ -132,7 +137,22 @@ class MailService(EmitterUtility):
 
         return None
 
-    @emittable
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "attachments",
+                "read",
+                inputs=("attachments",),
+                input_base="working-directory",
+                reason="Existing attachments are read; message body may also be read from a runtime file.",
+            ),
+            FileEffectDefinition(
+                "body",
+                "unknown",
+                reason="Message body is literal text or an existing file at runtime.",
+            ),
+        )
+    )
     def send(
         self,
         to: str,

@@ -1,24 +1,24 @@
 import './sql/sqlEditor.css'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { RotateCcw } from 'lucide-react'
 
 import type {
-  DependencyIssueView,
+  ParameterView,
   SqlActionRequest,
   SqlJoinView,
   SqlModelView,
   SqlPredicateView,
   SqlSelectionView,
-  StepView,
 } from './contracts.generated'
-import { formatOperationLabel } from './operationLabels'
+import { effectiveParameterValue } from './workspaceState'
 
 interface Props {
   tabId: string
-  step: StepView
+  parameter: ParameterView
+  readOnly: boolean
+  onReset: () => void
   values: Record<string, unknown>
-  files: { inputs: string[]; outputs: string[] }
-  diagnostics: DependencyIssueView[]
   inspect: (tabId: string, parameterId: string) => Promise<SqlModelView>
   runAction: (
     tabId: string,
@@ -28,9 +28,8 @@ interface Props {
   ) => Promise<SqlModelView>
 }
 
-export function StructuredSqlEditor({ tabId, step, values, files, diagnostics, inspect, runAction }: Props) {
-  const parameter = step.parameters.find((item) => item.capabilities.includes('structured-sql')) ?? null
-  const effectiveSql = parameter && Object.hasOwn(values, parameter.id) ? values[parameter.id] : parameter?.value
+export function StructuredSqlEditor({ tabId, parameter, values, readOnly, inspect, runAction, onReset }: Props) {
+  const effectiveSql = effectiveParameterValue(values, parameter)
   const [model, setModel] = useState<SqlModelView | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -44,36 +43,29 @@ export function StructuredSqlEditor({ tabId, step, values, files, diagnostics, i
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not inspect SQL.') })
       .finally(() => { if (!cancelled) setBusy(false) })
     return () => { cancelled = true }
-  }, [tabId, parameter?.id, typeof effectiveSql === 'string' ? effectiveSql : ''])
+  }, [tabId, parameter?.id, values, typeof effectiveSql === 'string' ? effectiveSql : ''])
 
-  async function act(action: SqlActionRequest['action'], args: Record<string, unknown>) {
-    if (!parameter) return
+  async function act(action: SqlActionRequest['action'], args: Record<string, unknown>): Promise<boolean> {
+    if (!parameter) return false
     setBusy(true)
     try {
       setModel(await runAction(tabId, parameter.id, action, args))
       setError('')
+      return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'SQL update failed.')
+      return false
     } finally {
       setBusy(false)
     }
   }
 
-  const label = formatOperationLabel(step)
-  if (!parameter) return <p className="read-only-note">This operation does not expose a structured SQL parameter.</p>
-
   return (
-    <section className="operation-editor sql-operation-editor" aria-label={`Edit ${label.primary}`}>
-      <header className="operation-editor__header">
-        <div><span className="eyebrow">Operation {step.block_index + 1}</span><h3>{label.primary}</h3>{label.secondary && <p className="operation-secondary">{label.secondary}</p>}</div>
-        <span className={`state-pill${step.read_only ? ' state-pill--readonly' : ''}`}>{step.read_only ? 'Read only' : 'Structured SQL'}</span>
-      </header>
-      {step.description && <p className="operation-description">{step.description}</p>}
-      <FileSummary files={files} />
-      <Diagnostics diagnostics={diagnostics} />
+    <section className="sql-operation-editor" aria-label="Structured SQL">
+      <header className="sql-parameter-heading"><strong>SQL</strong><button className="icon-button" type="button" aria-label="Reset SQL to generated value" title="Reset SQL to generated value" disabled={readOnly || !(parameter.id in values || parameter.overridden)} onClick={onReset}><RotateCcw size={14} /></button></header>
       {error && <p className="sql-edit-error" role="alert">{error}</p>}
       {busy && !model && <p className="empty-copy">Loading structured SQL…</p>}
-      {model && !step.read_only && (
+      {model && !readOnly && (
         <div className="sql-structured-sections">
           <Selections model={model} onAction={act} disabled={busy} />
           <Filters model={model} onAction={act} disabled={busy} />
@@ -91,13 +83,30 @@ export function StructuredSqlEditor({ tabId, step, values, files, diagnostics, i
 }
 
 function Selections({ model, onAction, disabled }: SectionProps) {
+  const [adding, setAdding] = useState(false)
   return (
-    <section className="sql-section"><header><h4>Selected attributes</h4><button type="button" disabled={disabled || !model.capabilities.selected} onClick={() => {
-      const expression = prompt('Selected expression')?.trim(); if (expression) void onAction('add-selection', { expression })
-    }}>Add</button></header>
+    <section className="sql-section">
+      <header><h4>Selected attributes</h4><button type="button" disabled={disabled || !model.capabilities.selected} onClick={() => setAdding(true)}>Add</button></header>
+      {adding && <SelectionAddForm disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
       {model.selections.map((item, index) => <SelectionRow key={item.id} item={item} index={index} count={model.selections.length} disabled={disabled} onAction={onAction} />)}
     </section>
   )
+}
+
+function SelectionAddForm({ disabled, onAction, onClose }: AddFormProps) {
+  const [expression, setExpression] = useState('')
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const next = expression.trim()
+    if (!next) return
+    void onAction('add-selection', { expression: next }).then((success) => {
+      if (success) onClose()
+    })
+  }
+  return <form className="sql-add-panel" onSubmit={submit}>
+    <label><span className="sr-only">Selected expression</span><input autoFocus value={expression} disabled={disabled} onChange={(event) => setExpression(event.target.value)} placeholder="Selected expression" /></label>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !expression.trim()}>Add selection</button></div>
+  </form>
 }
 
 function SelectionRow({ item, index, count, disabled, onAction }: { item: SqlSelectionView; index: number; count: number; disabled: boolean; onAction: ActionFn }) {
@@ -111,14 +120,38 @@ function SelectionRow({ item, index, count, disabled, onAction }: { item: SqlSel
 }
 
 function Filters({ model, onAction, disabled }: SectionProps) {
+  const [adding, setAdding] = useState(false)
   return (
-    <section className="sql-section"><header><h4>Filters</h4><button type="button" disabled={disabled || !model.capabilities.filters} onClick={() => {
-      const left = prompt('Left expression')?.trim(); const right = prompt('Right expression')?.trim(); if (left && right) void onAction('add-filter', { left, operator: model.filter_operators[0], right, connector: model.logical_connectors[0] })
-    }}>Add</button></header>
+    <section className="sql-section">
+      <header><h4>Filters</h4><button type="button" disabled={disabled || !model.capabilities.filters} onClick={() => setAdding(true)}>Add</button></header>
+      {adding && <FilterAddForm model={model} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
       {model.filters.map((item) => <PredicateRow key={item.id} item={item} operators={model.filter_operators} connectors={model.logical_connectors} disabled={disabled} onAction={onAction} />)}
-      {!model.filters.length && <p className="empty-copy">No filters.</p>}
+      {!model.filters.length && !adding && <p className="empty-copy">No filters.</p>}
     </section>
   )
+}
+
+function FilterAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps) {
+  const [left, setLeft] = useState('')
+  const [operator, setOperator] = useState(model.filter_operators[0] ?? '')
+  const [right, setRight] = useState('')
+  const [connector, setConnector] = useState(model.logical_connectors[0] ?? 'AND')
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!left.trim() || !right.trim() || !operator) return
+    void onAction('add-filter', { left: left.trim(), operator, right: right.trim(), connector }).then((success) => {
+      if (success) onClose()
+    })
+  }
+  return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
+    <div className="sql-add-panel__row">
+      <label>Left<input autoFocus value={left} disabled={disabled} onChange={(event) => setLeft(event.target.value)} /></label>
+      <label>Operator<select value={operator} disabled={disabled} onChange={(event) => setOperator(event.target.value)}>{model.filter_operators.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label>Right<input value={right} disabled={disabled} onChange={(event) => setRight(event.target.value)} /></label>
+      <label>Connector<select value={connector} disabled={disabled} onChange={(event) => setConnector(event.target.value)}>{model.logical_connectors.map((item) => <option key={item}>{item}</option>)}</select></label>
+    </div>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !left.trim() || !right.trim() || !operator}>Add filter</button></div>
+  </form>
 }
 
 function PredicateRow({ item, operators, connectors, disabled, onAction }: { item: SqlPredicateView; operators: string[]; connectors: string[]; disabled: boolean; onAction: ActionFn }) {
@@ -132,14 +165,42 @@ function PredicateRow({ item, operators, connectors, disabled, onAction }: { ite
 }
 
 function Joins({ model, onAction, disabled }: SectionProps) {
+  const [adding, setAdding] = useState(false)
   return (
-    <section className="sql-section"><header><h4>Joins</h4><button type="button" disabled={disabled || !model.capabilities.joins} onClick={() => {
-      const source = prompt('Join source')?.trim(); const left = prompt('Left key')?.trim(); const right = prompt('Right key')?.trim(); if (source && left && right) void onAction('add-join', { join_type: model.join_types[0], source, left, right, operator: model.filter_operators[0] })
-    }}>Add</button></header>
+    <section className="sql-section">
+      <header><h4>Joins</h4><button type="button" disabled={disabled || !model.capabilities.joins} onClick={() => setAdding(true)}>Add</button></header>
+      {adding && <JoinAddForm model={model} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
       {model.joins.map((item) => <JoinRow key={item.id} item={item} model={model} disabled={disabled} onAction={onAction} />)}
-      {!model.joins.length && <p className="empty-copy">No joins.</p>}
+      {!model.joins.length && !adding && <p className="empty-copy">No joins.</p>}
     </section>
   )
+}
+
+function JoinAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps) {
+  const [joinType, setJoinType] = useState(model.join_types[0] ?? '')
+  const [source, setSource] = useState('')
+  const [left, setLeft] = useState('')
+  const [operator, setOperator] = useState(model.filter_operators[0] ?? '')
+  const [right, setRight] = useState('')
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!joinType || !source.trim() || !left.trim() || !operator || !right.trim()) return
+    void onAction('add-join', { join_type: joinType, source: source.trim(), left: left.trim(), right: right.trim(), operator }).then((success) => {
+      if (success) onClose()
+    })
+  }
+  return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
+    <div className="sql-add-panel__row">
+      <label>Join type<select value={joinType} disabled={disabled} onChange={(event) => setJoinType(event.target.value)}>{model.join_types.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label>Source<input autoFocus value={source} disabled={disabled} onChange={(event) => setSource(event.target.value)} /></label>
+    </div>
+    <div className="sql-add-panel__row">
+      <label>Left key<input value={left} disabled={disabled} onChange={(event) => setLeft(event.target.value)} /></label>
+      <label>Operator<select value={operator} disabled={disabled} onChange={(event) => setOperator(event.target.value)}>{model.filter_operators.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label>Right key<input value={right} disabled={disabled} onChange={(event) => setRight(event.target.value)} /></label>
+    </div>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !joinType || !source.trim() || !left.trim() || !operator || !right.trim()}>Add join</button></div>
+  </form>
 }
 
 function JoinRow({ item, model, disabled, onAction }: { item: SqlJoinView; model: SqlModelView; disabled: boolean; onAction: ActionFn }) {
@@ -158,17 +219,13 @@ function JoinRow({ item, model, disabled, onAction }: { item: SqlJoinView; model
   </div>
 }
 
-type ActionFn = (action: SqlActionRequest['action'], args: Record<string, unknown>) => Promise<void>
+type ActionFn = (action: SqlActionRequest['action'], args: Record<string, unknown>) => Promise<boolean>
 interface SectionProps { model: SqlModelView; onAction: ActionFn; disabled: boolean }
+interface AddFormProps { disabled: boolean; onAction: ActionFn; onClose: () => void }
+interface ModelAddFormProps extends AddFormProps { model: SqlModelView }
 
-function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { value: string; disabled: boolean; ariaLabel: string; placeholder?: string; onCommit: (value: string) => Promise<void> }) {
+function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { value: string; disabled: boolean; ariaLabel: string; placeholder?: string; onCommit: (value: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return <input aria-label={ariaLabel} placeholder={placeholder} disabled={disabled} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { const next = draft.trim(); if (next !== value.trim()) void onCommit(next) }} />
 }
-
-function FileSummary({ files }: { files: { inputs: string[]; outputs: string[] } }) {
-  return <div className="operation-io">{files.inputs.length > 0 && <FileChips label="Reads" paths={files.inputs} />}{files.outputs.length > 0 && <FileChips label="Produces" paths={files.outputs} />}</div>
-}
-function FileChips({ label, paths }: { label: string; paths: string[] }) { return <div className="file-chip-row"><strong>{label}</strong><div>{paths.map((path) => <code key={path} title={path}>{path}</code>)}</div></div> }
-function Diagnostics({ diagnostics }: { diagnostics: DependencyIssueView[] }) { return diagnostics.length ? <div className="operation-diagnostics" role="alert">{diagnostics.map((item) => <p key={`${item.code}-${item.artifact}`}><strong>{item.code.replaceAll('_', ' ')}</strong><span>{item.message}</span></p>)}</div> : null }

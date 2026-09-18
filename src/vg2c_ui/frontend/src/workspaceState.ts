@@ -3,12 +3,22 @@ import type {
   ChangePreviewView,
   CsvPreviewView,
   DocumentView,
+  DocumentSnapshot,
   ParameterChangeRequest,
+  ParameterView,
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
 } from './contracts.generated'
 
 export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'conflict' | 'error'
+
+export const RESET_VALUE = Symbol('reset-to-generated')
+export type FieldPath = Array<string | number>
+
+export function effectiveParameterValue(values: Record<string, unknown>, parameter: ParameterView): unknown {
+  const value = Object.hasOwn(values, parameter.id) ? values[parameter.id] : parameter.value
+  return value === RESET_VALUE ? parameter.generated_value : value
+}
 
 export interface EditState {
   values: Record<string, unknown>
@@ -21,20 +31,27 @@ export interface TabState {
   document: DocumentView
   instanceId: number
   selectedId: string | null
+  revealVersion: number
+  revealFocus: boolean
   expandedScopeIds: Set<string>
   status: TabStatus
   edits: EditState
+  fieldDrafts: Record<string, { parameterId: string; text: string; error: string }>
   preview: ChangePreviewView | null
   mutationRequestId: string | null
+  mutationError: string | null
   csv: CsvPreviewView | null
   csvArtifactPath: string | null
   csvRequestId: string | null
+  csvError: string | null
 }
 
 export interface WorkspaceState {
   tabs: TabState[]
   activeId: string | null
   projection: WorkspaceProjectionView | null
+  projectionStatus: 'idle' | 'loading' | 'ready' | 'error'
+  projectionError: string | null
   nextInstanceId: number
 }
 
@@ -43,20 +60,24 @@ export type WorkspaceAction =
   | { type: 'activate'; tabId: string | null }
   | { type: 'close'; tabId: string }
   | { type: 'select'; tabId: string; itemId: string | null }
+  | { type: 'navigate-operation'; tabId: string; operationId: string; focus?: boolean }
   | { type: 'toggle-scope'; tabId: string; scopeId: string; expanded?: boolean }
   | { type: 'set-all-scopes'; tabId: string; expanded: boolean }
-  | { type: 'edit'; tabId: string; parameterId: string; value: unknown; baseVersion?: number; instanceId?: number }
+  | { type: 'edit'; tabId: string; parameterId: string; value: unknown; clearDraftPaths?: FieldPath[]; baseVersion?: number; instanceId?: number }
+  | { type: 'field-draft'; tabId: string; key: string; draft: TabState['fieldDrafts'][string] | null }
   | { type: 'undo'; tabId: string }
   | { type: 'redo'; tabId: string }
   | { type: 'mutation-started'; tabId: string; instanceId: number; requestId: string; baseVersion: number; status: TabStatus }
   | { type: 'preview-result'; tabId: string; instanceId: number; requestId: string; baseVersion: number; preview: ChangePreviewView }
   | { type: 'replace-document'; tabId: string; instanceId: number; requestId: string; baseVersion: number; document: DocumentView }
-  | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean }
+  | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean; message: string }
   | { type: 'csv-loading'; tabId: string; instanceId: number; requestId: string; path: string }
-  | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null }
+  | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null; error: string | null }
   | { type: 'projection'; projection: WorkspaceProjectionView | null }
+  | { type: 'projection-loading' }
+  | { type: 'projection-error'; message: string }
 
-export const initialWorkspaceState: WorkspaceState = { tabs: [], activeId: null, projection: null, nextInstanceId: 1 }
+export const initialWorkspaceState: WorkspaceState = { tabs: [], activeId: null, projection: null, projectionStatus: 'idle', projectionError: null, nextInstanceId: 1 }
 
 export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
   if (action.type === 'merge-documents') {
@@ -80,7 +101,16 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     }
   }
   if (action.type === 'activate') return { ...state, activeId: action.tabId }
-  if (action.type === 'projection') return { ...state, projection: action.projection }
+  if (action.type === 'navigate-operation') {
+    const tab = tabById(state, action.tabId)
+    if (!tab || !tab.document.steps.some((step) => step.operations.some((operation) => operation.id === action.operationId))) return state
+    return updateTab({ ...state, activeId: action.tabId }, action.tabId, (current) => ({
+      ...selectItem(current, action.operationId), revealVersion: current.revealVersion + 1, revealFocus: Boolean(action.focus),
+    }))
+  }
+  if (action.type === 'projection') return { ...state, projection: action.projection, projectionStatus: action.projection ? 'ready' : 'idle', projectionError: null }
+  if (action.type === 'projection-loading') return { ...state, projectionStatus: 'loading', projectionError: null }
+  if (action.type === 'projection-error') return { ...state, projectionStatus: 'error', projectionError: action.message }
   if (action.type === 'close') {
     const index = state.tabs.findIndex((tab) => tab.document.id === action.tabId)
     const tabs = state.tabs.filter((tab) => tab.document.id !== action.tabId)
@@ -92,14 +122,24 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
   return updateTab(state, action.tabId, (tab) => reduceTab(tab, action))
 }
 
-function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merge-documents' | 'activate' | 'close' | 'projection' }>): TabState {
-  if (action.type === 'select') return { ...tab, selectedId: action.itemId, csv: null }
+function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merge-documents' | 'activate' | 'close' | 'projection' | 'projection-loading' | 'projection-error' | 'navigate-operation' }>): TabState {
+  if (tab.status === 'saving' && ['edit', 'field-draft', 'undo', 'redo'].includes(action.type)) return tab
+  if (action.type === 'field-draft') {
+    if (!action.draft && !tab.fieldDrafts[action.key]) return tab
+    const fieldDrafts = { ...tab.fieldDrafts }
+    if (action.draft) fieldDrafts[action.key] = action.draft
+    else delete fieldDrafts[action.key]
+    return { ...tab, fieldDrafts, preview: null, mutationRequestId: null,
+      csv: null, csvRequestId: null, csvArtifactPath: null, csvError: null,
+      edits: { ...tab.edits, version: tab.edits.version + 1 } }
+  }
+  if (action.type === 'select') return selectItem(tab, action.itemId)
   if (action.type === 'toggle-scope') {
     const next = new Set(tab.expandedScopeIds)
     const expand = action.expanded ?? !next.has(action.scopeId)
     if (expand) next.add(action.scopeId)
     else next.delete(action.scopeId)
-    return { ...tab, selectedId: action.scopeId, expandedScopeIds: next, csv: null }
+    return { ...tab, expandedScopeIds: next }
   }
   if (action.type === 'set-all-scopes') {
     return {
@@ -113,7 +153,14 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
     if (action.instanceId !== undefined && action.instanceId !== tab.instanceId) return tab
     if (action.baseVersion !== undefined && action.baseVersion !== tab.edits.version) return tab
     const values = { ...tab.edits.values, [action.parameterId]: action.value }
-    return withEditState(tab, {
+    const fieldDrafts = Object.fromEntries(Object.entries(tab.fieldDrafts).filter(([key, draft]) => {
+      if (draft.parameterId !== action.parameterId) return true
+      if (action.value === RESET_VALUE) return false
+      if (!action.clearDraftPaths?.length) return true
+      const path: FieldPath = JSON.parse(key)
+      return !action.clearDraftPaths.some((prefix) => [action.parameterId, ...prefix].every((part, index) => path[index] === part))
+    }))
+    return withEditState({ ...tab, fieldDrafts }, {
       values,
       history: [...tab.edits.history, tab.edits.values],
       future: [],
@@ -121,6 +168,7 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
     })
   }
   if (action.type === 'undo') {
+    if (Object.keys(tab.fieldDrafts).length) return { ...tab, fieldDrafts: {}, edits: { ...tab.edits, version: tab.edits.version + 1 } }
     const previous = tab.edits.history.at(-1)
     if (!previous) return tab
     return withEditState(tab, {
@@ -142,11 +190,11 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   }
   if (action.type === 'mutation-started') {
     if (action.instanceId !== tab.instanceId || action.baseVersion !== tab.edits.version) return tab
-    return { ...tab, status: action.status, mutationRequestId: action.requestId }
+    return { ...tab, status: action.status, mutationRequestId: action.requestId, mutationError: null }
   }
   if (action.type === 'preview-result') {
     if (!ownsMutation(tab, action)) return tab
-    return { ...tab, preview: action.preview, mutationRequestId: null, status: action.preview.valid ? 'valid' : 'invalid' }
+    return { ...tab, preview: action.preview, mutationRequestId: null, mutationError: null, status: action.preview.valid ? 'valid' : 'invalid' }
   }
   if (action.type === 'replace-document') {
     if (!ownsMutation(tab, action)) return tab
@@ -154,17 +202,42 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   }
   if (action.type === 'mutation-error') {
     if (!ownsMutation(tab, action)) return tab
-    return { ...tab, mutationRequestId: null, status: action.conflict ? 'conflict' : 'error' }
+    return {
+      ...tab,
+      mutationRequestId: null,
+      mutationError: action.message,
+      status: action.conflict ? 'conflict' : 'error',
+    }
   }
   if (action.type === 'csv-loading') {
     if (action.instanceId !== tab.instanceId) return tab
-    return { ...tab, csvRequestId: action.requestId, csvArtifactPath: action.path, csv: null }
+    return { ...tab, csvRequestId: action.requestId, csvArtifactPath: action.path, csv: null, csvError: null }
   }
   if (action.type === 'csv-result') {
     if (action.instanceId !== tab.instanceId || tab.csvRequestId !== action.requestId) return tab
-    return { ...tab, csvRequestId: null, csv: action.csv }
+    return { ...tab, csvRequestId: null, csv: action.csv, csvError: action.error }
   }
   return tab
+}
+
+export function ancestorScopeIds(document: DocumentView, itemId: string): string[] {
+  const step = document.steps.find((item) => item.id === itemId || item.operations.some((operation) => operation.id === itemId))
+  const item = step ?? document.scopes.find((scope) => scope.id === itemId)
+  const scopes = new Map(document.scopes.map((scope) => [scope.id, scope]))
+  const ancestors: string[] = []
+  let parent = item?.parent_scope_id ?? null
+  while (parent && !ancestors.includes(parent)) {
+    ancestors.push(parent)
+    parent = scopes.get(parent)?.parent_scope_id ?? null
+  }
+  return ancestors
+}
+
+function selectItem(tab: TabState, itemId: string | null): TabState {
+  const step = tab.document.steps.find((item) => item.id === itemId)
+  const selectedId = step?.operations[0]?.id ?? itemId
+  return { ...tab, selectedId, revealFocus: false,
+    expandedScopeIds: new Set([...tab.expandedScopeIds, ...ancestorScopeIds(tab.document, selectedId ?? '')]) }
 }
 
 function ownsMutation(tab: TabState, action: { instanceId: number; requestId: string; baseVersion: number }): boolean {
@@ -181,20 +254,25 @@ function updateTab(state: WorkspaceState, tabId: string, update: (tab: TabState)
 }
 
 function createTab(document: DocumentView, previous: TabState | undefined, instanceId: number): TabState {
-  const itemIds = new Set([...document.steps, ...document.scopes].map((item) => item.id))
+  const itemIds = new Set([...document.steps, ...document.scopes, ...document.steps.flatMap((step) => step.operations)].map((item) => item.id))
   const scopeIds = new Set(document.scopes.map((scope) => scope.id))
   return {
     document,
     instanceId,
     selectedId: previous?.selectedId && itemIds.has(previous.selectedId) ? previous.selectedId : null,
+    revealVersion: previous?.revealVersion ?? 0,
+    revealFocus: false,
     expandedScopeIds: new Set([...(previous?.expandedScopeIds ?? [])].filter((id) => scopeIds.has(id))),
     status: 'ready',
     edits: emptyEdits(),
+    fieldDrafts: {},
     preview: null,
     mutationRequestId: null,
+    mutationError: null,
     csv: null,
     csvArtifactPath: null,
     csvRequestId: null,
+    csvError: null,
   }
 }
 
@@ -203,12 +281,18 @@ function emptyEdits(): EditState {
 }
 
 function withEditState(tab: TabState, edits: EditState): TabState {
+  const conflict = tab.status === 'conflict'
   return {
     ...tab,
     edits,
+    csv: null,
+    csvRequestId: null,
+    csvArtifactPath: null,
+    csvError: null,
     preview: null,
     mutationRequestId: null,
-    status: Object.keys(edits.values).length ? 'dirty' : 'ready',
+    mutationError: conflict ? tab.mutationError : null,
+    status: conflict ? 'conflict' : Object.keys(edits.values).length ? 'dirty' : 'ready',
   }
 }
 
@@ -221,19 +305,29 @@ export function activeTab(state: WorkspaceState): TabState | null {
 }
 
 export function draftChanges(tab: TabState): ParameterChangeRequest[] {
-  return Object.entries(tab.edits.values).map(([parameter_id, value]) => ({ parameter_id, value }))
+  return Object.entries(tab.edits.values).map(([parameter_id, value]) => ({
+    parameter_id, value: value === RESET_VALUE ? null : value, reset: value === RESET_VALUE,
+  }))
 }
 
 export function changeBatch(tab: TabState): ChangeBatch | null {
   const changes = draftChanges(tab)
   if (!changes.length) return null
   return {
-    source_path: tab.document.source_path,
-    output_path: tab.document.output_path,
-    source_hash: tab.document.source_hash,
-    output_hash: tab.document.output_hash,
-    revision: tab.document.revision,
+    ...documentSnapshot(tab.document),
     changes,
+  }
+}
+
+export function documentSnapshot(document: DocumentView): DocumentSnapshot {
+  return {
+    schema_version: 4,
+    source_path: document.source_path,
+    output_path: document.output_path,
+    source_hash: document.source_hash,
+    output_hash: document.output_hash,
+    revision: document.revision,
+    compiler_hash: document.compiler_hash,
   }
 }
 
@@ -241,8 +335,7 @@ export function workspaceProjectionRequest(state: WorkspaceState): WorkspaceProj
   return {
     documents: state.tabs.map((tab) => ({
       document_id: tab.document.id,
-      source_path: tab.document.source_path,
-      output_path: tab.document.output_path,
+      ...documentSnapshot(tab.document),
       changes: draftChanges(tab),
     })),
   }

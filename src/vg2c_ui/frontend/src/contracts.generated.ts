@@ -1,9 +1,24 @@
 // Generated from vg2c_ui.api.models. DO NOT EDIT.
 
+export const SCHEMA_VERSION = 4
+
 export interface SourceSpanView {
   file: string | null
   start_line: number
   end_line: number
+}
+
+export interface ValueSchemaView {
+  kind: 'string' | 'integer' | 'number' | 'boolean' | 'list' | 'object' | 'union' | 'dynamic'
+  nullable: boolean
+  choices: Array<unknown>
+  items: ValueSchemaView | null
+  properties: Record<string, ValueSchemaView>
+  required_keys: Array<string>
+  variants: Array<ValueSchemaView>
+  path: boolean
+  prefix_items: Array<ValueSchemaView>
+  tuple_value: boolean
 }
 
 export interface ParameterView {
@@ -12,7 +27,7 @@ export interface ParameterView {
   position: number | null
   source: string
   value: unknown
-  editor_type: 'string' | 'multiline' | 'integer' | 'boolean' | 'list' | 'dynamic'
+  editor_type: 'string' | 'multiline' | 'integer' | 'number' | 'boolean' | 'list' | 'object' | 'union' | 'dynamic'
   editable: boolean
   read_only_reason: string | null
   constraints: Record<string, unknown>
@@ -20,6 +35,11 @@ export interface ParameterView {
   required: boolean
   default: unknown
   capabilities: Array<string>
+  value_schema: ValueSchemaView | null
+  internal: boolean
+  omitted: boolean
+  overridden: boolean
+  generated_value: unknown
 }
 
 export interface UtilityView {
@@ -35,6 +55,12 @@ export interface UtilityView {
   supported_mutations: Array<string>
 }
 
+export interface OperationView {
+  id: string
+  utility: UtilityView
+  parameters: Array<ParameterView>
+}
+
 export interface StepView {
   id: string
   node_kind: 'step'
@@ -44,16 +70,12 @@ export interface StepView {
   functional_kind: string
   display_label: string
   description: string
-  parameters: Array<ParameterView>
-  csv_inputs: Array<string>
-  csv_outputs: Array<string>
   parent_scope_id: string | null
   branch: 'true' | 'false' | null
   validation_state: 'valid' | 'warning' | 'unsupported'
   raw_code: string | null
   read_only: boolean
-  utility: UtilityView
-  capabilities: Array<string>
+  operations: Array<OperationView>
 }
 
 export interface ScopeView {
@@ -87,6 +109,33 @@ export interface DiagnosticView {
   node_id: string | null
 }
 
+export interface FileEndpointView {
+  id: string
+  parameter_id: string | null
+  path: string | null
+  expression: string | null
+  path_base: 'working-directory' | 'script-directory' | 'runtime-search'
+  phase: 'prior' | 'next' | 'deleted'
+  state_ids: Array<string>
+  status: 'known' | 'dynamic' | 'external' | 'missing' | 'possible'
+}
+
+export interface FileEffectView {
+  id: string
+  operation_id: string
+  step_id: string
+  block_index: number
+  scope_id: number
+  order: number
+  kind: 'read' | 'observe' | 'write' | 'copy' | 'move' | 'transform' | 'append' | 'delete' | 'unknown'
+  inputs: Array<FileEndpointView>
+  outputs: Array<FileEndpointView>
+  conditional: boolean
+  in_loop: boolean
+  reason: string | null
+  dependency_ids: Array<string>
+}
+
 export interface DocumentView {
   schema_version: number
   id: string
@@ -94,26 +143,41 @@ export interface DocumentView {
   output_path: string
   source_hash: string
   output_hash: string
-  revision: number
+  revision: string
+  compiler_hash: string
   synchronized: boolean
   read_only_reason: string | null
   steps: Array<StepView>
   scopes: Array<ScopeView>
   artifacts: Array<ArtifactView>
   diagnostics: Array<DiagnosticView>
+  effects: Array<FileEffectView>
 }
 
 export interface ParameterChangeRequest {
   parameter_id: string
   value: unknown
+  reset: boolean
 }
 
-export interface ChangeBatch {
+export interface DocumentSnapshot {
+  schema_version: 4
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
-  revision: number
+  revision: string
+  compiler_hash: string
+}
+
+export interface ChangeBatch {
+  schema_version: 4
+  source_path: string
+  output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
   changes: Array<ParameterChangeRequest>
 }
 
@@ -148,8 +212,17 @@ export interface DocumentReference {
 }
 
 export interface CsvPreviewRequest {
+  schema_version: 4
   source_path: string
-  csv_path: string
+  output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
+  effect_id: string
+  endpoint_id: string
+  expected_path: string
+  changes: Array<ParameterChangeRequest>
 }
 
 export interface BatchTranslationRequest {
@@ -163,9 +236,14 @@ export interface BatchTranslationResponse {
 }
 
 export interface WorkspaceDocumentRequest {
-  document_id: string
+  schema_version: 4
   source_path: string
   output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
+  document_id: string
   changes: Array<ParameterChangeRequest>
 }
 
@@ -189,11 +267,14 @@ export interface DependencyLinkView {
   producer_step_id: string
   consumer_document_id: string
   consumer_step_id: string
+  producer_operation_id: string | null
+  consumer_operation_id: string | null
 }
 
 export interface ProjectedDocumentView {
   document_id: string
   artifacts: Array<ArtifactView>
+  effects: Array<FileEffectView>
 }
 
 export interface WorkspaceProjectionView {
@@ -206,6 +287,15 @@ export interface WorkspaceFileView {
   path: string
   size_bytes: number
   modified_at: number
+  role: 'source' | 'data' | 'generated'
+  translatable: boolean
+}
+
+export interface WorkspaceUploadPolicyView {
+  allowed_upload_suffixes: Array<string>
+  max_upload_bytes: number
+  max_file_count: number
+  max_workspace_bytes: number
 }
 
 export interface SqlSpanView {
@@ -285,15 +375,25 @@ export interface SqlModelView {
 }
 
 export interface SqlModelRequest {
+  schema_version: 4
   source_path: string
   output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
   parameter_id: string
   changes: Array<ParameterChangeRequest>
 }
 
 export interface SqlActionRequest {
+  schema_version: 4
   source_path: string
   output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
   parameter_id: string
   changes: Array<ParameterChangeRequest>
   action: string

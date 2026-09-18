@@ -1,131 +1,217 @@
-import { useEffect, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
+import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 
-import { ContextSidebar } from './ContextSidebar'
-import type { ChangePreviewView, DiagnosticView, ParameterView } from './contracts.generated'
-import { listWorkspaceFiles, uploadWorkspaceFiles, workspaceDownloadUrl } from './api'
+import { workspaceDownloadUrl } from './api'
+import { ChangeToolbar } from './ChangeToolbar'
+import { CommandPalette } from './CommandPalette'
+import { buildCommands, executeCommand } from './commands'
+import type { ChangePreviewView, DiagnosticView } from './contracts.generated'
+import { DirtyCloseDialog } from './DirtyCloseDialog'
+import { FileTabs, fileTabId } from './FileTabs'
 import { baseName } from './operationLabels'
-import { ancestorScopeIds, ScriptTree } from './ScriptTree'
+import { ScriptTree } from './ScriptTree'
+import { OperationEditor } from './OperationEditor'
+import { FileFlowPane } from './file-flow/FileFlowPane'
+import { SourceIntake } from './SourceIntake'
+import { ThemeSelector } from './ThemeSelector'
+import { useSourceIntake } from './useSourceIntake'
+import { useTheme } from './theme'
 import { useWorkspace } from './useWorkspace'
-import type { TabStatus, TabState } from './workspaceState'
+import { useWorkspaceFiles } from './useWorkspaceFiles'
+import { hasUnsavedChanges } from './workspaceGuards'
 
 export function App() {
   const workspace = useWorkspace()
+  const fileInventory = useWorkspaceFiles()
+  const theme = useTheme()
   const { state, active, dispatch } = workspace
-  const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ path: string, size_bytes: number }>>([])
-  const [sourcePaths, setSourcePaths] = useState<string[]>([])
   const [search, setSearch] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('Upload VG2 source and data files to begin.')
-  const [batchDiagnostics, setBatchDiagnostics] = useState<DiagnosticView[]>([])
-  const [contextOpen, setContextOpen] = useState(false)
+  const [pane, setPane] = useState<'logic' | 'config' | 'flow'>('logic')
+  const [commandOpen, setCommandOpen] = useState(false)
+  const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
+  const intake = useSourceIntake({
+    files: fileInventory.files,
+    loadingFiles: fileInventory.loading,
+    inventoryError: fileInventory.inventoryError,
+    policy: fileInventory.policy,
+    policyError: fileInventory.policyError,
+    refreshFiles: fileInventory.refresh,
+    translateSources: workspace.translate,
+  })
 
+  const hasUnsavedWorkspaceChanges = state.tabs.some(hasUnsavedChanges)
   useEffect(() => {
-    void refreshWorkspaceFiles().catch((error) => setMessage(errorMessage(error, 'Could not load workspace files')))
-  }, [])
+    if (!hasUnsavedWorkspaceChanges) return
+    function beforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [hasUnsavedWorkspaceChanges])
 
-  async function refreshWorkspaceFiles() {
-    const files = await listWorkspaceFiles()
-    setWorkspaceFiles(files)
-    setSourcePaths((current) => current.length
-      ? current.filter((path) => files.some((file) => file.path === path))
-      : files.filter((file) => file.path.toLowerCase().endsWith('.txt')).map((file) => file.path))
-  }
-
-  async function upload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? [])
-    if (!files.length) return
-    setBusy(true); setMessage('Uploading…')
-    try {
-      const saved = await uploadWorkspaceFiles(files)
-      await refreshWorkspaceFiles()
-      const sources = saved.filter((item) => item.path.toLowerCase().endsWith('.txt')).map((item) => item.path)
-      setSourcePaths((current) => [...new Set([...current, ...sources])])
-      setMessage(`${saved.length} file${saved.length === 1 ? '' : 's'} uploaded.`)
-    } catch (error) { setMessage(errorMessage(error, 'Upload failed')) } finally { setBusy(false); event.target.value = '' }
-  }
-
-  async function translate() {
-    if (!sourcePaths.length) return
-    setBusy(true); setMessage('Translating…')
-    try {
-      const response = await workspace.translate(sourcePaths)
-      await refreshWorkspaceFiles()
-      setBatchDiagnostics(response.diagnostics)
-      setMessage(response.documents.length ? `${response.documents.length} translated script${response.documents.length === 1 ? '' : 's'} ready.` : 'No scripts were translated.')
-    } catch (error) { setMessage(errorMessage(error, 'Translation failed')) } finally { setBusy(false) }
-  }
+  const activeDocumentId = active?.document.id ?? null
+  useEffect(() => {
+    if (activeDocumentId) return
+    setPane('logic')
+    setSearch('')
+  }, [activeDocumentId])
 
   function selectItem(id: string) {
     if (!active) return
     dispatch({ type: 'select', tabId: active.document.id, itemId: id })
-    for (const scopeId of ancestorScopeIds(active.document, id)) dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId, expanded: true })
   }
 
-  async function validateActive() {
-    if (!active) return
-    try {
-      const preview = await workspace.validate(active.document.id)
-      if (preview) setMessage(preview.valid ? 'Changes are valid. Review the diff, then apply.' : 'Validation found problems.')
-    } catch (error) { setMessage(errorMessage(error, 'Could not validate changes')) }
+  function navigateOperation(documentId: string, operationId: string, focus: boolean) {
+    dispatch({ type: 'navigate-operation', tabId: documentId, operationId, focus })
+    setPane(focus ? 'logic' : 'config')
   }
 
-  async function applyActive() {
-    if (!active) return
-    try {
-      const result = await workspace.apply(active.document.id)
-      if (result) setMessage('Changes applied atomically to generated Python.')
-    } catch (error) { setMessage(errorMessage(error, 'Could not apply changes')) }
+  function requestCloseTab(id: string) {
+    const tab = state.tabs.find((candidate) => candidate.document.id === id)
+    if (!tab) return
+    if (hasUnsavedChanges(tab)) {
+      setPendingCloseId(id)
+      return
+    }
+    dispatch({ type: 'close', tabId: id })
   }
 
-  async function reloadActive() {
-    if (!active) return
-    try { await workspace.reload(active.document.id); setMessage('Reloaded document; unsaved drafts were cleared.') }
-    catch (error) { setMessage(errorMessage(error, 'Reload failed')) }
+  function discardAndCloseTab(id: string) {
+    dispatch({ type: 'close', tabId: id })
+    setPendingCloseId(null)
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.tabs [role="tab"][tabindex="0"]')?.focus())
   }
+
+  function validateActive() {
+    if (active) void workspace.validate(active.document.id).catch(() => undefined)
+  }
+
+  function applyActive() {
+    if (active) void workspace.apply(active.document.id).catch(() => undefined)
+  }
+
+  function reloadActive() {
+    if (active) void workspace.reload(active.document.id).catch(() => undefined)
+  }
+
+  const commands = buildCommands({
+    tabs: state.tabs,
+    active,
+    workspace: {
+      canStage: intake.canStage,
+      queuedCount: intake.canUploadQueued ? intake.queuedCount : 0,
+      canTranslate: intake.canTranslate,
+      openFiles: intake.openFiles,
+      openFolder: intake.openFolder,
+      uploadQueued: () => { void intake.uploadQueued() },
+      translateSelected: () => { void intake.translateSelected() },
+    },
+    actions: {
+      activateDocument: (id) => dispatch({ type: 'activate', tabId: id }),
+      selectItem,
+      openInspector: () => setPane('flow'),
+      undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
+      redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
+      validate: validateActive,
+      apply: applyActive,
+      reload: reloadActive,
+      expandAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true }),
+      collapseAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false }),
+    },
+  })
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
-      if (event.key === 'Escape' && contextOpen) { setContextOpen(false); return }
+      if ((event.target as HTMLElement | null)?.closest('dialog[open]')) return
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen(true)
+        return
+      }
       if (!(event.ctrlKey || event.metaKey) || !active) return
-      if ((event.target as HTMLElement | null)?.closest('.translate-box')) return
       const key = event.key.toLowerCase()
-      if (key === 'z') { event.preventDefault(); dispatch({ type: event.shiftKey ? 'redo' : 'undo', tabId: active.document.id }) }
-      else if (key === 'y') { event.preventDefault(); dispatch({ type: 'redo', tabId: active.document.id }) }
-      else if (key === 's') { event.preventDefault(); if (active.preview?.valid) void applyActive(); else void validateActive() }
+      if (key === 'z') {
+        event.preventDefault()
+        executeCommand(commands, event.shiftKey ? 'editing.redo' : 'editing.undo')
+      } else if (key === 'y') {
+        event.preventDefault()
+        executeCommand(commands, 'editing.redo')
+      } else if (key === 's') {
+        event.preventDefault()
+        if (!executeCommand(commands, 'editing.apply')) executeCommand(commands, 'editing.preview')
+      }
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
   })
 
-  const diagnostics = active ? [...active.document.diagnostics, ...batchDiagnostics] : batchDiagnostics
-  const editCount = active ? Object.keys(active.edits.values).length : 0
-  const documents = state.tabs.map((tab) => tab.document)
+  const selectedStep = active?.document.steps.find((step) => step.operations.some((operation) => operation.id === active.selectedId))
+  const selectedOperation = selectedStep?.operations.find((operation) => operation.id === active?.selectedId)
+  const effects = state.projection?.documents.find((item) => item.document_id === active?.document.id)?.effects ?? active?.document.effects ?? []
+  const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
+  const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
+  const hasTabs = state.tabs.length > 0
 
-  const uploadedSources = workspaceFiles.filter((file) => file.path.toLowerCase().endsWith('.txt'))
-  const generatedFiles = workspaceFiles.filter((file) => file.path.startsWith('generated/'))
+  return <main className={`app-shell app-shell--with-intake${hasTabs ? '' : ' app-shell--no-tabs'}`}>
+    <header className="topbar">
+      <div className="brand"><span>SQL</span>PathFinder</div>
+      <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
+      <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
+    </header>
 
-  return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span>PYTHON</span>PathFinder</div><div className="translate-box"><label className="upload-button">Upload files<input aria-label="Upload VG2 source and data files" type="file" multiple onChange={(event) => void upload(event)} /></label><label className="upload-button">Upload folder<input aria-label="Upload a VG2 workspace folder" type="file" multiple ref={(node) => node?.setAttribute('webkitdirectory', '')} onChange={(event) => void upload(event)} /></label><select aria-label="VG2 source files" multiple value={sourcePaths} onChange={(event) => setSourcePaths(Array.from(event.target.selectedOptions, (option) => option.value))}>{uploadedSources.map((file) => <option key={file.path} value={file.path}>{file.path}</option>)}</select><button className="primary-button" type="button" onClick={() => void translate()} disabled={busy || !sourcePaths.length}>{busy ? 'Working…' : 'Translate'}</button></div><output className="status-message" aria-live="polite">{message}</output><div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div></header>
+    <SourceIntake intake={intake} hasOpenDocument={Boolean(active)} />
 
-    <nav className="tabs" aria-label="Open translated files" role="tablist">{state.tabs.map((tab, index) => <div className={`tab${tab.document.id === state.activeId ? ' is-active' : ''}`} key={tab.document.id}><button type="button" role="tab" aria-selected={tab.document.id === state.activeId} aria-controls="script-workspace" tabIndex={tab.document.id === state.activeId ? 0 : -1} title={tab.document.output_path} onClick={() => dispatch({ type: 'activate', tabId: tab.document.id })} onKeyDown={(event) => handleTabKeys(event, state.tabs, index, (id) => dispatch({ type: 'activate', tabId: id }))}><span className="tab-name">{baseName(tab.document.output_path || tab.document.source_path)}</span><span className={`tab-state tab-state--${tab.status}`} aria-hidden="true" /><span className="sr-only">{tab.status}</span></button><button className="tab-close" type="button" tabIndex={tab.document.id === state.activeId ? 0 : -1} onClick={() => dispatch({ type: 'close', tabId: tab.document.id })} aria-label={`Close ${baseName(tab.document.output_path)}`}>×</button></div>)}</nav>
+    {hasTabs && <FileTabs
+      tabs={state.tabs}
+      activeId={state.activeId}
+      onActivate={(id) => dispatch({ type: 'activate', tabId: id })}
+      onClose={requestCloseTab}
+    />}
 
-    <section className="workspace" id="script-workspace" role="tabpanel" aria-label="Translated script editor"><section className="editor-pane"><div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations…" disabled={!active} /></label><div className="toolbar-group tree-controls"><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active?.document.scopes.length}>Expand all</button><button type="button" onClick={() => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active?.document.scopes.length}>Collapse all</button></div><button className="context-toggle" type="button" onClick={() => setContextOpen(true)} disabled={!active} aria-expanded={contextOpen} aria-controls="file-context">File context</button></div>
+    {active ? <section className={`workspace workbench workbench--${pane}`} id="script-workspace" role="tabpanel" aria-labelledby={fileTabId(active.document.id)}>
+      <div className="workbench-actions">
+        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.scopes.length}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.scopes.length}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
 
-      {active && <div className="change-toolbar"><div className="change-status"><strong>{editCount ? `${editCount} unsaved change${editCount === 1 ? '' : 's'}` : 'No pending changes'}</strong><small>{statusCopy(active.status)}</small></div><div className="toolbar-group"><button type="button" onClick={() => dispatch({ type: 'undo', tabId: active.document.id })} disabled={!active.edits.history.length}>Undo</button><button type="button" onClick={() => dispatch({ type: 'redo', tabId: active.document.id })} disabled={!active.edits.future.length}>Redo</button><button type="button" onClick={() => void validateActive()} disabled={!editCount || active.status === 'validating' || !active.document.synchronized}>Preview changes</button><button className="primary-button" type="button" onClick={() => void applyActive()} disabled={!active.preview?.valid || active.status === 'saving'}>Apply changes</button>{active.status === 'conflict' && <button type="button" onClick={() => void reloadActive()}>Reload</button>}</div></div>}
+        <ChangeToolbar
+          tab={active}
+          onUndo={() => executeCommand(commands, 'editing.undo')}
+          onRedo={() => executeCommand(commands, 'editing.redo')}
+          onValidate={() => executeCommand(commands, 'editing.preview')}
+          onApply={() => executeCommand(commands, 'editing.apply')}
+          onReload={() => executeCommand(commands, 'editing.reload')}
+        />
 
-      <div className="editor-scroll">{active ? <ScriptTree tabId={active.document.id} document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} values={active.edits.values} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onEdit={(parameter: ParameterView, value) => workspace.edit(active.document.id, parameter, value)} inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction} /> : <div className="empty-state"><strong>No translated file open</strong><span>Open or translate a VG2 source file to begin.</span></div>}
-        {active?.preview && <ChangePreview preview={active.preview} />}
-        <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
       </div>
-    </section>
+      <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'flow', label: 'File Flow', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
+      <div className="workbench-panes">
+        <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.steps.length}</span></header><div className="pane-scroll"><ScriptTree document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
+        <section id="pane-config" className="workbench-pane configuration-pane" aria-label="Utility Configuration">
+          <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
+          <div className="pane-scroll">
+            {selectedStep && selectedOperation ? <OperationEditor
+              key={`${active.instanceId}-${selectedOperation.id}`}
+              tabId={active.document.id} step={selectedStep} operation={selectedOperation}
+              values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
+              onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
+              diagnostics={state.projection?.issues.filter((item) => item.document_id === active.document.id && item.step_id === selectedStep.id)}
+              onEdit={(parameter, value, cleared) => workspace.edit(active.document.id, parameter, value, cleared)}
+              inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
+            /> : <p className="pane-empty">{active.document.scopes.find((scope) => scope.id === active.selectedId)?.label ?? 'No operation selected'}</p>}
+            {active.preview && <ChangePreview preview={active.preview} />}
+          </div>
+        </section>
+        <section id="pane-flow" className="workbench-pane flow-pane" aria-label="File Flow"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>File Flow</h2><span>{effects.length}</span></header><div className="pane-scroll"><FileFlowPane document={active.document} effects={effects} projection={state.projection} selectedId={active.selectedId} status={state.projectionStatus} error={state.projectionError} csv={active.csv} csvPath={active.csvArtifactPath} csvError={active.csvError} csvLoading={Boolean(active.csvRequestId)} onActivate={navigateOperation} onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)} /></div></section>
+      </div>
+    </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
 
-    <button className={`context-backdrop${contextOpen ? ' is-open' : ''}`} type="button" aria-label="Close file context" tabIndex={contextOpen ? 0 : -1} onClick={() => setContextOpen(false)} />
-    <ContextSidebar document={active?.document ?? null} documents={documents} projection={state.projection} csv={active?.csv ?? null} csvArtifactPath={active?.csvArtifactPath ?? null} open={contextOpen} onClose={() => setContextOpen(false)} onPreviewCsv={(path) => active && void workspace.loadCsv(active.document.id, path).catch((error) => setMessage(errorMessage(error, 'CSV preview failed')))} onActivateDocument={(id) => { dispatch({ type: 'activate', tabId: id }); setContextOpen(false) }} />
-    </section>
+    <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
+    <DirtyCloseDialog tab={pendingCloseTab} onCancel={() => setPendingCloseId(null)} onDiscard={discardAndCloseTab} />
   </main>
 }
 
+function DocumentDiagnostics({ diagnostics }: { diagnostics: DiagnosticView[] }) {
+  return <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
+}
+
 function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}<pre>{preview.diff || 'No textual change.'}</pre></div></details> }
-function errorMessage(error: unknown, fallback: string): string { return error instanceof Error ? error.message : fallback }
-function statusCopy(status: TabStatus): string { if (status === 'dirty') return 'Preview before applying.'; if (status === 'validating') return 'Validating generated Python…'; if (status === 'valid') return 'Validation passed.'; if (status === 'invalid') return 'Validation found issues.'; if (status === 'saving') return 'Applying changes…'; if (status === 'conflict') return 'File changed externally; reload required.'; if (status === 'error') return 'The last update failed.'; return 'Select an operation to inspect or edit it.' }
-function handleTabKeys(event: ReactKeyboardEvent<HTMLButtonElement>, tabs: TabState[], index: number, activate: (id: string) => void) { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); let nextIndex = index; if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length; if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length; if (event.key === 'Home') nextIndex = 0; if (event.key === 'End') nextIndex = tabs.length - 1; const next = tabs[nextIndex]; if (!next) return; activate(next.document.id); document.querySelectorAll<HTMLButtonElement>('.tab > button[role="tab"]')[nextIndex]?.focus() }

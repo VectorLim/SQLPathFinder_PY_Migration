@@ -7,9 +7,11 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Literal, Protocol
 
 from fastapi import HTTPException, UploadFile
+
+WorkspaceFileRole = Literal["source", "data", "generated"]
 
 
 class WorkspacePathError(ValueError):
@@ -27,6 +29,8 @@ class WorkspaceFile:
     path: str
     size_bytes: int
     modified_at: float
+    role: WorkspaceFileRole
+    translatable: bool
 
 
 class ExecutionService(Protocol):
@@ -45,6 +49,7 @@ class WorkspaceManager:
 
     cookie_name = "vg2c_workspace"
     allowed_upload_suffixes = {".txt", ".csv", ".tab", ".dat", ".xlsx", ".xls"}
+    translation_source_suffixes = {".txt"}
 
     def __init__(
         self,
@@ -142,10 +147,7 @@ class WorkspaceManager:
             target.unlink(missing_ok=True)
             raise
         self.touch(workspace)
-        stat = target.stat()
-        return WorkspaceFile(
-            path=target_relative.as_posix(), size_bytes=stat.st_size, modified_at=stat.st_mtime
-        )
+        return self._workspace_file(target_relative.as_posix(), target.stat())
 
     def list_files(self, workspace: Workspace, *, prefix: str | None = None) -> list[WorkspaceFile]:
         root = self.resolve_file(workspace, prefix) if prefix else workspace.root
@@ -156,9 +158,26 @@ class WorkspaceManager:
             if not path.is_file() or path.is_symlink() or path.name.endswith(".vg2c-ui.json"):
                 continue
             relative = path.relative_to(workspace.root).as_posix()
-            stat = path.stat()
-            files.append(WorkspaceFile(relative, stat.st_size, stat.st_mtime))
+            files.append(self._workspace_file(relative, path.stat()))
         return sorted(files, key=lambda item: item.path)
+
+    def classify_file(self, path: str) -> tuple[WorkspaceFileRole, bool]:
+        relative = PurePosixPath(path)
+        if relative.parts and relative.parts[0] == "generated":
+            return "generated", False
+        if relative.suffix.lower() in self.translation_source_suffixes:
+            return "source", True
+        return "data", False
+
+    def _workspace_file(self, path: str, stat) -> WorkspaceFile:
+        role, translatable = self.classify_file(path)
+        return WorkspaceFile(
+            path=path,
+            size_bytes=stat.st_size,
+            modified_at=stat.st_mtime,
+            role=role,
+            translatable=translatable,
+        )
 
 
 def get_workspace(request) -> Workspace:
@@ -189,6 +208,7 @@ __all__ = [
     "ExecutionService",
     "DisabledExecutionService",
     "WorkspaceFile",
+    "WorkspaceFileRole",
     "WorkspaceManager",
     "WorkspacePathError",
     "get_workspace",

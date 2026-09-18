@@ -10,6 +10,7 @@ from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import list_code_expr, split_utility_command
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class ExternalProcess(EmitterUtility):
@@ -69,7 +70,16 @@ class ExternalProcess(EmitterUtility):
             for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
         ]
 
-    @emittable
+    @emittable(
+        internal_parameters=("env",),
+        file_effects=(
+            FileEffectDefinition(
+                "process",
+                "unknown",
+                reason="External process may read, write, or delete files; arguments do not prove effects.",
+            ),
+        ),
+    )
     def run(
         self,
         argv: list[str],

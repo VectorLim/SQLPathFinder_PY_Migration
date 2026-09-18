@@ -179,3 +179,6 @@ secrets.yml
 /docs/*
 !/docs/symbol-dependency-resolution.md
 !/docs/docker-lan.md
+
+
+/data

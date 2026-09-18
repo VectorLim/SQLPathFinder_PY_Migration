@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from vg2c.compilation import CompilationResult
-from vg2c.emitter.models import EmittedParameter
+from vg2c.emitter.models import CodeExpr, EmittableOperation, EmittedParameter
 
 
 @dataclass(frozen=True, slots=True)
 class ParameterChange:
     parameter_id: str
-    value: Any
+    value: Any = None
+    reset: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,9 +63,10 @@ def project_changes(
 ) -> ChangeProjection:
     """Project parameter intent onto canonical emitted source without writing files."""
     requested = tuple(changes)
-    parameters = {
-        parameter.id: parameter for step in result.emitted.steps for parameter in step.parameters
-    }
+    bindings: dict[str, list[EmittedParameter]] = {}
+    for step in result.emitted.steps:
+        for parameter in step.parameters:
+            bindings.setdefault(parameter.id, []).append(parameter)
     issues: list[ValidationIssue] = []
     replacements: dict[tuple[int, int], str] = {}
     accepted: list[ParameterChange] = []
@@ -73,7 +75,7 @@ def project_changes(
     for change in requested:
         if change.parameter_id in seen:
             if change.parameter_id.startswith("global:"):
-                if seen[change.parameter_id] == repr(change.value):
+                if seen[change.parameter_id] == repr((change.reset, change.value)):
                     continue
                 issues.append(
                     ValidationIssue(
@@ -91,9 +93,9 @@ def project_changes(
                 )
             )
             continue
-        seen[change.parameter_id] = repr(change.value)
-        parameter = parameters.get(change.parameter_id)
-        if parameter is None:
+        seen[change.parameter_id] = repr((change.reset, change.value))
+        parameters = bindings.get(change.parameter_id, [])
+        if not parameters:
             issues.append(
                 ValidationIssue(
                     code="unknown-parameter",
@@ -102,14 +104,71 @@ def project_changes(
                 )
             )
             continue
-        issue = _validate_value(parameter, change.value)
-        if issue is not None:
-            issues.append(issue)
+        binding_issues = [
+            issue
+            for parameter in parameters
+            if (
+                issue := _validate_value(
+                    parameter, parameter.value if change.reset else change.value
+                )
+            )
+            is not None
+        ]
+        if binding_issues:
+            issues.extend(binding_issues)
             continue
-        serialized = _serialize(parameter, change.value)
-        span = (parameter.source_range.start_offset, parameter.source_range.end_offset)
-        replacements[span] = serialized
+        if change.reset:
+            continue
+        for parameter in parameters:
+            if parameter.source_range is not None:
+                span = (
+                    parameter.source_range.start_offset,
+                    parameter.source_range.end_offset,
+                )
+                replacements[span] = _serialize(parameter, change.value)
         accepted.append(change)
+
+    values = {change.parameter_id: change.value for change in accepted}
+    for step in result.emitted.steps:
+        for invocation in step.invocations:
+            omitted = [
+                parameter
+                for parameter in invocation.parameters
+                if parameter.source_range is None and parameter.id in values
+            ]
+            if not omitted:
+                continue
+            parameters_by_name = {
+                parameter.name: parameter for parameter in invocation.parameters
+            }
+            args: list[Any] = []
+            kwargs: dict[str, Any] = {}
+            for argument in invocation.arguments:
+                parameter = parameters_by_name[argument.name]
+                value = (
+                    CodeExpr(_serialize(parameter, values[parameter.id]))
+                    if parameter.id in values and not parameter.id.startswith("global:")
+                    else CodeExpr(argument.source)
+                )
+                if argument.position is None:
+                    kwargs[argument.name] = value
+                else:
+                    args.append(value)
+            kwargs.update(
+                (parameter.name, CodeExpr(_serialize(parameter, values[parameter.id])))
+                for parameter in omitted
+            )
+            span = invocation.source_range
+            replacements = {
+                key: value
+                for key, value in replacements.items()
+                if not (span.start_offset <= key[0] and key[1] <= span.end_offset)
+            }
+            replacements[(span.start_offset, span.end_offset)] = str(
+                EmittableOperation.render_method_call(
+                    invocation.operation, args=tuple(args), kwargs=kwargs
+                )
+            )
 
     candidate = result.emitted.source
     for (start, end), replacement in sorted(replacements.items(), reverse=True):
@@ -117,7 +176,9 @@ def project_changes(
 
     if not issues:
         try:
-            tree = ast.parse(candidate, filename=str(result.input_path.with_suffix(".py")))
+            tree = ast.parse(
+                candidate, filename=str(result.input_path.with_suffix(".py"))
+            )
             compile(tree, str(result.input_path.with_suffix(".py")), "exec")
         except SyntaxError as exc:
             issues.append(ValidationIssue(code="invalid-python", message=str(exc)))
@@ -129,7 +190,9 @@ def project_changes(
     )
 
 
-def preview_changes(result: CompilationResult, changes: Iterable[ParameterChange]) -> ChangePreview:
+def preview_changes(
+    result: CompilationResult, changes: Iterable[ParameterChange]
+) -> ChangePreview:
     projection = project_changes(result, changes)
     diff = "".join(
         difflib.unified_diff(
@@ -159,6 +222,10 @@ def _validate_value(parameter: EmittedParameter, value: Any) -> ValidationIssue 
             message=parameter.read_only_reason or "Parameter is read-only.",
             parameter_id=parameter.id,
         )
+
+    schema = parameter.definition.schema if parameter.definition else None
+    if schema is not None and schema.kind != "dynamic":
+        return None if schema.accepts(value) else _type_issue(parameter)
 
     expected: type[Any]
     if parameter.editor_type in {"string", "multiline"}:
@@ -208,7 +275,8 @@ def _type_issue(parameter: EmittedParameter) -> ValidationIssue:
 
 
 def _serialize(parameter: EmittedParameter, value: Any) -> str:
-    return repr(value)
+    schema = parameter.definition.schema if parameter.definition else None
+    return repr(schema.python_value(value) if schema else value)
 
 
 __all__ = [

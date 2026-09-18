@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from vg2c.compilation import CompilationResult
-from vg2c.editing import ParameterChange
+from vg2c.editing import ParameterChange, project_changes
 from vg2c.emitter.models import EmittedInvocation, EmittedParameter
 from vg2c.sql_editor.models import SqlActionName, SqlEditableModel, SqlEditError
 from vg2c.sql_editor.parser import parse_sql
@@ -48,7 +48,7 @@ def structured_sql_model(
     changes: Iterable[ParameterChange] = (),
 ) -> SqlEditableModel:
     _, parameter = _structured_parameter(result, parameter_id)
-    value = _effective_parameter_value(parameter, changes)
+    value = _effective_parameter_value(result, parameter, changes)
     if not isinstance(value, str):
         raise SqlEditError("Structured SQL requires an editable string parameter.")
     return parse_sql(value)
@@ -60,7 +60,7 @@ def apply_sql_action(
     changes: Iterable[ParameterChange] = (),
 ) -> ParameterChange:
     _, parameter = _structured_parameter(result, action.parameter_id)
-    sql = _effective_parameter_value(parameter, changes)
+    sql = _effective_parameter_value(result, parameter, changes)
     if not isinstance(sql, str):
         raise SqlEditError("Structured SQL requires an editable string parameter.")
 
@@ -101,7 +101,11 @@ def apply_sql_action(
         transformed = update_filter(
             sql,
             _require(args, "filter_id"),
-            **{key: args[key] for key in ("left", "operator", "right", "connector") if key in args},
+            **{
+                key: args[key]
+                for key in ("left", "operator", "right", "connector")
+                if key in args
+            },
         )
     elif name == "remove-filter":
         transformed = remove_filter(sql, _require(args, "filter_id"))
@@ -115,9 +119,13 @@ def apply_sql_action(
             operator=args.get("operator", "="),
         )
     elif name == "update-join-type":
-        transformed = update_join_type(sql, _require(args, "join_id"), _require(args, "join_type"))
+        transformed = update_join_type(
+            sql, _require(args, "join_id"), _require(args, "join_type")
+        )
     elif name == "update-join-source":
-        transformed = update_join_source(sql, _require(args, "join_id"), _require(args, "source"))
+        transformed = update_join_source(
+            sql, _require(args, "join_id"), _require(args, "source")
+        )
     elif name == "update-join-predicate":
         transformed = update_join_predicate(
             sql,
@@ -132,7 +140,9 @@ def apply_sql_action(
     elif name == "remove-join":
         transformed = remove_join(sql, _require(args, "join_id"))
     elif name == "update-source":
-        transformed = update_source(sql, _require(args, "source_id"), _require(args, "source"))
+        transformed = update_source(
+            sql, _require(args, "source_id"), _require(args, "source")
+        )
     else:
         raise SqlEditError(f"Unsupported structured SQL action: {name}")
 
@@ -147,24 +157,36 @@ def _structured_parameter(
             for parameter in invocation.parameters:
                 if parameter.id != parameter_id:
                     continue
-                if "structured-sql" not in parameter_capabilities(invocation, parameter):
+                if "structured-sql" not in parameter_capabilities(
+                    invocation, parameter
+                ):
                     raise SqlEditError(
                         "This utility parameter does not expose structured SQL editing."
                     )
                 if not parameter.editable:
-                    raise SqlEditError(parameter.read_only_reason or "SQL parameter is read-only.")
+                    raise SqlEditError(
+                        parameter.read_only_reason or "SQL parameter is read-only."
+                    )
                 return invocation, parameter
     raise SqlEditError("SQL parameter no longer exists.")
 
 
 def _effective_parameter_value(
-    parameter: EmittedParameter, changes: Iterable[ParameterChange]
+    result: CompilationResult,
+    parameter: EmittedParameter,
+    changes: Iterable[ParameterChange],
 ) -> Any:
-    value = parameter.value
-    for change in changes:
-        if change.parameter_id == parameter.id:
-            value = change.value
-    return value
+    projection = project_changes(result, changes)
+    if not projection.valid:
+        raise SqlEditError("; ".join(issue.message for issue in projection.issues))
+    return next(
+        (
+            change.value
+            for change in projection.values
+            if change.parameter_id == parameter.id
+        ),
+        parameter.value,
+    )
 
 
 def _require(arguments: Mapping[str, Any], key: str) -> Any:

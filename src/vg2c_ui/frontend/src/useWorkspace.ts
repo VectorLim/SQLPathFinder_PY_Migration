@@ -12,6 +12,7 @@ import {
   translateBatch,
 } from './api'
 import type {
+  FileEndpointView,
   ParameterView,
   SqlActionRequest,
   SqlModelView,
@@ -20,10 +21,12 @@ import {
   activeTab,
   changeBatch,
   draftChanges,
+  documentSnapshot,
   initialWorkspaceState,
   tabById,
   workspaceProjectionRequest,
   workspaceReducer,
+  type FieldPath,
 } from './workspaceState'
 
 export function useWorkspace() {
@@ -57,13 +60,16 @@ export function useWorkspace() {
       dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document })
       return document
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: false })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: tab.status === 'conflict', message: errorMessage(error, 'Reload failed'),
+      })
       throw error
     }
   }, [])
 
-  const edit = useCallback((tabId: string, parameter: ParameterView, value: unknown) => {
-    dispatch({ type: 'edit', tabId, parameterId: parameter.id, value })
+  const edit = useCallback((tabId: string, parameter: ParameterView, value: unknown, clearDraftPaths?: FieldPath[]) => {
+    dispatch({ type: 'edit', tabId, parameterId: parameter.id, value, clearDraftPaths })
   }, [])
 
   const validate = useCallback(async (tabId: string) => {
@@ -80,7 +86,11 @@ export function useWorkspace() {
       dispatch({ type: 'preview-result', tabId, instanceId, requestId, baseVersion: version, preview })
       return preview
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: error instanceof ApiError && error.status === 409 })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not validate changes'),
+      })
       throw error
     }
   }, [])
@@ -99,23 +109,31 @@ export function useWorkspace() {
       dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document: result.document })
       return result
     } catch (error) {
-      dispatch({ type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version, conflict: error instanceof ApiError && error.status === 409 })
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not apply changes'),
+      })
       throw error
     }
   }, [])
 
-  const loadCsv = useCallback(async (tabId: string, path: string) => {
+  const loadCsv = useCallback(async (tabId: string, effectId: string, endpoint: FileEndpointView) => {
     const tab = tabById(stateRef.current, tabId)
-    if (!tab) return null
+    if (!tab || !endpoint.path) return null
     const instanceId = tab.instanceId
     const requestId = `${tabId}:${instanceId}:csv:${++csvCounter.current}`
-    dispatch({ type: 'csv-loading', tabId, instanceId, requestId, path })
+    dispatch({ type: 'csv-loading', tabId, instanceId, requestId, path: endpoint.path })
     try {
-      const csv = await previewCsv(tab.document.source_path, path)
-      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv })
+      const csv = await previewCsv({ ...documentSnapshot(tab.document), effect_id: effectId,
+        endpoint_id: endpoint.id, expected_path: endpoint.path, changes: draftChanges(tab) })
+      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv, error: null })
       return csv
     } catch (error) {
-      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv: null })
+      dispatch({
+        type: 'csv-result', tabId, instanceId, requestId, csv: null,
+        error: errorMessage(error, 'CSV preview failed'),
+      })
       throw error
     }
   }, [])
@@ -123,16 +141,14 @@ export function useWorkspace() {
   const inspectStructuredSql = useCallback(async (tabId: string, parameterId: string): Promise<SqlModelView> => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
-    const version = tab.edits.version
     const instanceId = tab.instanceId
     const model = await inspectSql({
-      source_path: tab.document.source_path,
-      output_path: tab.document.output_path,
+      ...documentSnapshot(tab.document),
       parameter_id: parameterId,
       changes: draftChanges(tab),
     })
     const current = tabById(stateRef.current, tabId)
-    if (!current || current.instanceId !== instanceId || current.edits.version !== version) {
+    if (!current || current.instanceId !== instanceId || current.edits.values !== tab.edits.values || current.document.revision !== tab.document.revision) {
       throw new Error('SQL draft changed while the structured model was loading.')
     }
     return model
@@ -149,8 +165,7 @@ export function useWorkspace() {
     const version = tab.edits.version
     const instanceId = tab.instanceId
     const response = await applySqlAction({
-      source_path: tab.document.source_path,
-      output_path: tab.document.output_path,
+      ...documentSnapshot(tab.document),
       parameter_id: parameterId,
       changes: draftChanges(tab),
       action,
@@ -178,12 +193,13 @@ export function useWorkspace() {
     }
     let cancelled = false
     const request = workspaceProjectionRequest(state)
+    dispatch({ type: 'projection-loading' })
     void projectWorkspace(request)
       .then((projection) => {
         if (!cancelled) dispatch({ type: 'projection', projection })
       })
-      .catch(() => {
-        if (!cancelled) dispatch({ type: 'projection', projection: null })
+      .catch((error) => {
+        if (!cancelled) dispatch({ type: 'projection-error', message: errorMessage(error, 'Could not update file flow') })
       })
     return () => { cancelled = true }
   }, [state.tabs.map((tab) => `${tab.document.id}:${tab.instanceId}:${tab.document.revision}:${tab.edits.version}`).join('|')])
@@ -206,4 +222,8 @@ export function useWorkspace() {
 
 function mutationId(tabId: string, instanceId: number, sequence: number): string {
   return `${tabId}:${instanceId}:mutation:${sequence}`
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }

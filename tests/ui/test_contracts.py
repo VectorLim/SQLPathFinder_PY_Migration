@@ -16,3 +16,5 @@ def test_contracts_are_transport_views_not_workflow_domain_copies():
     assert "interface WorkflowDocument" not in generated
     assert "overrides:" not in generated
     assert "capabilities:" in generated
+    assert "interface WorkspaceUploadPolicyView" in generated
+    assert "allowed_upload_suffixes:" in generated

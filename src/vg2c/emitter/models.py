@@ -13,7 +13,15 @@ from typing import (
     Union,
     get_args,
     get_origin,
+    get_type_hints,
     overload,
+)
+
+from vg2c.utility_metadata import (
+    FileEffectDefinition,
+    ValueSchema,
+    safe_literal,
+    value_schema,
 )
 
 P = ParamSpec("P")
@@ -34,7 +42,17 @@ class CodeExpr:
         return self.value is not _UNSET
 
 
-EditorType = Literal["string", "multiline", "integer", "boolean", "list", "dynamic"]
+EditorType = Literal[
+    "string",
+    "multiline",
+    "integer",
+    "number",
+    "boolean",
+    "list",
+    "object",
+    "union",
+    "dynamic",
+]
 ArtifactDirection = Literal["input", "output"]
 
 
@@ -59,6 +77,9 @@ class ParameterDefinition:
     required: bool
     default: Any = None
     choices: tuple[Any, ...] = ()
+    schema: ValueSchema | None = None
+    internal: bool = False
+    keyword: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,18 +98,25 @@ class UtilityOperationDefinition:
     parameter_capabilities: tuple[tuple[str, tuple[str, ...]], ...] = ()
     artifact_roles: tuple[tuple[str, ArtifactRole], ...] = ()
     supported_mutations: tuple[str, ...] = ("set-parameter",)
+    file_effects: tuple[FileEffectDefinition, ...] | None = None
 
     def parameter(self, name: str) -> ParameterDefinition | None:
         return next((item for item in self.parameters if item.name == name), None)
 
     def capabilities_for_parameter(self, parameter_name: str) -> tuple[str, ...]:
         return next(
-            (caps for name, caps in self.parameter_capabilities if name == parameter_name),
+            (
+                caps
+                for name, caps in self.parameter_capabilities
+                if name == parameter_name
+            ),
             (),
         )
 
     def artifact_role(self, parameter_name: str) -> ArtifactRole | None:
-        return next((role for name, role in self.artifact_roles if name == parameter_name), None)
+        return next(
+            (role for name, role in self.artifact_roles if name == parameter_name), None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +173,7 @@ class EmittedParameter:
     read_only_reason: str | None
     definition: ParameterDefinition | None
     artifact_role: ArtifactRole | None
-    source_range: SourceRange
+    source_range: SourceRange | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +182,7 @@ class EmittedInvocation:
     operation: UtilityOperationDefinition
     source_range: SourceRange
     parameters: tuple[EmittedParameter, ...]
+    arguments: tuple[RenderedArgument, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +197,9 @@ class EmittedStep:
     @property
     def parameters(self) -> tuple[EmittedParameter, ...]:
         return tuple(
-            parameter for invocation in self.invocations for parameter in invocation.parameters
+            parameter
+            for invocation in self.invocations
+            for parameter in invocation.parameters
         )
 
 
@@ -181,7 +212,9 @@ class EmittedScript:
     steps: tuple[EmittedStep, ...] = ()
 
     def step_for_block(self, block_index: int) -> EmittedStep | None:
-        return next((step for step in self.steps if step.block_index == block_index), None)
+        return next(
+            (step for step in self.steps if step.block_index == block_index), None
+        )
 
     def parameter(self, parameter_id: str) -> EmittedParameter | None:
         for step in self.steps:
@@ -221,6 +254,9 @@ class EmittableOperation(Generic[P, R]):
         capabilities: tuple[str, ...] = (),
         parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
         artifact_roles: dict[str, ArtifactRole] | None = None,
+        internal_parameters: tuple[str, ...] = (),
+        parameter_schemas: dict[str, ValueSchema] | None = None,
+        file_effects: tuple[FileEffectDefinition, ...] | None = None,
         supported_mutations: tuple[str, ...] = ("set-parameter",),
     ) -> None:
         self.func = func
@@ -228,9 +264,13 @@ class EmittableOperation(Generic[P, R]):
         self.__doc__ = func.__doc__
         self.capabilities = tuple(capabilities)
         self.parameter_capabilities = tuple(
-            (name, tuple(values)) for name, values in (parameter_capabilities or {}).items()
+            (name, tuple(values))
+            for name, values in (parameter_capabilities or {}).items()
         )
         self.artifact_roles = tuple((artifact_roles or {}).items())
+        self.internal_parameters = internal_parameters
+        self.parameter_schemas = parameter_schemas or {}
+        self.file_effects = file_effects
         self.supported_mutations = tuple(supported_mutations)
 
     @overload
@@ -254,21 +294,33 @@ class EmittableOperation(Generic[P, R]):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> RenderedCall:
-        receiver = "ctx" if definition.utility_name == "ctx" else f"ctx.{definition.utility_name}"
+        receiver = (
+            "ctx"
+            if definition.utility_name == "ctx"
+            else f"ctx.{definition.utility_name}"
+        )
         prefix = f"{receiver}.{definition.method}("
         parts: list[str] = []
         rendered_arguments: list[RenderedArgument] = []
         cursor = len(prefix)
 
         positional_definitions = [
-            parameter for parameter in definition.parameters if parameter.position is not None
+            parameter
+            for parameter in definition.parameters
+            if parameter.position is not None
         ]
         for position, value in enumerate(args):
             source, metadata = _render_argument(value)
             parameter_definition = (
-                positional_definitions[position] if position < len(positional_definitions) else None
+                positional_definitions[position]
+                if position < len(positional_definitions)
+                else None
             )
-            name = parameter_definition.name if parameter_definition else f"arg_{position + 1}"
+            name = (
+                parameter_definition.name
+                if parameter_definition
+                else f"arg_{position + 1}"
+            )
             rendered_arguments.append(
                 RenderedArgument(
                     name=name,
@@ -313,6 +365,9 @@ def emittable(
     capabilities: tuple[str, ...] = (),
     parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
     artifact_roles: dict[str, ArtifactRole] | None = None,
+    internal_parameters: tuple[str, ...] = (),
+    parameter_schemas: dict[str, ValueSchema] | None = None,
+    file_effects: tuple[FileEffectDefinition, ...] | None = None,
     supported_mutations: tuple[str, ...] = ("set-parameter",),
 ) -> Callable[[Callable[P, R]], EmittableOperation[P, R]]: ...
 
@@ -324,6 +379,9 @@ def emittable(
     capabilities: tuple[str, ...] = (),
     parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
     artifact_roles: dict[str, ArtifactRole] | None = None,
+    internal_parameters: tuple[str, ...] = (),
+    parameter_schemas: dict[str, ValueSchema] | None = None,
+    file_effects: tuple[FileEffectDefinition, ...] | None = None,
     supported_mutations: tuple[str, ...] = ("set-parameter",),
 ) -> EmittableOperation[P, R] | Callable[[Callable[P, R]], EmittableOperation[P, R]]:
     """Declare an emitted operation and any non-inferable semantic metadata."""
@@ -334,6 +392,9 @@ def emittable(
             capabilities=capabilities,
             parameter_capabilities=parameter_capabilities,
             artifact_roles=artifact_roles,
+            internal_parameters=internal_parameters,
+            parameter_schemas=parameter_schemas,
+            file_effects=file_effects,
             supported_mutations=supported_mutations,
         )
 
@@ -356,7 +417,9 @@ class EmittableMethod(Generic[P, R]):
 
 
 class BoundEmittableMethod(Generic[P, R]):
-    def __init__(self, descriptor: EmittableOperation[P, R], instance: Any, owner: Any) -> None:
+    def __init__(
+        self, descriptor: EmittableOperation[P, R], instance: Any, owner: Any
+    ) -> None:
         self.descriptor = descriptor
         self.func = descriptor.func
         self.instance = instance
@@ -401,7 +464,9 @@ def build_step_emission(
                     operation=rendered.definition,
                     source_range=SourceRange(call_start, call_end),
                     arguments=tuple(
-                        _adjust_argument_for_indentation(argument, rendered, exact_call, call_start)
+                        _adjust_argument_for_indentation(
+                            argument, rendered, exact_call, call_start
+                        )
                         for argument in rendered.arguments
                     ),
                     semantic_key=rendered.semantic_key,
@@ -430,14 +495,18 @@ def finalize_steps(
     for emission in emissions:
         step_start = source.find(emission.source, search_from)
         if step_start < 0:
-            raise ValueError(f"emitted step not found in final source: {emission.function_name}")
+            raise ValueError(
+                f"emitted step not found in final source: {emission.function_name}"
+            )
         step_end = step_start + len(emission.source)
         search_from = step_end
         seen_invocation_ids: set[str] = set()
         invocations: list[EmittedInvocation] = []
         for relative in emission.invocations:
             semantic_key = relative.semantic_key or "default"
-            invocation_id = f"block-{emission.block_index}:{relative.operation.id}:{semantic_key}"
+            invocation_id = (
+                f"block-{emission.block_index}:{relative.operation.id}:{semantic_key}"
+            )
             if invocation_id in seen_invocation_ids:
                 raise ValueError(
                     "ambiguous emitted invocation identity for "
@@ -454,7 +523,9 @@ def finalize_steps(
                             name=argument.name,
                             position=argument.position,
                             definition=argument.definition,
-                            artifact_role=relative.operation.artifact_role(argument.name),
+                            artifact_role=relative.operation.artifact_role(
+                                argument.name
+                            ),
                         )
                     )
                     continue
@@ -488,8 +559,41 @@ def finalize_steps(
                 parameters.extend(
                     global_parameters[name]
                     for name in argument.global_names
-                    if global_parameters[name].id not in {parameter.id for parameter in parameters}
+                    if global_parameters[name].id
+                    not in {parameter.id for parameter in parameters}
                 )
+            supplied_names = {argument.name for argument in relative.arguments}
+            for definition in relative.operation.parameters:
+                schema = definition.schema
+                if (
+                    definition.name in supplied_names
+                    or definition.required
+                    or definition.internal
+                    or not definition.keyword
+                ):
+                    continue
+                if (
+                    schema is None
+                    or schema.kind == "dynamic"
+                    or not schema.accepts(definition.default)
+                ):
+                    continue
+                parameters.append(
+                    EmittedParameter(
+                        id=f"{invocation_id}:{definition.name}",
+                        name=definition.name,
+                        position=None,
+                        source=repr(definition.default),
+                        value=definition.default,
+                        editor_type=schema.kind,
+                        editable=True,
+                        read_only_reason=None,
+                        definition=definition,
+                        artifact_role=relative.operation.artifact_role(definition.name),
+                        source_range=None,
+                    )
+                )
+            parameters = [_typed_parameter(parameter) for parameter in parameters]
             invocations.append(
                 EmittedInvocation(
                     id=invocation_id,
@@ -499,6 +603,7 @@ def finalize_steps(
                         step_start + relative.source_range.end_offset,
                     ),
                     parameters=tuple(parameters),
+                    arguments=relative.arguments,
                 )
             )
         finalized.append(
@@ -537,7 +642,9 @@ def _adjust_argument_for_indentation(
 
 
 def _indent_call_source(source: str) -> str:
-    return "\n".join(f"    {line}" if line.strip() else "" for line in source.split("\n"))
+    return "\n".join(
+        f"    {line}" if line.strip() else "" for line in source.split("\n")
+    )
 
 
 def _indent_adjusted_offset(source: str, offset: int) -> int:
@@ -553,7 +660,9 @@ def _joined_length(lines: list[str]) -> int:
 
 def _render_argument(value: Any) -> tuple[str, dict[str, Any]]:
     if isinstance(value, CodeExpr):
-        metadata = _value_metadata(value.value) if value.has_value else _dynamic_metadata()
+        metadata = (
+            _value_metadata(value.value) if value.has_value else _dynamic_metadata()
+        )
         metadata["global_names"] = value.global_names
         return value.source, metadata
     return repr(value), _value_metadata(value)
@@ -570,10 +679,21 @@ def _dynamic_metadata() -> dict[str, Any]:
 
 def _value_metadata(value: Any) -> dict[str, Any]:
     editor_type: EditorType
+    if not safe_literal(value):
+        return {
+            "value": None,
+            "editor_type": "dynamic",
+            "editable": False,
+            "read_only_reason": "This literal type is not supported",
+        }
     if isinstance(value, bool):
         editor_type = "boolean"
     elif isinstance(value, int):
         editor_type = "integer"
+    elif isinstance(value, float):
+        editor_type = "number"
+    elif isinstance(value, dict):
+        editor_type = "object"
     elif isinstance(value, list) and all(_safe_list_item(item) for item in value):
         editor_type = "list"
     elif isinstance(value, str) and "\n" in value:
@@ -584,10 +704,10 @@ def _value_metadata(value: Any) -> dict[str, Any]:
         editor_type = "dynamic"
     editable = editor_type != "dynamic"
     return {
-        "value": value if editable else None,
+        "value": value,
         "editor_type": editor_type,
         "editable": editable,
-        "read_only_reason": None if editable else "This literal type is not supported",
+        "read_only_reason": None,
     }
 
 
@@ -597,6 +717,10 @@ def _operation_definition(
     func = operation.func
     utility_name = getattr(owner, "utility_name", owner.__name__.lower())
     signature = inspect.signature(func)
+    try:
+        hints = get_type_hints(func)
+    except (NameError, TypeError):
+        hints = {}
     parameters: list[ParameterDefinition] = []
     positional_index = 0
     for index, parameter in enumerate(signature.parameters.values()):
@@ -609,11 +733,9 @@ def _operation_definition(
         position = positional_index if is_positional else None
         if is_positional:
             positional_index += 1
-        choices = (
-            tuple(get_args(parameter.annotation))
-            if get_origin(parameter.annotation) is Literal
-            else ()
-        )
+        hint = hints.get(parameter.name, parameter.annotation)
+        schema = operation.parameter_schemas.get(parameter.name, value_schema(hint))
+        choices = schema.choices
         required = parameter.default is inspect.Parameter.empty
         parameters.append(
             ParameterDefinition(
@@ -623,6 +745,13 @@ def _operation_definition(
                 required=required,
                 default=None if required else _json_default(parameter.default),
                 choices=choices,
+                schema=schema,
+                internal=parameter.name in operation.internal_parameters,
+                keyword=parameter.kind
+                in {
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.KEYWORD_ONLY,
+                },
             )
         )
     class_doc = inspect.cleandoc(owner.__doc__) if owner.__doc__ else ""
@@ -641,6 +770,40 @@ def _operation_definition(
         parameter_capabilities=operation.parameter_capabilities,
         artifact_roles=operation.artifact_roles,
         supported_mutations=operation.supported_mutations,
+        file_effects=operation.file_effects,
+    )
+
+
+def _typed_parameter(parameter: EmittedParameter) -> EmittedParameter:
+    definition = parameter.definition
+    if definition is None:
+        return parameter
+    if definition.internal:
+        return replace(
+            parameter, editable=False, read_only_reason="Runtime/internal parameter"
+        )
+    schema = definition.schema
+    if schema is None:
+        return parameter
+    if schema.kind == "dynamic":
+        return replace(
+            parameter, editable=False, read_only_reason="Unsupported declared type"
+        )
+    if parameter.read_only_reason is not None:
+        return parameter
+    if not schema.accepts(parameter.value):
+        return replace(
+            parameter,
+            editable=False,
+            read_only_reason="Value does not match its declared type",
+        )
+    editor_type = (
+        "multiline"
+        if parameter.editor_type == "multiline" and schema.kind == "string"
+        else schema.kind
+    )
+    return replace(
+        parameter, editor_type=editor_type, editable=True, read_only_reason=None
     )
 
 

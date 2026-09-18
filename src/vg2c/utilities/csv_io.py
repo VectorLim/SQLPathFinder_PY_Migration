@@ -12,6 +12,7 @@ import pandas
 from vg2c.emitter.models import emittable
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class CsvIO(UtilitySpec):
@@ -30,7 +31,7 @@ class CsvIO(UtilitySpec):
     # Read
     # ------------------------------------------------------------------
 
-    @emittable
+    @emittable(file_effects=(FileEffectDefinition("read", "read", inputs=("name",)),))
     def iter(self, name: str) -> Iterator[dict[str, str]]:
         """Yield each data row as a dict keyed by header names."""
         path = resolve_path(name)
@@ -38,7 +39,7 @@ class CsvIO(UtilitySpec):
             reader = csv.DictReader(fh)
             yield from reader
 
-    @emittable
+    @emittable(file_effects=(FileEffectDefinition("read", "read", inputs=("name",)),))
     def single_row(self, name: str) -> dict[str, str]:
         """Return exactly one data row from *name*; raise on 0 or >1 rows."""
         rows = self.iter(name)
@@ -94,7 +95,7 @@ class CsvIO(UtilitySpec):
     def _single_quote(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
-    @emittable
+    @emittable(file_effects=(FileEffectDefinition("read", "read", inputs=("path",)),))
     def sql_get_csv_list(
         self,
         path: str,
@@ -123,7 +124,9 @@ class CsvIO(UtilitySpec):
 
         return "".join(parts)
 
-    @emittable
+    @emittable(
+        file_effects=(FileEffectDefinition("observe", "observe", inputs=("name",)),)
+    )
     def row_count(self, name: str) -> int:
         """Count data rows (excludes header); 0 if file missing."""
         path = resolve_path(name)
@@ -134,8 +137,16 @@ class CsvIO(UtilitySpec):
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
-    @emittable
-    def iter_chunks(self, input_name: str, chunk_name: str, chunk_size: int) -> Iterator[Path]:
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "chunks", "transform", inputs=("input_name",), outputs=("chunk_name",)
+            ),
+        )
+    )
+    def iter_chunks(
+        self, input_name: str, chunk_name: str, chunk_size: int
+    ) -> Iterator[Path]:
         """Stream *input_name* in fixed-size chunks, materializing each batch to *chunk_name*.
 
         Yields the chunk file path once per batch. The header of *input_name* is
@@ -161,7 +172,9 @@ class CsvIO(UtilitySpec):
                 yield out_path
 
     @staticmethod
-    def _write_chunk(path: Path, header: list[str] | None, rows: list[list[str]]) -> None:
+    def _write_chunk(
+        path: Path, header: list[str] | None, rows: list[list[str]]
+    ) -> None:
         with path.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             if header is not None:
@@ -172,7 +185,17 @@ class CsvIO(UtilitySpec):
     # Write
     # ------------------------------------------------------------------
 
-    @emittable
+    @emittable(
+        internal_parameters=("content",),
+        file_effects=(
+            FileEffectDefinition(
+                "write",
+                "write",
+                outputs=("name",),
+                reason="Runtime content may itself be a file; input is not statically known.",
+            ),
+        ),
+    )
     def write(self, name: str, content: Any, header: list[str] | None = None) -> None:
         """Write *content* to a CSV file.
 
@@ -189,7 +212,9 @@ class CsvIO(UtilitySpec):
             if header is not None:
                 columns = {str(column).casefold(): column for column in content.columns}
                 content = content.reindex(
-                    columns=[columns.get(column.casefold(), column) for column in header]
+                    columns=[
+                        columns.get(column.casefold(), column) for column in header
+                    ]
                 )
                 content.columns = header
             content.to_csv(path, index=False, encoding="utf-8")
@@ -218,7 +243,9 @@ class CsvIO(UtilitySpec):
         with path.open("w", newline="", encoding="utf-8") as fh:
             if isinstance(rows[0], dict):
                 fieldnames = header if header is not None else list(rows[0].keys())
-                writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+                writer = csv.DictWriter(
+                    fh, fieldnames=fieldnames, extrasaction="ignore"
+                )
                 writer.writeheader()
                 writer.writerows(rows)
             else:

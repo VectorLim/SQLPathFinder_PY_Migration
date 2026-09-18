@@ -10,6 +10,7 @@ from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
 from vg2c.utilities._runtime_helpers import strip_quotes
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class WaitFile(EmitterUtility):
@@ -54,7 +55,9 @@ class WaitFile(EmitterUtility):
         argv = cls._utility_argv(block)
         # argv[0] = tool path, argv[1] = file path, argv[2] = timeout seconds
         path_expr = to_code_expr(argv[1] if len(argv) > 1 else "")
-        raw_timeout = strip_quotes(argv[2]) if len(argv) > 2 else str(cls._DEFAULT_TIMEOUT)
+        raw_timeout = (
+            strip_quotes(argv[2]) if len(argv) > 2 else str(cls._DEFAULT_TIMEOUT)
+        )
         try:
             timeout_val = int(raw_timeout)
         except ValueError:
@@ -62,7 +65,13 @@ class WaitFile(EmitterUtility):
         stmt = cls.poll.render(path_expr, timeout_val)
         return "wait_file", [stmt]
 
-    @emittable
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "observe", "observe", inputs=("path",), input_base="working-directory"
+            ),
+        )
+    )
     def poll(
         self,
         path: str | Path,

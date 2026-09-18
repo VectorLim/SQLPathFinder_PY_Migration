@@ -4,7 +4,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = 2
+from vg2c.emitter.models import EditorType
+from vg2c.utility_metadata import FileEffectKind, PathBase, ValueKind
+
+SCHEMA_VERSION = 4
 
 
 class SourceSpanView(BaseModel):
@@ -13,13 +16,26 @@ class SourceSpanView(BaseModel):
     end_line: int
 
 
+class ValueSchemaView(BaseModel):
+    kind: ValueKind
+    nullable: bool = False
+    choices: list[Any] = Field(default_factory=list)
+    items: ValueSchemaView | None = None
+    properties: dict[str, ValueSchemaView] = Field(default_factory=dict)
+    required_keys: list[str] = Field(default_factory=list)
+    variants: list[ValueSchemaView] = Field(default_factory=list)
+    path: bool = False
+    prefix_items: list[ValueSchemaView] = Field(default_factory=list)
+    tuple_value: bool = False
+
+
 class ParameterView(BaseModel):
     id: str
     name: str
     position: int | None = None
     source: str
     value: Any = None
-    editor_type: Literal["string", "multiline", "integer", "boolean", "list", "dynamic"]
+    editor_type: EditorType
     editable: bool
     read_only_reason: str | None = None
     constraints: dict[str, Any] = Field(default_factory=dict)
@@ -27,6 +43,11 @@ class ParameterView(BaseModel):
     required: bool = True
     default: Any = None
     capabilities: list[str] = Field(default_factory=list)
+    value_schema: ValueSchemaView | None = None
+    internal: bool = False
+    omitted: bool = False
+    overridden: bool = False
+    generated_value: Any = None
 
 
 class UtilityView(BaseModel):
@@ -42,6 +63,12 @@ class UtilityView(BaseModel):
     supported_mutations: list[str] = Field(default_factory=list)
 
 
+class OperationView(BaseModel):
+    id: str
+    utility: UtilityView
+    parameters: list[ParameterView] = Field(default_factory=list)
+
+
 class StepView(BaseModel):
     id: str
     node_kind: Literal["step"] = "step"
@@ -51,16 +78,12 @@ class StepView(BaseModel):
     functional_kind: str
     display_label: str
     description: str
-    parameters: list[ParameterView] = Field(default_factory=list)
-    csv_inputs: list[str] = Field(default_factory=list)
-    csv_outputs: list[str] = Field(default_factory=list)
     parent_scope_id: str | None = None
     branch: Literal["true", "false"] | None = None
     validation_state: Literal["valid", "warning", "unsupported"] = "valid"
     raw_code: str | None = None
     read_only: bool = True
-    utility: UtilityView
-    capabilities: list[str] = Field(default_factory=list)
+    operations: list[OperationView] = Field(default_factory=list)
 
 
 class ScopeView(BaseModel):
@@ -94,6 +117,33 @@ class DiagnosticView(BaseModel):
     node_id: str | None = None
 
 
+class FileEndpointView(BaseModel):
+    id: str
+    parameter_id: str | None
+    path: str | None
+    expression: str | None
+    path_base: PathBase
+    phase: Literal["prior", "next", "deleted"]
+    state_ids: list[str] = Field(default_factory=list)
+    status: Literal["known", "dynamic", "external", "missing", "possible"]
+
+
+class FileEffectView(BaseModel):
+    id: str
+    operation_id: str
+    step_id: str
+    block_index: int
+    scope_id: int
+    order: int
+    kind: FileEffectKind
+    inputs: list[FileEndpointView]
+    outputs: list[FileEndpointView]
+    conditional: bool
+    in_loop: bool
+    reason: str | None
+    dependency_ids: list[str]
+
+
 class DocumentView(BaseModel):
     schema_version: int = SCHEMA_VERSION
     id: str
@@ -101,26 +151,34 @@ class DocumentView(BaseModel):
     output_path: str
     source_hash: str
     output_hash: str
-    revision: int = 1
+    revision: str
+    compiler_hash: str
     synchronized: bool = True
     read_only_reason: str | None = None
     steps: list[StepView]
     scopes: list[ScopeView]
     artifacts: list[ArtifactView]
     diagnostics: list[DiagnosticView]
+    effects: list[FileEffectView] = Field(default_factory=list)
 
 
 class ParameterChangeRequest(BaseModel):
     parameter_id: str
-    value: Any
+    value: Any = None
+    reset: bool = False
 
 
-class ChangeBatch(BaseModel):
+class DocumentSnapshot(BaseModel):
+    schema_version: Literal[4]
     source_path: str
     output_path: str
     source_hash: str
     output_hash: str
-    revision: int
+    revision: str
+    compiler_hash: str
+
+
+class ChangeBatch(DocumentSnapshot):
     changes: list[ParameterChangeRequest] = Field(min_length=1)
 
 
@@ -154,9 +212,11 @@ class DocumentReference(BaseModel):
     output_path: str | None = None
 
 
-class CsvPreviewRequest(BaseModel):
-    source_path: str
-    csv_path: str
+class CsvPreviewRequest(DocumentSnapshot):
+    effect_id: str
+    endpoint_id: str
+    expected_path: str
+    changes: list[ParameterChangeRequest] = Field(default_factory=list)
 
 
 class BatchTranslationRequest(BaseModel):
@@ -169,10 +229,8 @@ class BatchTranslationResponse(BaseModel):
     diagnostics: list[DiagnosticView]
 
 
-class WorkspaceDocumentRequest(BaseModel):
+class WorkspaceDocumentRequest(DocumentSnapshot):
     document_id: str
-    source_path: str
-    output_path: str
     changes: list[ParameterChangeRequest] = Field(default_factory=list)
 
 
@@ -196,11 +254,14 @@ class DependencyLinkView(BaseModel):
     producer_step_id: str
     consumer_document_id: str
     consumer_step_id: str
+    producer_operation_id: str | None = None
+    consumer_operation_id: str | None = None
 
 
 class ProjectedDocumentView(BaseModel):
     document_id: str
     artifacts: list[ArtifactView]
+    effects: list[FileEffectView] = Field(default_factory=list)
 
 
 class WorkspaceProjectionView(BaseModel):
@@ -213,6 +274,15 @@ class WorkspaceFileView(BaseModel):
     path: str
     size_bytes: int
     modified_at: float
+    role: Literal["source", "data", "generated"]
+    translatable: bool
+
+
+class WorkspaceUploadPolicyView(BaseModel):
+    allowed_upload_suffixes: list[str]
+    max_upload_bytes: int
+    max_file_count: int
+    max_workspace_bytes: int
 
 
 class SqlSpanView(BaseModel):
@@ -291,9 +361,7 @@ class SqlModelView(BaseModel):
     from_clause_span: SqlSpanView | None = None
 
 
-class SqlModelRequest(BaseModel):
-    source_path: str
-    output_path: str
+class SqlModelRequest(DocumentSnapshot):
     parameter_id: str
     changes: list[ParameterChangeRequest] = Field(default_factory=list)
 
@@ -310,14 +378,19 @@ class SqlActionResponse(BaseModel):
 
 CONTRACT_MODELS = (
     SourceSpanView,
+    ValueSchemaView,
     ParameterView,
     UtilityView,
+    OperationView,
     StepView,
     ScopeView,
     ArtifactView,
     DiagnosticView,
+    FileEndpointView,
+    FileEffectView,
     DocumentView,
     ParameterChangeRequest,
+    DocumentSnapshot,
     ChangeBatch,
     ValidationIssueView,
     ChangePreviewView,
@@ -334,6 +407,7 @@ CONTRACT_MODELS = (
     ProjectedDocumentView,
     WorkspaceProjectionView,
     WorkspaceFileView,
+    WorkspaceUploadPolicyView,
     SqlSpanView,
     SqlSelectionView,
     SqlSourceView,
@@ -347,4 +421,7 @@ CONTRACT_MODELS = (
 )
 
 
-__all__ = [model.__name__ for model in CONTRACT_MODELS] + ["CONTRACT_MODELS", "SCHEMA_VERSION"]
+__all__ = [model.__name__ for model in CONTRACT_MODELS] + [
+    "CONTRACT_MODELS",
+    "SCHEMA_VERSION",
+]

@@ -15,6 +15,7 @@ from vg2c.utilities._emit_helpers import (
     to_code_expr,
 )
 from vg2c.utilities._runtime_helpers import resolve_path, strip_quotes
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class FileSystemOps(EmitterUtility):
@@ -115,7 +116,20 @@ class FileSystemOps(EmitterUtility):
         items = [p.strip() for p in raw.split(",") if p.strip()]
         return cls.delete.render(paths=list_code_expr(items))
 
-    @emittable
+    @emittable(
+        internal_parameters=("recurse",),
+        file_effects=(
+            FileEffectDefinition(
+                "copy",
+                "copy",
+                inputs=("src",),
+                outputs=("dst",),
+                input_base="working-directory",
+                output_base="working-directory",
+                reason="File or directory copy; destination interpretation depends on runtime filesystem state.",
+            ),
+        ),
+    )
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
         src, dst = Path(src), Path(dst)
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -124,11 +138,32 @@ class FileSystemOps(EmitterUtility):
         else:
             shutil.copy2(src, dst)
 
-    @emittable
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "move",
+                "move",
+                inputs=("src",),
+                outputs=("dst",),
+                input_base="working-directory",
+                output_base="working-directory",
+            ),
+        )
+    )
     def rename(self, src: str | Path, dst: str | Path) -> None:
         Path(src).replace(Path(dst))
 
-    @emittable
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "delete",
+                "delete",
+                inputs=("paths",),
+                input_base="working-directory",
+                reason="Directories are removed only when recurse is enabled.",
+            ),
+        )
+    )
     def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
         for p in paths:
             path = Path(p)
@@ -138,7 +173,9 @@ class FileSystemOps(EmitterUtility):
             else:
                 path.unlink(missing_ok=True)
 
-    @emittable
+    @emittable(
+        file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
+    )
     def write_file(self, path: str | Path, content: str) -> None:
         out = resolve_path(path, for_write=True)
         out.parent.mkdir(parents=True, exist_ok=True)

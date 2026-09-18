@@ -4,10 +4,11 @@ import difflib
 import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
+from threading import RLock
 
 from vg2c import CompilationResult, compile_document
-from vg2c.dataflow.projection import project_workspace
 from vg2c.editing import (
     ParameterChange,
     ValidationIssue,
@@ -17,14 +18,23 @@ from vg2c.editing import (
     apply_changes as apply_parameter_changes,
 )
 from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
+from vg2c.workflow import (
+    WorkflowDocument,
+    project_workflow,
+    workspace_issues,
+    workspace_links,
+)
 from vg2c_ui.api.models import (
     ChangeBatch,
     ChangePreviewView,
     ChangeResultView,
     CsvPreviewView,
+    CsvPreviewRequest,
     DependencyIssueView,
     DependencyLinkView,
     DocumentView,
+    DocumentSnapshot,
+    DiagnosticView,
     ParameterChangeRequest,
     ProjectedDocumentView,
     SqlActionRequest,
@@ -35,7 +45,13 @@ from vg2c_ui.api.models import (
     WorkspaceProjectionRequest,
     WorkspaceProjectionView,
 )
-from vg2c_ui.api.serialization import artifact_views_for_analysis, document_view, sql_model_view
+from vg2c_ui.api.serialization import (
+    artifact_views_for_effects,
+    compiler_manifest_hash,
+    document_view,
+    effect_views,
+    sql_model_view,
+)
 from vg2c_ui.services.atomic_io import atomic_write_text
 from vg2c_ui.services.csv_preview import read_csv_preview
 from vg2c_ui.services.sidecar import (
@@ -54,6 +70,18 @@ class PathOutsideWorkspace(ValueError):
 
 class RevisionConflict(RuntimeError):
     pass
+
+
+_STORE_LOCK = RLock()
+
+
+def _serialized(method):
+    @wraps(method)
+    def guarded(*args, **kwargs):
+        with _STORE_LOCK:
+            return method(*args, **kwargs)
+
+    return guarded
 
 
 def get_document_store(request) -> "DocumentStore":
@@ -75,22 +103,36 @@ class DocumentStore:
         self.workspace = Path(workspace).resolve()
         self.expose_relative_paths = expose_relative_paths
 
+    @_serialized
     def open_document(
         self, source_path: str, output_path: str | None = None
     ) -> OpenedDocument:
         source = self._resolve(source_path)
-        output = self._resolve(output_path) if output_path else source.with_suffix(".py")
+        output = (
+            self._resolve(output_path) if output_path else source.with_suffix(".py")
+        )
         result = compile_document(source)
-        persisted = self._read_effective_changes(source, output)
+        recovery_reason = None
+        try:
+            persisted = self._read_effective_changes(source, output)
+        except InvalidSidecar as exc:
+            persisted = []
+            recovery_reason = str(exc)
         projected = project_changes(result, persisted)
+        if not projected.valid:
+            persisted = []
+            recovery_reason = "Saved edits no longer match the compiler manifest. Original files are preserved."
         generated = projected.source if projected.valid else result.emitted.source
-        synchronized = output.exists() and _hash_text(
-            output.read_text(encoding="utf-8")
-        ) == _hash_text(generated)
+        synchronized = (
+            recovery_reason is None
+            and output.exists()
+            and _hash_text(output.read_text(encoding="utf-8")) == _hash_text(generated)
+        )
         read_only_reason = None
         if not synchronized:
             read_only_reason = (
-                "Generated output cannot be reconciled with compiler metadata; "
+                recovery_reason
+                or "Generated output cannot be reconciled with compiler metadata; "
                 "retranslate before editing."
             )
         view = document_view(
@@ -103,18 +145,30 @@ class DocumentStore:
             synchronized=synchronized,
             read_only_reason=read_only_reason,
         )
+        if recovery_reason:
+            view.diagnostics.append(
+                DiagnosticView(
+                    level="error",
+                    code="saved-changes-unreconciled",
+                    message=recovery_reason,
+                )
+            )
         return OpenedDocument(result=result, view=self._present_view(view))
 
+    @_serialized
     def translate(
         self, source_path: str, output_path: str | None = None
     ) -> OpenedDocument:
         source = self._resolve(source_path)
-        output = self._resolve(output_path) if output_path else source.with_suffix(".py")
+        output = (
+            self._resolve(output_path) if output_path else source.with_suffix(".py")
+        )
         result = compile_document(source)
         atomic_write_text(output, result.emitted.source)
         self._clear_sidecar(output)
-        return self.open_document(str(source), str(output))
+        return self.open_document(source_path, output_path)
 
+    @_serialized
     def preview(self, batch: ChangeBatch) -> ChangePreviewView:
         source, output, result, persisted = self._load_for_change(batch)
         merged = _merge_changes(persisted, _changes(batch.changes))
@@ -137,89 +191,87 @@ class DocumentStore:
             issues=tuple(_issue_view(issue) for issue in projected.issues),
         )
 
+    @_serialized
     def apply(self, batch: ChangeBatch) -> ChangeResultView:
         source, output, result, persisted = self._load_for_change(batch)
         merged = _merge_changes(persisted, _changes(batch.changes))
         projected = apply_parameter_changes(result, merged)
 
-        atomic_write_text(output, projected.source)
-        write_sidecar(
-            output,
-            EditorSidecar(
-                source_hash=_hash_file(source),
-                output_hash=_hash_file(output),
-                changes=[
-                    SavedParameterChange(
-                        parameter_id=item.parameter_id,
-                        value=item.value,
-                    )
-                    for item in merged
-                ],
-            ),
-        )
+        previous = output.read_text(encoding="utf-8")
+        if batch.revision != self._revision(source, output):
+            raise RevisionConflict("Document changed while validating edits.")
+        try:
+            atomic_write_text(output, projected.source)
+            write_sidecar(
+                output,
+                EditorSidecar(
+                    source_hash=_hash_file(source),
+                    output_hash=_hash_file(output),
+                    changes=[
+                        SavedParameterChange(
+                            parameter_id=item.parameter_id,
+                            value=item.value,
+                        )
+                        for item in projected.values
+                    ],
+                ),
+            )
+        except OSError:
+            if output.exists() and _hash_text(
+                output.read_text(encoding="utf-8")
+            ) == _hash_text(projected.source):
+                atomic_write_text(output, previous)
+            raise
         opened = self.open_document(str(source), str(output))
         return ChangeResultView(document=opened.view)
 
+    @_serialized
     def project_workspace(
         self, request: WorkspaceProjectionRequest
     ) -> WorkspaceProjectionView:
-        documents: list[tuple[str, CompilationResult, tuple[ParameterChange, ...]]] = []
-        results_by_id: dict[str, CompilationResult] = {}
+        workflows: list[WorkflowDocument] = []
+        baseline: list[WorkflowDocument] = []
         for item in request.documents:
-            source = self._resolve(item.source_path)
-            output = self._resolve(item.output_path)
-            result = compile_document(source)
-            persisted = self._read_effective_changes(source, output)
+            source, output, result, persisted = self._load_for_change(item)
             merged = _merge_changes(persisted, _changes(item.changes))
-            documents.append((item.document_id, result, tuple(merged)))
-            results_by_id[item.document_id] = result
+            workflows.append(
+                WorkflowDocument(
+                    item.document_id,
+                    output,
+                    project_workflow(result, merged, output_path=output),
+                )
+            )
+            baseline.append(
+                WorkflowDocument(
+                    item.document_id,
+                    output,
+                    project_workflow(result, persisted, output_path=output),
+                )
+            )
 
-        projection = project_workspace(documents)
         projected_documents = tuple(
             ProjectedDocumentView(
                 document_id=item.document_id,
-                artifacts=artifact_views_for_analysis(item.analyzed),
+                artifacts=artifact_views_for_effects(item.workflow.effects),
+                effects=effect_views(item.workflow.effects),
             )
-            for item in projection.documents
+            for item in workflows
         )
         links = tuple(
             DependencyLinkView(
                 artifact=item.artifact,
                 producer_document_id=item.producer_document_id,
-                producer_step_id=_step_id(
-                    results_by_id[item.producer_document_id],
-                    item.producer_block_index,
-                ),
+                producer_step_id=item.producer_step_id,
                 consumer_document_id=item.consumer_document_id,
-                consumer_step_id=_step_id(
-                    results_by_id[item.consumer_document_id],
-                    item.consumer_block_index,
-                ),
+                consumer_step_id=item.consumer_step_id,
+                producer_operation_id=item.producer_operation_id,
+                consumer_operation_id=item.consumer_operation_id,
             )
-            for item in projection.dependencies
+            for item in workspace_links(workflows)
         )
         issues = tuple(
-            DependencyIssueView(
-                code=item.code,
-                document_id=item.document_id,
-                step_id=_step_id(
-                    results_by_id[item.document_id],
-                    item.block_index,
-                ),
-                artifact=item.artifact,
-                message=item.message,
-                related_document_id=item.related_document_id,
-                related_step_id=(
-                    _step_id(
-                        results_by_id[item.related_document_id],
-                        item.related_block_index,
-                    )
-                    if item.related_document_id is not None
-                    and item.related_block_index is not None
-                    else None
-                ),
-            )
-            for item in projection.issues
+            DependencyIssueView.model_validate(item, from_attributes=True)
+            for item in workspace_issues(workflows, baseline)
         )
         return WorkspaceProjectionView(
             documents=projected_documents,
@@ -227,19 +279,17 @@ class DocumentStore:
             issues=issues,
         )
 
+    @_serialized
     def inspect_sql(self, request: SqlModelRequest) -> SqlModelView:
-        source = self._resolve(request.source_path)
-        output = self._resolve(request.output_path)
-        result = compile_document(source)
-        persisted = self._read_effective_changes(source, output)
+        source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
-        return sql_model_view(structured_sql_model(result, request.parameter_id, merged))
+        return sql_model_view(
+            structured_sql_model(result, request.parameter_id, merged)
+        )
 
+    @_serialized
     def apply_sql_action(self, request: SqlActionRequest) -> SqlActionResponse:
-        source = self._resolve(request.source_path)
-        output = self._resolve(request.output_path)
-        result = compile_document(source)
-        persisted = self._read_effective_changes(source, output)
+        source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
         change = apply_sql_action(
             result,
@@ -261,13 +311,44 @@ class DocumentStore:
             ),
         )
 
-    def preview_csv(self, source_path: str, csv_path: str) -> CsvPreviewView:
-        source = self._resolve(source_path)
-        csv_file = self._resolve_relative_to_source(source, csv_path)
-        return read_csv_preview(csv_file)
+    @_serialized
+    def preview_csv(self, request: CsvPreviewRequest) -> CsvPreviewView:
+        source, output, result, persisted = self._load_for_change(request)
+        workflow = project_workflow(
+            result,
+            _merge_changes(persisted, _changes(request.changes)),
+            output_path=output,
+        )
+        endpoint = next(
+            (
+                endpoint
+                for effect in workflow.effects
+                if effect.id == request.effect_id
+                for endpoint in (*effect.inputs, *effect.outputs)
+                if endpoint.id == request.endpoint_id
+            ),
+            None,
+        )
+        if endpoint is None or endpoint.path != request.expected_path:
+            raise RevisionConflict(
+                "File endpoint changed; refresh the file flow before previewing."
+            )
+        if not endpoint.path:
+            raise ValueError("Dynamic file paths cannot be previewed.")
+        candidate = Path(endpoint.path)
+        if not candidate.is_absolute():
+            if endpoint.path_base != "script-directory":
+                raise ValueError(
+                    "Preview unavailable: runtime working directory is unknown."
+                )
+            candidate = output.parent / candidate
+        preview = read_csv_preview(self._resolve(str(candidate)))
+        if self.expose_relative_paths:
+            preview.path = self._relative_display(preview.path)
+        return preview
 
     def _load_for_change(
-        self, batch: ChangeBatch
+        self, batch: DocumentSnapshot
     ) -> tuple[Path, Path, CompilationResult, list[ParameterChange]]:
         source = self._resolve(batch.source_path)
         output = self._resolve(batch.output_path)
@@ -283,21 +364,37 @@ class DocumentStore:
                 "Document revision changed since the document was opened."
             )
         result = compile_document(source)
-        return source, output, result, self._read_effective_changes(source, output)
+        if batch.compiler_hash != compiler_manifest_hash(result):
+            raise RevisionConflict(
+                "Compiler manifest changed since the document was opened."
+            )
+        persisted = self._read_effective_changes(source, output)
+        projected = project_changes(result, persisted)
+        if (
+            not projected.valid
+            or not output.exists()
+            or _hash_text(output.read_text(encoding="utf-8"))
+            != _hash_text(projected.source)
+        ):
+            raise RevisionConflict(
+                "Generated output is not synchronized; retranslate before editing."
+            )
+        return source, output, result, persisted
 
     def _read_effective_changes(
         self, source: Path, output: Path
     ) -> list[ParameterChange]:
-        try:
-            sidecar = read_sidecar(output)
-        except InvalidSidecar:
-            return []
+        sidecar = read_sidecar(output)
         if sidecar is None:
             return []
         if sidecar.source_hash != _hash_file(source):
-            return []
+            raise InvalidSidecar(
+                "Saved changes belong to a different source revision. Original files are preserved."
+            )
         if not output.exists() or sidecar.output_hash != _hash_file(output):
-            return []
+            raise InvalidSidecar(
+                "Saved changes and generated output do not match. Original files are preserved."
+            )
         return [
             ParameterChange(
                 parameter_id=item.parameter_id,
@@ -326,9 +423,11 @@ class DocumentStore:
                 update={
                     "source_span": step.source_span.model_copy(
                         update={
-                            "file": self._relative_display(step.source_span.file)
-                            if step.source_span.file
-                            else None
+                            "file": (
+                                self._relative_display(step.source_span.file)
+                                if step.source_span.file
+                                else None
+                            )
                         }
                     )
                 }
@@ -350,19 +449,13 @@ class DocumentStore:
             raise PathOutsideWorkspace("Cannot expose a path outside the workspace.")
         return path.relative_to(self.workspace).as_posix()
 
-    def _resolve_relative_to_source(self, source: Path, value: str) -> Path:
-        candidate = Path(value)
-        if not candidate.is_absolute():
-            candidate = source.parent / candidate
-        return self._resolve(str(candidate))
-
-    def _revision(self, source: Path, output: Path) -> int:
+    def _revision(self, source: Path, output: Path) -> str:
         digest = hashlib.sha256()
         digest.update(_hash_file(source).encode())
         digest.update((_hash_file(output) if output.exists() else "").encode())
         persisted = sidecar_path(output)
         digest.update((_hash_file(persisted) if persisted.exists() else "").encode())
-        return int.from_bytes(digest.digest()[:8], "big", signed=False)
+        return digest.hexdigest()
 
     def _clear_sidecar(self, output: Path) -> None:
         sidecar_path(output).unlink(missing_ok=True)
@@ -370,7 +463,9 @@ class DocumentStore:
 
 def _changes(items: Iterable[ParameterChangeRequest]) -> list[ParameterChange]:
     return [
-        ParameterChange(parameter_id=item.parameter_id, value=item.value)
+        ParameterChange(
+            parameter_id=item.parameter_id, value=item.value, reset=item.reset
+        )
         for item in items
     ]
 
@@ -404,11 +499,6 @@ def _hash_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _step_id(result: CompilationResult, block_index: int) -> str:
-    step = result.emitted.step_for_block(block_index)
-    return step.function_name if step is not None else f"block-{block_index}"
 
 
 __all__ = [

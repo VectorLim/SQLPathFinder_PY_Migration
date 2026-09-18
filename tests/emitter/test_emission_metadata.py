@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NotRequired, TypedDict
 
 import pytest
 
@@ -15,8 +15,37 @@ from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.pipeline_context import PipelineContext
 from vg2c.utilities.wait_file import WaitFile
+from vg2c.utility_metadata import value_schema
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
+
+
+def test_configuration_schema_validates_optional_collections_and_strict_scalars():
+    schema = value_schema(list[str] | None)
+    assert schema.kind == "list" and schema.nullable
+    assert schema.accepts(None) and schema.accepts(["a.csv", "b.csv"])
+    assert not schema.accepts([1])
+    assert not value_schema(int).accepts(True)
+    assert value_schema(float).accepts(0.25)
+    assert not value_schema(float).accepts(float("nan"))
+    assert value_schema(Literal["fast", "safe"]).accepts("safe")
+    assert not value_schema(Literal["fast", "safe"]).accepts("other")
+    assert value_schema(dict[str, str]).accepts({"name": "value"})
+    assert not value_schema(dict[str, str]).accepts({"name": 1})
+    assert value_schema(Literal["auto", 3]).accepts(3)
+    assert not value_schema(Literal["auto", 3]).accepts(True)
+
+
+def test_postponed_typed_object_honors_optional_keys():
+    class Options(TypedDict):
+        name: str
+        count: NotRequired[int]
+
+    schema = value_schema(Options)
+    assert schema.accepts({"name": "sample"})
+    assert schema.accepts({"name": "sample", "count": 2})
+    assert not schema.accepts({"name": "sample", "extra": True})
+    assert not schema.accepts({"count": 2})
 
 
 class MetadataProbeUtility(UtilitySpec):
@@ -60,7 +89,9 @@ def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):
     assert len(result.emitted.steps) == 1
     step = result.emitted.steps[0]
     assert step.block_index == 0
-    invocation = next(item for item in step.invocations if item.operation.id == "ctx.run_query")
+    invocation = next(
+        item for item in step.invocations if item.operation.id == "ctx.run_query"
+    )
     parameters = {item.name: item for item in invocation.parameters}
 
     assert parameters["output"].value == "owner.csv"
@@ -73,7 +104,36 @@ def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):
 
     for parameter in invocation.parameters:
         span = parameter.source_range
-        assert result.emitted.source[span.start_offset : span.end_offset] == parameter.source
+        if span is None:
+            assert (
+                parameter.definition is not None and not parameter.definition.required
+            )
+            assert parameter.value == parameter.definition.default
+            continue
+        assert (
+            result.emitted.source[span.start_offset : span.end_offset]
+            == parameter.source
+        )
+
+
+def test_omitted_defaults_have_stable_bindings_without_fabricated_spans():
+    rendered = MetadataProbeUtility.transform.render("in.csv", "out.csv")
+    step = build_step_emission(
+        function_name="step_0000_probe",
+        block_index=0,
+        functional_kind="TEST",
+        body_lines=[rendered],
+    )
+    parameters = {
+        item.name: item for item in finalize_steps(step.source, [step])[0].parameters
+    }
+    assert parameters["mode"].value == "safe"
+    assert parameters["mode"].source_range is None
+    assert parameters["mode"].editable
+    assert (
+        parameters["retries"].id
+        == "block-0:test_metadata_probe.transform:default:retries"
+    )
 
 
 def test_parameter_identity_ignores_unrelated_call_order():
@@ -133,9 +193,12 @@ def test_same_operation_requires_distinct_semantic_keys_and_is_order_stable():
         body_lines=[second, first],
     )
 
-    forward_ids = {item.id for item in finalize_steps(forward.source, [forward])[0].invocations}
+    forward_ids = {
+        item.id for item in finalize_steps(forward.source, [forward])[0].invocations
+    }
     reverse_ids = {
-        item.id for item in finalize_steps(reversed_step.source, [reversed_step])[0].invocations
+        item.id
+        for item in finalize_steps(reversed_step.source, [reversed_step])[0].invocations
     }
     assert (
         forward_ids
@@ -167,21 +230,29 @@ def test_code_expr_is_explicit_and_never_reparsed_for_editability():
         functional_kind="TEST",
         body_lines=[literal],
     )
-    literal_parameter = finalize_steps(literal_step.source, [literal_step])[0].parameters[0]
+    literal_parameter = finalize_steps(literal_step.source, [literal_step])[
+        0
+    ].parameters[0]
     assert literal_parameter.value == "a.txt"
     assert literal_parameter.editable is True
 
-    dynamic = PipelineContext.write_file.render(CodeExpr("ctx.macro.named('PATH')"), "body")
+    dynamic = PipelineContext.write_file.render(
+        CodeExpr("ctx.macro.named('PATH')"), "body"
+    )
     dynamic_step = build_step_emission(
         function_name="step_0008_dynamic",
         block_index=8,
         functional_kind="TEST",
         body_lines=[dynamic],
     )
-    dynamic_parameter = finalize_steps(dynamic_step.source, [dynamic_step])[0].parameters[0]
+    dynamic_parameter = finalize_steps(dynamic_step.source, [dynamic_step])[
+        0
+    ].parameters[0]
     assert dynamic_parameter.source == "ctx.macro.named('PATH')"
     assert dynamic_parameter.editable is False
-    assert dynamic_parameter.read_only_reason == "Dynamic Python expressions are read-only"
+    assert (
+        dynamic_parameter.read_only_reason == "Dynamic Python expressions are read-only"
+    )
 
 
 def test_utility_catalog_is_derived_from_registered_emittable_methods():

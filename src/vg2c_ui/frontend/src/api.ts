@@ -1,9 +1,11 @@
+import { SCHEMA_VERSION } from './contracts.generated'
 import type {
   BatchTranslationResponse,
   ChangeBatch,
   ChangePreviewView,
   ChangeResultView,
   CsvPreviewView,
+  CsvPreviewRequest,
   DocumentView,
   SqlActionRequest,
   SqlActionResponse,
@@ -12,6 +14,7 @@ import type {
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
   WorkspaceFileView,
+  WorkspaceUploadPolicyView,
 } from './contracts.generated'
 
 export class ApiError extends Error {
@@ -31,7 +34,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     const detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail)
     throw new ApiError(detail || response.statusText, response.status)
   }
-  return response.json() as Promise<T>
+  const payload = await response.json()
+  const documents = path === '/api/documents/open' ? [payload]
+    : path === '/api/translations/batch' ? payload.documents
+    : path === '/api/changes/apply' ? [payload.document] : []
+  for (const document of documents ?? []) {
+    if (document?.schema_version !== SCHEMA_VERSION || typeof document?.revision !== 'string') {
+      throw new ApiError('Unsupported workbench contract. Reload after updating the client and server together.', 426)
+    }
+  }
+  return payload as T
 }
 
 export function translateBatch(sourcePaths: string[]): Promise<BatchTranslationResponse> {
@@ -62,26 +74,32 @@ export function applySqlAction(request: SqlActionRequest): Promise<SqlActionResp
   return post('/api/sql/apply-action', request)
 }
 
-export function previewCsv(sourcePath: string, csvPath: string): Promise<CsvPreviewView> {
-  return post('/api/documents/preview-csv', { source_path: sourcePath, csv_path: csvPath })
+export function previewCsv(request: CsvPreviewRequest): Promise<CsvPreviewView> {
+  return post('/api/documents/preview-csv', request)
 }
 
-export async function uploadWorkspaceFiles(files: File[]): Promise<WorkspaceFileView[]> {
+export async function uploadWorkspaceFile(file: File): Promise<WorkspaceFileView> {
   const body = new FormData()
-  for (const file of files) {
-    const relativePath = file.webkitRelativePath || file.name
-    body.append('files', file)
-    body.append('paths', relativePath)
-  }
+  body.append('files', file)
+  body.append('paths', file.webkitRelativePath || file.name)
   const response = await fetch('/api/workspace/files', { method: 'POST', body })
   if (!response.ok) await throwApiError(response)
-  return response.json() as Promise<WorkspaceFileView[]>
+  const saved = await response.json() as WorkspaceFileView[]
+  const result = saved[0]
+  if (!result) throw new Error('Upload completed without a saved workspace file.')
+  return result
 }
 
 export async function listWorkspaceFiles(): Promise<WorkspaceFileView[]> {
   const response = await fetch('/api/workspace/files')
   if (!response.ok) await throwApiError(response)
   return response.json() as Promise<WorkspaceFileView[]>
+}
+
+export async function getWorkspaceUploadPolicy(): Promise<WorkspaceUploadPolicyView> {
+  const response = await fetch('/api/workspace/policy')
+  if (!response.ok) await throwApiError(response)
+  return response.json() as Promise<WorkspaceUploadPolicyView>
 }
 
 export function workspaceDownloadUrl(path: string): string {

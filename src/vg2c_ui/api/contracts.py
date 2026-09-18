@@ -5,13 +5,13 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
-from vg2c_ui.api.models import CONTRACT_MODELS
+from vg2c_ui.api.models import CONTRACT_MODELS, SCHEMA_VERSION
 
 _HEADER = "// Generated from vg2c_ui.api.models. DO NOT EDIT.\n\n"
 
 
 def render_typescript_contracts() -> str:
-    chunks = [_HEADER]
+    chunks = [_HEADER, f"export const SCHEMA_VERSION = {SCHEMA_VERSION}\n\n"]
     for model in CONTRACT_MODELS:
         chunks.append(f"export interface {model.__name__} {{\n")
         for name, field in model.model_fields.items():

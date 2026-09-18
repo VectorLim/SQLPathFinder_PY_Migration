@@ -40,7 +40,9 @@ def read_sidecar(output_path: Path) -> EditorSidecar | None:
     try:
         sidecar = EditorSidecar.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValidationError, json.JSONDecodeError) as exc:
-        raise InvalidSidecar(f"invalid sidecar {path}: {exc}") from exc
+        raise InvalidSidecar(
+            "Saved editor changes could not be read or validated. Original files are preserved."
+        ) from exc
     if sidecar.schema_version != SIDECAR_VERSION:
         raise InvalidSidecar(
             f"unsupported sidecar version {sidecar.schema_version}; expected {SIDECAR_VERSION}"

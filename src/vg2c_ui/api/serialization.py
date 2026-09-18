@@ -1,20 +1,31 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable
+from dataclasses import asdict
 from pathlib import Path
 from typing import get_args
 
 from vg2c import CompilationResult
-from vg2c.dataflow import AnalyzedProgram
+from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import ParameterChange
 from vg2c.kind import Kind
 from vg2c.operands import ScopeNode as CompilerScopeNode
-from vg2c.sql_editor import FILTER_OPERATORS, JOIN_TYPES, SqlEditableModel, SqlLogicalConnector
+from vg2c.sql_editor import (
+    FILTER_OPERATORS,
+    JOIN_TYPES,
+    SqlEditableModel,
+    SqlLogicalConnector,
+)
 from vg2c.sql_editor.capability import parameter_capabilities
+from vg2c.workflow import project_workflow
 from vg2c_ui.api.models import (
     ArtifactView,
     DiagnosticView,
     DocumentView,
+    FileEffectView,
+    OperationView,
     ParameterView,
     ScopeView,
     SourceSpanView,
@@ -27,9 +38,21 @@ from vg2c_ui.api.models import (
     SqlSpanView,
     StepView,
     UtilityView,
+    ValueSchemaView,
 )
 
 MAX_DIAGNOSTICS = 200
+
+
+def compiler_manifest_hash(result: CompilationResult) -> str:
+    manifest = [
+        (invocation.id, asdict(invocation.operation))
+        for step in result.emitted.steps
+        for invocation in step.invocations
+    ]
+    digest = hashlib.sha256(result.emitted.source.encode("utf-8"))
+    digest.update(json.dumps(manifest, sort_keys=True).encode("utf-8"))
+    return digest.hexdigest()
 
 
 def document_view(
@@ -38,15 +61,20 @@ def document_view(
     output_path: Path,
     source_hash: str,
     output_hash: str,
-    revision: int,
+    revision: str,
     saved_changes: Iterable[ParameterChange] = (),
     synchronized: bool = True,
     read_only_reason: str | None = None,
 ) -> DocumentView:
     """Serialize compiler-owned semantics without re-discovering or re-inferring them."""
+    saved_changes = tuple(saved_changes)
     values = {change.parameter_id: change.value for change in saved_changes}
+    workflow = project_workflow(result, saved_changes, output_path=output_path)
+    artifacts = artifact_views_for_effects(workflow.effects)
     block_by_index = {block.index: block for block in result.resolved.blocks}
-    step_id_by_block = {step.block_index: step.function_name for step in result.emitted.steps}
+    step_id_by_block = {
+        step.block_index: step.function_name for step in result.emitted.steps
+    }
     parent_by_scope, scope_by_id = _scope_indexes(result.resolved.scope_tree)
     leaf_parent = {
         node.block_index: parent_by_scope.get(node.scope_id)
@@ -57,20 +85,10 @@ def document_view(
         scope_id: (
             "true"
             if scope.kind == "if-branch"
-            else "false"
-            if scope.kind == "else-branch"
-            else None
+            else "false" if scope.kind == "else-branch" else None
         )
         for scope_id, scope in scope_by_id.items()
     }
-
-    inputs_by_block: dict[int, set[str]] = {}
-    outputs_by_block: dict[int, set[str]] = {}
-    for artifact in result.analyzed.artifacts:
-        for producer in artifact.producers:
-            outputs_by_block.setdefault(producer.block_index, set()).add(artifact.path)
-        for consumer in artifact.consumers:
-            inputs_by_block.setdefault(consumer.block_index, set()).add(artifact.path)
 
     steps: list[StepView] = []
     for emitted_step in result.emitted.steps:
@@ -80,12 +98,11 @@ def document_view(
         primary = emitted_step.invocations[0] if emitted_step.invocations else None
         unsupported = block.kind in {Kind.PYTHON_EMBED, Kind.UNKNOWN} or primary is None
         step_read_only = unsupported or not synchronized
-        params: list[ParameterView] = []
-        step_capabilities: set[str] = set(primary.operation.capabilities if primary else ())
+        operations: list[OperationView] = []
         for invocation in emitted_step.invocations:
+            invocation_parameters: list[ParameterView] = []
             for parameter in invocation.parameters:
                 capabilities = parameter_capabilities(invocation, parameter)
-                step_capabilities.update(capabilities)
                 effective_value = values.get(parameter.id, parameter.value)
                 editable = parameter.editable and not step_read_only
                 reason = parameter.read_only_reason
@@ -97,13 +114,15 @@ def document_view(
                 elif unsupported:
                     reason = f"{block.kind.value} blocks are read-only"
                 definition = parameter.definition
-                params.append(
+                invocation_parameters.append(
                     ParameterView(
                         id=parameter.id,
                         name=parameter.name,
                         position=parameter.position,
                         source=(
-                            repr(effective_value) if parameter.id in values else parameter.source
+                            repr(effective_value)
+                            if parameter.id in values
+                            else parameter.source
                         ),
                         value=effective_value,
                         editor_type=parameter.editor_type,
@@ -118,12 +137,34 @@ def document_view(
                         required=definition.required if definition else True,
                         default=definition.default if definition else None,
                         capabilities=list(capabilities),
+                        value_schema=(
+                            _value_schema_view(definition.schema)
+                            if definition
+                            else None
+                        ),
+                        internal=definition.internal if definition else False,
+                        omitted=parameter.source_range is None,
+                        overridden=parameter.id in values,
+                        generated_value=parameter.value,
                     )
                 )
+            operations.append(
+                OperationView(
+                    id=invocation.id,
+                    utility=_utility_view(invocation.operation),
+                    parameters=invocation_parameters,
+                )
+            )
 
         utility = _utility_view(primary.operation if primary else None)
+        if not operations:
+            operations.append(
+                OperationView(id=f"block-{block.index}:source", utility=utility)
+            )
         display_label = block.resolved_options.lookup.get("PROMPT-TEXT") or (
-            primary.operation.title if primary else block.kind.value.replace("_", " ").title()
+            primary.operation.title
+            if primary
+            else block.kind.value.replace("_", " ").title()
         )
         description = (
             (primary.operation.method_description or primary.operation.description)
@@ -144,20 +185,45 @@ def document_view(
                 functional_kind=block.kind.value,
                 display_label=display_label,
                 description=description,
-                parameters=params,
-                csv_inputs=sorted(inputs_by_block.get(block.index, ())),
-                csv_outputs=sorted(outputs_by_block.get(block.index, ())),
                 parent_scope_id=_scope_view_id(parent_scope, scope_by_id),
                 branch=branch_by_scope.get(parent_scope),
                 validation_state="unsupported" if step_read_only else "valid",
                 raw_code=emitted_step.source if step_read_only else None,
                 read_only=step_read_only,
-                utility=utility,
-                capabilities=sorted(step_capabilities),
+                operations=operations,
             )
         )
 
-    diagnostics = _diagnostics(result, step_id_by_block)
+    known_steps = {step.id for step in steps}
+    for effect in workflow.effects:
+        if effect.step_id in known_steps:
+            continue
+        block = block_by_index[effect.block_index]
+        utility = _utility_view(None)
+        label = block.kind.value.replace("_", " ").title()
+        steps.append(
+            StepView(
+                id=effect.step_id,
+                function_name="",
+                block_index=block.index,
+                source_span=SourceSpanView(
+                    file=str(block.span.file) if block.span.file else None,
+                    start_line=block.span.start_line,
+                    end_line=block.span.end_line,
+                ),
+                functional_kind=block.kind.value,
+                display_label=label,
+                description="Compiler source/control operation",
+                read_only=True,
+                validation_state="unsupported",
+                raw_code=block.resolved_body,
+                parent_scope_id=_scope_view_id(block.scope_id, scope_by_id),
+                operations=[OperationView(id=effect.operation_id, utility=utility)],
+            )
+        )
+        known_steps.add(effect.step_id)
+
+    diagnostics = _diagnostics(result, workflow.effects)
     if not synchronized:
         diagnostics.append(
             DiagnosticView(
@@ -174,26 +240,63 @@ def document_view(
         source_path=str(result.input_path.resolve()),
         output_path=str(output_path.resolve()),
         source_hash=source_hash,
+        compiler_hash=compiler_manifest_hash(result),
         output_hash=output_hash,
         revision=revision,
         synchronized=synchronized,
         read_only_reason=read_only_reason,
         steps=sorted(steps, key=lambda item: item.block_index),
         scopes=_scope_views(result.resolved.scope_tree, parent_by_scope),
-        artifacts=_artifact_views(result.analyzed, step_id_by_block),
+        artifacts=artifacts,
         diagnostics=diagnostics,
+        effects=effect_views(workflow.effects),
     )
 
 
-def artifact_views_for_analysis(
-    analyzed: AnalyzedProgram, step_id_by_block: dict[int, str]
-) -> list[ArtifactView]:
-    return _artifact_views(analyzed, step_id_by_block)
+def effect_views(effects: Iterable[FileEffect]) -> list[FileEffectView]:
+    return [
+        FileEffectView.model_validate(effect, from_attributes=True)
+        for effect in effects
+    ]
+
+
+def artifact_views_for_effects(effects: Iterable[FileEffect]) -> list[ArtifactView]:
+    artifacts: dict[str, ArtifactView] = {}
+    for effect in effects:
+        for endpoint in (*effect.inputs, *effect.outputs):
+            if not endpoint.path:
+                continue
+            artifact = artifacts.setdefault(
+                endpoint.path,
+                ArtifactView(
+                    id=endpoint.path,
+                    path=endpoint.path,
+                    label=Path(endpoint.path).name,
+                ),
+            )
+            references = (
+                artifact.producer_step_ids
+                if endpoint.phase == "next"
+                else artifact.consumer_step_ids
+            )
+            if effect.step_id not in references:
+                references.append(effect.step_id)
+            artifact.conditional |= effect.conditional
+            artifact.in_loop |= effect.in_loop
+            artifact.order_valid &= endpoint.status != "missing"
+    for artifact in artifacts.values():
+        artifact.is_output = bool(artifact.producer_step_ids)
+        artifact.is_external_input = (
+            bool(artifact.consumer_step_ids) and not artifact.is_output
+        )
+    return sorted(artifacts.values(), key=lambda item: item.path)
 
 
 def sql_model_view(model: SqlEditableModel) -> SqlModelView:
     def span(value):
-        return SqlSpanView(start=value.start, end=value.end) if value is not None else None
+        return (
+            SqlSpanView(start=value.start, end=value.end) if value is not None else None
+        )
 
     def predicates(values):
         return [
@@ -272,6 +375,23 @@ def sql_model_view(model: SqlEditableModel) -> SqlModelView:
     )
 
 
+def _value_schema_view(schema) -> ValueSchemaView | None:
+    if schema is None:
+        return None
+    return ValueSchemaView(
+        kind=schema.kind,
+        nullable=schema.nullable,
+        choices=list(schema.choices),
+        items=_value_schema_view(schema.items),
+        properties={name: _value_schema_view(item) for name, item in schema.properties},
+        required_keys=list(schema.required_keys),
+        variants=[_value_schema_view(item) for item in schema.variants],
+        path=schema.path,
+        prefix_items=[_value_schema_view(item) for item in schema.prefix_items],
+        tuple_value=schema.tuple_value,
+    )
+
+
 def _utility_view(operation) -> UtilityView:
     if operation is None:
         return UtilityView(
@@ -296,7 +416,7 @@ def _utility_view(operation) -> UtilityView:
 
 
 def _diagnostics(
-    result: CompilationResult, step_id_by_block: dict[int, str]
+    result: CompilationResult, effects: Iterable[FileEffect]
 ) -> list[DiagnosticView]:
     diagnostics = [
         DiagnosticView(
@@ -315,60 +435,22 @@ def _diagnostics(
                 message=f"Only the first {MAX_DIAGNOSTICS} compiler diagnostics are shown.",
             )
         )
-    for edge in result.analyzed.edges:
-        node_id = step_id_by_block.get(edge.consumer.block_index)
-        if edge.producer is None:
-            diagnostics.append(
-                DiagnosticView(
-                    level="warning",
-                    code="csv-input-missing-producer",
-                    message=f"{edge.csv_path} has no producer in this script.",
-                    node_id=node_id,
+    for effect in effects:
+        for endpoint in effect.inputs:
+            if endpoint.status in {"external", "missing"}:
+                diagnostics.append(
+                    DiagnosticView(
+                        level="warning" if endpoint.status == "missing" else "info",
+                        code=(
+                            "file-state-missing"
+                            if endpoint.status == "missing"
+                            else "external-file-input"
+                        ),
+                        message=f"{endpoint.path}: {'unavailable after deletion/move' if endpoint.status == 'missing' else 'external input' }.",
+                        node_id=effect.operation_id,
+                    )
                 )
-            )
-        elif not edge.order_ok:
-            diagnostics.append(
-                DiagnosticView(
-                    level="warning",
-                    code="csv-producer-order",
-                    message=(
-                        f"{edge.csv_path} may be consumed before its producer "
-                        f"({edge.scope_relation})."
-                    ),
-                    node_id=node_id,
-                )
-            )
     return diagnostics
-
-
-def _artifact_views(
-    analyzed: AnalyzedProgram, step_id_by_block: dict[int, str]
-) -> list[ArtifactView]:
-    views: list[ArtifactView] = []
-    for artifact in analyzed.artifacts:
-        views.append(
-            ArtifactView(
-                id=artifact.path,
-                path=artifact.path,
-                label=Path(artifact.path).name,
-                conditional=artifact.conditional,
-                in_loop=artifact.in_loop,
-                producer_step_ids=[
-                    step_id_by_block[item.block_index]
-                    for item in artifact.producers
-                    if item.block_index in step_id_by_block
-                ],
-                consumer_step_ids=[
-                    step_id_by_block[item.block_index]
-                    for item in artifact.consumers
-                    if item.block_index in step_id_by_block
-                ],
-                order_valid=artifact.order_valid,
-                is_external_input=artifact.is_external_input,
-                is_output=artifact.is_output,
-            )
-        )
-    return views
 
 
 def _scope_indexes(
@@ -386,7 +468,9 @@ def _scope_indexes(
     return parent_by_scope, scope_by_id
 
 
-def _scope_view_id(scope_id: int | None, scope_by_id: dict[int, CompilerScopeNode]) -> str | None:
+def _scope_view_id(
+    scope_id: int | None, scope_by_id: dict[int, CompilerScopeNode]
+) -> str | None:
     if scope_id is None or scope_id not in scope_by_id:
         return None
     return None if scope_by_id[scope_id].kind == "program" else f"scope-{scope_id}"
@@ -403,22 +487,33 @@ def _scope_views(
         node_kind = (
             "branch"
             if scope.kind in {"if-branch", "else-branch"}
-            else "if"
-            if scope.kind == "if"
-            else "loop"
+            else "if" if scope.kind == "if" else "loop"
         )
         scopes.append(
             ScopeView(
                 id=f"scope-{scope.scope_id}",
                 node_kind=node_kind,
                 scope_kind=scope.kind,
-                label=scope.kind.replace("-", " ").title(),
+                label=_scope_label(scope.kind),
                 start_index=scope.start_index,
                 end_index=scope.end_index,
-                parent_scope_id=_scope_view_id(parent_by_scope[scope.scope_id], scope_by_id),
+                parent_scope_id=_scope_view_id(
+                    parent_by_scope[scope.scope_id], scope_by_id
+                ),
             )
         )
     return sorted(scopes, key=lambda item: (item.start_index, item.id))
+
+
+def _scope_label(kind: str) -> str:
+    labels = {
+        "if": "Condition",
+        "if-branch": "True branch",
+        "else-branch": "Else branch",
+        "macro": "For each macro row",
+        "loop": "For each row",
+    }
+    return labels.get(kind, kind.replace("-", " ").title())
 
 
 def _diagnostic_level(value: str) -> str:
@@ -427,7 +522,6 @@ def _diagnostic_level(value: str) -> str:
 
 __all__ = [
     "MAX_DIAGNOSTICS",
-    "artifact_views_for_analysis",
     "document_view",
     "sql_model_view",
 ]

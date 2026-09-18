@@ -38,7 +38,10 @@ def _render_sql(sql, **changes):
     expression = SqliteEngine._extract_sql_text(block, refs)
     namespace = {reference.source: reference.value for reference in refs.values()}
     namespace.update(changes)
-    return eval(expression.source, {"SqliteEngine": SqliteEngine}, namespace), candidates
+    return (
+        eval(expression.source, {"SqliteEngine": SqliteEngine}, namespace),
+        candidates,
+    )
 
 
 def test_collection_reuses_conflicts_and_normalizes_without_aliasing_types():
@@ -107,10 +110,14 @@ def test_sql_preserves_behavior_and_changes_all_references():
     rendered, _ = _render_sql(sql)
     with sqlite3.connect(":memory:") as db:
         db.execute("CREATE TABLE t (lot TEXT, n INTEGER)")
-        db.executemany("INSERT INTO t VALUES (?, ?)", [("O'Brien", 2), ("x", 3), ("z", 4)])
+        db.executemany(
+            "INSERT INTO t VALUES (?, ?)", [("O'Brien", 2), ("x", 3), ("z", 4)]
+        )
         assert db.execute(sql).fetchall() == db.execute(rendered).fetchall()
     assert "-- lot = 'comment'" in rendered
-    changed, _ = _render_sql("SELECT * FROM t WHERE lot = '1' OR lot = '1'", LOT="O'Brien")
+    changed, _ = _render_sql(
+        "SELECT * FROM t WHERE lot = '1' OR lot = '1'", LOT="O'Brien"
+    )
     assert changed.count("'O''Brien'") == 2
     exact, _ = _render_sql("SELECT * FROM t WHERE x = 0.123456789012345678901")
     assert "0.123456789012345678901" in exact
@@ -127,20 +134,33 @@ def test_generated_globals_metadata_and_shared_edits(tmp_path):
     source = result.emitted.source
     tree = ast.parse(source)
     last_import = max(
-        i for i, node in enumerate(tree.body) if isinstance(node, (ast.Import, ast.ImportFrom))
+        i
+        for i, node in enumerate(tree.body)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
     )
-    assert ast.unparse(tree.body[last_import + 1]) == "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000"
+    assert (
+        ast.unparse(tree.body[last_import + 1])
+        == "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000"
+    )
     assert ast.unparse(tree.body[last_import + 2]) == "LOT = '1'"
     assert source.count("\nLOT = '1'\n") == 1
     assert len(result.emitted.steps) == 4
     all_parameters = [p for step in result.emitted.steps for p in step.parameters]
     for parameter in all_parameters:
         span = parameter.source_range
+        if span is None:
+            assert (
+                parameter.definition is not None and not parameter.definition.required
+            )
+            continue
         assert source[span.start_offset : span.end_offset] == parameter.source
     lots = [p for p in all_parameters if p.name == "LOT"]
     assert len(lots) == 2 and lots[0].id == lots[1].id
     assert all(not p.editable for p in all_parameters if p.name == "sql")
-    assert len([p for p in all_parameters if p.id == "global:EMAIL_TO" and p.name == "to"]) == 2
+    assert (
+        len([p for p in all_parameters if p.id == "global:EMAIL_TO" and p.name == "to"])
+        == 2
+    )
     assert all(p.definition is not None for p in all_parameters if p.name == "to")
     assert not any(
         "vg2c" in ast.unparse(node)
@@ -151,7 +171,9 @@ def test_generated_globals_metadata_and_shared_edits(tmp_path):
     projected = project_changes(result, [change, change])
     assert projected.valid and projected.source.count("\nLOT = '2'\n") == 1
     assert (
-        project_changes(result, [change, ParameterChange(lots[1].id, "3")]).issues[0].code
+        project_changes(result, [change, ParameterChange(lots[1].id, "3")])
+        .issues[0]
+        .code
         == "conflicting-global-change"
     )
     assert _compile(tmp_path, text).emitted.source == source
@@ -171,7 +193,10 @@ def test_generated_steps_execute_shared_sql_without_external_services(tmp_path):
         and any(isinstance(t, ast.Name) and t.id == "LOT" for t in node.targets)
     ]
     namespace = {"SqliteEngine": SqliteEngine, "SqliteReader": lambda **kw: None}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "<steps>", "exec"), namespace)
+    exec(
+        compile(ast.Module(body=selected, type_ignores=[]), "<steps>", "exec"),
+        namespace,
+    )
     calls = []
     context = SimpleNamespace(run_query=lambda **kwargs: calls.append(kwargs["sql"]))
     namespace["LOT"] = "2"
@@ -188,8 +213,12 @@ def test_email_long_form_and_dynamic_values(tmp_path):
     )
     result = _compile(tmp_path, long_form + _mail_block(subject="<<<SUBJECT>>>"))
     parameters = [p for step in result.emitted.steps for p in step.parameters]
-    assert [p.value for p in parameters if p.id == "global:EMAIL_SUBJECT"] == ["Long report"]
-    assert [p.value for p in parameters if p.id == "global:EMAIL_TO"] == ["person@example.com"] * 2
+    assert [p.value for p in parameters if p.id == "global:EMAIL_SUBJECT"] == [
+        "Long report"
+    ]
+    assert [p.value for p in parameters if p.id == "global:EMAIL_TO"] == [
+        "person@example.com"
+    ] * 2
     assert any(p.name == "subject" and not p.editable for p in parameters)
 
 
@@ -208,7 +237,9 @@ def test_legacy_macro_wrapper_and_clause_boundaries():
         "SELECT * FROM (SELECT * FROM t WHERE (lot In "
         "SQL_Get_CSV_List('data.csv', 'lot', 'lot In') AND operation = '2303')"
     )
-    assert SqliteEngine.extract_globals(SimpleNamespace(resolved_body=sql)) == {"OPERATION": "2303"}
+    assert SqliteEngine.extract_globals(SimpleNamespace(resolved_body=sql)) == {
+        "OPERATION": "2303"
+    }
     sql = "SELECT * FROM t JOIN u ON u.kind = 'one' LEFT JOIN v ON v.kind = 'two' WHERE t.id = 3"
     assert {v.key: v.value for v in extract_sql_globals(sql)} == {
         "KIND": "one",
@@ -220,9 +251,15 @@ def test_legacy_macro_wrapper_and_clause_boundaries():
 def test_generated_conflicts_reuse_the_disambiguated_global(tmp_path):
     result = _compile(
         tmp_path,
-        "".join(_sql_block(f"SELECT * FROM t WHERE lot = '{value}'") for value in ("1", "2", "2")),
+        "".join(
+            _sql_block(f"SELECT * FROM t WHERE lot = '{value}'")
+            for value in ("1", "2", "2")
+        ),
     )
-    ids = [[p.id for p in s.parameters if p.id.startswith("global:")] for s in result.emitted.steps]
+    ids = [
+        [p.id for p in s.parameters if p.id.startswith("global:")]
+        for s in result.emitted.steps
+    ]
     assert ids == [["global:LOT"], ["global:STEP_0001_LOT"], ["global:STEP_0001_LOT"]]
 
 
@@ -233,12 +270,16 @@ def test_imported_or_embedded_names_are_reserved(tmp_path, monkeypatch):
 
     def with_runtime_constant(**kwargs):
         embedded = assemble(**kwargs)
-        return replace(embedded, sources=(*embedded.sources, "LOT = 'runtime constant'"))
+        return replace(
+            embedded, sources=(*embedded.sources, "LOT = 'runtime constant'")
+        )
 
     monkeypatch.setattr(vg2c.embedding, "assemble_utilities", with_runtime_constant)
     result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'"))
     assert "STEP_0000_LOT = '1'" in result.emitted.source
-    parameter = next(p for p in result.emitted.steps[0].parameters if p.id.startswith("global:"))
+    parameter = next(
+        p for p in result.emitted.steps[0].parameters if p.id.startswith("global:")
+    )
     assert parameter.id == "global:STEP_0000_LOT"
     span = parameter.source_range
     assert result.emitted.source[span.start_offset : span.end_offset] == "'1'"

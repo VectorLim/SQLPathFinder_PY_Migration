@@ -10,6 +10,7 @@ from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
 from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.utility_metadata import FileEffectDefinition
 
 
 class SmartAppend(EmitterUtility):
@@ -36,20 +37,34 @@ class SmartAppend(EmitterUtility):
         source = to_code_expr(argv[2] if len(argv) > 2 else "")
         return "smart_append", [cls.append.render(destination, source)]
 
-    @emittable
+    @emittable(
+        file_effects=(
+            FileEffectDefinition(
+                "append",
+                "append",
+                inputs=("source",),
+                outputs=("destination",),
+                reason="Creates or appends when source has a header; preserves prior destination content.",
+            ),
+        )
+    )
     def append(self, destination: str | Path, source: str | Path) -> None:
         """Create or extend *destination* with source data rows exactly once."""
         source_path = resolve_path(source)
         destination_path = resolve_path(destination, for_write=True)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with source_path.open(newline="", encoding="utf-8", errors="replace") as source_fh:
+        with source_path.open(
+            newline="", encoding="utf-8", errors="replace"
+        ) as source_fh:
             reader = csv.reader(source_fh)
             header = next(reader, None)
             if header is None:
                 return
 
-            write_header = not destination_path.exists() or destination_path.stat().st_size == 0
+            write_header = (
+                not destination_path.exists() or destination_path.stat().st_size == 0
+            )
             with destination_path.open(
                 "w" if write_header else "a", newline="", encoding="utf-8"
             ) as destination_fh:
