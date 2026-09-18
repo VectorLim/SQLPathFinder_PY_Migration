@@ -54,6 +54,7 @@ EditorType = Literal[
     "dynamic",
 ]
 ArtifactDirection = Literal["input", "output"]
+OperationVisibility = Literal["normal", "advanced", "internal"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,7 @@ class UtilityOperationDefinition:
     module: str
     method: str
     title: str
+    display_name: str
     description: str
     method_description: str | None
     return_type: str | None
@@ -99,6 +101,7 @@ class UtilityOperationDefinition:
     artifact_roles: tuple[tuple[str, ArtifactRole], ...] = ()
     supported_mutations: tuple[str, ...] = ("set-parameter",)
     file_effects: tuple[FileEffectDefinition, ...] | None = None
+    visibility: OperationVisibility = "normal"
 
     def parameter(self, name: str) -> ParameterDefinition | None:
         return next((item for item in self.parameters if item.name == name), None)
@@ -258,6 +261,8 @@ class EmittableOperation(Generic[P, R]):
         parameter_schemas: dict[str, ValueSchema] | None = None,
         file_effects: tuple[FileEffectDefinition, ...] | None = None,
         supported_mutations: tuple[str, ...] = ("set-parameter",),
+        display_name: str | None = None,
+        visibility: OperationVisibility | None = None,
     ) -> None:
         self.func = func
         self.__name__ = func.__name__
@@ -272,6 +277,8 @@ class EmittableOperation(Generic[P, R]):
         self.parameter_schemas = parameter_schemas or {}
         self.file_effects = file_effects
         self.supported_mutations = tuple(supported_mutations)
+        self.display_name = display_name
+        self.visibility = visibility
 
     @overload
     def __get__(self, instance: None, owner: Any) -> EmittableMethod[P, R]: ...
@@ -369,6 +376,8 @@ def emittable(
     parameter_schemas: dict[str, ValueSchema] | None = None,
     file_effects: tuple[FileEffectDefinition, ...] | None = None,
     supported_mutations: tuple[str, ...] = ("set-parameter",),
+    display_name: str | None = None,
+    visibility: OperationVisibility | None = None,
 ) -> Callable[[Callable[P, R]], EmittableOperation[P, R]]: ...
 
 
@@ -383,6 +392,8 @@ def emittable(
     parameter_schemas: dict[str, ValueSchema] | None = None,
     file_effects: tuple[FileEffectDefinition, ...] | None = None,
     supported_mutations: tuple[str, ...] = ("set-parameter",),
+    display_name: str | None = None,
+    visibility: OperationVisibility | None = None,
 ) -> EmittableOperation[P, R] | Callable[[Callable[P, R]], EmittableOperation[P, R]]:
     """Declare an emitted operation and any non-inferable semantic metadata."""
 
@@ -396,6 +407,8 @@ def emittable(
             parameter_schemas=parameter_schemas,
             file_effects=file_effects,
             supported_mutations=supported_mutations,
+            display_name=display_name,
+            visibility=visibility,
         )
 
     return decorate(func) if func is not None else decorate
@@ -762,6 +775,7 @@ def _operation_definition(
         module=owner.__module__,
         method=func.__name__,
         title=_title(owner.__name__),
+        display_name=operation.display_name or _title(func.__name__),
         description=class_doc or f"{_title(owner.__name__)} utility",
         method_description=inspect.getdoc(func),
         return_type=_annotation(signature.return_annotation),
@@ -771,6 +785,7 @@ def _operation_definition(
         artifact_roles=operation.artifact_roles,
         supported_mutations=operation.supported_mutations,
         file_effects=operation.file_effects,
+        visibility=operation.visibility or getattr(owner, "semantic_visibility", "normal"),
     )
 
 
@@ -846,6 +861,7 @@ __all__ = [
     "BoundEmittableMethod",
     "CodeExpr",
     "EditorType",
+    "OperationVisibility",
     "EmittableOperation",
     "EmittableMethod",
     "EmittedInvocation",
