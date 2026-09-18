@@ -233,7 +233,6 @@ export function useWorkspace() {
     open,
     reload,
     edit,
-    validateCandidate,
     validate,
     apply,
     loadCsv,
