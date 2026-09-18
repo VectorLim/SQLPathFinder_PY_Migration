@@ -9,7 +9,7 @@ import type {
   ValueSchemaView,
 } from './contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
-import { SchemaValueField, type FieldDraftProps } from './ParameterField'
+import { SchemaValueField, type FieldDraftProps } from './SchemaValueField'
 import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
 import { effectiveBindingValue, RESET_VALUE, type FieldPath } from './workspaceState'
