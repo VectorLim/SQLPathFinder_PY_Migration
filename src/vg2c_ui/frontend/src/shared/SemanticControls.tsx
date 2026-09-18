@@ -55,6 +55,44 @@ export function FileSelector({
   </div>
 }
 
+export function FileListSelector({
+  label,
+  value,
+  files,
+  disabled = false,
+  onChange,
+  onUpload,
+}: {
+  label: string
+  value: unknown
+  files: string[]
+  disabled?: boolean
+  onChange: (value: string[]) => void
+  onUpload?: (file: File) => Promise<string>
+}) {
+  const items = Array.isArray(value) ? value.map(String) : []
+  const inputId = useId()
+  return <div className="semantic-file-list">
+    <span className="field-label">{label}</span>
+    {items.map((item, index) => <div className="collection-row" key={`${index}:${item}`}>
+      <FileSelector label={`${label} ${index + 1}`} value={item} files={files} disabled={disabled} onChange={(next) => onChange(items.map((current, position) => position === index ? next : current))} />
+      <button type="button" className="icon-button" disabled={disabled} aria-label={`Remove ${label} ${index + 1}`} onClick={() => onChange(items.filter((_, position) => position !== index))}>×</button>
+    </div>)}
+    <div className="field-command-row">
+      <button type="button" className="field-command" disabled={disabled} onClick={() => onChange([...items, files[0] ?? ''])}>Add file</button>
+      {onUpload && <>
+        <label className="field-command" htmlFor={inputId}>Upload file</label>
+        <input id={inputId} className="sr-only" type="file" disabled={disabled} onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.currentTarget.value = ''
+          if (!file) return
+          void onUpload(file).then((path) => onChange([...items, path]))
+        }} />
+      </>}
+    </div>
+  </div>
+}
+
 export function SymbolSelector({
   label,
   value,
