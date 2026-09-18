@@ -11,7 +11,7 @@ import { FileTabs, fileTabId } from './FileTabs'
 import { baseName } from './operationLabels'
 import { SemanticScriptTree } from './SemanticScriptTree'
 import { SemanticOperationEditor } from './SemanticOperationEditor'
-import { FileFlowPane } from './file-flow/FileFlowPane'
+import { ContextPane } from './ContextPane'
 import { SourceIntake } from './SourceIntake'
 import { ThemeSelector } from './ThemeSelector'
 import { useSourceIntake } from './useSourceIntake'
@@ -26,7 +26,7 @@ export function App() {
   const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
-  const [pane, setPane] = useState<'logic' | 'config' | 'flow'>('logic')
+  const [pane, setPane] = useState<'logic' | 'config' | 'context'>('logic')
   const [commandOpen, setCommandOpen] = useState(false)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const intake = useSourceIntake({
@@ -110,7 +110,7 @@ export function App() {
     actions: {
       activateDocument: (id) => dispatch({ type: 'activate', tabId: id }),
       selectItem,
-      openInspector: () => setPane('flow'),
+      openInspector: () => setPane('context'),
       undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
       redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
       validate: validateActive,
@@ -148,7 +148,6 @@ export function App() {
 
   const selectedOperation = active?.document.semantic_operations.find((operation) => operation.id === active.selectedId)
   const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
-  const effects = state.projection?.documents.find((item) => item.document_id === active?.document.id)?.effects ?? active?.document.effects ?? []
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
   const hasTabs = state.tabs.length > 0
@@ -183,7 +182,7 @@ export function App() {
         />
 
       </div>
-      <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'flow', label: 'File Flow', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
+      <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'context', label: 'Context', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
       <div className="workbench-panes">
         <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
         <section id="pane-config" className="workbench-pane configuration-pane" aria-label="Utility Configuration">
@@ -202,7 +201,17 @@ export function App() {
             {active.preview && <ChangePreview preview={active.preview} />}
           </div>
         </section>
-        <section id="pane-flow" className="workbench-pane flow-pane" aria-label="File Flow"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>File Flow</h2><span>{effects.length}</span></header><div className="pane-scroll"><FileFlowPane document={active.document} effects={effects} projection={state.projection} selectedId={active.selectedId} status={state.projectionStatus} error={state.projectionError} csv={active.csv} csvPath={active.csvArtifactPath} csvError={active.csvError} csvLoading={Boolean(active.csvRequestId)} onActivate={navigateOperation} onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)} /></div></section>
+        <section id="pane-context" className="workbench-pane context-workbench-pane" aria-label="Context"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>Context</h2></header><div className="pane-scroll"><ContextPane
+          document={active.document}
+          values={active.edits.values}
+          csv={active.csv}
+          csvPath={active.csvArtifactPath}
+          csvError={active.csvError}
+          csvLoading={Boolean(active.csvRequestId)}
+          onNavigate={(operationId, focus) => navigateOperation(active.document.id, operationId, focus)}
+          onEdit={(binding, value) => workspace.edit(active.document.id, binding, value)}
+          onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)}
+        /></div></section>
       </div>
     </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
 
