@@ -54,6 +54,9 @@ async function translate(page: Page) {
     '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n',
   )
   await selectSemanticOperation(page, 'workbench.txt', (operation) => operation.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
+  const intakeRegion = page.getByRole('region', { name: 'Workspace source intake' })
+  await expect(intakeRegion.getByRole('button', { name: /Sources & translation/i })).toBeVisible()
+  await expect(intakeRegion.locator('.source-intake')).toBeHidden()
   await pane(page, 'Configuration')
   await expect(page.getByRole('combobox', { name: /Output file/i })).toBeVisible()
   const tabs = await page.locator('.tabs').boundingBox()
