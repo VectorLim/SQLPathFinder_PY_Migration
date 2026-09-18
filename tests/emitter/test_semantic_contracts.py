@@ -280,3 +280,16 @@ def test_condition_bindings_and_symbols_are_frontend_ready(tmp_path):
     assert by_name["op"].capabilities == ("condition-operator",)
     assert by_name["conj"].capabilities == ("condition-connector",)
     assert count.condition_value == "VAR(COUNT)"
+
+
+def test_rows_in_file_target_macro_is_editable(tmp_path):
+    result = _compile(tmp_path, _condition_source())
+    row_count = next(
+        op for op in build_semantic_model(result).operations if op.kind == "check-row-count"
+    )
+    target = next(binding for binding in row_count.bindings if binding.name == "target")
+
+    projected = project_changes(result, [SemanticChange(target.id, "TOTAL")])
+
+    assert projected.valid
+    assert "ctx.macro.set_named('TOTAL'," in projected.source
