@@ -7,6 +7,7 @@ from vg2c.emitter.models import CodeExpr, build_step_emission, finalize_steps
 from vg2c.utilities.fs_ops import FileSystemOps
 from vg2c.utilities.pipeline_context import PipelineContext
 from vg2c.utilities.smart_append import SmartAppend
+from vg2c.workflow import file_resources
 
 
 def _effects(call, values=None):
@@ -244,3 +245,25 @@ def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
 
     replacement = replace(documents[0], document_id="replacement")
     assert not workspace_issues((*changed, replacement), documents)
+
+
+def test_file_resources_mark_write_and_transform_as_lifecycle_changes():
+    written = _effects(PipelineContext.write_file.render("written.csv", "body"))[0]
+    transformed = _effects(
+        PipelineContext.run_query.render(
+            "select 1",
+            "transformed.csv",
+            CodeExpr("reader"),
+            inputs=["source.csv"],
+        )
+    )[0]
+
+    resources = {item.path: item for item in file_resources((written, transformed))}
+
+    assert [ref.operation_id for ref in resources["written.csv"].lifecycle_refs] == [
+        written.operation_id
+    ]
+    assert [ref.operation_id for ref in resources["transformed.csv"].lifecycle_refs] == [
+        transformed.operation_id
+    ]
+    assert resources["source.csv"].lifecycle_refs == ()
