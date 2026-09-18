@@ -81,6 +81,16 @@ export function useWorkspace() {
     return previewChanges({ ...documentSnapshot(tab.document), changes })
   }, [])
 
+  const validateCandidate = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) throw new Error('Document is no longer open.')
+    const changes = [
+      ...draftChanges(tab).filter((change) => change.binding_id !== bindingId),
+      { binding_id: bindingId, value, reset: false },
+    ]
+    return previewChanges({ ...documentSnapshot(tab.document), changes })
+  }, [])
+
   const validate = useCallback(async (tabId: string) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) return null
@@ -231,6 +241,7 @@ export function useWorkspace() {
     open,
     reload,
     edit,
+    validateCandidate,
     validate,
     previewBinding,
     apply,
