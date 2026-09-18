@@ -223,7 +223,7 @@ tr th {{ background-color:#f5f5f5; }}
         self.css_file = None
         self.deferred_reports.clear()
 
-    @emittable(display_name="Generate HTML Report", capabilities=("html-preview",), file_effects=())
+    @emittable(display_name="Generate HTML Report", capabilities=("html-preview",), internal_parameters=("ctx",), file_effects=())
     def layout(
         self,
         ctx: Any,
