@@ -154,6 +154,16 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('configuration.png'), fullPage: true })
   await page.evaluate(() => { document.documentElement.style.zoom = '2' })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
+  if (testInfo.project.name === 'mobile') {
+    expect(await page.evaluate(() => {
+      const brand = document.querySelector('.brand')?.getBoundingClientRect()
+      const theme = document.querySelector('.theme-selector')?.getBoundingClientRect()
+      if (!brand || !theme) return false
+      return brand.right <= theme.left || theme.right <= brand.left || brand.bottom <= theme.top || theme.bottom <= brand.top
+    })).toBeTruthy()
+    const tabFits = await page.locator('.adaptive-pane-tabs button').evaluateAll((buttons) => buttons.every((button) => button.scrollWidth <= button.clientWidth + 1))
+    expect(tabFits).toBeTruthy()
+  }
   await page.screenshot({ path: testInfo.outputPath('zoom-200.png'), fullPage: true })
   expect(errors).toEqual([])
 })
