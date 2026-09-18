@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ExternalLink, FileClock, Globe2, Mail } from 'lucide-react'
 
 import type {
@@ -42,7 +42,7 @@ export function ContextPane(props: Props) {
   </section>
 }
 
-function ContextTabButton({ id, current, onSelect, icon, children }: { id: ContextTab; current: ContextTab; onSelect: (id: ContextTab) => void; icon: React.ReactNode; children: React.ReactNode }) {
+function ContextTabButton({ id, current, onSelect, icon, children }: { id: ContextTab; current: ContextTab; onSelect: (id: ContextTab) => void; icon: ReactNode; children: ReactNode }) {
   return <button type="button" role="tab" aria-selected={current === id} onClick={() => onSelect(id)}>{icon}<span>{children}</span></button>
 }
 
