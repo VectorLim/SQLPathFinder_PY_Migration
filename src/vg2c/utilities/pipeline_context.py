@@ -20,6 +20,7 @@ class PipelineContext(UtilitySpec):
         self.__dict__.update(utilities)
 
     @emittable(
+        title="Write File",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(
@@ -40,6 +41,7 @@ class PipelineContext(UtilitySpec):
         return result
 
     @emittable(
+        title="Run Query",
         file_effects=(
             FileEffectDefinition(
                 "query",

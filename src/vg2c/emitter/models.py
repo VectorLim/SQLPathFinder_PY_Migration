@@ -251,6 +251,8 @@ class EmittableOperation(Generic[P, R]):
         self,
         func: Callable[P, R],
         *,
+        title: str | None = None,
+        description: str | None = None,
         capabilities: tuple[str, ...] = (),
         parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
         artifact_roles: dict[str, ArtifactRole] | None = None,
@@ -262,6 +264,8 @@ class EmittableOperation(Generic[P, R]):
         self.func = func
         self.__name__ = func.__name__
         self.__doc__ = func.__doc__
+        self.title = title.strip() if title and title.strip() else None
+        self.description = description.strip() if description and description.strip() else None
         self.capabilities = tuple(capabilities)
         self.parameter_capabilities = tuple(
             (name, tuple(values))
@@ -362,6 +366,8 @@ def emittable(func: Callable[P, R], /) -> EmittableOperation[P, R]: ...
 @overload
 def emittable(
     *,
+    title: str | None = None,
+    description: str | None = None,
     capabilities: tuple[str, ...] = (),
     parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
     artifact_roles: dict[str, ArtifactRole] | None = None,
@@ -376,6 +382,8 @@ def emittable(
     func: Callable[P, R] | None = None,
     /,
     *,
+    title: str | None = None,
+    description: str | None = None,
     capabilities: tuple[str, ...] = (),
     parameter_capabilities: dict[str, tuple[str, ...]] | None = None,
     artifact_roles: dict[str, ArtifactRole] | None = None,
@@ -389,6 +397,8 @@ def emittable(
     def decorate(target: Callable[P, R]) -> EmittableOperation[P, R]:
         return EmittableOperation(
             target,
+            title=title,
+            description=description,
             capabilities=capabilities,
             parameter_capabilities=parameter_capabilities,
             artifact_roles=artifact_roles,
@@ -761,8 +771,13 @@ def _operation_definition(
         class_name=owner.__name__,
         module=owner.__module__,
         method=func.__name__,
-        title=_title(owner.__name__),
-        description=class_doc or f"{_title(owner.__name__)} utility",
+        title=operation.title or _title(func.__name__),
+        description=(
+            operation.description
+            or inspect.getdoc(func)
+            or class_doc
+            or f"{_title(func.__name__)} operation"
+        ),
         method_description=inspect.getdoc(func),
         return_type=_annotation(signature.return_annotation),
         parameters=tuple(parameters),
