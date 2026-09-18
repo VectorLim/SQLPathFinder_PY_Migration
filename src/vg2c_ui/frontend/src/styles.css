@@ -576,13 +576,15 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 @media (max-width: 640px) {
   .workbench-actions .change-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .workbench-actions .change-toolbar .toolbar-group {
-    display: grid;
-    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     width: 100%;
     margin: 0;
+    overflow: visible;
   }
-  .workbench-actions .change-toolbar .toolbar-group button { min-width: 0; width: 100%; }
+  .workbench-actions .change-toolbar .toolbar-group .icon-button { flex: 0 0 44px; }
+  .workbench-actions .change-toolbar .toolbar-group button:not(.icon-button) { flex: 1 1 88px; min-width: max-content; }
   .pane-tabs button { gap: var(--space-1); padding-inline: var(--space-1); }
   .pane-tabs svg { flex: 0 0 16px; }
 }
