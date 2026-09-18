@@ -20,6 +20,7 @@ class PipelineContext(UtilitySpec):
         self.__dict__.update(utilities)
 
     @emittable(
+        display_name="Write File",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(
@@ -40,6 +41,7 @@ class PipelineContext(UtilitySpec):
         return result
 
     @emittable(
+        display_name="Run Query",
         file_effects=(
             FileEffectDefinition(
                 "query",
@@ -101,6 +103,6 @@ class PipelineContext(UtilitySpec):
 
         self.csv_io.write(output, result, header=header)
 
-    @emittable(file_effects=())
+    @emittable(file_effects=(), visibility="internal")
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)
