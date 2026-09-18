@@ -197,6 +197,7 @@ export function App() {
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
               onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
               validateBinding={workspace.previewBinding}
+              previewHtml={workspace.previewHtmlOperation}
               inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
             /> : <p className="pane-empty">Select an operation to configure it.</p>}
             {active.preview && <ChangePreview preview={active.preview} />}
