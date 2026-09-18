@@ -213,8 +213,17 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
         encoding="utf-8",
     )
 
+    legacy = read_sidecar(output)
+    assert legacy is not None
+    assert legacy.schema_version == 3
+    assert [(item.binding_id, item.value) for item in legacy.changes] == [
+        (parameter.id, "legacy edit")
+    ]
+
     reopened = store.open_document(source, output).view
-    assert reopened.synchronized
+    assert reopened.synchronized, [
+        (item.code, item.message) for item in reopened.diagnostics
+    ]
     reopened_parameter = next(
         item
         for step in reopened.steps
