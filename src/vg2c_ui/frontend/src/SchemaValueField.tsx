@@ -61,7 +61,7 @@ export function defaultSchemaValue(schema: ValueSchemaView): unknown {
   if (schema.kind === 'union') return schema.variants[0] ? defaultSchemaValue(schema.variants[0]) : null
   if (schema.kind === 'boolean') return false
   if (schema.kind === 'integer' || schema.kind === 'number') return 0
-  if (schema.kind === 'list') return schema.tuple_value ? schema.prefix_items.map(defaultValue) : []
+  if (schema.kind === 'list') return schema.tuple_value ? schema.prefix_items.map(defaultSchemaValue) : []
   if (schema.kind === 'object') return Object.fromEntries(schema.required_keys.map((key) => [key, defaultSchemaValue(schema.properties[key])]))
   return ''
 }
