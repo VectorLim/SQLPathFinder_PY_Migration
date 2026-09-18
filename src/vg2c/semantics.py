@@ -546,6 +546,15 @@ def _build_symbols(
 
     references: dict[str, list[SymbolReference]] = {}
     for operation in operations:
+        for binding in operation.bindings:
+            if not binding.id.startswith("global:"):
+                continue
+            key = binding.id.removeprefix("global:").upper()
+            if key in symbols:
+                references.setdefault(key, []).append(
+                    SymbolReference(operation.id, binding.id)
+                )
+
         if operation.kind != "condition":
             continue
         values = {item.name: item for item in operation.bindings}
