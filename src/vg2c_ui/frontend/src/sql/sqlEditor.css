@@ -194,11 +194,11 @@
 .sql-tabs button span { color: var(--muted); font-size: 11px; }
 .sql-tab-panel { min-width: 0; }
 .reorderable-list { display: grid; gap: var(--space-2); }
-.reorderable-item { border-radius: var(--radius-sm); }
-.reorderable-item[draggable="true"] { cursor: grab; }
+.reorderable-item { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2); border-radius: var(--radius-sm); }
+.reorder-drag-handle { cursor: grab; color: var(--muted); font-size: var(--text-sm); user-select: none; touch-action: none; }
+.reorder-drag-handle:active { cursor: grabbing; }
 .reorderable-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.sql-column-row { grid-template-columns: auto minmax(0, 1fr) minmax(100px, .4fr) auto; }
-.reorder-handle { color: var(--muted); font-size: var(--text-sm); user-select: none; }
+.sql-column-row { min-width: 0; }
 .sql-advanced { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); }
 .sql-advanced > summary, .raw-sql-details > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
 .raw-sql-details { margin-top: var(--space-2); }
