@@ -48,7 +48,7 @@ class PipelineContext(UtilitySpec):
                 "transform",
                 inputs=("inputs",),
                 outputs=("output",),
-                input_base="working-directory",
+                input_base="runtime-search",
                 input_format="table-binding",
             ),
         ),
