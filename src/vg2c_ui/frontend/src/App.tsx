@@ -9,8 +9,8 @@ import type { ChangePreviewView, DiagnosticView } from './contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
 import { baseName } from './operationLabels'
-import { ScriptTree } from './ScriptTree'
-import { OperationEditor } from './OperationEditor'
+import { SemanticScriptTree } from './SemanticScriptTree'
+import { SemanticOperationEditor } from './SemanticOperationEditor'
 import { FileFlowPane } from './file-flow/FileFlowPane'
 import { SourceIntake } from './SourceIntake'
 import { ThemeSelector } from './ThemeSelector'
@@ -146,8 +146,8 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut)
   })
 
-  const selectedStep = active?.document.steps.find((step) => step.operations.some((operation) => operation.id === active.selectedId))
-  const selectedOperation = selectedStep?.operations.find((operation) => operation.id === active?.selectedId)
+  const selectedOperation = active?.document.semantic_operations.find((operation) => operation.id === active.selectedId)
+  const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
   const effects = state.projection?.documents.find((item) => item.document_id === active?.document.id)?.effects ?? active?.document.effects ?? []
   const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
@@ -171,7 +171,7 @@ export function App() {
 
     {active ? <section className={`workspace workbench workbench--${pane}`} id="script-workspace" role="tabpanel" aria-labelledby={fileTabId(active.document.id)}>
       <div className="workbench-actions">
-        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.scopes.length}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.scopes.length}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
+        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.semantic_operations.some((operation) => active.document.semantic_operations.some((child) => child.parent_operation_id === operation.id))}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.scopes.length}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
 
         <ChangeToolbar
           tab={active}
@@ -185,19 +185,20 @@ export function App() {
       </div>
       <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'flow', label: 'File Flow', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
       <div className="workbench-panes">
-        <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.steps.length}</span></header><div className="pane-scroll"><ScriptTree document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
+        <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
         <section id="pane-config" className="workbench-pane configuration-pane" aria-label="Utility Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">
-            {selectedStep && selectedOperation ? <OperationEditor
+            {selectedOperation ? <SemanticOperationEditor
               key={`${active.instanceId}-${selectedOperation.id}`}
-              tabId={active.document.id} step={selectedStep} operation={selectedOperation}
+              tabId={active.document.id} operation={selectedOperation}
               values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
+              knownFiles={knownFiles} symbols={active.document.symbols}
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
-              diagnostics={state.projection?.issues.filter((item) => item.document_id === active.document.id && item.step_id === selectedStep.id)}
-              onEdit={(parameter, value, cleared) => workspace.edit(active.document.id, parameter, value, cleared)}
+              onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
+              validateBinding={workspace.previewBinding}
               inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
-            /> : <p className="pane-empty">{active.document.scopes.find((scope) => scope.id === active.selectedId)?.label ?? 'No operation selected'}</p>}
+            /> : <p className="pane-empty">Select an operation to configure it.</p>}
             {active.preview && <ChangePreview preview={active.preview} />}
           </div>
         </section>
