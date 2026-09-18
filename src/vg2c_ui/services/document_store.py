@@ -478,10 +478,18 @@ class DocumentStore:
         sidecar_path(output).unlink(missing_ok=True)
 
 
-def _changes(items: Iterable[SemanticChangeRequest]) -> list[SemanticChange]:
+def _changes(
+    items: Iterable[SemanticChangeRequest | ParameterChangeRequest],
+) -> list[SemanticChange]:
     return [
         SemanticChange(
-            binding_id=(item.binding_id or item.parameter_id), value=item.value, reset=item.reset
+            binding_id=(
+                item.binding_id
+                if isinstance(item, SemanticChangeRequest)
+                else item.parameter_id
+            ),
+            value=item.value,
+            reset=item.reset,
         )
         for item in items
     ]
