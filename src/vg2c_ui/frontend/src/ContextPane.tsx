@@ -29,7 +29,7 @@ interface Props {
 export function ContextPane(props: Props) {
   const [tab, setTab] = useState<ContextTab>('files')
   const emailCount = props.document.semantic_operations.filter(isEmail).length
-  return <section className="context-pane" aria-label="Context">
+  return <section className="context-pane">
     <nav className="context-tabs" aria-label="Context views" role="tablist">
       <ContextTabButton id="files" current={tab} onSelect={setTab} icon={<FileClock size={15} />}>File Flow</ContextTabButton>
       <ContextTabButton id="email" current={tab} onSelect={setTab} icon={<Mail size={15} />}>Email{emailCount ? ` (${emailCount})` : ''}</ContextTabButton>
