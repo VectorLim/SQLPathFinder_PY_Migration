@@ -69,6 +69,15 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await translate(page)
+  await expect(page.getByRole('tab', { name: /workbench\.txt/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /workbench\.py/ })).toHaveCount(0)
+  if (testInfo.project.name === 'mobile') {
+    const actionBoxes = await page.locator('.change-toolbar .toolbar-group button').evaluateAll((buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect()
+      return { top: Math.round(rect.top), bottom: Math.round(rect.bottom) }
+    }))
+    expect(new Set(actionBoxes.map((box) => box.top)).size).toBe(1)
+  }
   if (testInfo.project.name !== 'mobile') {
     const separator = page.getByRole('separator').first()
     await expect(separator).toBeVisible()
