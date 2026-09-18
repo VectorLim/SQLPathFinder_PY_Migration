@@ -789,7 +789,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 .embedded-python-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0; background: var(--panel); color: var(--ink); }
 .embedded-python-dialog::backdrop { background: rgb(0 0 0 / .45); }
-.embedded-python-dialog .dialog-card { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.embedded-python-card { display: grid; gap: var(--space-3); padding: var(--space-4); }
 .embedded-python-dialog header h3 { margin: 0; }
 .embedded-python-dialog header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
 .embedded-python-dialog textarea { width: 100%; min-height: 320px; resize: vertical; font-family: var(--font-mono); }
@@ -811,3 +811,5 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 @media (prefers-reduced-motion: reduce) {
   .semantic-tree-row .tree-toggle svg { transition: none; }
 }
+
+.embedded-python-card > footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
