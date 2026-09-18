@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
 
 export type WorkbenchPane = 'logic' | 'config' | 'context'
+type SecondaryPane = Exclude<WorkbenchPane, 'logic'>
 
 export function WorkbenchLayout({
   activePane,
@@ -22,8 +23,9 @@ export function WorkbenchLayout({
   const [width, setWidth] = useState(1400)
   const [logicWidth, setLogicWidth] = useState(360)
   const [configWidth, setConfigWidth] = useState(460)
-  const [configVisibility, setConfigVisibility] = useState<boolean | null>(null)
-  const [contextVisibility, setContextVisibility] = useState<boolean | null>(null)
+  const [manualConfigCollapsed, setManualConfigCollapsed] = useState(false)
+  const [manualContextCollapsed, setManualContextCollapsed] = useState(false)
+  const [secondaryOverride, setSecondaryOverride] = useState<SecondaryPane | null>(null)
 
   useEffect(() => {
     const root = rootRef.current
@@ -33,16 +35,43 @@ export function WorkbenchLayout({
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    if (activePane === 'config') setConfigVisibility(true)
-    if (activePane === 'context') setContextVisibility(true)
-  }, [activePane])
-
   const narrow = width < 720
-  const autoConfigCollapsed = width < 1200
-  const autoContextCollapsed = width < 930
-  const showConfig = configVisibility ?? !autoConfigCollapsed
-  const showContext = contextVisibility ?? !autoContextCollapsed
+  const wide = width >= 1200
+  const medium = width >= 930 && width < 1200
+
+  let showConfig = false
+  let showContext = false
+  if (wide) {
+    showConfig = !manualConfigCollapsed
+    showContext = !manualContextCollapsed
+  } else if (secondaryOverride) {
+    showConfig = secondaryOverride === 'config'
+    showContext = secondaryOverride === 'context'
+  } else if (medium) {
+    // Collapse Configuration first. Context remains visible until the next breakpoint.
+    showContext = true
+  }
+
+  useEffect(() => {
+    if (narrow) return
+    if (activePane === 'config') {
+      if (wide) setManualConfigCollapsed(false)
+      else setSecondaryOverride('config')
+    } else if (activePane === 'context') {
+      if (wide) setManualContextCollapsed(false)
+      else setSecondaryOverride('context')
+    }
+  }, [activePane, narrow, wide])
+
+  function toggleSecondary(pane: SecondaryPane) {
+    if (wide) {
+      if (pane === 'config') setManualConfigCollapsed((value) => !value)
+      else setManualContextCollapsed((value) => !value)
+      return
+    }
+    const visible = pane === 'config' ? showConfig : showContext
+    setSecondaryOverride(visible ? null : pane)
+  }
 
   function resizeLogic(delta: number) {
     setLogicWidth((current) => clamp(current + delta, 260, 560))
@@ -68,10 +97,10 @@ export function WorkbenchLayout({
     </> : <>
       <div className="workbench-pane-controls" aria-label="Pane visibility">
         <span>Script Logic</span>
-        <button type="button" aria-pressed={showConfig} title={autoConfigCollapsed && configVisibility === null ? 'Configuration is hidden automatically at this width' : undefined} onClick={() => setConfigVisibility(!showConfig)}>
+        <button type="button" aria-pressed={showConfig} onClick={() => toggleSecondary('config')}>
           {showConfig ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />} Configuration
         </button>
-        <button type="button" aria-pressed={showContext} title={autoContextCollapsed && contextVisibility === null ? 'Context is hidden automatically at this width' : undefined} onClick={() => setContextVisibility(!showContext)}>
+        <button type="button" aria-pressed={showContext} onClick={() => toggleSecondary('context')}>
           {showContext ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />} Context
         </button>
       </div>
@@ -81,13 +110,7 @@ export function WorkbenchLayout({
       >
         {logic}
         {showConfig && <><PaneSeparator label="Resize Script Logic and Configuration" value={logicWidth} min={260} max={560} onDelta={resizeLogic} />{configuration}</>}
-        {showContext && <><PaneSeparator
-          label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'}
-          value={showConfig ? configWidth : logicWidth}
-          min={showConfig ? 320 : 260}
-          max={showConfig ? 680 : 560}
-          onDelta={showConfig ? resizeConfig : resizeLogic}
-        />{context}</>}
+        {showContext && <><PaneSeparator label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'} value={showConfig ? configWidth : logicWidth} min={showConfig ? 320 : 260} max={showConfig ? 680 : 560} onDelta={showConfig ? resizeConfig : resizeLogic} />{context}</>}
       </div>
     </>}
   </div>
@@ -107,10 +130,9 @@ function PaneSeparator({
   onDelta: (delta: number) => void
 }) {
   function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    const startX = event.clientX
     const target = event.currentTarget
     target.setPointerCapture(event.pointerId)
-    let lastX = startX
+    let lastX = event.clientX
     const move = (moveEvent: PointerEvent) => {
       const delta = moveEvent.clientX - lastX
       lastX = moveEvent.clientX
