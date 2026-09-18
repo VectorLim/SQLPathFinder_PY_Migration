@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.frontend.models import copy_dataclass_fields
-from vg2c.resolver.models import ResolvedBlock
+from vg2c.resolver.models import ResolvedBlock, ResolvedProgram
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,5 +66,5 @@ class DispatchedBlock(ResolvedBlock):
 
 @dataclass(frozen=True, slots=True)
 class DispatchedProgram:
-    analyzed: AnalyzedProgram
+    resolved: ResolvedProgram
     dispatched: tuple[DispatchedBlock, ...]
