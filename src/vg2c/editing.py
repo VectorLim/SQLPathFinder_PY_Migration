@@ -154,7 +154,7 @@ def project_changes(
             )
             continue
 
-        value = binding.default if change.reset else change.value
+        value = binding.value if change.reset else change.value
         if binding.source_kind == "parameter":
             binding_issues = [
                 issue
