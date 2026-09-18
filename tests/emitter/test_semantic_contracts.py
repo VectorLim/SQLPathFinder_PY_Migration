@@ -209,3 +209,27 @@ def test_shared_generated_global_records_each_semantic_operation_reference(tmp_p
         op.id for op in email_operations
     }
     assert {ref.binding_id for ref in recipient.references} == {"global:EMAIL_TO"}
+
+
+def test_macro_placeholder_reference_is_captured_before_python_rendering(tmp_path):
+    result = _compile(
+        tmp_path,
+        """<OPTIONS>
+/UTILITIES={ROWS-IN-FILE} "input.csv" "COUNT" "N"
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES=@EXEDIR@\\WaitFile.va "<<<COUNT>>>.csv" "30"
+</OPTIONS>
+<---- New Query ---->
+""",
+    )
+    model = build_semantic_model(result)
+
+    count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
+    wait = next(op for op in model.operations if op.display_name == "Wait for File")
+
+    assert count.kind == "macro"
+    assert count.introduction is not None
+    assert {ref.operation_id for ref in count.references} >= {wait.id}
+    assert all(ref.binding_id for ref in count.references)
