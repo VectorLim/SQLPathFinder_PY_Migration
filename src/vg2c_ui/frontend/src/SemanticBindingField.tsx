@@ -62,8 +62,8 @@ export function SemanticBindingField({
         binding={binding}
         value={String(value ?? '')}
         disabled={disabled}
-        validate={validateBinding}
-        onChange={(next) => onEdit(binding, next)}
+        validateBinding={validateBinding}
+        onCommit={(next) => onEdit(binding, next)}
       />
     </div>
   }
