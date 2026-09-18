@@ -10,7 +10,7 @@ from threading import RLock
 
 from vg2c import CompilationResult, compile_document
 from vg2c.editing import (
-    ParameterChange,
+    SemanticChange,
     ValidationIssue,
     project_changes,
 )
@@ -35,7 +35,7 @@ from vg2c_ui.api.models import (
     DocumentView,
     DocumentSnapshot,
     DiagnosticView,
-    ParameterChangeRequest,
+    SemanticChangeRequest,
     ProjectedDocumentView,
     SqlActionRequest,
     SqlActionResponse,
@@ -57,7 +57,7 @@ from vg2c_ui.services.csv_preview import read_csv_preview
 from vg2c_ui.services.sidecar import (
     EditorSidecar,
     InvalidSidecar,
-    SavedParameterChange,
+    SavedSemanticChange,
     read_sidecar,
     sidecar_path,
     write_sidecar,
@@ -208,8 +208,8 @@ class DocumentStore:
                     source_hash=_hash_file(source),
                     output_hash=_hash_file(output),
                     changes=[
-                        SavedParameterChange(
-                            parameter_id=item.parameter_id,
+                        SavedSemanticChange(
+                            binding_id=item.binding_id,
                             value=item.value,
                         )
                         for item in projected.values
@@ -302,8 +302,8 @@ class DocumentStore:
         )
         next_changes = _merge_changes(merged, [change])
         return SqlActionResponse(
-            change=ParameterChangeRequest(
-                parameter_id=change.parameter_id,
+            change=SemanticChangeRequest(
+                binding_id=change.binding_id,
                 value=change.value,
             ),
             model=sql_model_view(
@@ -349,7 +349,7 @@ class DocumentStore:
 
     def _load_for_change(
         self, batch: DocumentSnapshot
-    ) -> tuple[Path, Path, CompilationResult, list[ParameterChange]]:
+    ) -> tuple[Path, Path, CompilationResult, list[SemanticChange]]:
         source = self._resolve(batch.source_path)
         output = self._resolve(batch.output_path)
         if batch.source_hash != _hash_file(source):
@@ -383,7 +383,7 @@ class DocumentStore:
 
     def _read_effective_changes(
         self, source: Path, output: Path
-    ) -> list[ParameterChange]:
+    ) -> list[SemanticChange]:
         sidecar = read_sidecar(output)
         if sidecar is None:
             return []
@@ -396,8 +396,8 @@ class DocumentStore:
                 "Saved changes and generated output do not match. Original files are preserved."
             )
         return [
-            ParameterChange(
-                parameter_id=item.parameter_id,
+            SemanticChange(
+                binding_id=item.binding_id,
                 value=item.value,
             )
             for item in sidecar.changes
@@ -461,23 +461,23 @@ class DocumentStore:
         sidecar_path(output).unlink(missing_ok=True)
 
 
-def _changes(items: Iterable[ParameterChangeRequest]) -> list[ParameterChange]:
+def _changes(items: Iterable[SemanticChangeRequest]) -> list[SemanticChange]:
     return [
-        ParameterChange(
-            parameter_id=item.parameter_id, value=item.value, reset=item.reset
+        SemanticChange(
+            binding_id=(item.binding_id or item.parameter_id), value=item.value, reset=item.reset
         )
         for item in items
     ]
 
 
 def _merge_changes(
-    base: Iterable[ParameterChange],
-    overrides: Iterable[ParameterChange],
-) -> list[ParameterChange]:
+    base: Iterable[SemanticChange],
+    overrides: Iterable[SemanticChange],
+) -> list[SemanticChange]:
     requested = list(overrides)
-    overridden = {item.parameter_id for item in requested}
+    overridden = {item.binding_id for item in requested}
     # Preserve duplicate requests so core validation can reject conflicting shared edits.
-    return [item for item in base if item.parameter_id not in overridden] + requested
+    return [item for item in base if item.binding_id not in overridden] + requested
 
 
 def _issue_view(issue: ValidationIssue) -> ValidationIssueView:
