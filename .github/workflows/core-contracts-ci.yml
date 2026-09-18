@@ -21,6 +21,14 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: pytest -q tests/resolver tests/emitter tests/dataflow tests/ui
+      - name: Generate contract handoff
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python scripts/generate_frontend_contracts.py
+          printf 'VG2C_CONTRACTS_B64='
+          base64 -w0 src/vg2c_ui/frontend/src/contracts.generated.ts
+          printf '\n'
       - name: Contract check
         env:
           PYTHONPATH: src:.
