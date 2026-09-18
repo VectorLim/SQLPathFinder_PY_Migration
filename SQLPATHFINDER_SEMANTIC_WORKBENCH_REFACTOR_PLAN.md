@@ -386,6 +386,42 @@ Hide a parameter when it exists only to satisfy runtime plumbing, dependency inj
 
 Use existing internal_parameters metadata first. Add explicit editor metadata only when type/schema/role/capability cannot safely infer the desired control.
 
+
+### 4.4 Verified parameter matrix and defaults
+
+This matrix is based on the current method signatures and current source-to-emission paths, not on prior planning documents.
+
+| Semantic operation | Current emitted/runtime parameters | User-facing classification | Default/optional behavior | Required metadata correction |
+|---|---|---|---|---|
+| Run Query | sql, output, reader, inputs=None, header=None, crosstab=None, node=None | sql = specialized SQL editor; output = editable file output; inputs = editable file/table bindings where SQLite; header = optional advanced output setting; crosstab = specialized optional setting; node = expose only where source query genuinely uses it; reader = internal | inputs/header/crosstab/node are omitted defaults today and can be reconstructed by @emittable | keep reader internal; add presentation/file-role hints without duplicating schema |
+| Copy File | src, dst, recurse=False | src/dst editable file refs; recurse internal | source syntax currently emits src/dst only | existing recurse internal flag is correct |
+| Move File | src, dst | both editable file refs | no optional fields | none beyond user title |
+| Delete File | paths, recurse=False | paths editable multi-file refs; recurse should be internal for the current SPFDelete emission path | current source emission supplies paths only | add recurse to internal_parameters unless a verified source syntax actually exposes it |
+| Write File | path, content | path editable output; content editable only when it originates from user source rather than a higher-level helper | no defaults | distinguish direct FileSystemOps.write_file from PipelineContext.write_file runtime use |
+| Run External Command | argv, cwd=None, env=None, check=False | argv editable; cwd/check should remain hidden unless a verified source syntax emits them; env internal | current source emission supplies argv only | current env-only internal list is insufficient; characterize then mark cwd/check internal for this source form |
+| Wait for File | path, timeout=30, interval=1 | path and timeout editable; interval advanced/internal by default | current source syntax supplies path and optional timeout; interval is not emitted | mark interval internal unless a real source form exposes it |
+| Check Row Count | source block arguments: csv_path, var_name, prompt_off | file and target variable editable; prompt_off hidden because generated Python intentionally ignores it | prompt_off is parsed but intentionally ignored | create composite semantic binding instead of exposing CsvIO.row_count/MacroState.set_named |
+| For Each Macro Row | csv_path, prompt_off | csv_path editable when non-empty; prompt_off only if it has real generated behavior | missing csv_path means static macro scope; prompt flag defaults N | do not expose MacroState.scope or CsvIO.single_row |
+| For Each File Chunk | input_csv_path, chunk_csv_path, chunk_size, prompt_off | input/chunk/size editable; prompt_off hidden unless behavior is implemented | chunk size becomes 0 when omitted/invalid in current parser; prompt defaults N | validate chunk_size as a meaningful positive value before enabling edits |
+| Condition | lhs, op, rhs, optional conj/lhs2/op2/rhs2, prompt_text | condition operands/operators editable; prompt may be secondary description, not primary identity | second clause optional | represent operands as semantic literal/symbol refs and reuse core _operand_expr/operator table |
+| Append File | destination, source | both editable file refs | no defaults | none beyond file roles/title |
+| Send Email | to, subject, body, attachments=None, from_addr=None | to/subject/body editable; attachments editable file list; from_addr optional only where current long form supplies it; planned enabled=true semantic field | short form supplies to/subject/body; long form may supply attachments/from_addr; globals can replace to/subject | add email capability, attachment artifact role, enabled field; keep SMTP/credentials internal |
+| HTML run | instance=None, prompt_text=None, app_server_default=None, template=None | template and only genuinely meaningful report identity fields; prompt may be secondary; server default should be hidden unless user-relevant | all optional | explicitly classify each field after fixture characterization |
+| HTML defer | id, instance=None, prompt_text=None, app_server_default=None, template=None | id and template are principal; other fields only if user-relevant | id required; rest optional | add file/symbol effects discovered from template |
+| HTML layout | ctx, template, outlook=None, instance=None, json_only=None, chart_instance=None, app_server_default=None | template plus supported output/layout options; ctx always internal; other switches exposed only if fixtures prove user value | template required, others optional | current ctx is not marked internal and must be corrected |
+| HTML delete | instance=None | normally no configuration or only instance when semantically meaningful | optional | keep as low-noise operation |
+| Embedded Python | raw body | read-only | n/a | no editable runtime fields |
+| Unsupported Operation | raw source command/body | read-only | n/a | no guessed fields |
+
+Additional verified helper settings:
+
+- CsvIO declares VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000 as a generated script setting.
+- WaitFile defaults timeout to 30 seconds and polling interval to 1 second.
+- ROWS-IN-FILE's prompt-suppression argument is explicitly documented in current code as parsed but intentionally ignored.
+- FileSystemOps current SPFDelete emission passes only paths; recurse is therefore currently an implementation-level optional parameter.
+- ExternalProcess current source emission passes only argv; cwd/check are omitted runtime defaults and should not automatically appear just because @emittable can reconstruct them.
+- HtmlReport.layout currently accepts ctx as a normal @emittable parameter even though it is runtime plumbing; this is a concrete metadata leak to correct.
+
 ## 5. Phase B — shared configuration controls
 
 Shared controls should be created only for repeated semantic needs.
@@ -621,22 +657,31 @@ Each binding must have:
 
 The frontend must not know how a condition or runtime call is rendered into Python.
 
-### 8.3 Semantic change model
+### 8.3 Preserve the existing ParameterChange model unless evidence requires more
 
-Replace the assumption that every edit is only ParameterChange(parameter_id,value) with a generalized validated semantic change, while preserving parameter changes as the common case.
+The second architecture review found that introducing a parallel SemanticChange hierarchy would add abstraction before it is proven necessary.
 
-A minimal direction:
+Preferred implementation:
 
-SemanticChange
-- target_id
-- value
-- reset
+- keep ParameterChange(parameter_id, value, reset) as the persisted/edit transport;
+- broaden what can have a stable parameter/binding ID;
+- allow structural controls and synthetic operation settings to contribute EmittedParameter-compatible editor bindings;
+- let the core binding own validation and reconstruction of generated Python;
+- keep the existing sidecar v2 shape if these new bindings can be persisted as parameter_id/value pairs;
+- increment the sidecar version only if a concrete edit cannot be represented safely by this existing shape.
 
-The target registry resolves whether the ID represents an emitted parameter, global, control field, or operation setting.
+This keeps one edit model for:
 
-Do not add separate condition-change, email-change, and macro-change persistence formats unless their validation truly differs.
+- ordinary @emittable arguments;
+- globals;
+- condition operands/operators;
+- macro/loop control fields;
+- Check Row Count composite fields;
+- email enabled state.
 
-Sidecar version should be incremented only when this generalized model is actually persisted. Provide a strict migration/read path from sidecar v2 rather than silently accepting incompatible state.
+The implementation should first attempt to extend the existing emitted/editor binding registry rather than create feature-specific change classes or a new generic change hierarchy.
+
+A sidecar v3 migration is therefore a contingency, not a planned requirement.
 
 ### 8.4 Symbol graph
 
@@ -1288,40 +1333,41 @@ Commit Boundary
 
 refactor(core): make workflow controls semantically editable
 
-### Step 3 — generalize semantic changes and sidecar persistence
+### Step 3 — extend existing editable bindings without replacing ParameterChange
 
 Goal
 
-Persist utility and structural edits through one validated mechanism.
+Make utility and structural edits persist through the existing validated edit mechanism.
 
 Current Problem
 
-ParameterChange assumes emitted invocation/global parameters.
+Current ParameterChange lookup only knows emitted invocation/global parameters even though its persisted shape is already generic.
 
 Scope
 
-vg2c.editing, emitter manifest, sidecar, DocumentStore.
+vg2c.editing, emitted/editor binding metadata, DocumentStore, sidecar tests.
 
 Core Changes
 
-- introduce generalized semantic target lookup;
-- retain emitted parameters as common targets;
-- support control/operation setting targets;
-- preserve conflict validation;
-- introduce sidecar v3 only if persisted shape changes;
-- implement strict v2 read/migration path.
+- extend the editable target registry so structural/composite fields can expose stable parameter IDs;
+- reuse ParameterChange(parameter_id,value,reset);
+- let each binding own schema validation and generated-source reconstruction;
+- preserve shared-global conflict handling;
+- preserve reset/generated-value behavior;
+- keep sidecar v2 if the parameter_id/value representation remains sufficient;
+- introduce a new sidecar version only after a concrete counterexample proves v2 insufficient.
 
 Frontend Changes
 
-Generated contracts may rename parameter_id to target_id only if necessary. Prefer compatibility inside backend if it avoids needless transport churn.
+No new change type should be introduced. Existing change batches remain the default contract.
 
 Refactoring
 
-Consolidate target validation rather than adding per-feature edit services.
+Prefer adapting existing EmittedParameter/ParameterDefinition-compatible metadata over a new change-class hierarchy.
 
 Deletion
 
-Delete transitional per-control change classes if any were created during development.
+Delete any transitional condition-change/email-change/macro-change classes if experimentation creates them.
 
 Dependencies
 
@@ -1329,19 +1375,20 @@ Steps 1–2.
 
 Validation
 
-- existing v2 sidecars reopen correctly;
-- new structural edits save/reopen;
+- existing v2 sidecars reopen unchanged;
+- structural edits save/reopen;
 - stale hashes still reject edits;
 - rollback on sidecar write failure still works;
-- no generated-source change occurs on preview.
+- preview remains side-effect free;
+- ordinary parameter edits remain byte-for-byte behavior compatible.
 
 Completion Criteria
 
-Every editable field planned for the workbench can persist through one edit/change pipeline.
+Every planned editable field can persist through ParameterChange, or the implementation has a documented concrete reason why a narrowly scoped sidecar evolution is required.
 
 Commit Boundary
 
-refactor(editor): generalize validated semantic changes
+refactor(editor): extend validated editable bindings
 
 ### Step 4 — add symbol/global/macro reference graph
 
