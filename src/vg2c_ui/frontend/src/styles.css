@@ -460,16 +460,14 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 @media (max-width: 780px) {
   .app-shell { grid-template-rows: auto 44px minmax(0, 1fr); }
   .topbar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px 12px;
     padding: 9px 12px;
   }
-  .brand { grid-column: 1 / -1; }
+  .brand { flex: 1 0 150px; min-width: 150px; }
   .workspace-downloads {
-    grid-column: 1 / -1;
-    justify-self: stretch;
-    flex-wrap: nowrap;
+    flex: 1 0 100%;
     max-width: none;
     overflow-x: auto;
     padding-bottom: 2px;
@@ -600,8 +598,8 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .workbench-pane-controls button { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--muted); }
 .pane-separator { min-width: 6px; cursor: col-resize; background: var(--line-soft); touch-action: none; }
 .pane-separator:hover, .pane-separator:focus-visible { background: var(--accent); outline: none; }
-.adaptive-pane-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 44px; border-bottom: 1px solid var(--line); }
-.adaptive-pane-tabs button { border: 0; border-bottom: 2px solid transparent; background: var(--panel); color: var(--muted); }
+.adaptive-pane-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.adaptive-pane-tabs button { flex: 1 1 max-content; min-width: max-content; min-height: 44px; border: 0; border-bottom: 2px solid transparent; background: var(--panel); color: var(--muted); }
 .adaptive-pane-tabs button[aria-pressed="true"] { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
 
 .semantic-tree-row .tree-toggle svg { transition: transform var(--motion-fast); }
