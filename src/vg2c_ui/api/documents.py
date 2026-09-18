@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, Request
 from vg2c_ui.api.models import (
     CsvPreviewRequest,
     CsvPreviewView,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
     DocumentReference,
     DocumentView,
 )
@@ -29,6 +31,11 @@ def open_document(payload: DocumentReference, request: Request) -> DocumentView:
         )
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/preview-html", response_model=HtmlPreviewView)
+def preview_html(payload: HtmlPreviewRequest, request: Request) -> HtmlPreviewView:
+    return _store(request).preview_html(payload)
 
 
 @router.post("/preview-csv", response_model=CsvPreviewView)
