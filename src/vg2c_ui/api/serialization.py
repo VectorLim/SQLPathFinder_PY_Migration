@@ -429,6 +429,8 @@ def sql_model_view(model: SqlEditableModel) -> SqlModelView:
         join_types=list(JOIN_TYPES),
         logical_connectors=list(get_args(SqlLogicalConnector)),
         statement_span=span(model.statement_span),
+        before_statement=model.source[: model.statement_span.start],
+        after_statement=model.source[model.statement_span.end :],
         selections=[
             SqlSelectionView(
                 id=item.id,
