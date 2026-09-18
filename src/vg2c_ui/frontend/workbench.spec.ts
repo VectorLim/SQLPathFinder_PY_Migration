@@ -166,7 +166,7 @@ test('Email context limits bulk edits to enable state and accepts image attachme
   await page.screenshot({ path: testInfo.outputPath('email-context.png'), fullPage: true })
 
   await pane(page, 'Configuration')
-  const attachments = page.getByRole('checkbox', { name: 'Set Attachments', exact: true })
+  const attachments = page.getByRole('checkbox', { name: 'Attachments', exact: true })
   await attachments.check()
   await page.locator('.semantic-file-list input[type=file]').setInputFiles({
     name: 'chart.png',
