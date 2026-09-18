@@ -184,7 +184,6 @@ export function App() {
       <WorkbenchLayout
         activePane={pane}
         onActivePaneChange={setPane}
-        actions={null}
         logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
         configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
