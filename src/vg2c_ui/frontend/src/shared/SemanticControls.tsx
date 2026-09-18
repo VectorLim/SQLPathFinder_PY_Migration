@@ -184,18 +184,24 @@ export function ReorderableList<T>({
     {items.map((item, index) => <div
       key={getId(item)}
       className="reorderable-item"
-      draggable={!disabled}
       tabIndex={disabled ? -1 : 0}
       role="listitem"
       aria-label={`Item ${index + 1} of ${items.length}. Alt plus arrow keys reorder.`}
       onKeyDown={(event) => onKeyDown(event, index)}
-      onDragStart={() => setDragIndex(index)}
       onDragOver={(event) => { if (!disabled) event.preventDefault() }}
       onDrop={() => {
         if (dragIndex !== null) move(dragIndex, index)
         setDragIndex(null)
       }}
-      onDragEnd={() => setDragIndex(null)}
-    >{renderItem(item, index)}</div>)}
+    >
+      <span
+        className="reorder-drag-handle"
+        draggable={!disabled}
+        aria-hidden="true"
+        onDragStart={() => setDragIndex(index)}
+        onDragEnd={() => setDragIndex(null)}
+      >⋮⋮</span>
+      {renderItem(item, index)}
+    </div>)}
   </div>
 }
