@@ -6,6 +6,7 @@ from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
 from vg2c.operands import IfThen
 from vg2c.semantics import CONDITION_OPERATORS, build_semantic_model
+from vg2c.utilities.mail import MailService
 
 
 def _condition_source() -> str:
@@ -346,3 +347,45 @@ second
     assert projected.valid
     assert projected.source.count("int(ctx.macro.named('COUNT')) > int('0')") == 1
     assert projected.source.count("int(ctx.macro.named('COUNT')) > int('1')") == 1
+
+
+def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_path):
+    result = _compile(
+        tmp_path,
+        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+        '"person@example.com" "Report" "Body"\n</OPTIONS>\n'
+        '<---- New Query ---->\n',
+    )
+    operation = next(
+        op for op in build_semantic_model(result).operations
+        if "email" in op.capabilities
+    )
+    bindings = {binding.name: binding for binding in operation.bindings}
+
+    assert operation.display_name == "Send Email"
+    assert bindings["enabled"].value is True
+    assert bindings["enabled"].editable
+    assert bindings["enabled"].schema is not None
+    assert bindings["enabled"].schema.kind == "boolean"
+    assert "file-input" in bindings["attachments"].capabilities
+
+    projected = project_changes(
+        result,
+        [SemanticChange(bindings["enabled"].id, False)],
+    )
+    assert projected.valid
+    assert "enabled=False" in projected.source
+
+
+def test_disabled_email_returns_before_credentials_or_network(monkeypatch):
+    def fail_credentials():
+        raise AssertionError("disabled email must not load SMTP credentials")
+
+    monkeypatch.setattr(MailService, "_load_credential", staticmethod(fail_credentials))
+
+    MailService().send(
+        "person@example.com",
+        "Report",
+        "Body",
+        enabled=False,
+    )
