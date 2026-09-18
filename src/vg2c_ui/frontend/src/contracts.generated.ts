@@ -228,7 +228,6 @@ export interface DocumentView {
 
 export interface SemanticChangeRequest {
   binding_id: string
-  parameter_id: string | null
   value: unknown
   reset: boolean
 }
