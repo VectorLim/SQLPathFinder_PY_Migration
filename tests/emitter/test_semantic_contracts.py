@@ -403,3 +403,25 @@ def test_required_parameter_default_is_generated_reset_value(tmp_path):
     assert sql.default == "SELECT 1 AS value"
     assert overridden_sql.value == "SELECT 2 AS value"
     assert overridden_sql.default == "SELECT 1 AS value"
+
+
+def test_multiline_editor_hint_is_preserved_as_semantic_capability(tmp_path):
+    result = _compile(
+        tmp_path,
+        """<OPTIONS>
+/WRITE-FILE=Y
+/CSV=out.txt
+</OPTIONS>
+first line
+second line
+<---- New Query ---->
+""",
+    )
+    operation = next(
+        item for item in build_semantic_model(result).operations
+        if item.display_name == "Write File"
+    )
+    template = next(binding for binding in operation.bindings if binding.name == "template")
+
+    assert "multiline" in template.capabilities
+    assert "\n" in str(template.value)
