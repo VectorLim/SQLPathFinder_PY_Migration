@@ -1,6 +1,6 @@
 import './sql/sqlEditor.css'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { RotateCcw } from 'lucide-react'
 
 import type {
@@ -30,6 +30,12 @@ interface Props {
 }
 
 type SqlTab = 'columns' | 'filters' | 'joins'
+const SQL_TABS: Array<{ id: SqlTab; label: string }> = [
+  { id: 'columns', label: 'Columns' },
+  { id: 'filters', label: 'Filters' },
+  { id: 'joins', label: 'Joins' },
+]
+
 
 export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect, runAction, onReset }: Props) {
   const effectiveSql = effectiveBindingValue(values, binding)
@@ -65,19 +71,28 @@ export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect,
   return <section className="sql-operation-editor" aria-label="Structured SQL">
     <header className="sql-parameter-heading">
       <strong>Query</strong>
-      <button className="icon-button" type="button" aria-label="Reset SQL to generated value" title="Reset SQL to generated value" disabled={readOnly || !(binding.id in values)} onClick={onReset}><RotateCcw size={14} /></button>
+      <button className="icon-button" type="button" aria-label="Reset query" title="Reset query" disabled={readOnly || !(binding.id in values)} onClick={onReset}><RotateCcw size={14} /></button>
     </header>
     {error && <p className="sql-edit-error" role="alert">{error}</p>}
     {busy && !model && <p className="empty-copy">Loading structured SQL…</p>}
     {model && <>
       <nav className="sql-tabs" aria-label="Query configuration" role="tablist">
-        {([
-          ['columns', 'Columns', model.selections.length],
-          ['filters', 'Filters', model.filters.length],
-          ['joins', 'Joins', model.joins.length],
-        ] as const).map(([id, label, count]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}<span>{count}</span></button>)}
+        {SQL_TABS.map(({ id, label }, index) => {
+          const count = id === 'columns' ? model.selections.length : id === 'filters' ? model.filters.length : model.joins.length
+          return <button
+            id={`sql-tab-${id}`}
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls="sql-tab-panel"
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => setTab(id)}
+            onKeyDown={(event) => handleSqlTabKey(event, index, setTab)}
+          >{label}<span>{count}</span></button>
+        })}
       </nav>
-      <div className="sql-tab-panel" role="tabpanel">
+      <div id="sql-tab-panel" className="sql-tab-panel" role="tabpanel" aria-labelledby={`sql-tab-${tab}`}>
         {tab === 'columns' && <Selections model={model} onAction={act} disabled={busy || readOnly} />}
         {tab === 'filters' && <Filters model={model} onAction={act} disabled={busy || readOnly} />}
         {tab === 'joins' && <Joins model={model} onAction={act} disabled={busy || readOnly} />}
@@ -135,7 +150,6 @@ function SelectionAddForm({ disabled, onAction, onClose }: AddFormProps) {
 
 function SelectionRow({ item, count, disabled, onAction }: { item: SqlSelectionView; count: number; disabled: boolean; onAction: ActionFn }) {
   return <div className="sql-row sql-column-row">
-    <span className="reorder-handle" aria-hidden="true">⋮⋮</span>
     <CommitInput value={item.expression} disabled={disabled || !item.editable} ariaLabel="Column expression" onCommit={(expression) => onAction('update-selection', { selection_id: item.id, expression })} />
     <CommitInput value={item.alias ?? ''} disabled={disabled || !item.editable} ariaLabel="Column alias" placeholder="alias" onCommit={(alias) => onAction('update-selection', { selection_id: item.id, alias: alias || null })} />
     <button type="button" disabled={disabled || count <= 1 || !item.editable} onClick={() => void onAction('remove-selection', { selection_id: item.id })}>Remove</button>
@@ -243,4 +257,22 @@ function CommitInput({ value, disabled, ariaLabel, placeholder, onCommit }: { va
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return <input aria-label={ariaLabel} placeholder={placeholder} disabled={disabled} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { const next = draft.trim(); if (next !== value.trim()) void onCommit(next) }} />
+}
+
+function handleSqlTabKey(
+  event: KeyboardEvent<HTMLButtonElement>,
+  index: number,
+  setTab: (tab: SqlTab) => void,
+) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  let nextIndex = index
+  if (event.key === 'ArrowLeft') nextIndex = (index - 1 + SQL_TABS.length) % SQL_TABS.length
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % SQL_TABS.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = SQL_TABS.length - 1
+  const next = SQL_TABS[nextIndex]
+  if (!next) return
+  setTab(next.id)
+  event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus()
 }
