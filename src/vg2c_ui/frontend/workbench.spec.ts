@@ -47,6 +47,14 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await translate(page)
+  if (testInfo.project.name !== 'mobile') {
+    const separator = page.getByRole('separator').first()
+    await expect(separator).toBeVisible()
+    const before = Number(await separator.getAttribute('aria-valuenow'))
+    await separator.focus()
+    await separator.press('ArrowRight')
+    expect(Number(await separator.getAttribute('aria-valuenow'))).toBeGreaterThan(before)
+  }
   const output = page.getByLabel('Output', { exact: true })
   await output.fill('renamed.csv')
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
@@ -92,6 +100,9 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   expect(reopenedDocument.semantic_operations.flatMap((operation) => operation.bindings).find((binding) => binding.name === 'output')?.value).toBe('renamed.csv')
 
   await pane(page, 'Context')
+  await expect(page.getByRole('tab', { name: 'File Flow', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Email/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Globals', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Preview CSV', exact: true }).first().click()
   await expect(page.locator('.on-disk-preview [role=alert]')).toBeVisible()
   const session = (await page.context().cookies()).find((cookie) => cookie.name === 'vg2c_workspace')!
