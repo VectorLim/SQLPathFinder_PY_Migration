@@ -161,7 +161,10 @@ class MailService(EmitterUtility):
         body: str,
         attachments: list[str] | None = None,
         from_addr: str | None = None,
+        enabled: bool = True,
     ) -> None:
+        if not enabled:
+            return
         cred = self._load_credential()
         sender = from_addr or cred.username
 
