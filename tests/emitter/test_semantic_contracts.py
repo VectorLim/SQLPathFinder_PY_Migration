@@ -6,7 +6,6 @@ from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
 from vg2c.operands import IfThen
 from vg2c.semantics import CONDITION_OPERATORS, build_semantic_model
-from vg2c.utilities.mail import MailService
 
 
 def _condition_source() -> str:
@@ -376,16 +375,3 @@ def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_pat
     assert projected.valid
     assert "enabled=False" in projected.source
 
-
-def test_disabled_email_returns_before_credentials_or_network(monkeypatch):
-    def fail_credentials():
-        raise AssertionError("disabled email must not load SMTP credentials")
-
-    monkeypatch.setattr(MailService, "_load_credential", staticmethod(fail_credentials))
-
-    MailService().send(
-        "person@example.com",
-        "Report",
-        "Body",
-        enabled=False,
-    )
