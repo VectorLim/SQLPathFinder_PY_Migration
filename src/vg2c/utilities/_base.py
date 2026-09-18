@@ -29,6 +29,7 @@ class UtilitySpec(ABC):
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
     script_settings: ClassVar[tuple[tuple[str, object, str], ...]] = ()
+    semantic_visibility: ClassVar[str] = "normal"
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
     _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
     _script_settings: ClassVar[dict[str, tuple[object, str]]] = {}
