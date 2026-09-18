@@ -36,7 +36,7 @@ export function ContextPane(props: Props) {
     </nav>
     <div className="context-content">
       {tab === 'files' && <FileContext {...props} />}
-      {tab === 'email' && <EmailContext document={props.document} values={props.values} onNavigate={props.onNavigate} onEdit={props.onEdit} />}
+      {tab === 'email' && <EmailContext key={props.document.id} document={props.document} values={props.values} onNavigate={props.onNavigate} onEdit={props.onEdit} />}
       {tab === 'globals' && <GlobalsContext symbols={props.document.symbols} onNavigate={props.onNavigate} />}
     </div>
   </section>
