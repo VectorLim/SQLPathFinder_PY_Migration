@@ -100,6 +100,7 @@ def test_api_exposes_only_current_transport_routes(tmp_path):
     paths = set(create_app(tmp_path).openapi()["paths"])
     assert "/api/documents/open" in paths
     assert "/api/documents/preview-csv" in paths
+    assert "/api/documents/preview-html" in paths
     assert "/api/translations/batch" in paths
     assert "/api/changes/preview" in paths
     assert "/api/changes/apply" in paths
