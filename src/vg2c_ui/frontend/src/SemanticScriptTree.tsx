@@ -27,7 +27,6 @@ export function SemanticScriptTree({
 }: Props) {
   const treeRef = useRef<HTMLUListElement>(null)
   const operations = document.semantic_operations.filter((operation) => operation.visibility !== 'internal')
-  const byId = useMemo(() => new Map(operations.map((operation) => [operation.id, operation])), [operations])
   const children = useMemo(() => {
     const index = new Map<string, SemanticOperationView[]>()
     for (const operation of operations) {
