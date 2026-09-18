@@ -75,7 +75,7 @@ export function EmbeddedPythonEditor({ tabId, binding, value, disabled, validate
           {preview.issues.map((issue) => <p key={`${issue.code}:${issue.message}`}>{issue.message}</p>)}
         </div>}
         {preview?.valid && <p className="validation-success" role="status">Python is valid.</p>}
-        <footer>
+        <footer className="dialog-actions">
           <button type="button" onClick={modal.requestClose}>Cancel</button>
           <button type="button" disabled={validating} onClick={() => void validateDraft()}>{validating ? 'Validating…' : 'Validate'}</button>
           <button className="primary-button" type="button" disabled={validating || disabled} onClick={() => void save()}>Update Python</button>
