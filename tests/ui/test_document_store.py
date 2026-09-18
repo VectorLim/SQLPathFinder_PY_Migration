@@ -11,6 +11,7 @@ from vg2c_ui.api.models import (
     CsvPreviewRequest,
     DocumentView,
     ParameterChangeRequest,
+    SemanticChangeRequest,
     SqlModelRequest,
     WorkspaceDocumentRequest,
     WorkspaceProjectionRequest,
@@ -502,3 +503,47 @@ def test_normal_document_view_never_exposes_generated_python(tmp_path):
     document = DocumentStore(tmp_path).translate(str(source)).view
 
     assert all(step.raw_code is None for step in document.steps)
+
+
+def test_condition_semantic_edit_persists_through_reopen(tmp_path):
+    source = tmp_path / "condition.txt"
+    source.write_text(
+        """<OPTIONS>
+/UTILITIES={IF-THEN} "left" "EQS" "right" "" "" "" ""
+</OPTIONS>
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/CSV=inside.txt
+</OPTIONS>
+inside
+<---- New Query ---->
+<OPTIONS>
+/UTILITIES={END-IF}
+</OPTIONS>
+<---- New Query ---->
+""",
+        encoding="utf-8",
+    )
+    store = DocumentStore(tmp_path)
+    document = store.translate(str(source)).view
+    condition = next(op for op in document.semantic_operations if op.kind == "condition")
+    operator = next(binding for binding in condition.bindings if binding.name == "op")
+
+    applied = store.apply(
+        ChangeBatch(
+            **document.model_dump(),
+            changes=[SemanticChangeRequest(binding_id=operator.id, value="NES")],
+        )
+    ).document
+    reopened = store.open_document(source, applied.output_path).view
+    reopened_condition = next(
+        op for op in reopened.semantic_operations if op.id == condition.id
+    )
+    reopened_operator = next(
+        binding for binding in reopened_condition.bindings if binding.name == "op"
+    )
+
+    assert reopened.synchronized
+    assert reopened_operator.value == "NES"
+    assert " != " in Path(reopened.output_path).read_text(encoding="utf-8")
