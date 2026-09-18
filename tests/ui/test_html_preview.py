@@ -17,6 +17,7 @@ def test_html_preview_replays_safely_and_does_not_write_outputs(tmp_path: Path):
     operation = next(
         item for item in view.semantic_operations if item.kind == "html_report.layout"
     )
+    assert "ctx" not in {binding.name for binding in operation.bindings}
 
     request = HtmlPreviewRequest(
         schema_version=5,
