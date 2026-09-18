@@ -24,7 +24,7 @@ export function effectiveParameterValue(values: Record<string, unknown>, paramet
 
 export function effectiveBindingValue(values: Record<string, unknown>, binding: SemanticBindingView): unknown {
   const value = Object.hasOwn(values, binding.id) ? values[binding.id] : binding.value
-  return value === RESET_VALUE ? binding.value : value
+  return value === RESET_VALUE ? binding.default : value
 }
 
 export interface EditState {
