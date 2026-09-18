@@ -241,8 +241,9 @@ class SemanticChangeRequest(BaseModel):
     reset: bool = False
 
 
-# Compatibility alias for the current frontend during the v5 handoff.
-ParameterChangeRequest = SemanticChangeRequest
+class ParameterChangeRequest(SemanticChangeRequest):
+    """Deprecated v4 transport name retained until the frontend consumes v5 bindings."""
+
 
 
 class DocumentSnapshot(BaseModel):
@@ -475,6 +476,7 @@ CONTRACT_MODELS = (
     FileEffectView,
     DocumentView,
     SemanticChangeRequest,
+    ParameterChangeRequest,
     DocumentSnapshot,
     ChangeBatch,
     ValidationIssueView,
