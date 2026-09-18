@@ -4,6 +4,7 @@ import { ExternalLink, FileClock, Globe2, Mail } from 'lucide-react'
 import type {
   CsvPreviewView,
   DocumentView,
+  FileEffectView,
   FileEndpointView,
   SemanticBindingView,
   SemanticOperationView,
@@ -71,15 +72,18 @@ function handleContextTabKey(event: KeyboardEvent<HTMLButtonElement>, index: num
 }
 
 function FileContext({ document, csv, csvPath, csvError, csvLoading, onNavigate, onPreview }: Props) {
-  const lifecycle = document.files.filter((file) => file.lifecycle_refs.length > 0)
+  const lifecycleKinds = new Set<FileEffectView['kind']>(['write', 'copy', 'move', 'transform', 'append', 'delete'])
+  const lifecycle = document.effects.filter((effect) => lifecycleKinds.has(effect.kind)).slice().sort((left, right) => left.order - right.order)
   const required = document.files.filter((file) =>
     file.producer_refs.length === 0
     && file.consumer_refs.length > 0
     && ['external', 'missing', 'dynamic', 'possible'].includes(file.status))
   return <div className="context-section file-context">
-    <header><h3>File Flow</h3><p>Files that are created, copied, moved, appended, renamed, or deleted.</p></header>
-    {lifecycle.length ? lifecycle.map((file) => <FileResourceRow key={file.id} document={document} file={file} onNavigate={onNavigate} onPreview={onPreview} />) : <p className="empty-copy">No file lifecycle changes.</p>}
-    {required.length > 0 && <section className="required-inputs"><h3>Required Inputs</h3>{required.map((file) => <FileResourceRow key={file.id} document={document} file={file} onNavigate={onNavigate} onPreview={onPreview} compact />)}</section>}
+    <header><h3>File Flow</h3><p>Ordered file operations, including fan-in when several inputs produce one output.</p></header>
+    {lifecycle.length
+      ? lifecycle.map((effect) => <FileEffectRow key={effect.id} document={document} effect={effect} onNavigate={onNavigate} onPreview={onPreview} />)
+      : <p className="empty-copy">No file lifecycle changes.</p>}
+    {required.length > 0 && <section className="required-inputs"><h3>Required Inputs</h3>{required.map((file) => <RequiredFileRow key={file.id} document={document} file={file} onNavigate={onNavigate} onPreview={onPreview} />)}</section>}
     {csvPath && <section className="on-disk-preview" aria-label="On-disk CSV preview">
       <h3>CSV Preview</h3><p>{csvPath}</p>
       {csvLoading && <p role="status">Loading file…</p>}
@@ -89,24 +93,77 @@ function FileContext({ document, csv, csvPath, csvError, csvLoading, onNavigate,
   </div>
 }
 
-function FileResourceRow({
+function FileEffectRow({
+  document,
+  effect,
+  onNavigate,
+  onPreview,
+}: {
+  document: DocumentView
+  effect: FileEffectView
+  onNavigate: Props['onNavigate']
+  onPreview: Props['onPreview']
+}) {
+  const operation = document.semantic_operations.find((item) => item.id === effect.operation_id)
+  const inputs = effect.inputs
+  const outputs = effect.outputs
+  return <article className="file-effect-row">
+    <header>
+      <button type="button" className="file-effect-operation" onClick={(event) => onNavigate(effect.operation_id, event.detail === 0)}>
+        <ExternalLink size={13} />{operation?.display_name ?? humanizeEffect(effect.kind)}
+      </button>
+      <span className="state-pill">{humanizeEffect(effect.kind)}</span>
+    </header>
+    <div className="file-effect-flow" aria-label={`${inputs.length} inputs to ${outputs.length} outputs`}>
+      <div className="file-endpoints">
+        {inputs.length ? inputs.map((endpoint) => <FileEndpointChip key={endpoint.id} endpoint={endpoint} />) : <span className="file-endpoint file-endpoint--generated">Generated content</span>}
+      </div>
+      <span className="file-flow-arrow" aria-hidden="true">→</span>
+      <div className="file-endpoints">
+        {outputs.length
+          ? outputs.map((endpoint) => <FileEndpointChip key={endpoint.id} endpoint={endpoint} onPreview={() => onPreview(effect.id, endpoint)} />)
+          : <span className="file-endpoint file-endpoint--deleted">Deleted</span>}
+      </div>
+    </div>
+    <div className="file-effect-meta">
+      {inputs.length > 1 && <small>{inputs.length} inputs feed this operation.</small>}
+      {effect.conditional && <small>Conditional</small>}
+      {effect.in_loop && <small>Runs in a loop</small>}
+      {effect.reason && <small>{effect.reason}</small>}
+    </div>
+  </article>
+}
+
+function FileEndpointChip({
+  endpoint,
+  onPreview,
+}: {
+  endpoint: FileEndpointView
+  onPreview?: () => void
+}) {
+  const label = endpoint.path ?? endpoint.expression ?? 'Dynamic path'
+  const canPreview = Boolean(onPreview && endpoint.path?.toLowerCase().endsWith('.csv'))
+  return <span className={`file-endpoint file-endpoint--${endpoint.status}`}>
+    <span title={label}>{label}</span>
+    {canPreview && <button type="button" onClick={onPreview}>Preview CSV</button>}
+  </span>
+}
+
+function RequiredFileRow({
   document,
   file,
   onNavigate,
   onPreview,
-  compact = false,
 }: {
   document: DocumentView
   file: DocumentView['files'][number]
   onNavigate: Props['onNavigate']
   onPreview: Props['onPreview']
-  compact?: boolean
 }) {
-  const refs = uniqueRefs([...file.lifecycle_refs, ...file.producer_refs, ...file.consumer_refs])
+  const refs = uniqueRefs(file.consumer_refs)
   const preview = file.path?.toLowerCase().endsWith('.csv') ? findCsvEndpoint(document, file.path) : null
-  return <article className={`file-resource-row${compact ? ' file-resource-row--compact' : ''}`}>
+  return <article className="file-resource-row file-resource-row--compact">
     <header><strong>{file.path ?? 'Dynamic file'}</strong><span className={`state-pill state-pill--${file.status}`}>{file.status}</span></header>
-    {!compact && <p>{lifecycleSummary(document, file.lifecycle_refs.map((ref) => ref.operation_id))}</p>}
     <div className="operation-references" aria-label="Used by">
       {refs.map((ref) => {
         const operation = document.semantic_operations.find((item) => item.id === ref.operation_id)
@@ -117,9 +174,10 @@ function FileResourceRow({
   </article>
 }
 
-function lifecycleSummary(document: DocumentView, operationIds: string[]): string {
-  const names = [...new Set(operationIds.map((id) => document.semantic_operations.find((operation) => operation.id === id)?.display_name).filter(Boolean))]
-  return names.length ? names.join(' → ') : 'File lifecycle change'
+function humanizeEffect(kind: FileEffectView['kind']): string {
+  if (kind === 'write') return 'Create'
+  if (kind === 'transform') return 'Transform'
+  return kind.charAt(0).toUpperCase() + kind.slice(1)
 }
 
 function findCsvEndpoint(document: DocumentView, path: string): { effectId: string; endpoint: FileEndpointView } | null {
