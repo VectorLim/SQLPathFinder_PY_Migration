@@ -55,7 +55,7 @@ async function translate(page: Page) {
   )
   await selectSemanticOperation(page, 'workbench.txt', (operation) => operation.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
   await pane(page, 'Configuration')
-  await expect(page.getByLabel('Output file', { exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: /Output file/i })).toBeVisible()
   const tabs = await page.locator('.tabs').boundingBox()
   expect(tabs?.height).toBe(44)
   const intake = await page.getByRole('region', { name: 'Workspace source intake' }).boundingBox()
