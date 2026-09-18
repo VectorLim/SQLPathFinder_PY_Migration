@@ -19,6 +19,7 @@ import { useTheme } from './theme'
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceFiles } from './useWorkspaceFiles'
 import { hasUnsavedChanges } from './workspaceGuards'
+import { WorkbenchLayout } from './WorkbenchLayout'
 
 export function App() {
   const workspace = useWorkspace()
@@ -182,10 +183,12 @@ export function App() {
         />
 
       </div>
-      <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'context', label: 'Context', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
-      <div className="workbench-panes">
-        <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
-        <section id="pane-config" className="workbench-pane configuration-pane" aria-label="Utility Configuration">
+      <WorkbenchLayout
+        activePane={pane}
+        onActivePaneChange={setPane}
+        actions={null}
+        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
+        configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">
             {selectedOperation ? <SemanticOperationEditor
@@ -202,8 +205,8 @@ export function App() {
             /> : <p className="pane-empty">Select an operation to configure it.</p>}
             {active.preview && <ChangePreview preview={active.preview} />}
           </div>
-        </section>
-        <section id="pane-context" className="workbench-pane context-workbench-pane" aria-label="Context"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>Context</h2></header><div className="pane-scroll"><ContextPane
+        </section>}
+        context={<section id="pane-context" className="workbench-pane context-workbench-pane" aria-label="Context"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>Context</h2></header><div className="pane-scroll"><ContextPane
           document={active.document}
           values={active.edits.values}
           csv={active.csv}
@@ -213,8 +216,8 @@ export function App() {
           onNavigate={(operationId, focus) => navigateOperation(active.document.id, operationId, focus)}
           onEdit={(binding, value) => workspace.edit(active.document.id, binding, value)}
           onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)}
-        /></div></section>
-      </div>
+        /></div></section>}
+      />
     </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
 
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
