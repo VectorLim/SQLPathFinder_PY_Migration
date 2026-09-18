@@ -20,7 +20,7 @@ jobs:
       - name: Core tests
         env:
           PYTHONPATH: src:.
-        run: pytest -q tests/resolver tests/emitter tests/dataflow tests/ui
+        run: pytest -q
       - name: Contract check
         env:
           PYTHONPATH: src:.
