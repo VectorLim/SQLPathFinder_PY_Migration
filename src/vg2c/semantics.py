@@ -381,6 +381,8 @@ def _leaf_operations(
                     continue
                 binding_value = values.get(parameter.id, parameter.value)
                 capabilities = list(definition.capabilities_for_parameter(parameter.name))
+                if parameter.editor_type == "multiline":
+                    capabilities.append("multiline")
                 if parameter.artifact_role is not None:
                     capabilities.append(f"file-{parameter.artifact_role.direction}")
                 bindings.append(
