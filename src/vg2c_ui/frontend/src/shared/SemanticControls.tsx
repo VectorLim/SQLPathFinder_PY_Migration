@@ -12,12 +12,14 @@ export function FileSelector({
   value,
   files,
   disabled = false,
+  showLabel = true,
   onChange,
 }: {
   label: string
   value: unknown
   files: string[]
   disabled?: boolean
+  showLabel?: boolean
   onChange: (value: string) => void
 }) {
   const current = typeof value === 'string' ? value : ''
@@ -27,9 +29,8 @@ export function FileSelector({
   useEffect(() => setManual(!known.includes(current)), [current, known.join('\u0000')])
   const selectValue = manual ? '__manual__' : current
 
-  return <div className="semantic-file-selector">
-    <label>{label}
-      <select
+  const select = <select
+        aria-label={label}
         value={selectValue}
         disabled={disabled}
         onChange={(event) => {
@@ -44,7 +45,9 @@ export function FileSelector({
         <option value="__manual__">Manual / external path…</option>
         {known.map((path) => <option key={path} value={path}>{path}</option>)}
       </select>
-    </label>
+
+  return <div className="semantic-file-selector">
+    {showLabel ? <label>{label}{select}</label> : select}
     {manual && <input
       aria-label={`${label} path`}
       type="text"
@@ -61,6 +64,7 @@ export function FileListSelector({
   value,
   files,
   disabled = false,
+  showLabel = true,
   onChange,
   onUpload,
 }: {
@@ -68,15 +72,16 @@ export function FileListSelector({
   value: unknown
   files: string[]
   disabled?: boolean
+  showLabel?: boolean
   onChange: (value: string[]) => void
   onUpload?: (file: File) => Promise<string>
 }) {
   const items = Array.isArray(value) ? value.map(String) : []
   const inputId = useId()
   return <div className="semantic-file-list">
-    <span className="field-label">{label}</span>
+    {showLabel && <span className="field-label">{label}</span>}
     {items.map((item, index) => <div className="collection-row" key={`${index}:${item}`}>
-      <FileSelector label={`${label} ${index + 1}`} value={item} files={files} disabled={disabled} onChange={(next) => onChange(items.map((current, position) => position === index ? next : current))} />
+      <FileSelector label={`${label} ${index + 1}`} showLabel={false} value={item} files={files} disabled={disabled} onChange={(next) => onChange(items.map((current, position) => position === index ? next : current))} />
       <button type="button" className="icon-button" disabled={disabled} aria-label={`Remove ${label} ${index + 1}`} onClick={() => onChange(items.filter((_, position) => position !== index))}>×</button>
     </div>)}
     <div className="field-command-row">
@@ -99,29 +104,33 @@ export function SymbolSelector({
   value,
   symbols,
   disabled = false,
+  showLabel = true,
   onChange,
 }: {
   label: string
   value: unknown
   symbols: SymbolView[]
   disabled?: boolean
+  showLabel?: boolean
   onChange: (value: string) => void
 }) {
   const listId = useId()
-  return <label>{label}
-    <input
+  const input = <input
+      aria-label={label}
       type="text"
       list={listId}
       value={typeof value === 'string' ? value : ''}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     />
+  return <>
+    {showLabel ? <label>{label}{input}</label> : input}
     <datalist id={listId}>
       {symbols
         .filter((symbol) => symbol.condition_value)
         .map((symbol) => <option key={symbol.id} value={symbol.condition_value ?? symbol.display_name}>{symbol.display_name}</option>)}
     </datalist>
-  </label>
+  </>
 }
 
 export function OptionalValue({
