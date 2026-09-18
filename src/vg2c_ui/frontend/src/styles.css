@@ -513,8 +513,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 }
 
 @media (max-width: 430px) {
-  .change-toolbar .toolbar-group { flex-wrap: wrap; overflow-x: visible; margin-left: -2px; margin-right: -2px; }
-  .change-toolbar .toolbar-group button { flex: 1 1 auto; }
   .tree-children { margin-left: 9px; padding-left: 6px; }
   .tree-children > .tree-node::before { left: -6px; width: 5px; }
   .operation-editor { margin-left: 10px; max-width: 100%; }
