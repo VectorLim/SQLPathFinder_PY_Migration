@@ -13,7 +13,7 @@ import {
 } from './api'
 import type {
   FileEndpointView,
-  ParameterView,
+  SemanticBindingView,
   SqlActionRequest,
   SqlModelView,
 } from './contracts.generated'
@@ -68,8 +68,8 @@ export function useWorkspace() {
     }
   }, [])
 
-  const edit = useCallback((tabId: string, parameter: ParameterView, value: unknown, clearDraftPaths?: FieldPath[]) => {
-    dispatch({ type: 'edit', tabId, parameterId: parameter.id, value, clearDraftPaths })
+  const edit = useCallback((tabId: string, binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => {
+    dispatch({ type: 'edit', tabId, parameterId: binding.id, value, clearDraftPaths })
   }, [])
 
   const validate = useCallback(async (tabId: string) => {
