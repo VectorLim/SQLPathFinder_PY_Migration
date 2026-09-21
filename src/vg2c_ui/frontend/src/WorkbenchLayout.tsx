@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
 
 export type WorkbenchPane = 'logic' | 'config' | 'context'
 type SecondaryPane = Exclude<WorkbenchPane, 'logic'>
@@ -46,7 +46,7 @@ export function WorkbenchLayout({
     showConfig = secondaryOverride === 'config'
     showContext = secondaryOverride === 'context'
   } else if (medium) {
-    // Collapse Configuration first. Context remains visible until the next breakpoint.
+    // Configuration folds away first; Context remains visible until the next breakpoint.
     showContext = true
   }
 
@@ -62,13 +62,14 @@ export function WorkbenchLayout({
   }, [activePane, narrow, wide])
 
   function toggleSecondary(pane: SecondaryPane) {
+    const visible = pane === 'config' ? showConfig : showContext
     if (wide) {
       if (pane === 'config') setManualConfigCollapsed((value) => !value)
       else setManualContextCollapsed((value) => !value)
-      return
+    } else {
+      setSecondaryOverride(visible ? null : pane)
     }
-    const visible = pane === 'config' ? showConfig : showContext
-    setSecondaryOverride(visible ? null : pane)
+    if (!visible) onActivePaneChange(pane)
   }
 
   function resizeLogic(delta: number) {
@@ -91,24 +92,71 @@ export function WorkbenchLayout({
       <div className="workbench-panes workbench-panes--single">
         {activePane === 'logic' ? logic : activePane === 'config' ? configuration : context}
       </div>
-    </> : <>
-      <div className="workbench-pane-controls" aria-label="Pane visibility">
-        <button type="button" aria-pressed={showConfig} onClick={() => toggleSecondary('config')}>
-          {showConfig ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />} Configuration
-        </button>
-        <button type="button" aria-pressed={showContext} onClick={() => toggleSecondary('context')}>
-          {showContext ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />} Context
-        </button>
-      </div>
-      <div
-        className="workbench-panes adaptive-workbench-panes"
-        style={{ gridTemplateColumns: gridColumns(logicWidth, configWidth, showConfig, showContext) }}
-      >
-        {logic}
-        {showConfig && <><PaneSeparator label="Resize Script Logic and Configuration" value={logicWidth} min={260} max={560} onDelta={resizeLogic} />{configuration}</>}
-        {showContext && <><PaneSeparator label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'} value={showConfig ? configWidth : logicWidth} min={showConfig ? 320 : 260} max={showConfig ? 680 : 560} onDelta={showConfig ? resizeConfig : resizeLogic} />{context}</>}
-      </div>
-    </>}
+    </> : <div
+      className="workbench-panes adaptive-workbench-panes"
+      data-config-collapsed={!showConfig}
+      data-context-collapsed={!showContext}
+      style={{ gridTemplateColumns: gridColumns(logicWidth, configWidth, showConfig, showContext) }}
+    >
+      {logic}
+      <SeparatorSlot visible={showConfig}>
+        <PaneSeparator label="Resize Script Logic and Configuration" value={logicWidth} min={260} max={560} onDelta={resizeLogic} />
+      </SeparatorSlot>
+      <PaperPaneSlot pane="config" label="Configuration" expanded={showConfig} onToggle={() => toggleSecondary('config')}>
+        {configuration}
+      </PaperPaneSlot>
+      <SeparatorSlot visible={showContext}>
+        <PaneSeparator
+          label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'}
+          value={showConfig ? configWidth : logicWidth}
+          min={showConfig ? 320 : 260}
+          max={showConfig ? 680 : 560}
+          onDelta={showConfig ? resizeConfig : resizeLogic}
+        />
+      </SeparatorSlot>
+      <PaperPaneSlot pane="context" label="Context" expanded={showContext} onToggle={() => toggleSecondary('context')}>
+        {context}
+      </PaperPaneSlot>
+    </div>}
+  </div>
+}
+
+function PaperPaneSlot({
+  pane,
+  label,
+  expanded,
+  onToggle,
+  children,
+}: {
+  pane: SecondaryPane
+  label: string
+  expanded: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  const action = expanded ? 'Collapse' : 'Expand'
+  return <div className={`paper-pane-slot paper-pane-slot--${pane} ${expanded ? 'is-expanded' : 'is-collapsed'}`} data-pane-slot={pane}>
+    <button
+      className="paper-pull-tab"
+      type="button"
+      aria-label={`${action} ${label}`}
+      aria-expanded={expanded}
+      aria-controls={pane === 'config' ? 'pane-config' : 'pane-context'}
+      title={`${action} ${label}`}
+      onClick={onToggle}
+    >
+      <GripVertical className="paper-pull-tab__grip" size={11} aria-hidden="true" />
+      {expanded ? <ChevronRight size={15} aria-hidden="true" /> : <ChevronLeft size={15} aria-hidden="true" />}
+    </button>
+    <div className="paper-pane-surface" aria-hidden={!expanded}>
+      {children}
+    </div>
+  </div>
+}
+
+function SeparatorSlot({ visible, children }: { visible: boolean; children: ReactNode }) {
+  return <div className={`pane-separator-slot${visible ? ' is-active' : ''}`}>
+    {visible ? children : null}
   </div>
 }
 
@@ -168,9 +216,9 @@ function PaneSeparator({
 
 function gridColumns(logicWidth: number, configWidth: number, showConfig: boolean, showContext: boolean): string {
   if (showConfig && showContext) return `${logicWidth}px 6px ${configWidth}px 6px minmax(320px, 1fr)`
-  if (showConfig) return `${logicWidth}px 6px minmax(360px, 1fr)`
-  if (showContext) return `${logicWidth}px 6px minmax(340px, 1fr)`
-  return 'minmax(0, 1fr)'
+  if (showConfig) return `${logicWidth}px 6px minmax(360px, 1fr) 0px 0px`
+  if (showContext) return `${logicWidth}px 0px 0px 6px minmax(340px, 1fr)`
+  return 'minmax(0, 1fr) 0px 0px 0px 0px'
 }
 
 function clamp(value: number, min: number, max: number): number {

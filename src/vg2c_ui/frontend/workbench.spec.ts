@@ -12,8 +12,10 @@ async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Contex
     await tabButton.click()
     return
   }
-  const visibility = page.locator('.workbench-pane-controls').getByRole('button', { name, exact: true })
-  if (await visibility.isVisible().catch(() => false)) await visibility.click()
+  if (name === 'Configuration' || name === 'Context') {
+    const pullTab = page.getByRole('button', { name: `Expand ${name}`, exact: true })
+    if (await pullTab.isVisible().catch(() => false)) await pullTab.click()
+  }
 }
 
 async function uploadAndTranslate(page: Page, name: string, source: string) {
@@ -169,6 +171,74 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('zoom-200.png'), fullPage: true })
   expect(errors).toEqual([])
 })
+
+test('secondary panes reflow, stack pull tabs and restore in either collapse order', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await translate(page)
+
+  const workbench = page.locator('.adaptive-workbench-panes')
+  const logic = page.locator('#pane-logic')
+  const configuration = page.locator('#pane-config')
+  const context = page.locator('#pane-context')
+
+  const initialConfig = await configuration.boundingBox()
+  const initialContext = await context.boundingBox()
+  expect(initialConfig).toBeTruthy()
+  expect(initialContext).toBeTruthy()
+
+  await page.getByRole('button', { name: 'Collapse Configuration', exact: true }).click()
+  await expect(configuration).toBeHidden()
+  await expect(context).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Expand Configuration', exact: true })).toBeVisible()
+  const contextAfterConfigCollapse = await context.boundingBox()
+  expect(contextAfterConfigCollapse!.width).toBeGreaterThan(initialContext!.width + 200)
+  await expectPullTabsStacked(page)
+  await page.screenshot({ path: testInfo.outputPath('collapse-config-only.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Collapse Context', exact: true }).click()
+  await expect(context).toBeHidden()
+  await expect(configuration).toBeHidden()
+  const fullLogic = await logic.boundingBox()
+  const workbenchBox = await workbench.boundingBox()
+  expect(fullLogic!.width).toBeGreaterThanOrEqual(workbenchBox!.width - 2)
+  await expectPullTabsStacked(page)
+  await page.screenshot({ path: testInfo.outputPath('collapse-config-then-context.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Expand Configuration', exact: true }).click()
+  await page.getByRole('button', { name: 'Expand Context', exact: true }).click()
+  await expect(configuration).toBeVisible()
+  await expect(context).toBeVisible()
+
+  await page.getByRole('button', { name: 'Collapse Context', exact: true }).click()
+  await expect(context).toBeHidden()
+  await expect(configuration).toBeVisible()
+  const configAfterContextCollapse = await configuration.boundingBox()
+  expect(configAfterContextCollapse!.width).toBeGreaterThan(initialConfig!.width + 200)
+  await page.screenshot({ path: testInfo.outputPath('collapse-context-only.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Collapse Configuration', exact: true }).click()
+  await expect(configuration).toBeHidden()
+  await expect(context).toBeHidden()
+  await expectPullTabsStacked(page)
+  await page.screenshot({ path: testInfo.outputPath('collapse-context-then-config.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Expand Context', exact: true }).click()
+  await expect(context).toBeVisible()
+  await expect(configuration).toBeHidden()
+  await page.getByRole('button', { name: 'Expand Configuration', exact: true }).click()
+  await expect(configuration).toBeVisible()
+  await expect(context).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
+})
+
+async function expectPullTabsStacked(page: Page) {
+  const configTab = await page.getByRole('button', { name: /Configuration$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') }).boundingBox()
+  const contextTab = await page.getByRole('button', { name: /Context$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') }).boundingBox()
+  expect(configTab).toBeTruthy()
+  expect(contextTab).toBeTruthy()
+  expect(Math.abs(configTab!.left - contextTab!.left)).toBeLessThanOrEqual(8)
+  expect(configTab!.bottom).toBeLessThanOrEqual(contextTab!.top + 1)
+}
 
 test('Email context limits bulk edits to enable state and accepts image attachments', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')

@@ -592,13 +592,134 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 /* Semantic workbench */
 .adaptive-workbench { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
-.adaptive-workbench-panes { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.adaptive-workbench-panes {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 360ms cubic-bezier(.22, 1, .36, 1);
+}
 .workbench-panes--single { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workbench-panes--single > .workbench-pane { flex: 1; border: 0; }
-.workbench-pane-controls { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-height: 36px; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line-soft); background: var(--surface); font-size: var(--text-xs); }
-.workbench-pane-controls button { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--muted); }
-.pane-separator { min-width: 6px; cursor: col-resize; background: var(--line-soft); touch-action: none; }
-.pane-separator:hover, .pane-separator:focus-visible { background: var(--accent); outline: none; }
+
+.pane-separator-slot { position: relative; z-index: 4; min-width: 0; min-height: 0; overflow: visible; }
+.pane-separator-slot.is-active { width: 6px; }
+.pane-separator { width: 6px; height: 100%; cursor: col-resize; background: var(--line-soft); touch-action: none; transition: background 140ms ease, box-shadow 140ms ease; }
+.pane-separator:hover, .pane-separator:focus-visible { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); outline: none; }
+
+.paper-pane-slot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  isolation: isolate;
+}
+.paper-pane-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  background: var(--panel);
+  box-shadow: -12px 0 28px rgba(20, 31, 48, .055), -2px 0 0 rgba(20, 31, 48, .035);
+  transform: translateX(0) scaleX(1);
+  transform-origin: left center;
+  opacity: 1;
+  transition:
+    transform 300ms cubic-bezier(.22, 1, .36, 1),
+    opacity 180ms ease,
+    box-shadow 260ms ease;
+}
+.paper-pane-surface::before {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset: 0 auto 0 0;
+  width: 3px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(20, 31, 48, .09), rgba(20, 31, 48, 0));
+}
+.paper-pane-surface > .workbench-pane { width: 100%; height: 100%; border-right: 0; }
+.paper-pane-slot.is-collapsed .paper-pane-surface {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(20px) scaleX(.975);
+  box-shadow: none;
+}
+
+.paper-pull-tab {
+  position: absolute;
+  z-index: 12;
+  left: 1px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  width: 31px;
+  height: 62px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 15px 0 0 15px;
+  color: var(--muted);
+  background: linear-gradient(180deg, var(--panel), var(--surface));
+  box-shadow: -7px 7px 20px rgba(20, 31, 48, .10), inset 0 1px 0 rgba(255, 255, 255, .5);
+  transform: translate(-100%, -50%);
+  transition:
+    transform 180ms cubic-bezier(.22, 1, .36, 1),
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 180ms ease;
+}
+.paper-pane-slot--config .paper-pull-tab { top: calc(50% - 36px); }
+.paper-pane-slot--context .paper-pull-tab { top: calc(50% + 36px); }
+.paper-pull-tab::after {
+  content: "";
+  width: 10px;
+  height: 1px;
+  border-radius: 99px;
+  background: var(--line);
+}
+.paper-pull-tab__grip { opacity: .55; }
+.paper-pull-tab:hover, .paper-pull-tab:focus-visible {
+  color: var(--accent-strong);
+  background: linear-gradient(180deg, var(--panel), var(--accent-soft));
+  box-shadow: -10px 8px 24px rgba(20, 31, 48, .14), inset 0 1px 0 rgba(255, 255, 255, .65);
+  transform: translate(calc(-100% - 3px), -50%);
+}
+.paper-pane-slot.is-collapsed .paper-pull-tab {
+  color: var(--accent-strong);
+  background: linear-gradient(180deg, var(--accent-soft), var(--panel));
+}
+.paper-pane-slot.is-collapsed .paper-pull-tab:hover,
+.paper-pane-slot.is-collapsed .paper-pull-tab:focus-visible {
+  transform: translate(calc(-100% - 5px), -50%);
+}
+
+/* When a sibling sheet folds away, the remaining content grows into the released space.
+   Keep wide forms useful rather than stretching one narrow column across the screen. */
+.paper-pane-slot--config .configuration-pane .pane-scroll > * {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+}
+.paper-pane-slot--context .context-pane {
+  width: min(100%, 1180px);
+  margin-inline: auto;
+}
+@container (min-width: 760px) {
+  .configuration-pane .parameter-grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+  .configuration-pane .semantic-file-list,
+  .configuration-pane .field-command-row { max-width: 920px; }
+}
+@container (min-width: 980px) {
+  .configuration-pane .parameter-grid { gap: var(--space-5); }
+}
+
 .adaptive-pane-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 .adaptive-pane-tabs button { flex: 1 1 max-content; min-width: max-content; min-height: 44px; border: 0; border-bottom: 2px solid transparent; background: var(--panel); color: var(--muted); }
 .adaptive-pane-tabs button[aria-pressed="true"] { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
@@ -691,7 +812,11 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .semantic-tree-row .tree-toggle svg { transition: none; }
+  .semantic-tree-row .tree-toggle svg,
+  .adaptive-workbench-panes,
+  .paper-pane-surface,
+  .paper-pull-tab,
+  .pane-separator { transition: none; }
 }
 
 .embedded-python-card > footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
