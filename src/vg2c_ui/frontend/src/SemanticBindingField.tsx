@@ -1,69 +1,36 @@
 import { RotateCcw } from 'lucide-react'
 
-import type {
-  ChangePreviewView,
-  SemanticBindingView,
-  SqlActionRequest,
-  SqlModelView,
-  SymbolView,
-  ValueSchemaView,
-} from './contracts.generated'
+import type { SemanticBindingView, ValueSchemaView } from './contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
-import { defaultSchemaValue, SchemaValueField, type FieldDraftProps } from './SchemaValueField'
+import { defaultSchemaValue, SchemaValueField } from './SchemaValueField'
+import type { SemanticEditorSession } from './semanticEditorSession'
 import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
-import { effectiveBindingValue, RESET_VALUE, type FieldPath } from './workspaceState'
+import { effectiveBindingValue, RESET_VALUE } from './workspaceState'
 
-interface Props extends FieldDraftProps {
-  tabId: string
+interface Props {
   binding: SemanticBindingView
-  values: Record<string, unknown>
   readOnly: boolean
-  knownFiles: string[]
-  symbols: SymbolView[]
-  onUploadFile: (file: File) => Promise<string>
-  onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
-  validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
-  inspectSql: (tabId: string, bindingId: string) => Promise<SqlModelView>
-  runSqlAction: (
-    tabId: string,
-    bindingId: string,
-    action: SqlActionRequest['action'],
-    args: Record<string, unknown>,
-  ) => Promise<SqlModelView>
+  session: SemanticEditorSession
 }
 
-export function SemanticBindingField({
-  tabId,
-  binding,
-  values,
-  readOnly,
-  knownFiles,
-  symbols,
-  onUploadFile,
-  onEdit,
-  validateBinding,
-  inspectSql,
-  runSqlAction,
-  drafts,
-  onDraft,
-}: Props) {
+export function SemanticBindingField({ binding, readOnly, session }: Props) {
+  const { values, resources, drafts, actions } = session
   const value = effectiveBindingValue(values, binding)
   const disabled = readOnly || !binding.editable
   const reset = binding.resettable && Object.hasOwn(values, binding.id)
-    ? <button type="button" className="icon-button" aria-label={`Reset ${binding.display_label}`} title="Reset value" onClick={() => onEdit(binding, RESET_VALUE)}><RotateCcw size={14} aria-hidden="true" /></button>
+    ? <button type="button" className="icon-button" aria-label={`Reset ${binding.display_label}`} title="Reset value" onClick={() => actions.edit({ binding, value: RESET_VALUE })}><RotateCcw size={14} aria-hidden="true" /></button>
     : null
 
   if (binding.capabilities.includes('embedded-python')) {
     return <div className="parameter semantic-binding">
       <div className="parameter-field__meta"><strong>{binding.display_label}</strong>{reset}</div>
       <EmbeddedPythonEditor
-        tabId={tabId}
         binding={binding}
         value={String(value ?? '')}
         disabled={disabled}
-        validateBinding={validateBinding}
-        onCommit={(next) => onEdit(binding, next)}
+        validateBinding={actions.validateBinding}
+        onCommit={(next) => actions.edit({ binding, value: next })}
       />
     </div>
   }
@@ -71,13 +38,12 @@ export function SemanticBindingField({
   if (binding.capabilities.includes('structured-sql')) {
     return <div className="parameter semantic-binding">
       <StructuredSqlEditor
-        tabId={tabId}
         binding={binding}
         values={values}
         readOnly={disabled}
-        inspect={inspectSql}
-        runAction={runSqlAction}
-        onReset={() => onEdit(binding, RESET_VALUE)}
+        inspect={actions.inspectSql}
+        runCommand={actions.runSqlCommand}
+        onReset={() => actions.edit({ binding, value: RESET_VALUE })}
       />
     </div>
   }
@@ -90,12 +56,12 @@ export function SemanticBindingField({
     value,
     disabled,
     schema: controlSchema,
-    knownFiles,
-    symbols,
-    onUploadFile,
-    onEdit,
-    drafts,
-    onDraft,
+    knownFiles: resources.knownFiles,
+    symbols: resources.symbols,
+    onUploadFile: actions.uploadFile,
+    onEdit: actions.edit,
+    drafts: drafts.values,
+    onDraft: drafts.update,
   })
 
   return <fieldset className={`parameter semantic-binding${disabled ? ' parameter--readonly' : ''}`} disabled={disabled}>
@@ -105,7 +71,7 @@ export function SemanticBindingField({
           enabled={value !== null && value !== undefined}
           disabled={disabled}
           action={reset}
-          onEnabledChange={(enabled) => onEdit(binding, enabled ? enabledValue(binding, schema) : null)}
+          onEnabledChange={(enabled) => actions.edit({ binding, value: enabled ? enabledValue(binding, schema) : null })}
         >{body}</OptionalValue>
       : <>
           <div className="parameter-field__meta"><strong>{binding.display_label}{binding.required ? ' *' : ''}</strong>{reset}</div>
@@ -133,27 +99,27 @@ function renderBindingControl({
   disabled: boolean
   schema: ValueSchemaView | null
   knownFiles: string[]
-  symbols: SymbolView[]
-  onUploadFile: (file: File) => Promise<string>
-  onEdit: Props['onEdit']
-  drafts: Props['drafts']
-  onDraft: Props['onDraft']
+  symbols: SemanticEditorSession['resources']['symbols']
+  onUploadFile: SemanticEditorSession['actions']['uploadFile']
+  onEdit: SemanticEditorSession['actions']['edit']
+  drafts: SemanticEditorSession['drafts']['values']
+  onDraft: SemanticEditorSession['drafts']['update']
 }) {
   const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
   if (isFileBinding && schema?.kind === 'list') {
-    return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} onUpload={onUploadFile} />
+    return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} onUpload={onUploadFile} />
   }
   if (isFileBinding) {
-    return <FileSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+    return <FileSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (binding.capabilities.includes('symbol-or-literal')) {
-    return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit(binding, next)} />
+    return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (schema) {
     return <SchemaValueField
       schema={schema}
       value={value}
-      onChange={(next, cleared) => onEdit(binding, next, cleared)}
+      onChange={(next, clearDraftPaths) => onEdit({ binding, value: next, clearDraftPaths })}
       label={binding.display_label}
       bindingId={binding.id}
       path={[]}
@@ -162,7 +128,7 @@ function renderBindingControl({
       onDraft={onDraft}
     />
   }
-  return <input aria-label={binding.display_label} disabled={disabled} value={String(value ?? '')} onChange={(event) => onEdit(binding, event.target.value)} />
+  return <input aria-label={binding.display_label} disabled={disabled} value={String(value ?? '')} onChange={(event) => onEdit({ binding, value: event.target.value })} />
 }
 
 function enabledValue(binding: SemanticBindingView, schema: ValueSchemaView | null): unknown {
@@ -171,4 +137,3 @@ function enabledValue(binding: SemanticBindingView, schema: ValueSchemaView | nu
   if (!schema) return ''
   return defaultSchemaValue({ ...schema, nullable: false })
 }
-

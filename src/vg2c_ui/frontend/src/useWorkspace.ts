@@ -15,9 +15,9 @@ import {
 import type {
   FileEndpointView,
   SemanticBindingView,
-  SqlActionRequest,
   SqlModelView,
 } from './contracts.generated'
+import type { SqlCommand } from './sql/sqlCommands'
 import {
   activeTab,
   changeBatch,
@@ -175,11 +175,10 @@ export function useWorkspace() {
     return model
   }, [])
 
-  const runSqlAction = useCallback(async (
+  const runSqlCommand = useCallback(async (
     tabId: string,
     bindingId: string,
-    action: SqlActionRequest['action'],
-    args: Record<string, unknown>,
+    command: SqlCommand,
   ): Promise<SqlModelView> => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
@@ -189,8 +188,8 @@ export function useWorkspace() {
       ...documentSnapshot(tab.document),
       parameter_id: bindingId,
       changes: draftChanges(tab),
-      action,
-      arguments: args,
+      action: command.action,
+      arguments: { ...command.arguments },
     })
     const current = tabById(stateRef.current, tabId)
     if (!current || current.instanceId !== instanceId || current.edits.version !== version) {
@@ -239,7 +238,7 @@ export function useWorkspace() {
     loadCsv,
     previewHtmlOperation,
     inspectStructuredSql,
-    runSqlAction,
+    runSqlCommand,
   }
 }
 

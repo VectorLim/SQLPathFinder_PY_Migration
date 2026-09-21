@@ -5,28 +5,22 @@ import { RotateCcw } from 'lucide-react'
 
 import type {
   SemanticBindingView,
-  SqlActionRequest,
   SqlJoinView,
   SqlModelView,
   SqlPredicateView,
   SqlSelectionView,
 } from './contracts.generated'
 import { ReorderableList } from './shared/SemanticControls'
+import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from './sql/sqlCommands'
 import { effectiveBindingValue } from './workspaceState'
 
 interface Props {
-  tabId: string
   binding: SemanticBindingView
   readOnly: boolean
   onReset: () => void
   values: Record<string, unknown>
-  inspect: (tabId: string, bindingId: string) => Promise<SqlModelView>
-  runAction: (
-    tabId: string,
-    bindingId: string,
-    action: SqlActionRequest['action'],
-    args: Record<string, unknown>,
-  ) => Promise<SqlModelView>
+  inspect: (bindingId: string) => Promise<SqlModelView>
+  runCommand: (bindingId: string, command: SqlCommand) => Promise<SqlModelView>
 }
 
 type SqlTab = 'columns' | 'filters' | 'joins'
@@ -37,7 +31,7 @@ const SQL_TABS: Array<{ id: SqlTab; label: string }> = [
 ]
 
 
-export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect, runAction, onReset }: Props) {
+export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCommand, onReset }: Props) {
   const effectiveSql = effectiveBindingValue(values, binding)
   const [model, setModel] = useState<SqlModelView | null>(null)
   const [error, setError] = useState('')
@@ -47,17 +41,17 @@ export function StructuredSqlEditor({ tabId, binding, values, readOnly, inspect,
   useEffect(() => {
     let cancelled = false
     setBusy(true)
-    void inspect(tabId, binding.id)
+    void inspect(binding.id)
       .then((next) => { if (!cancelled) { setModel(next); setError('') } })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not inspect SQL.') })
       .finally(() => { if (!cancelled) setBusy(false) })
     return () => { cancelled = true }
-  }, [tabId, binding.id, values, typeof effectiveSql === 'string' ? effectiveSql : ''])
+  }, [binding.id, values, typeof effectiveSql === 'string' ? effectiveSql : ''])
 
-  async function act(action: SqlActionRequest['action'], args: Record<string, unknown>): Promise<boolean> {
+  async function act<T extends SqlCommandName>(action: T, args: SqlCommandArguments<T>): Promise<boolean> {
     setBusy(true)
     try {
-      setModel(await runAction(tabId, binding.id, action, args))
+      setModel(await runCommand(binding.id, sqlCommand(action, args)))
       setError('')
       return true
     } catch (reason) {
@@ -248,7 +242,7 @@ function JoinRow({ item, model, disabled, onAction }: { item: SqlJoinView; model
   </div>
 }
 
-type ActionFn = (action: SqlActionRequest['action'], args: Record<string, unknown>) => Promise<boolean>
+type ActionFn = <T extends SqlCommandName>(action: T, args: SqlCommandArguments<T>) => Promise<boolean>
 interface SectionProps { model: SqlModelView; onAction: ActionFn; disabled: boolean }
 interface AddFormProps { disabled: boolean; onAction: ActionFn; onClose: () => void }
 interface ModelAddFormProps extends AddFormProps { model: SqlModelView }

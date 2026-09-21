@@ -10,6 +10,7 @@ import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
 import { SemanticScriptTree } from './SemanticScriptTree'
 import { SemanticOperationEditor } from './SemanticOperationEditor'
+import type { SemanticEditorSession } from './semanticEditorSession'
 import { ContextPane } from './ContextPane'
 import { SourceIntake } from './SourceIntake'
 import { ThemeSelector } from './ThemeSelector'
@@ -150,6 +151,31 @@ export function App() {
   const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
   const hasTabs = state.tabs.length > 0
+  const editorSession = active ? {
+    values: active.edits.values,
+    saving: active.status === 'saving',
+    resources: {
+      knownFiles,
+      symbols: active.document.symbols,
+      conditionOperators: active.document.condition_operators,
+    },
+    drafts: {
+      values: active.fieldDrafts,
+      update: (key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft }),
+    },
+    actions: {
+      uploadFile: async (file) => {
+        const saved = await uploadWorkspaceFile(file)
+        await fileInventory.refresh()
+        return saved.path
+      },
+      edit: ({ binding, value, clearDraftPaths }) => workspace.edit(active.document.id, binding, value, clearDraftPaths),
+      validateBinding: (bindingId, value) => workspace.validateCandidate(active.document.id, bindingId, value),
+      previewHtml: (operationId) => workspace.previewHtmlOperation(active.document.id, operationId),
+      inspectSql: (bindingId) => workspace.inspectStructuredSql(active.document.id, bindingId),
+      runSqlCommand: (bindingId, command) => workspace.runSqlCommand(active.document.id, bindingId, command),
+    },
+  } satisfies SemanticEditorSession : null
 
   return <main className={`app-shell app-shell--with-intake${hasTabs ? '' : ' app-shell--no-tabs'}`}>
     <header className="topbar">
@@ -188,17 +214,10 @@ export function App() {
         configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">
-            {selectedOperation ? <SemanticOperationEditor
+            {selectedOperation && editorSession ? <SemanticOperationEditor
               key={`${active.instanceId}-${selectedOperation.id}`}
-              tabId={active.document.id} operation={selectedOperation}
-              values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
-              knownFiles={knownFiles} symbols={active.document.symbols} conditionOperators={active.document.condition_operators}
-              onUploadFile={async (file) => { const saved = await uploadWorkspaceFile(file); await fileInventory.refresh(); return saved.path }}
-              onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
-              onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
-              validateBinding={workspace.validateCandidate}
-              previewHtml={workspace.previewHtmlOperation}
-              inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
+              operation={selectedOperation}
+              session={editorSession}
             /> : <p className="pane-empty">Select an operation to configure it.</p>}
             {active.preview && <ChangePreview preview={active.preview} />}
           </div>

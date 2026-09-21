@@ -1,76 +1,24 @@
 import { useState } from 'react'
 
 import type {
-  ChangePreviewView,
-  ConditionOperatorView,
   HtmlPreviewView,
-  SemanticBindingView,
   SemanticOperationView,
-  SqlActionRequest,
-  SqlModelView,
-  SymbolView,
 } from './contracts.generated'
 import { ConditionEditor } from './ConditionEditor'
-import type { FieldDraftProps } from './SchemaValueField'
 import { SemanticBindingField } from './SemanticBindingField'
+import type { SemanticEditorSession } from './semanticEditorSession'
 import { ValidationMessage } from './shared/SemanticControls'
-import type { FieldPath } from './workspaceState'
 
-interface Props extends FieldDraftProps {
-  tabId: string
+interface Props {
   operation: SemanticOperationView
-  values: Record<string, unknown>
-  saving: boolean
-  knownFiles: string[]
-  symbols: SymbolView[]
-  conditionOperators: ConditionOperatorView[]
-  onUploadFile: (file: File) => Promise<string>
-  onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
-  validateBinding: (tabId: string, bindingId: string, value: unknown) => Promise<ChangePreviewView>
-  previewHtml: (tabId: string, operationId: string) => Promise<HtmlPreviewView>
-  inspectSql: (tabId: string, bindingId: string) => Promise<SqlModelView>
-  runSqlAction: (
-    tabId: string,
-    bindingId: string,
-    action: SqlActionRequest['action'],
-    args: Record<string, unknown>,
-  ) => Promise<SqlModelView>
+  session: SemanticEditorSession
 }
 
-export function SemanticOperationEditor({
-  tabId,
-  operation,
-  values,
-  saving,
-  knownFiles,
-  symbols,
-  conditionOperators,
-  onUploadFile,
-  onEdit,
-  validateBinding,
-  previewHtml,
-  inspectSql,
-  runSqlAction,
-  drafts,
-  onDraft,
-}: Props) {
+export function SemanticOperationEditor({ operation, session }: Props) {
+  const { values, saving, resources, actions } = session
   const normal = operation.bindings.filter((binding) => binding.visibility === 'normal')
   const advanced = operation.bindings.filter((binding) => binding.visibility === 'advanced')
   const readOnly = operation.validation_state === 'unsupported'
-  const bindingProps = {
-    tabId,
-    values,
-    readOnly,
-    knownFiles,
-    symbols,
-    onUploadFile,
-    onEdit,
-    validateBinding,
-    inspectSql,
-    runSqlAction,
-    drafts,
-    onDraft,
-  }
 
   return <section className="operation-editor semantic-operation-editor" aria-label={`Configure ${operation.display_name}`}>
     <header className="operation-editor__header">
@@ -87,25 +35,25 @@ export function SemanticOperationEditor({
       ? <ConditionEditor
           operation={operation}
           values={values}
-          symbols={symbols}
-          operators={conditionOperators}
+          symbols={resources.symbols}
+          operators={resources.conditionOperators}
           saving={saving}
-          onEdit={onEdit}
+          onEdit={actions.edit}
         />
       : <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
-          {normal.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
+          {normal.map((binding) => <SemanticBindingField key={binding.id} binding={binding} readOnly={readOnly} session={session} />)}
           {!normal.length && !advanced.length && <p className="empty-copy">
             {readOnly ? 'This operation is visible for context but has no safe editor.' : 'No configurable values.'}
           </p>}
         </fieldset>}
 
     {operation.capabilities.includes('html-preview')
-      && <HtmlPreviewPanel tabId={tabId} operationId={operation.id} previewHtml={previewHtml} />}
+      && <HtmlPreviewPanel operationId={operation.id} previewHtml={actions.previewHtml} />}
 
     {advanced.length > 0 && !operation.capabilities.includes('condition-editor') && <details className="advanced-settings">
       <summary>Advanced</summary>
       <fieldset className="parameter-grid" disabled={saving} aria-busy={saving}>
-        {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} {...bindingProps} />)}
+        {advanced.map((binding) => <SemanticBindingField key={binding.id} binding={binding} readOnly={readOnly} session={session} />)}
       </fieldset>
     </details>}
 
@@ -121,13 +69,11 @@ export function SemanticOperationEditor({
 }
 
 function HtmlPreviewPanel({
-  tabId,
   operationId,
   previewHtml,
 }: {
-  tabId: string
   operationId: string
-  previewHtml: Props['previewHtml']
+  previewHtml: SemanticEditorSession['actions']['previewHtml']
 }) {
   const [preview, setPreview] = useState<HtmlPreviewView | null>(null)
   const [loading, setLoading] = useState(false)
@@ -136,7 +82,7 @@ function HtmlPreviewPanel({
   async function load() {
     setLoading(true)
     try {
-      setPreview(await previewHtml(tabId, operationId))
+      setPreview(await previewHtml(operationId))
       setError('')
     } catch (reason) {
       setPreview(null)

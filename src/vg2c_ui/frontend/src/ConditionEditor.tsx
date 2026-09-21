@@ -1,11 +1,11 @@
 import type {
   ConditionOperatorView,
-  SemanticBindingView,
   SemanticOperationView,
   SymbolView,
 } from './contracts.generated'
+import type { BindingEdit } from './semanticEditorSession'
 import { OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
-import { effectiveBindingValue, type FieldPath } from './workspaceState'
+import { effectiveBindingValue } from './workspaceState'
 
 interface Props {
   operation: SemanticOperationView
@@ -13,7 +13,7 @@ interface Props {
   symbols: SymbolView[]
   operators: ConditionOperatorView[]
   saving: boolean
-  onEdit: (binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => void
+  onEdit: (request: BindingEdit) => void
 }
 
 export function ConditionEditor({ operation, values, symbols, operators, saving, onEdit }: Props) {
@@ -37,7 +37,7 @@ export function ConditionEditor({ operation, values, symbols, operators, saving,
         value={value(name)}
         symbols={symbols}
         disabled={saving || !binding.editable}
-        onChange={(next) => onEdit(binding, next)}
+        onChange={(next) => onEdit({ binding, value: next })}
       />
       {binding.validation_state === 'unresolved' && <ValidationMessage message="Unknown symbol. Choose a known symbol or enter a literal value." />}
     </div>
@@ -49,7 +49,7 @@ export function ConditionEditor({ operation, values, symbols, operators, saving,
     const allowedCodes = new Set((binding.value_schema?.choices ?? []).map(String))
     const choices = operators.filter((operator) => !allowedCodes.size || allowedCodes.has(operator.code))
     return <label className="parameter semantic-binding" key={binding.id}>{binding.display_label}
-      <select value={String(value(name) ?? '')} disabled={saving || !binding.editable} onChange={(event) => onEdit(binding, event.target.value || null)}>
+      <select value={String(value(name) ?? '')} disabled={saving || !binding.editable} onChange={(event) => onEdit({ binding, value: event.target.value || null })}>
         {!binding.required && <option value="">Not set</option>}
         {choices.map((operator) => <option key={operator.code} value={operator.code}>{operator.symbol} ({operator.code})</option>)}
       </select>
@@ -61,7 +61,7 @@ export function ConditionEditor({ operation, values, symbols, operators, saving,
     if (!binding) return null
     const choices = binding.value_schema?.choices ?? ['AND', 'OR']
     return <label className="parameter semantic-binding" key={binding.id}>{binding.display_label}
-      <select value={String(value('conj') ?? '')} disabled={saving || !binding.editable} onChange={(event) => onEdit(binding, event.target.value || null)}>
+      <select value={String(value('conj') ?? '')} disabled={saving || !binding.editable} onChange={(event) => onEdit({ binding, value: event.target.value || null })}>
         <option value="">Not set</option>
         {choices.map((choice) => <option key={String(choice)} value={String(choice)}>{String(choice)}</option>)}
       </select>
@@ -72,10 +72,10 @@ export function ConditionEditor({ operation, values, symbols, operators, saving,
     for (const name of ['conj', 'lhs2', 'op2', 'rhs2']) {
       const binding = get(name)
       if (!binding) continue
-      if (!enabled) onEdit(binding, null)
-      else if (name === 'conj') onEdit(binding, 'AND')
-      else if (name === 'op2') onEdit(binding, operators[0]?.code ?? binding.value_schema?.choices[0] ?? null)
-      else onEdit(binding, '')
+      if (!enabled) onEdit({ binding, value: null })
+      else if (name === 'conj') onEdit({ binding, value: 'AND' })
+      else if (name === 'op2') onEdit({ binding, value: operators[0]?.code ?? binding.value_schema?.choices[0] ?? null })
+      else onEdit({ binding, value: '' })
     }
   }
 
