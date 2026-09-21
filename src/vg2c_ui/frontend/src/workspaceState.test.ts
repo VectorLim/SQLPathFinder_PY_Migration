@@ -26,6 +26,22 @@ state = workspaceReducer(state, { type: 'activate', tabId: 'b' })
 assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.edits.values.p1, 'draft', 'inactive dirty tab must retain its draft')
 assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.status, 'dirty')
 
+const refreshedA = { ...doc('a'), revision: 'translated-revision' }
+const preserved = workspaceReducer(state, {
+  type: 'merge-documents',
+  documents: [refreshedA, doc('c')],
+  activateFirst: true,
+  preserveDirty: true,
+})
+assert.equal(
+  preserved.tabs.find((tab) => tab.document.id === 'a'),
+  state.tabs.find((tab) => tab.document.id === 'a'),
+  'batch translation must not replace an existing tab with unsaved edits',
+)
+assert.equal(preserved.tabs.find((tab) => tab.document.id === 'a')?.document.revision, doc('a').revision)
+assert.equal(preserved.activeId, 'c', 'a skipped dirty collision must not become the active translation result')
+assert.ok(preserved.tabs.some((tab) => tab.document.id === 'c'))
+
 const projection = workspaceProjectionRequest(state)
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', reset: false }])
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
