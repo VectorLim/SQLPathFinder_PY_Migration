@@ -244,3 +244,4 @@ def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
 
     replacement = replace(documents[0], document_id="replacement")
     assert not workspace_issues((*changed, replacement), documents)
+

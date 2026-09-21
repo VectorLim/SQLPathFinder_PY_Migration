@@ -304,6 +304,18 @@ class CsvPreviewRequest(DocumentSnapshot):
     changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
+class HtmlPreviewRequest(DocumentSnapshot):
+    operation_id: str
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
+
+
+class HtmlPreviewView(BaseModel):
+    state: Literal["exact", "approximate", "error"]
+    html: str
+    output_path: str | None = None
+    message: str | None = None
+
+
 class BatchTranslationRequest(BaseModel):
     source_paths: list[str] = Field(min_length=1, max_length=100)
     out_dir: str | None = None
@@ -434,6 +446,8 @@ class SqlModelView(BaseModel):
     join_types: list[str]
     logical_connectors: list[str]
     statement_span: SqlSpanView
+    before_statement: str
+    after_statement: str
     selections: list[SqlSelectionView]
     filters: list[SqlPredicateView]
     joins: list[SqlJoinView]
@@ -491,6 +505,8 @@ CONTRACT_MODELS = (
     CsvPreviewView,
     DocumentReference,
     CsvPreviewRequest,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
     BatchTranslationRequest,
     BatchTranslationResponse,
     WorkspaceDocumentRequest,

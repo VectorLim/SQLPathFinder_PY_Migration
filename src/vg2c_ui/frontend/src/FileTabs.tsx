@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from 'react'
 
-import { baseName } from './operationLabels'
+import { baseName } from './pathDisplay'
 import type { TabState } from './workspaceState'
 
 interface Props {
@@ -18,7 +18,8 @@ export function FileTabs({ tabs, activeId, onActivate, onClose }: Props) {
   return <nav className="tabs" aria-label="Open translated files" role="tablist">
     {tabs.map((tab, index) => {
       const active = tab.document.id === activeId
-      const name = baseName(tab.document.output_path || tab.document.source_path)
+      const visiblePath = tab.document.source_path || tab.document.output_path
+      const name = baseName(visiblePath)
       return <div className={`tab${active ? ' is-active' : ''}`} key={tab.document.id}>
         <button
           id={fileTabId(tab.document.id)}
@@ -27,7 +28,7 @@ export function FileTabs({ tabs, activeId, onActivate, onClose }: Props) {
           aria-selected={active}
           aria-controls="script-workspace"
           tabIndex={active ? 0 : -1}
-          title={tab.document.output_path}
+          title={visiblePath}
           onClick={() => onActivate(tab.document.id)}
           onKeyDown={(event) => handleTabKeys(event, tabs, index, onActivate)}
         >

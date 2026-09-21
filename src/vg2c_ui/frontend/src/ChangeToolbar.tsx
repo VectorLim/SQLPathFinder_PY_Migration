@@ -34,7 +34,7 @@ export function ChangeToolbar({ tab, onUndo, onRedo, onValidate, onApply, onRelo
 
 function statusCopy(status: TabStatus): string {
   if (status === 'dirty') return 'Unvalidated changes.'
-  if (status === 'validating') return 'Validating generated Python…'
+  if (status === 'validating') return 'Validating changes…'
   if (status === 'valid') return 'Validation passed.'
   if (status === 'invalid') return 'Validation found issues.'
   if (status === 'saving') return 'Applying changes…'

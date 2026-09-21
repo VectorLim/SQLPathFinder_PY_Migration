@@ -346,3 +346,82 @@ second
     assert projected.valid
     assert projected.source.count("int(ctx.macro.named('COUNT')) > int('0')") == 1
     assert projected.source.count("int(ctx.macro.named('COUNT')) > int('1')") == 1
+
+
+def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_path):
+    result = _compile(
+        tmp_path,
+        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+        '"person@example.com" "Report" "Body"\n</OPTIONS>\n'
+        '<---- New Query ---->\n',
+    )
+    operation = next(
+        op for op in build_semantic_model(result).operations
+        if "email" in op.capabilities
+    )
+    bindings = {binding.name: binding for binding in operation.bindings}
+
+    assert operation.display_name == "Send Email"
+    assert bindings["enabled"].value is True
+    assert bindings["enabled"].editable
+    assert bindings["enabled"].schema is not None
+    assert bindings["enabled"].schema.kind == "boolean"
+    assert "file-input" in bindings["attachments"].capabilities
+
+    projected = project_changes(
+        result,
+        [SemanticChange(bindings["enabled"].id, False)],
+    )
+    assert projected.valid
+    assert "enabled=False" in projected.source
+
+
+
+def test_required_parameter_default_is_generated_reset_value(tmp_path):
+    result = _compile(
+        tmp_path,
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n"
+        "SELECT 1 AS value\n"
+        "<---- New Query ---->\n",
+    )
+    model = build_semantic_model(result)
+    sql = next(
+        binding
+        for operation in model.operations
+        for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    overridden = build_semantic_model(result, {sql.id: "SELECT 2 AS value"})
+    overridden_sql = next(
+        binding
+        for operation in overridden.operations
+        for binding in operation.bindings
+        if binding.id == sql.id
+    )
+
+    assert sql.required
+    assert sql.default == "SELECT 1 AS value"
+    assert overridden_sql.value == "SELECT 2 AS value"
+    assert overridden_sql.default == "SELECT 1 AS value"
+
+
+def test_multiline_editor_hint_is_preserved_as_semantic_capability(tmp_path):
+    result = _compile(
+        tmp_path,
+        """<OPTIONS>
+/WRITE-FILE=Y
+/CSV=out.txt
+</OPTIONS>
+first line
+second line
+<---- New Query ---->
+""",
+    )
+    operation = next(
+        item for item in build_semantic_model(result).operations
+        if item.display_name == "Write File"
+    )
+    template = next(binding for binding in operation.bindings if binding.name == "template")
+
+    assert "multiline" in template.capabilities
+    assert "\n" in str(template.value)

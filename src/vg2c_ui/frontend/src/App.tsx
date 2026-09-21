@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 
-import { workspaceDownloadUrl } from './api'
+import { uploadWorkspaceFile } from './api'
 import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
 import type { ChangePreviewView, DiagnosticView } from './contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
-import { baseName } from './operationLabels'
-import { ScriptTree } from './ScriptTree'
-import { OperationEditor } from './OperationEditor'
-import { FileFlowPane } from './file-flow/FileFlowPane'
+import { SemanticScriptTree } from './SemanticScriptTree'
+import { SemanticOperationEditor } from './SemanticOperationEditor'
+import { ContextPane } from './ContextPane'
 import { SourceIntake } from './SourceIntake'
 import { ThemeSelector } from './ThemeSelector'
 import { useSourceIntake } from './useSourceIntake'
@@ -19,6 +18,7 @@ import { useTheme } from './theme'
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceFiles } from './useWorkspaceFiles'
 import { hasUnsavedChanges } from './workspaceGuards'
+import { WorkbenchLayout } from './WorkbenchLayout'
 
 export function App() {
   const workspace = useWorkspace()
@@ -26,7 +26,7 @@ export function App() {
   const theme = useTheme()
   const { state, active, dispatch } = workspace
   const [search, setSearch] = useState('')
-  const [pane, setPane] = useState<'logic' | 'config' | 'flow'>('logic')
+  const [pane, setPane] = useState<'logic' | 'config' | 'context'>('logic')
   const [commandOpen, setCommandOpen] = useState(false)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const intake = useSourceIntake({
@@ -110,7 +110,7 @@ export function App() {
     actions: {
       activateDocument: (id) => dispatch({ type: 'activate', tabId: id }),
       selectItem,
-      openInspector: () => setPane('flow'),
+      openInspector: () => setPane('context'),
       undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
       redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
       validate: validateActive,
@@ -146,10 +146,8 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut)
   })
 
-  const selectedStep = active?.document.steps.find((step) => step.operations.some((operation) => operation.id === active.selectedId))
-  const selectedOperation = selectedStep?.operations.find((operation) => operation.id === active?.selectedId)
-  const effects = state.projection?.documents.find((item) => item.document_id === active?.document.id)?.effects ?? active?.document.effects ?? []
-  const generatedFiles = fileInventory.files.filter((file) => file.role === 'generated')
+  const selectedOperation = active?.document.semantic_operations.find((operation) => operation.id === active.selectedId)
+  const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
   const hasTabs = state.tabs.length > 0
 
@@ -157,7 +155,7 @@ export function App() {
     <header className="topbar">
       <div className="brand"><span>SQL</span>PathFinder</div>
       <ThemeSelector preference={theme.preference} onChange={theme.setPreference} />
-      <div className="workspace-downloads">{generatedFiles.map((file) => <a key={file.path} href={workspaceDownloadUrl(file.path)} download>{baseName(file.path)}</a>)}<a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
+      <div className="workspace-downloads"><a href="/api/workspace/archive" download>Download workspace ZIP</a></div>
     </header>
 
     <SourceIntake intake={intake} hasOpenDocument={Boolean(active)} />
@@ -171,7 +169,7 @@ export function App() {
 
     {active ? <section className={`workspace workbench workbench--${pane}`} id="script-workspace" role="tabpanel" aria-labelledby={fileTabId(active.document.id)}>
       <div className="workbench-actions">
-        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.scopes.length}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.scopes.length}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
+        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.semantic_operations.some((operation) => active.document.semantic_operations.some((child) => child.parent_operation_id === operation.id))}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.semantic_operations.some((operation) => active.document.semantic_operations.some((child) => child.parent_operation_id === operation.id))}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
 
         <ChangeToolbar
           tab={active}
@@ -183,26 +181,40 @@ export function App() {
         />
 
       </div>
-      <nav className="pane-tabs" aria-label="Workbench views">{([{ id: 'logic', label: 'Script Logic', icon: ListTree }, { id: 'config', label: 'Configuration', icon: Settings2 }, { id: 'flow', label: 'File Flow', icon: GitBranch }] as const).map((item) => <button key={item.id} type="button" aria-pressed={pane === item.id} aria-controls={`pane-${item.id}`} onClick={() => setPane(item.id)}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span></button>)}</nav>
-      <div className="workbench-panes">
-        <section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.steps.length}</span></header><div className="pane-scroll"><ScriptTree document={active.document} projection={state.projection} search={search} expandedScopes={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggleScope={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>
-        <section id="pane-config" className="workbench-pane configuration-pane" aria-label="Utility Configuration">
+      <WorkbenchLayout
+        activePane={pane}
+        onActivePaneChange={setPane}
+        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
+        configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">
-            {selectedStep && selectedOperation ? <OperationEditor
+            {selectedOperation ? <SemanticOperationEditor
               key={`${active.instanceId}-${selectedOperation.id}`}
-              tabId={active.document.id} step={selectedStep} operation={selectedOperation}
+              tabId={active.document.id} operation={selectedOperation}
               values={active.edits.values} saving={active.status === 'saving'} drafts={active.fieldDrafts}
+              knownFiles={knownFiles} symbols={active.document.symbols} conditionOperators={active.document.condition_operators}
+              onUploadFile={async (file) => { const saved = await uploadWorkspaceFile(file); await fileInventory.refresh(); return saved.path }}
               onDraft={(key, draft) => dispatch({ type: 'field-draft', tabId: active.document.id, key, draft })}
-              diagnostics={state.projection?.issues.filter((item) => item.document_id === active.document.id && item.step_id === selectedStep.id)}
-              onEdit={(parameter, value, cleared) => workspace.edit(active.document.id, parameter, value, cleared)}
+              onEdit={(binding, value, cleared) => workspace.edit(active.document.id, binding, value, cleared)}
+              validateBinding={workspace.validateCandidate}
+              previewHtml={workspace.previewHtmlOperation}
               inspectSql={workspace.inspectStructuredSql} runSqlAction={workspace.runSqlAction}
-            /> : <p className="pane-empty">{active.document.scopes.find((scope) => scope.id === active.selectedId)?.label ?? 'No operation selected'}</p>}
+            /> : <p className="pane-empty">Select an operation to configure it.</p>}
             {active.preview && <ChangePreview preview={active.preview} />}
           </div>
-        </section>
-        <section id="pane-flow" className="workbench-pane flow-pane" aria-label="File Flow"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>File Flow</h2><span>{effects.length}</span></header><div className="pane-scroll"><FileFlowPane document={active.document} effects={effects} projection={state.projection} selectedId={active.selectedId} status={state.projectionStatus} error={state.projectionError} csv={active.csv} csvPath={active.csvArtifactPath} csvError={active.csvError} csvLoading={Boolean(active.csvRequestId)} onActivate={navigateOperation} onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)} /></div></section>
-      </div>
+        </section>}
+        context={<section id="pane-context" className="workbench-pane context-workbench-pane" aria-label="Context"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>Context</h2></header><div className="pane-scroll"><ContextPane
+          document={active.document}
+          values={active.edits.values}
+          csv={active.csv}
+          csvPath={active.csvArtifactPath}
+          csvError={active.csvError}
+          csvLoading={Boolean(active.csvRequestId)}
+          onNavigate={(operationId, focus) => navigateOperation(active.document.id, operationId, focus)}
+          onEdit={(binding, value) => workspace.edit(active.document.id, binding, value)}
+          onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)}
+        /></div></section>}
+      />
     </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
 
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
@@ -214,4 +226,5 @@ function DocumentDiagnostics({ diagnostics }: { diagnostics: DiagnosticView[] })
   return <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
 }
 
-function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Validated Python diff' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}<pre>{preview.diff || 'No textual change.'}</pre></div></details> }
+function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Changes validated' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}{preview.valid && <p className="empty-copy">The current draft is valid and ready to apply.</p>}</div></details> }
+

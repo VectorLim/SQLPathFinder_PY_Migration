@@ -48,7 +48,7 @@ class WorkspaceManager:
     """Own anonymous, cookie-scoped workspaces under one persistent data root."""
 
     cookie_name = "vg2c_workspace"
-    allowed_upload_suffixes = {".txt", ".csv", ".tab", ".dat", ".xlsx", ".xls"}
+    allowed_upload_suffixes = {".txt", ".csv", ".tab", ".dat", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
     translation_source_suffixes = {".txt"}
 
     def __init__(

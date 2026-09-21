@@ -8,12 +8,13 @@ import {
   openDocument,
   previewChanges,
   previewCsv,
+  previewHtml,
   projectWorkspace,
   translateBatch,
 } from './api'
 import type {
   FileEndpointView,
-  ParameterView,
+  SemanticBindingView,
   SqlActionRequest,
   SqlModelView,
 } from './contracts.generated'
@@ -68,8 +69,18 @@ export function useWorkspace() {
     }
   }, [])
 
-  const edit = useCallback((tabId: string, parameter: ParameterView, value: unknown, clearDraftPaths?: FieldPath[]) => {
-    dispatch({ type: 'edit', tabId, parameterId: parameter.id, value, clearDraftPaths })
+  const edit = useCallback((tabId: string, binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => {
+    dispatch({ type: 'edit', tabId, bindingId: binding.id, value, clearDraftPaths })
+  }, [])
+
+  const validateCandidate = useCallback(async (tabId: string, bindingId: string, value: unknown) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) throw new Error('Document is no longer open.')
+    const changes = [
+      ...draftChanges(tab).filter((change) => change.binding_id !== bindingId),
+      { binding_id: bindingId, value, reset: false },
+    ]
+    return previewChanges({ ...documentSnapshot(tab.document), changes })
   }, [])
 
   const validate = useCallback(async (tabId: string) => {
@@ -118,6 +129,16 @@ export function useWorkspace() {
     }
   }, [])
 
+  const previewHtmlOperation = useCallback(async (tabId: string, operationId: string) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) throw new Error('Document is no longer open.')
+    return previewHtml({
+      ...documentSnapshot(tab.document),
+      operation_id: operationId,
+      changes: draftChanges(tab),
+    })
+  }, [])
+
   const loadCsv = useCallback(async (tabId: string, effectId: string, endpoint: FileEndpointView) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab || !endpoint.path) return null
@@ -138,13 +159,13 @@ export function useWorkspace() {
     }
   }, [])
 
-  const inspectStructuredSql = useCallback(async (tabId: string, parameterId: string): Promise<SqlModelView> => {
+  const inspectStructuredSql = useCallback(async (tabId: string, bindingId: string): Promise<SqlModelView> => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
     const instanceId = tab.instanceId
     const model = await inspectSql({
       ...documentSnapshot(tab.document),
-      parameter_id: parameterId,
+      parameter_id: bindingId,
       changes: draftChanges(tab),
     })
     const current = tabById(stateRef.current, tabId)
@@ -156,7 +177,7 @@ export function useWorkspace() {
 
   const runSqlAction = useCallback(async (
     tabId: string,
-    parameterId: string,
+    bindingId: string,
     action: SqlActionRequest['action'],
     args: Record<string, unknown>,
   ): Promise<SqlModelView> => {
@@ -166,7 +187,7 @@ export function useWorkspace() {
     const instanceId = tab.instanceId
     const response = await applySqlAction({
       ...documentSnapshot(tab.document),
-      parameter_id: parameterId,
+      parameter_id: bindingId,
       changes: draftChanges(tab),
       action,
       arguments: args,
@@ -179,7 +200,7 @@ export function useWorkspace() {
       type: 'edit',
       tabId,
       instanceId,
-      parameterId: response.change.binding_id,
+      bindingId: response.change.binding_id,
       value: response.change.value,
       baseVersion: version,
     })
@@ -212,9 +233,11 @@ export function useWorkspace() {
     open,
     reload,
     edit,
+    validateCandidate,
     validate,
     apply,
     loadCsv,
+    previewHtmlOperation,
     inspectStructuredSql,
     runSqlAction,
   }

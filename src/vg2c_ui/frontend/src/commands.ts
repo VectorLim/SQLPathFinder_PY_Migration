@@ -1,6 +1,6 @@
+import { baseName } from './pathDisplay'
 import type { TabState } from './workspaceState'
 import { getChangeActionState } from './workspaceGuards'
-import { baseName, formatOperationLabel } from './operationLabels'
 
 export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
 
@@ -74,7 +74,7 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
       id: 'workspace.translate-selected',
       group: 'Workspace',
       label: 'Translate selected sources',
-      keywords: ['compile', 'generate', 'python'],
+      keywords: ['translate', 'source', 'script'],
       disabled: !workspace.canTranslate,
       run: workspace.translateSelected,
     },
@@ -92,34 +92,31 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
   }
 
   if (active) {
-    for (const scope of active.document.scopes) {
+    for (const operation of active.document.semantic_operations.filter((item) => item.visibility !== 'internal')) {
       commands.push({
-        id: `navigation.item:${scope.id}`,
+        id: `navigation.item:${operation.id}`,
         group: 'Navigation',
-        label: `Go to ${scope.label}`,
-        keywords: [scope.scope_kind, `${scope.start_index + 1}`, `${scope.end_index + 1}`],
-        run: () => actions.selectItem(scope.id),
+        label: `Go to ${operation.display_name}`,
+        keywords: [
+          operation.kind,
+          operation.description,
+          ...operation.comments,
+          ...operation.bindings.flatMap((binding) => [
+            binding.display_label,
+            binding.name,
+            String(binding.value ?? ''),
+          ]),
+        ],
+        run: () => actions.selectItem(operation.id),
       })
-    }
-    for (const step of active.document.steps) {
-      for (const operation of step.operations) {
-        const label = formatOperationLabel(step, operation, active.document.effects)
-        commands.push({
-          id: `navigation.item:${operation.id}`,
-          group: 'Navigation',
-          label: `Go to ${label.primary}`,
-          keywords: [label.secondary ?? '', step.description, step.function_name, operation.utility.title],
-          run: () => actions.selectItem(operation.id),
-        })
-      }
     }
   }
 
   commands.push({
     id: 'navigation.inspector',
     group: 'Navigation',
-    label: 'Open file context',
-    keywords: ['inspector', 'data flow', 'dependencies'],
+    label: 'Open context',
+    keywords: ['context', 'file flow', 'email', 'globals', 'dependencies'],
     disabled: !active,
     run: actions.openInspector,
   })
@@ -167,20 +164,23 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
     },
   )
 
-  const hasScopes = Boolean(active?.document.scopes.length)
+  const operations = active?.document.semantic_operations ?? []
+  const hasGroups = operations.some((operation) =>
+    operations.some((child) => child.parent_operation_id === operation.id),
+  )
   commands.push(
     {
       id: 'view.expand-all',
       group: 'View',
-      label: 'Expand all scopes',
-      disabled: !hasScopes,
+      label: 'Expand all groups',
+      disabled: !hasGroups,
       run: actions.expandAll,
     },
     {
       id: 'view.collapse-all',
       group: 'View',
-      label: 'Collapse all scopes',
-      disabled: !hasScopes,
+      label: 'Collapse all groups',
+      disabled: !hasGroups,
       run: actions.collapseAll,
     },
   )

@@ -6,6 +6,8 @@ import type {
   ChangeResultView,
   CsvPreviewView,
   CsvPreviewRequest,
+  HtmlPreviewRequest,
+  HtmlPreviewView,
   DocumentView,
   SqlActionRequest,
   SqlActionResponse,
@@ -72,6 +74,10 @@ export function inspectSql(request: SqlModelRequest): Promise<SqlModelView> {
 
 export function applySqlAction(request: SqlActionRequest): Promise<SqlActionResponse> {
   return post('/api/sql/apply-action', request)
+}
+
+export function previewHtml(request: HtmlPreviewRequest): Promise<HtmlPreviewView> {
+  return post('/api/documents/preview-html', request)
 }
 
 export function previewCsv(request: CsvPreviewRequest): Promise<CsvPreviewView> {

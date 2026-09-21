@@ -9,6 +9,7 @@ from vg2c_ui.api.models import (
     BatchTranslationRequest,
     ChangeBatch,
     CsvPreviewRequest,
+    HtmlPreviewRequest,
     DocumentView,
     ParameterChangeRequest,
     SemanticChangeRequest,
@@ -99,6 +100,7 @@ def test_api_exposes_only_current_transport_routes(tmp_path):
     paths = set(create_app(tmp_path).openapi()["paths"])
     assert "/api/documents/open" in paths
     assert "/api/documents/preview-csv" in paths
+    assert "/api/documents/preview-html" in paths
     assert "/api/translations/batch" in paths
     assert "/api/changes/preview" in paths
     assert "/api/changes/apply" in paths
@@ -547,3 +549,73 @@ inside
     assert reopened.synchronized
     assert reopened_operator.value == "NES"
     assert " != " in Path(reopened.output_path).read_text(encoding="utf-8")
+
+
+def test_html_preview_is_safe_exact_approximate_and_path_bounded(tmp_path):
+    source = tmp_path / "report.txt"
+    source.write_text(
+        "<OPTIONS>\n"
+        "/REPORT=HTML-LAYOUT\n"
+        "/INSTANCE=101\n"
+        "</OPTIONS>\n"
+        ":FILE:preview.html\n"
+        ":TITLE:Preview\n"
+        "<h1>Hello Preview</h1>\n"
+        "<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    store = DocumentStore(tmp_path)
+    document = store.translate(str(source)).view
+    operation = next(
+        item
+        for item in document.semantic_operations
+        if "html-preview" in item.capabilities
+    )
+    template = next(binding for binding in operation.bindings if binding.name == "template")
+
+    exact = store.preview_html(
+        HtmlPreviewRequest(
+            **document.model_dump(),
+            operation_id=operation.id,
+            changes=[],
+        )
+    )
+    assert exact.state == "exact"
+    assert "<h1>Hello Preview</h1>" in exact.html
+    assert exact.output_path == "preview.html"
+    assert not (tmp_path / "preview.html").exists()
+
+    approximate = store.preview_html(
+        HtmlPreviewRequest(
+            **document.model_dump(),
+            operation_id=operation.id,
+            changes=[
+                SemanticChangeRequest(
+                    binding_id=template.id,
+                    value=":FILE:VAR(REPORT).html\n<h1>Runtime Preview</h1>\n",
+                )
+            ],
+        )
+    )
+    assert approximate.state == "approximate"
+    assert "runtime values" in (approximate.message or "").lower()
+    assert not (tmp_path / "VAR(REPORT).html").exists()
+
+    escaped_name = f"preview-escape-{tmp_path.name}.html"
+    escaped_path = tmp_path.parent / escaped_name
+    assert not escaped_path.exists()
+    escaped = store.preview_html(
+        HtmlPreviewRequest(
+            **document.model_dump(),
+            operation_id=operation.id,
+            changes=[
+                SemanticChangeRequest(
+                    binding_id=template.id,
+                    value=f":FILE:../{escaped_name}\n<h1>Escape</h1>\n",
+                )
+            ],
+        )
+    )
+    assert escaped.state == "error"
+    assert "workspace" in (escaped.message or "").lower()
+    assert not escaped_path.exists()

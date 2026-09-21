@@ -4,8 +4,8 @@ import type {
   CsvPreviewView,
   DocumentView,
   DocumentSnapshot,
-  ParameterChangeRequest,
-  ParameterView,
+  SemanticBindingView,
+  SemanticChangeRequest,
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
 } from './contracts.generated'
@@ -15,9 +15,9 @@ export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' |
 export const RESET_VALUE = Symbol('reset-to-generated')
 export type FieldPath = Array<string | number>
 
-export function effectiveParameterValue(values: Record<string, unknown>, parameter: ParameterView): unknown {
-  const value = Object.hasOwn(values, parameter.id) ? values[parameter.id] : parameter.value
-  return value === RESET_VALUE ? parameter.generated_value : value
+export function effectiveBindingValue(values: Record<string, unknown>, binding: SemanticBindingView): unknown {
+  const value = Object.hasOwn(values, binding.id) ? values[binding.id] : binding.value
+  return value === RESET_VALUE ? binding.default : value
 }
 
 export interface EditState {
@@ -36,7 +36,7 @@ export interface TabState {
   expandedScopeIds: Set<string>
   status: TabStatus
   edits: EditState
-  fieldDrafts: Record<string, { parameterId: string; text: string; error: string }>
+  fieldDrafts: Record<string, { bindingId: string; text: string; error: string }>
   preview: ChangePreviewView | null
   mutationRequestId: string | null
   mutationError: string | null
@@ -63,7 +63,7 @@ export type WorkspaceAction =
   | { type: 'navigate-operation'; tabId: string; operationId: string; focus?: boolean }
   | { type: 'toggle-scope'; tabId: string; scopeId: string; expanded?: boolean }
   | { type: 'set-all-scopes'; tabId: string; expanded: boolean }
-  | { type: 'edit'; tabId: string; parameterId: string; value: unknown; clearDraftPaths?: FieldPath[]; baseVersion?: number; instanceId?: number }
+  | { type: 'edit'; tabId: string; bindingId: string; value: unknown; clearDraftPaths?: FieldPath[]; baseVersion?: number; instanceId?: number }
   | { type: 'field-draft'; tabId: string; key: string; draft: TabState['fieldDrafts'][string] | null }
   | { type: 'undo'; tabId: string }
   | { type: 'redo'; tabId: string }
@@ -103,7 +103,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
   if (action.type === 'activate') return { ...state, activeId: action.tabId }
   if (action.type === 'navigate-operation') {
     const tab = tabById(state, action.tabId)
-    if (!tab || !tab.document.steps.some((step) => step.operations.some((operation) => operation.id === action.operationId))) return state
+    if (!tab || !tab.document.semantic_operations.some((operation) => operation.id === action.operationId)) return state
     return updateTab({ ...state, activeId: action.tabId }, action.tabId, (current) => ({
       ...selectItem(current, action.operationId), revealVersion: current.revealVersion + 1, revealFocus: Boolean(action.focus),
     }))
@@ -145,20 +145,20 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
     return {
       ...tab,
       expandedScopeIds: action.expanded
-        ? new Set(tab.document.scopes.map((scope) => scope.id))
+        ? new Set(tab.document.semantic_operations.filter((operation) => tab.document.semantic_operations.some((child) => child.parent_operation_id === operation.id)).map((operation) => operation.id))
         : new Set(),
     }
   }
   if (action.type === 'edit') {
     if (action.instanceId !== undefined && action.instanceId !== tab.instanceId) return tab
     if (action.baseVersion !== undefined && action.baseVersion !== tab.edits.version) return tab
-    const values = { ...tab.edits.values, [action.parameterId]: action.value }
+    const values = { ...tab.edits.values, [action.bindingId]: action.value }
     const fieldDrafts = Object.fromEntries(Object.entries(tab.fieldDrafts).filter(([key, draft]) => {
-      if (draft.parameterId !== action.parameterId) return true
+      if (draft.bindingId !== action.bindingId) return true
       if (action.value === RESET_VALUE) return false
       if (!action.clearDraftPaths?.length) return true
       const path: FieldPath = JSON.parse(key)
-      return !action.clearDraftPaths.some((prefix) => [action.parameterId, ...prefix].every((part, index) => path[index] === part))
+      return !action.clearDraftPaths.some((prefix) => [action.bindingId, ...prefix].every((part, index) => path[index] === part))
     }))
     return withEditState({ ...tab, fieldDrafts }, {
       values,
@@ -221,21 +221,18 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
 }
 
 export function ancestorScopeIds(document: DocumentView, itemId: string): string[] {
-  const step = document.steps.find((item) => item.id === itemId || item.operations.some((operation) => operation.id === itemId))
-  const item = step ?? document.scopes.find((scope) => scope.id === itemId)
-  const scopes = new Map(document.scopes.map((scope) => [scope.id, scope]))
+  const operations = new Map(document.semantic_operations.map((operation) => [operation.id, operation]))
   const ancestors: string[] = []
-  let parent = item?.parent_scope_id ?? null
+  let parent = operations.get(itemId)?.parent_operation_id ?? null
   while (parent && !ancestors.includes(parent)) {
     ancestors.push(parent)
-    parent = scopes.get(parent)?.parent_scope_id ?? null
+    parent = operations.get(parent)?.parent_operation_id ?? null
   }
   return ancestors
 }
 
 function selectItem(tab: TabState, itemId: string | null): TabState {
-  const step = tab.document.steps.find((item) => item.id === itemId)
-  const selectedId = step?.operations[0]?.id ?? itemId
+  const selectedId = itemId && tab.document.semantic_operations.some((operation) => operation.id === itemId) ? itemId : null
   return { ...tab, selectedId, revealFocus: false,
     expandedScopeIds: new Set([...tab.expandedScopeIds, ...ancestorScopeIds(tab.document, selectedId ?? '')]) }
 }
@@ -254,8 +251,8 @@ function updateTab(state: WorkspaceState, tabId: string, update: (tab: TabState)
 }
 
 function createTab(document: DocumentView, previous: TabState | undefined, instanceId: number): TabState {
-  const itemIds = new Set([...document.steps, ...document.scopes, ...document.steps.flatMap((step) => step.operations)].map((item) => item.id))
-  const scopeIds = new Set(document.scopes.map((scope) => scope.id))
+  const itemIds = new Set(document.semantic_operations.map((operation) => operation.id))
+  const scopeIds = new Set(document.semantic_operations.filter((operation) => document.semantic_operations.some((child) => child.parent_operation_id === operation.id)).map((operation) => operation.id))
   return {
     document,
     instanceId,
@@ -304,9 +301,9 @@ export function activeTab(state: WorkspaceState): TabState | null {
   return tabById(state, state.activeId)
 }
 
-export function draftChanges(tab: TabState): ParameterChangeRequest[] {
-  return Object.entries(tab.edits.values).map(([parameter_id, value]) => ({
-    parameter_id, value: value === RESET_VALUE ? null : value, reset: value === RESET_VALUE,
+export function draftChanges(tab: TabState): SemanticChangeRequest[] {
+  return Object.entries(tab.edits.values).map(([binding_id, value]) => ({
+    binding_id, value: value === RESET_VALUE ? null : value, reset: value === RESET_VALUE,
   }))
 }
 
@@ -321,7 +318,7 @@ export function changeBatch(tab: TabState): ChangeBatch | null {
 
 export function documentSnapshot(document: DocumentView): DocumentSnapshot {
   return {
-    schema_version: 4,
+    schema_version: 5,
     source_path: document.source_path,
     output_path: document.output_path,
     source_hash: document.source_hash,

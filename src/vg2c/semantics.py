@@ -381,6 +381,8 @@ def _leaf_operations(
                     continue
                 binding_value = values.get(parameter.id, parameter.value)
                 capabilities = list(definition.capabilities_for_parameter(parameter.name))
+                if parameter.editor_type == "multiline":
+                    capabilities.append("multiline")
                 if parameter.artifact_role is not None:
                     capabilities.append(f"file-{parameter.artifact_role.direction}")
                 bindings.append(
@@ -391,7 +393,7 @@ def _leaf_operations(
                         display_label=_binding_label(parameter.name),
                         schema=definition_parameter.schema if definition_parameter else None,
                         value=binding_value,
-                        default=definition_parameter.default if definition_parameter else None,
+                        default=parameter.value,
                         required=definition_parameter.required if definition_parameter else True,
                         capabilities=tuple(dict.fromkeys(capabilities)),
                         validation_state="valid" if parameter.editable else "warning",

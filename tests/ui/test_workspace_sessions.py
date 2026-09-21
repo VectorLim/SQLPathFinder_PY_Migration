@@ -79,3 +79,18 @@ def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):
                 workspace, UploadFile(filename="bad.py", file=BytesIO(b"print('bad')")), "bad.py"
             )
         )
+
+
+def test_workspace_accepts_image_attachments_inside_inputs(tmp_path: Path):
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    workspace, _ = manager.resolve_or_create(None)
+    saved = asyncio.run(
+        manager.save_upload(
+            workspace,
+            UploadFile(filename="chart.png", file=BytesIO(b"\x89PNG\r\n\x1a\n")),
+            "attachments/chart.png",
+        )
+    )
+    assert saved.path == "inputs/attachments/chart.png"
+    assert saved.role == "data"
+    assert manager.resolve_file(workspace, saved.path).is_file()
