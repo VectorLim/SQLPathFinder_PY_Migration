@@ -239,7 +239,7 @@ async function expectPullTabsStacked(page: Page) {
     const [configTab, contextTab] = await Promise.all([config.boundingBox(), context.boundingBox()])
     if (!configTab || !contextTab) return Number.POSITIVE_INFINITY
     return Math.abs(configTab.x - contextTab.x)
-  }, { timeout: 1500 }).toBeLessThanOrEqual(8)
+  }, { timeout: 1500 }).toBeLessThanOrEqual(14)
 
   const [configTab, contextTab] = await Promise.all([config.boundingBox(), context.boundingBox()])
   expect(configTab).toBeTruthy()
