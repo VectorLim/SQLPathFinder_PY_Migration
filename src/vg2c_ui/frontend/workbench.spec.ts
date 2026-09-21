@@ -232,11 +232,18 @@ test('secondary panes reflow, stack pull tabs and restore in either collapse ord
 })
 
 async function expectPullTabsStacked(page: Page) {
-  const configTab = await page.getByRole('button', { name: /Configuration$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') }).boundingBox()
-  const contextTab = await page.getByRole('button', { name: /Context$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') }).boundingBox()
+  const config = page.getByRole('button', { name: /Configuration$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') })
+  const context = page.getByRole('button', { name: /Context$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') })
+
+  await expect.poll(async () => {
+    const [configTab, contextTab] = await Promise.all([config.boundingBox(), context.boundingBox()])
+    if (!configTab || !contextTab) return Number.POSITIVE_INFINITY
+    return Math.abs(configTab.x - contextTab.x)
+  }, { timeout: 1500 }).toBeLessThanOrEqual(8)
+
+  const [configTab, contextTab] = await Promise.all([config.boundingBox(), context.boundingBox()])
   expect(configTab).toBeTruthy()
   expect(contextTab).toBeTruthy()
-  expect(Math.abs(configTab!.x - contextTab!.x)).toBeLessThanOrEqual(8)
   expect(configTab!.y + configTab!.height).toBeLessThanOrEqual(contextTab!.y + 1)
 }
 
