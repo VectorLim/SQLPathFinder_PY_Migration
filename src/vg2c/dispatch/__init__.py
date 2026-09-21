@@ -1,4 +1,3 @@
-from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dialects as _dialects  # noqa: F401
 from vg2c.dispatch.base import DialectHandler
 from vg2c.dispatch.filter_detector import detect_filters
@@ -9,6 +8,7 @@ from vg2c.dispatch.models import (
     ReaderTarget,
 )
 from vg2c.kind import Kind
+from vg2c.resolver.models import ResolvedProgram
 
 __all__ = [
     "dispatch",
@@ -21,12 +21,12 @@ __all__ = [
 
 
 def dispatch(
-    analyzed: AnalyzedProgram,
+    resolved: ResolvedProgram,
 ) -> DispatchedProgram:
     """Stage 4 entry point: resolve dialects, substitute schemas, and bind readers."""
     dispatched: list[DispatchedBlock] = []
 
-    for block in analyzed.resolved.blocks:
+    for block in resolved.blocks:
         opts = block.resolved_options.lookup
 
         if block.kind is Kind.SQL_QUERY:
@@ -69,6 +69,6 @@ def dispatch(
         )
 
     return DispatchedProgram(
-        analyzed=analyzed,
+        resolved=resolved,
         dispatched=tuple(dispatched),
     )

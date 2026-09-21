@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -12,13 +13,18 @@ from vg2c.utility_metadata import FileEffectDefinition, FileEffectKind, PathBase
 @dataclass(frozen=True, slots=True)
 class FileEndpoint:
     id: str
-    parameter_id: str | None
+    binding_id: str | None
     path: str | None
     expression: str | None
     path_base: PathBase
     phase: Literal["prior", "next", "deleted"]
     state_ids: tuple[str, ...] = ()
     status: Literal["known", "dynamic", "external", "missing", "possible"] = "known"
+
+    @property
+    def parameter_id(self) -> str | None:
+        """Compatibility alias for pre-v5 file-effect consumers."""
+        return self.binding_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,15 +53,40 @@ class _State:
     uncertain: bool
 
 
+def _portable_path_key(value: str) -> str:
+    """Normalize VG2 paths using Windows separators even when tests run on POSIX."""
+    text = value.replace("\\", "/")
+    parts: list[str] = []
+    for part in text.split("/"):
+        if part in {"", "."}:
+            if not parts and part == "":
+                parts.append("")
+            continue
+        if part == ".." and parts and parts[-1] not in {"", ".."}:
+            parts.pop()
+        else:
+            parts.append(part)
+    normalized = "/".join(parts) or "."
+    if text.startswith("//") and not normalized.startswith("//"):
+        normalized = "/" + normalized
+    return normalized.casefold()
+
+
+def _is_absolute_artifact_path(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return normalized.startswith("/") or bool(re.match(r"^[A-Za-z]:/", normalized))
+
+
 def endpoint_keys(endpoint: FileEndpoint, output_path: Path) -> tuple[str, ...]:
     if endpoint.path is None:
         return ()
-    path = Path(endpoint.path)
-    if path.is_absolute():
-        return (os.path.normcase(os.path.normpath(str(path))),)
-    relative = os.path.normcase(os.path.normpath(str(path)))
+    raw = endpoint.path
+    if _is_absolute_artifact_path(raw):
+        return (_portable_path_key(raw),)
+
+    relative = _portable_path_key(raw)
     working = f"working-directory:{relative}"
-    script = os.path.normcase(os.path.normpath(str(output_path.parent / path)))
+    script = _portable_path_key(str(output_path.parent / Path(raw.replace("\\", "/"))))
     if endpoint.path_base == "runtime-search":
         return working, script
     return (working,) if endpoint.path_base == "working-directory" else (script,)

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from vg2c.emitter.models import EditorType
 from vg2c.utility_metadata import FileEffectKind, PathBase, ValueKind
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class SourceSpanView(BaseModel):
@@ -27,6 +27,74 @@ class ValueSchemaView(BaseModel):
     path: bool = False
     prefix_items: list[ValueSchemaView] = Field(default_factory=list)
     tuple_value: bool = False
+
+
+class SemanticBindingView(BaseModel):
+    id: str
+    owner_operation_id: str
+    name: str
+    display_label: str
+    value: Any = None
+    default: Any = None
+    required: bool = True
+    visibility: Literal["normal", "advanced", "internal"] = "normal"
+    capabilities: list[str] = Field(default_factory=list)
+    validation_state: Literal["valid", "warning", "unresolved", "unsupported"] = "valid"
+    resettable: bool = True
+    editable: bool = True
+    read_only_reason: str | None = None
+    value_schema: ValueSchemaView | None = None
+
+
+class SemanticOperationView(BaseModel):
+    id: str
+    kind: str
+    display_name: str
+    description: str
+    parent_operation_id: str | None = None
+    branch: Literal["true", "false"] | None = None
+    source_span: SourceSpanView
+    bindings: list[SemanticBindingView] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    comments: list[str] = Field(default_factory=list)
+    validation_state: Literal["valid", "warning", "unresolved", "unsupported"] = "valid"
+    visibility: Literal["normal", "advanced", "internal"] = "normal"
+
+
+class OperationReferenceView(BaseModel):
+    operation_id: str
+    binding_id: str | None = None
+
+
+class SymbolReferenceView(BaseModel):
+    operation_id: str
+    binding_id: str
+
+
+class SymbolView(BaseModel):
+    id: str
+    display_name: str
+    kind: Literal["global", "macro", "macro-row", "unresolved"]
+    value_state: Literal["known", "runtime", "unknown"]
+    value: Any = None
+    condition_value: str | None = None
+    introduction: OperationReferenceView | None = None
+    references: list[SymbolReferenceView] = Field(default_factory=list)
+
+
+class FileResourceView(BaseModel):
+    id: str
+    path: str | None = None
+    status: Literal["workspace", "generated", "external", "missing", "dynamic", "possible"]
+    producer_refs: list[OperationReferenceView] = Field(default_factory=list)
+    consumer_refs: list[OperationReferenceView] = Field(default_factory=list)
+    lifecycle_refs: list[OperationReferenceView] = Field(default_factory=list)
+
+
+class ConditionOperatorView(BaseModel):
+    code: str
+    symbol: str
+    operand_type: Literal["string", "numeric"]
 
 
 class ParameterView(BaseModel):
@@ -119,7 +187,8 @@ class DiagnosticView(BaseModel):
 
 class FileEndpointView(BaseModel):
     id: str
-    parameter_id: str | None
+    binding_id: str | None = None
+    parameter_id: str | None = None
     path: str | None
     expression: str | None
     path_base: PathBase
@@ -160,16 +229,31 @@ class DocumentView(BaseModel):
     artifacts: list[ArtifactView]
     diagnostics: list[DiagnosticView]
     effects: list[FileEffectView] = Field(default_factory=list)
+    semantic_operations: list[SemanticOperationView] = Field(default_factory=list)
+    files: list[FileResourceView] = Field(default_factory=list)
+    symbols: list[SymbolView] = Field(default_factory=list)
+    condition_operators: list[ConditionOperatorView] = Field(default_factory=list)
+
+
+class SemanticChangeRequest(BaseModel):
+    binding_id: str
+    value: Any = None
+    reset: bool = False
 
 
 class ParameterChangeRequest(BaseModel):
+    """Legacy v4 request accepted during the frontend migration window."""
+
     parameter_id: str
     value: Any = None
     reset: bool = False
 
 
+SemanticChangeInput = SemanticChangeRequest | ParameterChangeRequest
+
+
 class DocumentSnapshot(BaseModel):
-    schema_version: Literal[4]
+    schema_version: Literal[4, 5]
     source_path: str
     output_path: str
     source_hash: str
@@ -179,13 +263,14 @@ class DocumentSnapshot(BaseModel):
 
 
 class ChangeBatch(DocumentSnapshot):
-    changes: list[ParameterChangeRequest] = Field(min_length=1)
+    changes: list[SemanticChangeInput] = Field(min_length=1)
 
 
 class ValidationIssueView(BaseModel):
     level: Literal["warning", "error"] = "error"
     code: str
     message: str
+    binding_id: str | None = None
     parameter_id: str | None = None
 
 
@@ -216,7 +301,7 @@ class CsvPreviewRequest(DocumentSnapshot):
     effect_id: str
     endpoint_id: str
     expected_path: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class BatchTranslationRequest(BaseModel):
@@ -231,7 +316,7 @@ class BatchTranslationResponse(BaseModel):
 
 class WorkspaceDocumentRequest(DocumentSnapshot):
     document_id: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class WorkspaceProjectionRequest(BaseModel):
@@ -363,7 +448,7 @@ class SqlModelView(BaseModel):
 
 class SqlModelRequest(DocumentSnapshot):
     parameter_id: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeInput] = Field(default_factory=list)
 
 
 class SqlActionRequest(SqlModelRequest):
@@ -372,13 +457,20 @@ class SqlActionRequest(SqlModelRequest):
 
 
 class SqlActionResponse(BaseModel):
-    change: ParameterChangeRequest
+    change: SemanticChangeRequest
     model: SqlModelView
 
 
 CONTRACT_MODELS = (
     SourceSpanView,
     ValueSchemaView,
+    SemanticBindingView,
+    SemanticOperationView,
+    OperationReferenceView,
+    SymbolReferenceView,
+    SymbolView,
+    FileResourceView,
+    ConditionOperatorView,
     ParameterView,
     UtilityView,
     OperationView,
@@ -389,6 +481,7 @@ CONTRACT_MODELS = (
     FileEndpointView,
     FileEffectView,
     DocumentView,
+    SemanticChangeRequest,
     ParameterChangeRequest,
     DocumentSnapshot,
     ChangeBatch,
@@ -423,5 +516,6 @@ CONTRACT_MODELS = (
 
 __all__ = [model.__name__ for model in CONTRACT_MODELS] + [
     "CONTRACT_MODELS",
+    "ParameterChangeRequest",
     "SCHEMA_VERSION",
 ]

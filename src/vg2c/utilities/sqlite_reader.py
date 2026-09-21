@@ -11,6 +11,7 @@ import pandas as pd
 
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.crosstab import CrosstabUtility
+from vg2c.utilities._runtime_helpers import resolve_path
 
 
 class SqliteReader(UtilitySpec):
@@ -27,7 +28,7 @@ class SqliteReader(UtilitySpec):
     def _load_csv_as_table(
         conn: sqlite3.Connection, csv_path: str, table_name: str | None = None
     ) -> str:
-        path = Path(csv_path)
+        path = resolve_path(csv_path)
         table_name = table_name or path.stem
 
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:

@@ -38,6 +38,7 @@ class SmartAppend(EmitterUtility):
         return "smart_append", [cls.append.render(destination, source)]
 
     @emittable(
+        display_name="Append File",
         file_effects=(
             FileEffectDefinition(
                 "append",

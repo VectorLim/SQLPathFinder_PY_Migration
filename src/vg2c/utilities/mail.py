@@ -138,6 +138,7 @@ class MailService(EmitterUtility):
         return None
 
     @emittable(
+        display_name="Send Email",
         file_effects=(
             FileEffectDefinition(
                 "attachments",

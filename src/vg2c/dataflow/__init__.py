@@ -1,20 +1,15 @@
-from vg2c.dataflow.analyzer import analyze, analyze_records
-from vg2c.dataflow.models import (
-    AnalyzedProgram,
-    ArtifactSummary,
-    ConsumerKind,
-    ConsumerRecord,
-    DataflowEdge,
-    ProducerRecord,
+from vg2c.dataflow.file_effects import (
+    FileEffect,
+    FileEndpoint,
+    bind_file_effects,
+    endpoint_keys,
+    order_file_effects,
 )
 
 __all__ = [
-    "AnalyzedProgram",
-    "ArtifactSummary",
-    "ConsumerKind",
-    "ConsumerRecord",
-    "DataflowEdge",
-    "ProducerRecord",
-    "analyze",
-    "analyze_records",
+    "FileEffect",
+    "FileEndpoint",
+    "bind_file_effects",
+    "endpoint_keys",
+    "order_file_effects",
 ]

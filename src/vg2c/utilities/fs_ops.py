@@ -117,6 +117,7 @@ class FileSystemOps(EmitterUtility):
         return cls.delete.render(paths=list_code_expr(items))
 
     @emittable(
+        display_name="Copy File",
         internal_parameters=("recurse",),
         file_effects=(
             FileEffectDefinition(
@@ -139,6 +140,7 @@ class FileSystemOps(EmitterUtility):
             shutil.copy2(src, dst)
 
     @emittable(
+        display_name="Rename File",
         file_effects=(
             FileEffectDefinition(
                 "move",
@@ -154,6 +156,7 @@ class FileSystemOps(EmitterUtility):
         Path(src).replace(Path(dst))
 
     @emittable(
+        display_name="Delete File",
         file_effects=(
             FileEffectDefinition(
                 "delete",
@@ -174,6 +177,7 @@ class FileSystemOps(EmitterUtility):
                 path.unlink(missing_ok=True)
 
     @emittable(
+        display_name="Write File",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(self, path: str | Path, content: str) -> None:

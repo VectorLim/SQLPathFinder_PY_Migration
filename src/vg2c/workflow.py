@@ -16,15 +16,38 @@ from vg2c.dataflow.file_effects import (
 from vg2c.editing import (
     ChangeProjection,
     ChangeValidationError,
-    ParameterChange,
+    SemanticChange,
     project_changes,
 )
+from vg2c.semantics import (
+    EditableBinding,
+    OperationReference,
+    Symbol,
+    WorkflowOperation,
+    build_semantic_model,
+)
+from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
+from vg2c.utilities.html_report import HtmlReport
+
+
+@dataclass(frozen=True, slots=True)
+class FileResource:
+    id: str
+    path: str | None
+    status: Literal["workspace", "generated", "external", "missing", "dynamic", "possible"]
+    producer_refs: tuple[OperationReference, ...] = ()
+    consumer_refs: tuple[OperationReference, ...] = ()
+    lifecycle_refs: tuple[OperationReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowProjection:
     changes: ChangeProjection
     effects: tuple[FileEffect, ...]
+    operations: tuple[WorkflowOperation, ...] = ()
+    bindings: tuple[EditableBinding, ...] = ()
+    symbols: tuple[Symbol, ...] = ()
+    files: tuple[FileResource, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,14 +197,424 @@ def workspace_issues(
 
 def project_workflow(
     result: CompilationResult,
-    changes: Iterable[ParameterChange] = (),
+    changes: Iterable[SemanticChange] = (),
     *,
     output_path: Path | None = None,
 ) -> WorkflowProjection:
+    """Project edits, semantic operations, symbols, and file flow from one authority."""
     projection = project_changes(result, changes)
     if not projection.valid:
         raise ChangeValidationError(projection.issues)
-    values = {change.parameter_id: change.value for change in projection.values}
+
+    values = {change.binding_id: change.value for change in projection.values}
+    semantic = build_semantic_model(result, values)
+    flags = _scope_flags(result)
+    invocations = {
+        invocation.id: (step, invocation)
+        for step in result.emitted.steps
+        for invocation in step.invocations
+    }
+    steps_by_block = {step.block_index: step for step in result.emitted.steps}
+    effects: list[FileEffect] = []
+
+    for operation in semantic.operations:
+        conditional, in_loop = flags.get(operation.block_index, (False, False))
+        step = steps_by_block.get(operation.block_index)
+        step_id = step.function_name if step else operation.id
+        bound: list[FileEffect] = []
+
+        emitted = invocations.get(operation.id)
+        if emitted is not None:
+            emitted_step, invocation = emitted
+            bound.extend(
+                bind_file_effects(
+                    invocation,
+                    values,
+                    step_id=emitted_step.function_name,
+                    block_index=operation.block_index,
+                    scope_id=_block_scope_id(result, operation.block_index),
+                    order=0,
+                    conditional=conditional,
+                    in_loop=in_loop,
+                )
+            )
+            bound.extend(
+                _html_effects(
+                    operation,
+                    step_id=emitted_step.function_name,
+                    scope_id=_block_scope_id(result, operation.block_index),
+                    conditional=conditional,
+                    in_loop=in_loop,
+                )
+            )
+        elif operation.kind == "macro-loop":
+            bound.extend(
+                _macro_effects(operation, step_id, _block_scope_id(result, operation.block_index), conditional, in_loop)
+            )
+        elif operation.kind == "chunk-loop":
+            bound.extend(
+                _chunk_effects(operation, step_id, _block_scope_id(result, operation.block_index), conditional, in_loop)
+            )
+        elif operation.kind == "check-row-count":
+            bound.extend(
+                _row_count_effects(operation, step_id, _block_scope_id(result, operation.block_index), conditional, in_loop)
+            )
+        elif operation.kind in {"embedded-python", "unsupported"}:
+            bound.append(
+                FileEffect(
+                    f"{operation.id}:effect:unknown",
+                    operation.id,
+                    step_id,
+                    operation.block_index,
+                    _block_scope_id(result, operation.block_index),
+                    0,
+                    "unknown",
+                    (),
+                    (),
+                    conditional,
+                    in_loop,
+                    (
+                        "Embedded Python may perform arbitrary file operations."
+                        if operation.kind == "embedded-python"
+                        else "No declared file effects are available for this operation."
+                    ),
+                )
+            )
+
+        # SQL_Get_CSV_List is source syntax embedded inside SQL, not a runtime utility
+        # invocation. Reuse the compiler's existing scanner and represent the read explicitly.
+        block = next(
+            (item for item in result.resolved.blocks if item.index == operation.block_index),
+            None,
+        )
+        if block is not None and operation.display_name == "Run Query":
+            for index, call in enumerate(scan_sql_get_csv_list_calls(block.resolved_body)):
+                effect_id = f"{operation.id}:effect:sql-get-csv-list:{index}"
+                bound.append(
+                    FileEffect(
+                        effect_id,
+                        operation.id,
+                        step_id,
+                        operation.block_index,
+                        block.scope_id,
+                        len(bound),
+                        "read",
+                        (
+                            FileEndpoint(
+                                f"{effect_id}:prior:path:0",
+                                None,
+                                call.source_path,
+                                None,
+                                "runtime-search",
+                                "prior",
+                            ),
+                        ),
+                        (),
+                        conditional,
+                        in_loop,
+                        "SQL_Get_CSV_List reads this file while resolving SQL input.",
+                    )
+                )
+
+        start_order = len(effects)
+        effects.extend(
+            replace(effect, order=start_order + index)
+            for index, effect in enumerate(bound)
+        )
+
+    ordered = order_file_effects(
+        tuple(effects),
+        result.resolved.scope_tree,
+        output_path or result.input_path.with_suffix(".py"),
+    )
+    return WorkflowProjection(
+        changes=projection,
+        operations=semantic.operations,
+        bindings=semantic.bindings,
+        symbols=semantic.symbols,
+        effects=ordered,
+        files=file_resources(ordered),
+    )
+
+
+def file_resources(effects: Iterable[FileEffect]) -> tuple[FileResource, ...]:
+    grouped: dict[str, list[tuple[FileEffect, FileEndpoint]]] = {}
+    for effect in effects:
+        for endpoint in (*effect.inputs, *effect.outputs):
+            key = endpoint.path if endpoint.path is not None else f"@{endpoint.id}"
+            grouped.setdefault(key, []).append((effect, endpoint))
+
+    resources: list[FileResource] = []
+    for _, items in sorted(grouped.items()):
+        endpoint_ids = sorted(endpoint.id for _, endpoint in items)
+        known_path = next((endpoint.path for _, endpoint in items if endpoint.path), None)
+        producers = tuple(
+            dict.fromkeys(
+                OperationReference(effect.operation_id, endpoint.binding_id)
+                for effect, endpoint in items
+                if endpoint.phase == "next"
+            )
+        )
+        consumers = tuple(
+            dict.fromkeys(
+                OperationReference(effect.operation_id, endpoint.binding_id)
+                for effect, endpoint in items
+                if endpoint.phase != "next"
+            )
+        )
+        lifecycle = tuple(
+            dict.fromkeys(
+                OperationReference(effect.operation_id, endpoint.binding_id)
+                for effect, endpoint in items
+                if effect.kind in {"copy", "move", "append", "delete"}
+            )
+        )
+        statuses = {endpoint.status for _, endpoint in items}
+        if known_path is None:
+            status = "dynamic"
+        elif "missing" in statuses:
+            status = "missing"
+        elif "possible" in statuses:
+            status = "possible"
+        elif producers:
+            status = "generated"
+        elif "external" in statuses:
+            status = "external"
+        else:
+            status = "workspace"
+        resources.append(
+            FileResource(
+                id=f"file:{endpoint_ids[0]}",
+                path=known_path,
+                status=status,
+                producer_refs=producers,
+                consumer_refs=consumers,
+                lifecycle_refs=lifecycle,
+            )
+        )
+    return tuple(resources)
+
+
+def _macro_effects(
+    operation: WorkflowOperation,
+    step_id: str,
+    scope_id: int,
+    conditional: bool,
+    in_loop: bool,
+) -> tuple[FileEffect, ...]:
+    binding = _binding(operation, "csv_path")
+    if binding is None or not binding.value:
+        return ()
+    effect_id = f"{operation.id}:effect:macro-input"
+    return (
+        FileEffect(
+            effect_id,
+            operation.id,
+            step_id,
+            operation.block_index,
+            scope_id,
+            0,
+            "read",
+            (
+                FileEndpoint(
+                    f"{effect_id}:prior:csv_path:0",
+                    binding.id,
+                    binding.value if isinstance(binding.value, str) else None,
+                    None if isinstance(binding.value, str) else repr(binding.value),
+                    "runtime-search",
+                    "prior",
+                    status="known" if isinstance(binding.value, str) else "dynamic",
+                ),
+            ),
+            (),
+            conditional,
+            in_loop,
+            "Macro rows are loaded from this file.",
+        ),
+    )
+
+
+def _chunk_effects(
+    operation: WorkflowOperation,
+    step_id: str,
+    scope_id: int,
+    conditional: bool,
+    in_loop: bool,
+) -> tuple[FileEffect, ...]:
+    source = _binding(operation, "input_csv_path")
+    target = _binding(operation, "chunk_csv_path")
+    effect_id = f"{operation.id}:effect:chunks"
+    inputs = _binding_endpoints(effect_id, source, "prior", "runtime-search")
+    outputs = _binding_endpoints(effect_id, target, "next", "script-directory")
+    return (
+        FileEffect(
+            effect_id,
+            operation.id,
+            step_id,
+            operation.block_index,
+            scope_id,
+            0,
+            "transform",
+            inputs,
+            outputs,
+            conditional,
+            True,
+            "Each iteration reads the input and materializes the current chunk file.",
+        ),
+    )
+
+
+def _row_count_effects(
+    operation: WorkflowOperation,
+    step_id: str,
+    scope_id: int,
+    conditional: bool,
+    in_loop: bool,
+) -> tuple[FileEffect, ...]:
+    source = _binding(operation, "path")
+    effect_id = f"{operation.id}:effect:row-count"
+    return (
+        FileEffect(
+            effect_id,
+            operation.id,
+            step_id,
+            operation.block_index,
+            scope_id,
+            0,
+            "observe",
+            _binding_endpoints(effect_id, source, "prior", "runtime-search"),
+            (),
+            conditional,
+            in_loop,
+            "Row count observes this input file and stores the count in a symbol.",
+        ),
+    )
+
+
+def _html_effects(
+    operation: WorkflowOperation,
+    *,
+    step_id: str,
+    scope_id: int,
+    conditional: bool,
+    in_loop: bool,
+) -> tuple[FileEffect, ...]:
+    template = _binding(operation, "template")
+    if template is None or not isinstance(template.value, str):
+        return ()
+
+    effects: list[FileEffect] = []
+    if operation.kind == "html_report.defer":
+        options = HtmlReport._parse_options(template.value)
+        raw_inputs = options.get("INPUT-FILE", ())
+        inputs = raw_inputs if isinstance(raw_inputs, list) else [raw_inputs]
+        paths = [item for item in inputs if isinstance(item, str) and item]
+        if paths:
+            effect_id = f"{operation.id}:effect:html-inputs"
+            effects.append(
+                FileEffect(
+                    effect_id,
+                    operation.id,
+                    step_id,
+                    operation.block_index,
+                    scope_id,
+                    0,
+                    "read",
+                    tuple(
+                        FileEndpoint(
+                            f"{effect_id}:prior:input:{index}",
+                            template.id,
+                            path,
+                            None,
+                            "runtime-search",
+                            "prior",
+                        )
+                        for index, path in enumerate(paths)
+                    ),
+                    (),
+                    conditional,
+                    in_loop,
+                    "Deferred report rows are read from these input files.",
+                )
+            )
+
+    if operation.kind == "html_report.layout":
+        directives, _ = HtmlReport._split_layout(template.value)
+        output = directives.get("FILE")
+        effect_id = f"{operation.id}:effect:html-output"
+        if output:
+            outputs = (
+                FileEndpoint(
+                    f"{effect_id}:next:file:0",
+                    template.id,
+                    output,
+                    None,
+                    "script-directory",
+                    "next",
+                ),
+            )
+        else:
+            outputs = (
+                FileEndpoint(
+                    f"{effect_id}:next:file:0",
+                    template.id,
+                    None,
+                    "HTML output resolved from deferred report state",
+                    "script-directory",
+                    "next",
+                    status="dynamic",
+                ),
+            )
+        effects.append(
+            FileEffect(
+                effect_id,
+                operation.id,
+                step_id,
+                operation.block_index,
+                scope_id,
+                len(effects),
+                "write",
+                (),
+                outputs,
+                conditional,
+                in_loop,
+                "HTML layout writes the resolved report output.",
+            )
+        )
+    return tuple(effects)
+
+
+def _binding_endpoints(
+    effect_id: str,
+    binding: EditableBinding | None,
+    phase: Literal["prior", "next", "deleted"],
+    base,
+) -> tuple[FileEndpoint, ...]:
+    if binding is None:
+        return ()
+    values = binding.value if isinstance(binding.value, list) else [binding.value]
+    endpoints: list[FileEndpoint] = []
+    for index, value in enumerate(values):
+        known = isinstance(value, str) and bool(value.strip())
+        endpoints.append(
+            FileEndpoint(
+                f"{effect_id}:{phase}:{binding.name}:{index}",
+                binding.id,
+                value if known else None,
+                None if known else repr(value),
+                base,
+                phase,
+                status="known" if known else "dynamic",
+            )
+        )
+    return tuple(endpoints)
+
+
+def _binding(operation: WorkflowOperation, name: str) -> EditableBinding | None:
+    return next((item for item in operation.bindings if item.name == name), None)
+
+
+def _scope_flags(result: CompilationResult) -> dict[int, tuple[bool, bool]]:
     flags: dict[int, tuple[bool, bool]] = {}
 
     def visit(node, conditional=False, in_loop=False):
@@ -192,135 +625,22 @@ def project_workflow(
             visit(child, conditional, in_loop)
 
     visit(result.resolved.scope_tree)
-    steps = {step.block_index: step for step in result.emitted.steps}
-    effects: list[FileEffect] = []
-    for block in sorted(result.resolved.blocks, key=lambda item: item.index):
-        step = steps.get(block.index)
-        step_id = step.function_name if step else f"block-{block.index}"
-        operation_id = (
-            step.invocations[0].id
-            if step and step.invocations
-            else f"block-{block.index}:source"
-        )
-        conditional, in_loop = flags.get(block.scope_id, (False, False))
-        bound: list[FileEffect] = []
-        for invocation in step.invocations if step else ():
-            bound.extend(
-                bind_file_effects(
-                    invocation,
-                    values,
-                    step_id=step_id,
-                    block_index=block.index,
-                    scope_id=block.scope_id,
-                    order=0,
-                    conditional=conditional,
-                    in_loop=in_loop,
-                )
-            )
-        has_declared_inputs = (
-            any(
-                invocation.operation.file_effects is not None
-                and any(effect.inputs for effect in invocation.operation.file_effects)
-                for invocation in step.invocations
-            )
-            if step
-            else False
-        )
-        source_inputs = [
-            consumer
-            for consumer in result.analyzed.consumers
-            if consumer.block_index == block.index
-            and (not has_declared_inputs or consumer.consumer_kind == "sql-macro")
-        ]
-        if source_inputs:
-            effect_id = f"{operation_id}:effect:source-inputs"
-            effects.append(
-                FileEffect(
-                    effect_id,
-                    operation_id,
-                    step_id,
-                    block.index,
-                    block.scope_id,
-                    len(effects),
-                    "read",
-                    tuple(
-                        FileEndpoint(
-                            f"{effect_id}:{index}",
-                            None,
-                            item.csv_path,
-                            None,
-                            "runtime-search",
-                            "prior",
-                        )
-                        for index, item in enumerate(source_inputs)
-                    ),
-                    (),
-                    conditional,
-                    in_loop,
-                    "Source/control dependency recorded by the compiler.",
-                )
-            )
-        if not step:
-            outputs = [
-                producer
-                for producer in result.analyzed.producers
-                if producer.block_index == block.index
-            ]
-            if outputs:
-                effect_id = f"{operation_id}:effect:source-outputs"
-                bound.append(
-                    FileEffect(
-                        effect_id,
-                        operation_id,
-                        step_id,
-                        block.index,
-                        block.scope_id,
-                        0,
-                        "write",
-                        (),
-                        tuple(
-                            FileEndpoint(
-                                f"{effect_id}:{index}",
-                                None,
-                                item.csv_path,
-                                None,
-                                "script-directory",
-                                "next",
-                            )
-                            for index, item in enumerate(outputs)
-                        ),
-                        conditional,
-                        in_loop,
-                        "Source/control output recorded by the compiler.",
-                    )
-                )
-        elif not step.invocations:
-            bound.append(
-                FileEffect(
-                    f"{operation_id}:effect:unknown",
-                    operation_id,
-                    step_id,
-                    block.index,
-                    block.scope_id,
-                    0,
-                    "unknown",
-                    (),
-                    (),
-                    conditional,
-                    in_loop,
-                    "No declared file effects are available for this block.",
-                )
-            )
-        start_order = len(effects)
-        effects.extend(
-            replace(effect, order=start_order + index)
-            for index, effect in enumerate(bound)
-        )
-    return WorkflowProjection(
-        projection,
-        order_file_effects(
-            tuple(effects),
-            result.resolved.scope_tree,
-            output_path or result.input_path.with_suffix(".py"),
-        ),
-    )
+    return flags
+
+
+def _block_scope_id(result: CompilationResult, block_index: int) -> int:
+    block = next((item for item in result.resolved.blocks if item.index == block_index), None)
+    return block.scope_id if block is not None else 0
+
+
+__all__ = [
+    "FileResource",
+    "WorkflowDocument",
+    "WorkflowIssue",
+    "WorkflowLink",
+    "WorkflowProjection",
+    "file_resources",
+    "project_workflow",
+    "workspace_issues",
+    "workspace_links",
+]

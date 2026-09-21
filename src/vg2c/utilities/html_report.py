@@ -186,7 +186,7 @@ tr th {{ background-color:#f5f5f5; }}
     # Emittable runtime methods
     # ------------------------------------------------------------------
 
-    @emittable
+    @emittable(display_name="Start HTML Report", file_effects=())
     def run(
         self,
         instance: str | None = None,
@@ -202,7 +202,7 @@ tr th {{ background-color:#f5f5f5; }}
             elif key == "FORMAT" and len(parts) >= 3:
                 self.styles[parts[1]] = parts[2:]
 
-    @emittable
+    @emittable(display_name="Define HTML Report Section", file_effects=())
     def defer(
         self,
         id: str,
@@ -217,13 +217,13 @@ tr th {{ background-color:#f5f5f5; }}
             "options": self._parse_options(template),
         }
 
-    @emittable
+    @emittable(display_name="Clear HTML Report State", file_effects=())
     def delete(self, instance: str | None = None) -> None:
         self.styles.clear()
         self.css_file = None
         self.deferred_reports.clear()
 
-    @emittable
+    @emittable(display_name="Generate HTML Report", file_effects=())
     def layout(
         self,
         ctx: Any,

@@ -1,125 +1,86 @@
 from __future__ import annotations
 
-from vg2c.dataflow import analyze
-from vg2c.frontend.models import (
-    BlockOptions,
-    ClassifiedBlock,
-    ParsedBlock,
-    SourceSpan,
-)
-from vg2c.kind import Kind
-from vg2c.resolver import resolve
+from vg2c import compile_document
+from vg2c.workflow import project_workflow
 
 
-def _block(
-    index: int,
-    kind: Kind,
-    options: dict[str, str] | None = None,
-    body: str = "",
-    utilities: str | None = None,
-) -> ClassifiedBlock:
-    opts = dict(options or {})
-    if utilities is not None:
-        opts["UTILITIES"] = utilities
-    parsed = ParsedBlock(
-        index=index,
-        options=BlockOptions.from_pairs(opts.items()),
-        body=body,
-        raw=body,
-        span=SourceSpan(file=None, start_line=index + 1, end_line=index + 1),
+def _block(options: str, body: str = "") -> str:
+    return f"<OPTIONS>\n{options.strip()}\n</OPTIONS>\n{body}\n<---- New Query ---->\n"
+
+
+def _workflow(tmp_path, *blocks: str):
+    source = tmp_path / "script.txt"
+    source.write_text("\n".join(blocks), encoding="utf-8")
+    return project_workflow(compile_document(source))
+
+
+def _paths(effect, phase: str) -> set[str]:
+    endpoints = effect.outputs if phase == "output" else effect.inputs
+    return {endpoint.path for endpoint in endpoints if endpoint.path}
+
+
+def test_detects_write_file_and_table_consumer(tmp_path) -> None:
+    workflow = _workflow(
+        tmp_path,
+        _block("/WRITE-FILE=Y\n/CSV=foo.csv", "seed"),
+        _block("/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=result.csv\n/TABLE=foo.csv", "SELECT 1"),
     )
-    return ClassifiedBlock(parsed=parsed, kind=kind, reason="test")
+    producer = next(effect for effect in workflow.effects if "foo.csv" in _paths(effect, "output"))
+    consumer = next(effect for effect in workflow.effects if "foo.csv" in _paths(effect, "input"))
+
+    assert producer.kind == "write"
+    assert producer.id in consumer.dependency_ids
 
 
-def _analyze_blocks(blocks: list[ClassifiedBlock]):
-    resolved = resolve(blocks)
-    return analyze(resolved)
-
-
-def test_detects_write_file_and_table_consumer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "foo.csv"}),
-            _block(1, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "foo.csv"}),
-        ]
+def test_table_binding_links_to_its_csv_producer(tmp_path) -> None:
+    workflow = _workflow(
+        tmp_path,
+        _block("/WRITE-FILE=Y\n/CSV=data.csv", "seed"),
+        _block("/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=result.csv\n/TABLE=data.csv:T0", "SELECT 1"),
     )
-    assert any(
-        p.csv_path == "foo.csv" and p.producer_kind is Kind.WRITE_FILE
-        for p in program.producers
-    )
-    assert any(
-        c.csv_path == "foo.csv" and c.consumer_kind == "table"
-        for c in program.consumers
-    )
-    assert any(
-        e.csv_path == "foo.csv" and e.producer is not None for e in program.edges
-    )
+    consumer = next(effect for effect in workflow.effects if "data.csv" in _paths(effect, "input"))
+    assert consumer.dependency_ids
 
 
-def test_table_binding_links_to_its_csv_producer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "data.csv"}),
-            _block(1, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "data.csv:T0"}),
-        ]
+def test_incremental_csv_list_marker_links_to_unmarked_producer(tmp_path) -> None:
+    workflow = _workflow(
+        tmp_path,
+        _block("/WRITE-FILE=Y\n/CSV=lots.tab", "seed"),
+        _block(
+            "/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=result.csv",
+            "SELECT 1 WHERE SQL_Get_CSV_List('lots.tab->500', lot, 't.lot In')",
+        ),
     )
-
-    assert any(
-        edge.csv_path == "data.csv" and edge.producer is not None for edge in program.edges
+    consumer = next(
+        effect
+        for effect in workflow.effects
+        if effect.id.endswith("sql-get-csv-list:0")
     )
+    assert _paths(consumer, "input") == {"lots.tab"}
+    assert consumer.dependency_ids
 
 
-def test_incremental_csv_list_marker_links_to_the_unmarked_producer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "lots.tab"}),
-            _block(
-                1,
-                Kind.SQLITE_QUERY,
-                {"ENGINE": "SQLite"},
-                body="WHERE SQL_Get_CSV_List('lots.tab->500', lot, 't.lot In')",
-            ),
-        ]
+def test_sqlite_block_can_be_producer_and_consumer(tmp_path) -> None:
+    workflow = _workflow(
+        tmp_path,
+        _block("/WRITE-FILE=Y\n/CSV=a.csv", "seed"),
+        _block("/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=b.csv\n/TABLE=a.csv", "SELECT 1"),
     )
+    query = next(effect for effect in workflow.effects if "b.csv" in _paths(effect, "output"))
+    assert "a.csv" in _paths(query, "input")
+    assert query.dependency_ids
 
-    assert any(
-        edge.csv_path == "lots.tab"
-        and edge.consumer.consumer_kind == "sql-macro"
-        and edge.producer is not None
-        for edge in program.edges
+
+def test_table_comma_split_inputs_are_explicit_effects(tmp_path) -> None:
+    workflow = _workflow(
+        tmp_path,
+        _block("/WRITE-FILE=Y\n/CSV=a.csv", "a"),
+        _block("/WRITE-FILE=Y\n/CSV=b.csv", "b"),
+        _block(
+            "/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=result.csv\n/TABLE=a.csv,b.csv",
+            "SELECT 1",
+        ),
     )
-
-
-def test_sqlite_block_can_be_producer_and_consumer() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "a.csv"}),
-            _block(
-                1,
-                Kind.SQLITE_QUERY,
-                {"ENGINE": "SQLite", "TABLE": "a.csv", "CSV": "b.csv"},
-            ),
-        ]
-    )
-    assert any(
-        p.csv_path == "b.csv" and p.producer_kind is Kind.SQLITE_QUERY
-        for p in program.producers
-    )
-    assert any(c.csv_path == "a.csv" for c in program.consumers)
-
-
-def test_table_comma_split_patch_from_stage2() -> None:
-    program = _analyze_blocks(
-        [
-            _block(0, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "a.csv"}),
-            _block(1, Kind.WRITE_FILE, {"WRITE-FILE": "Y", "CSV": "b.csv"}),
-            _block(2, Kind.SQLITE_QUERY, {"ENGINE": "SQLite", "TABLE": "a.csv,b.csv"}),
-        ]
-    )
-    paths = [
-        c.csv_path
-        for c in program.consumers
-        if c.block_index == 2 and c.consumer_kind == "table"
-    ]
-    assert "a.csv" in paths
-    assert "b.csv" in paths
+    query = next(effect for effect in workflow.effects if "result.csv" in _paths(effect, "output"))
+    assert {"a.csv", "b.csv"} <= _paths(query, "input")
+    assert len(query.dependency_ids) >= 2

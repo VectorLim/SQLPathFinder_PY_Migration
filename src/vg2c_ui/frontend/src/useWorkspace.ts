@@ -179,7 +179,7 @@ export function useWorkspace() {
       type: 'edit',
       tabId,
       instanceId,
-      parameterId: response.change.parameter_id,
+      parameterId: response.change.binding_id,
       value: response.change.value,
       baseVersion: version,
     })
