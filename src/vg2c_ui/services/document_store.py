@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import difflib
 import hashlib
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import wraps
-from types import SimpleNamespace
 from pathlib import Path
 from threading import RLock
 
@@ -21,7 +19,6 @@ from vg2c.editing import (
 )
 from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
 from vg2c.semantics import build_semantic_model
-from vg2c.utilities.html_report import HtmlReport
 from vg2c.workflow import (
     WorkflowDocument,
     project_workflow,
@@ -61,6 +58,7 @@ from vg2c_ui.api.serialization import (
 )
 from vg2c_ui.services.atomic_io import atomic_write_text
 from vg2c_ui.services.csv_preview import read_csv_preview
+from vg2c_ui.services.html_preview import preview_html_report
 from vg2c_ui.services.sidecar import (
     EditorSidecar,
     InvalidSidecar,
@@ -77,24 +75,6 @@ class PathOutsideWorkspace(ValueError):
 
 class RevisionConflict(RuntimeError):
     pass
-
-
-class _PreviewMacro:
-    def __init__(self, resolver) -> None:
-        self._resolver = resolver
-        self.approximate = False
-        self.missing_inputs: set[str] = set()
-
-    def resolve_file_path(self, value: str) -> Path:
-        path = self._resolver(value)
-        if not path.is_file():
-            self.missing_inputs.add(value)
-        return path
-
-    def substitute(self, value: str) -> str:
-        if "VAR(" in value or "{{" in value or "}}" in value:
-            self.approximate = True
-        return value
 
 
 _STORE_LOCK = RLock()
@@ -229,97 +209,20 @@ class DocumentStore:
             )
 
         values = {item.binding_id: item.value for item in projected.values}
-        model = build_semantic_model(result, values)
-        target = next(
-            (item for item in model.operations if item.id == request.operation_id),
-            None,
+        preview = preview_html_report(
+            build_semantic_model(result, values),
+            target_operation_id=request.operation_id,
+            resolve_path=self._resolve,
         )
-        if target is None or target.kind != "html_report.layout":
-            return HtmlPreviewView(
-                state="error",
-                html="",
-                message="Select a Generate HTML Report operation to preview.",
-            )
-
-        report = HtmlReport()
-        preview_macro = _PreviewMacro(self._resolve)
-        context = SimpleNamespace(macro=preview_macro)
-
-        for operation in model.operations:
-            if not operation.kind.startswith("html_report."):
-                continue
-            bindings = {item.name: item.value for item in operation.bindings}
-            if operation.kind == "html_report.run":
-                report.run(
-                    instance=bindings.get("instance"),
-                    prompt_text=bindings.get("prompt_text"),
-                    app_server_default=bindings.get("app_server_default"),
-                    template=bindings.get("template"),
-                )
-            elif operation.kind == "html_report.defer":
-                report.defer(
-                    id=str(bindings.get("id") or ""),
-                    instance=bindings.get("instance"),
-                    prompt_text=bindings.get("prompt_text"),
-                    app_server_default=bindings.get("app_server_default"),
-                    template=bindings.get("template"),
-                )
-            elif operation.kind == "html_report.delete":
-                report.delete(instance=bindings.get("instance"))
-            elif operation.id == request.operation_id:
-                template = bindings.get("template")
-                if not isinstance(template, str):
-                    return HtmlPreviewView(
-                        state="error",
-                        html="",
-                        message="HTML layout template is unavailable.",
-                    )
-                try:
-                    filename, html = report.render_layout(
-                        context,
-                        template,
-                        instance=bindings.get("instance"),
-                        css_resolver=self._resolve,
-                        write_css=False,
-                    )
-                    output_candidate = self._resolve(filename)
-                except (OSError, ValueError, PathOutsideWorkspace) as exc:
-                    return HtmlPreviewView(
-                        state="error",
-                        html="",
-                        message=f"HTML preview could not resolve a workspace resource: {exc}",
-                    )
-                has_external_resources = bool(
-                    re.search(
-                        r"""(?:src|href)\s*=\s*["'](?!data:|#)""",
-                        html,
-                        flags=re.IGNORECASE,
-                    )
-                )
-                state = (
-                    "approximate"
-                    if preview_macro.approximate or has_external_resources
-                    else "exact"
-                )
-                message = None
-                if preview_macro.missing_inputs:
-                    state = "error"
-                    message = "Missing preview input: " + ", ".join(sorted(preview_macro.missing_inputs))
-                elif preview_macro.approximate:
-                    message = "Preview contains runtime values that cannot be resolved before execution."
-                elif has_external_resources:
-                    message = "External report resources are blocked in preview."
-                return HtmlPreviewView(
-                    state=state,
-                    html=html,
-                    output_path=self._relative_display(str(output_candidate)),
-                    message=message,
-                )
-
         return HtmlPreviewView(
-            state="error",
-            html="",
-            message="HTML layout operation could not be replayed safely.",
+            state=preview.state,
+            html=preview.html,
+            output_path=(
+                self._relative_display(str(preview.output_path))
+                if preview.output_path is not None
+                else None
+            ),
+            message=preview.message,
         )
 
     @_serialized
