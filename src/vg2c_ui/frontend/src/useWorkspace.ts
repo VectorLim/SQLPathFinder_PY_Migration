@@ -39,7 +39,7 @@ export function useWorkspace() {
 
   const translate = useCallback(async (sourcePaths: string[]) => {
     const response = await translateBatch(sourcePaths)
-    dispatch({ type: 'merge-documents', documents: response.documents, activateFirst: true })
+    dispatch({ type: 'merge-documents', documents: response.documents, activateFirst: true, preserveDirty: true })
     return response
   }, [])
 
