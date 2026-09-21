@@ -236,8 +236,8 @@ async function expectPullTabsStacked(page: Page) {
   const contextTab = await page.getByRole('button', { name: /Context$/, exact: false }).filter({ has: page.locator('.paper-pull-tab__grip') }).boundingBox()
   expect(configTab).toBeTruthy()
   expect(contextTab).toBeTruthy()
-  expect(Math.abs(configTab!.left - contextTab!.left)).toBeLessThanOrEqual(8)
-  expect(configTab!.bottom).toBeLessThanOrEqual(contextTab!.top + 1)
+  expect(Math.abs(configTab!.x - contextTab!.x)).toBeLessThanOrEqual(8)
+  expect(configTab!.y + configTab!.height).toBeLessThanOrEqual(contextTab!.y + 1)
 }
 
 test('Email context limits bulk edits to enable state and accepts image attachments', async ({ page }, testInfo) => {
