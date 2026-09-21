@@ -4,8 +4,8 @@ export type SqlCommand =
   | { action: 'remove-selection'; arguments: { selection_id: string } }
   | { action: 'move-selection'; arguments: { selection_id: string; direction: -1 | 1 } }
   | { action: 'reorder-selection'; arguments: { selection_id: string; target_index: number } }
-  | { action: 'add-filter'; arguments: { left: string; operator: string; right: string; connector?: 'AND' | 'OR' } }
-  | { action: 'update-filter'; arguments: { filter_id: string; left?: string; operator?: string; right?: string; connector?: 'AND' | 'OR' } }
+  | { action: 'add-filter'; arguments: { left: string; operator: string; right: string; connector?: string } }
+  | { action: 'update-filter'; arguments: { filter_id: string; left?: string; operator?: string; right?: string; connector?: string } }
   | { action: 'remove-filter'; arguments: { filter_id: string } }
   | { action: 'add-join'; arguments: { join_type: string; source: string; left: string; right: string; operator?: string } }
   | { action: 'update-join-type'; arguments: { join_id: string; join_type: string } }
