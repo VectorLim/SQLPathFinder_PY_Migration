@@ -414,12 +414,21 @@ test('HTML preview renders the current draft without exposing generated Python',
   await page.screenshot({ path: testInfo.outputPath('html-preview.png'), fullPage: true })
 })
 
-test('file-backed SQL filter chooses an uploaded server file', async ({ page }, testInfo) => {
+test('file-backed SQL remains structurally editable and chooses an uploaded server file', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
+  await page.goto('/')
+  const tableUpload = await page.request.post('/api/workspace/files', {
+    multipart: {
+      files: { name: 'lots.csv', mimeType: 'text/csv', buffer: Buffer.from('lot,owner\nA,Alice\n') },
+      paths: 'lots.csv',
+    },
+  })
+  expect(tableUpload.ok()).toBeTruthy()
+
   const name = 'file-filter.txt'
   await uploadAndTranslate(page, name,
-    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n'
-    + "SELECT * FROM lots t WHERE t.lot IN SQL_Get_CSV_List('old.csv', lot, 't.lot In')\n"
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n/TABLE=inputs/lots.csv:lots\n</OPTIONS>\n'
+    + "SELECT t.lot FROM lots t WHERE t.lot IN SQL_Get_CSV_List('old.csv', lot, 't.lot In')\n"
     + '<---- New Query ---->\n')
   const upload = await page.request.post('/api/workspace/files', {
     multipart: {
@@ -431,6 +440,14 @@ test('file-backed SQL filter chooses an uploaded server file', async ({ page }, 
   const operation = await selectSemanticOperation(page, name,
     (item) => item.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
   await pane(page, 'Configuration')
+
+  await expect(page.getByText('SQL structure is read-only; file-list inputs can be changed.')).toHaveCount(0)
+  const alias = page.getByRole('textbox', { name: 'Column alias' }).first()
+  await expect(alias).toBeEnabled()
+  await alias.fill('edited_lot')
+  await alias.press('Tab')
+  await expect(page.locator('.sql-column-label').first()).toContainText('edited_lot')
+
   await page.getByRole('tab', { name: /Filters/ }).click()
   const selector = page.getByRole('combobox', { name: /File list for t.lot In/ })
   await expect(selector).toBeEnabled()
@@ -445,5 +462,103 @@ test('file-backed SQL filter chooses an uploaded server file', async ({ page }, 
     data: { ...document, binding_id: sql.id },
   })
   expect(modelResponse.ok()).toBeTruthy()
-  expect((await modelResponse.json()).file_lists[0].path).toBe('inputs/new.csv')
+  const model = await modelResponse.json()
+  expect(model.file_lists[0].path).toBe('inputs/new.csv')
+  expect(model.selections[0].alias).toBe('edited_lot')
+})
+
+
+test('generated file choices follow execution order and unsaved upstream output edits', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  const name = 'file-flow-choices.txt'
+  await uploadAndTranslate(
+    page,
+    name,
+    '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.csv\n</OPTIONS>\nfirst\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/OLEDB=SQLite\n/CSV=query.csv\n/TABLE=first.csv:input_table\n</OPTIONS>\n'
+      + 'SELECT * FROM input_table\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=later.csv\n</OPTIONS>\nlater\n<---- New Query ---->\n',
+  )
+  const document = await currentDocument(page, name)
+  const writes = document.semantic_operations.filter((operation) => operation.kind === 'ctx.write_file')
+  const query = document.semantic_operations.find((operation) => operation.kind === 'ctx.run_query')!
+  expect(writes).toHaveLength(2)
+
+  await page.locator(`[data-semantic-tree-item="${query.id}"]`).click()
+  await pane(page, 'Configuration')
+  let input = page.getByRole('combobox', { name: 'Input files 1' })
+  let choices = await input.locator('option').allTextContents()
+  expect(choices).toContain('generated/first.csv')
+  expect(choices).not.toContain('generated/later.csv')
+
+  await page.locator(`[data-semantic-tree-item="${writes[0].id}"]`).click()
+  const output = page.getByLabel('Output file path', { exact: true })
+  await output.fill('renamed.csv')
+
+  await page.locator(`[data-semantic-tree-item="${query.id}"]`).click()
+  input = page.getByRole('combobox', { name: 'Input files 1' })
+  await expect.poll(async () => input.locator('option').allTextContents()).toContain('generated/renamed.csv')
+  choices = await input.locator('option').allTextContents()
+  expect(choices).not.toContain('generated/first.csv')
+  expect(choices).not.toContain('generated/later.csv')
+})
+
+test('nested Script Logic toggles with pointer and keyboard without reserving layout space', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  const name = 'nested-tree.txt'
+  await uploadAndTranslate(
+    page,
+    name,
+    '<OPTIONS>\n/UTILITIES={ROWS-IN-FILE} "input.csv" "COUNT" "N"\n</OPTIONS>\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/UTILITIES={IF-THEN} "COUNT" "GT" "0" "" "" "" ""\n</OPTIONS>\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=inside-a.txt\n</OPTIONS>\ninside a\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=inside-b.txt\n</OPTIONS>\ninside b\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/UTILITIES={END-IF}\n</OPTIONS>\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=after-a.txt\n</OPTIONS>\nafter a\n<---- New Query ---->\n'
+      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=after-b.txt\n</OPTIONS>\nafter b\n<---- New Query ---->\n',
+  )
+
+  const document = await currentDocument(page, name)
+  const parent = document.semantic_operations.find((operation) =>
+    document.semantic_operations.some((child) => child.parent_operation_id === operation.id),
+  )!
+  expect(parent).toBeTruthy()
+  const roots = document.semantic_operations.filter((operation) => operation.parent_operation_id === null)
+  const parentIndex = roots.findIndex((operation) => operation.id === parent.id)
+  const following = roots[parentIndex + 1]
+  expect(following).toBeTruthy()
+
+  const parentRow = page.locator(`[data-semantic-tree-item="${parent.id}"]`)
+  const followingRow = page.locator(`[data-semantic-tree-item="${following.id}"]`)
+  const collapsedBox = await followingRow.boundingBox()
+  expect(collapsedBox).toBeTruthy()
+
+  const expand = page.getByRole('button', { name: `Expand ${parent.display_name}`, exact: true })
+  await expand.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'true')
+  await expect(parentRow).toHaveAttribute('aria-selected', 'false')
+  const expandedBox = await followingRow.boundingBox()
+  expect(expandedBox).toBeTruthy()
+  expect(expandedBox!.y).toBeGreaterThan(collapsedBox!.y + 30)
+
+  await parentRow.click()
+  await expect(parentRow).toHaveAttribute('aria-selected', 'true')
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'true')
+  await parentRow.press('ArrowLeft')
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'false')
+  const keyboardCollapsedBox = await followingRow.boundingBox()
+  expect(keyboardCollapsedBox!.y).toBeLessThan(expandedBox!.y - 30)
+
+  await parentRow.press('ArrowRight')
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'true')
+  const collapseAll = page.getByRole('button', { name: 'Collapse all scopes', exact: true })
+  await expect(collapseAll).toBeVisible()
+  await collapseAll.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'false')
+  const expandAll = page.getByRole('button', { name: 'Expand all scopes', exact: true })
+  await expect(expandAll).toBeVisible()
+
+  await page.getByRole('button', { name: 'Open commands', exact: true }).click()
+  await expect(page.getByText('Expand all groups', { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
 })
