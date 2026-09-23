@@ -430,7 +430,7 @@ def _render_structured_sql_argument(
         if isinstance(path, str):
             sql = replace_sql_get_csv_list_path(sql, calls[index], path)
 
-    rendered = SqliteEngine.render_sql_text(
+    rendered = SqliteEngine._render_sql_text(
         sql, _sql_global_refs(invocation, parameter)
     )
     return rendered.source
