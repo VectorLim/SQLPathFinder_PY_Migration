@@ -1,0 +1,79 @@
+.command-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(72dvh, 680px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: var(--shadow-panel);
+}
+.command-dialog::backdrop { background: var(--overlay); }
+.command-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); max-height: min(72dvh, 680px); }
+.command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.command-header h2 { margin: 2px 0 0; font-size: 17px; }
+.command-search { padding: 12px 14px 8px; }
+.command-search input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 11px;
+  color: var(--ink);
+  background: var(--control-bg);
+}
+.command-results { min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
+.command-group { margin-top: 8px; }
+.command-group h3 {
+  margin: 0;
+  padding: 5px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.command-group > div { display: grid; gap: 2px; }
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.command-item:hover:not(:disabled), .command-item.is-active { background: var(--accent-soft); color: var(--accent-strong); }
+.command-item kbd, .command-trigger kbd {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 5px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 9px;
+  font-family: inherit;
+}
+.command-item:disabled { opacity: .4; }
+.command-empty { margin: 18px 10px; color: var(--muted); font-size: 12px; text-align: center; }
+.command-trigger { display: inline-flex; align-items: center; gap: 7px; }
+
+@media (max-width: 640px) {
+  .command-dialog { width: calc(100vw - 16px); max-height: 82dvh; border-radius: 12px; }
+  .command-panel { max-height: 82dvh; }
+  .command-search input, .command-item { min-height: 44px; }
+  .command-header .icon-button { min-width: 44px; min-height: 44px; }
+  .command-trigger kbd { display: none; }
+}
