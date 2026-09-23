@@ -38,6 +38,8 @@ class CodeExpr:
     value: Any = _UNSET
     global_names: tuple[str, ...] = ()
     symbol_names: tuple[str, ...] = ()
+    source_editable: bool | None = None
+    source_read_only_reason: str | None = None
 
     @property
     def has_value(self) -> bool:
@@ -669,6 +671,12 @@ def _render_argument(value: Any) -> tuple[str, dict[str, Any]]:
         metadata = (
             _value_metadata(value.value) if value.has_value else _dynamic_metadata()
         )
+        if value.source_editable is not None:
+            metadata["editable"] = value.source_editable
+            metadata["read_only_reason"] = (
+                None if value.source_editable else
+                value.source_read_only_reason or "Generated expression is read-only"
+            )
         metadata["global_names"] = value.global_names
         metadata["symbol_names"] = value.symbol_names
         return value.source, metadata
