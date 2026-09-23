@@ -8,7 +8,15 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
 
-from vg2c_ui.api.models import ChangeBatch, DocumentSnapshot, SemanticChangeRequest, SqlActionRequest, SqlModelRequest
+from vg2c_ui.api.models import (
+    ChangeBatch,
+    DocumentSnapshot,
+    SemanticChangeRequest,
+    SqlActionRequest,
+    SqlModelRequest,
+    WorkspaceDocumentRequest,
+    WorkspaceProjectionRequest,
+)
 from vg2c.sql_editor import SqlEditError
 from vg2c_ui.services.document_store import DocumentStore
 from vg2c_ui.app import create_app
@@ -271,3 +279,68 @@ def test_workspace_accepts_image_attachments_inside_inputs(tmp_path: Path):
     assert saved.path == "inputs/attachments/chart.png"
     assert saved.role == "data"
     assert manager.resolve_file(workspace, saved.path).is_file()
+
+
+
+def test_projected_file_choices_follow_draft_execution_order(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    (workspace / "inputs").mkdir(parents=True)
+    source = workspace / "inputs" / "flow.txt"
+    source.write_text(
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.csv\n</OPTIONS>\n"
+        "first\n<---- New Query ---->\n"
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=query.csv\n"
+        "/TABLE=first.csv:input_table\n</OPTIONS>\n"
+        "SELECT * FROM input_table\n<---- New Query ---->\n"
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=later.csv\n</OPTIONS>\n"
+        "later\n<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    store = DocumentStore(workspace, inventory_paths=lambda: ())
+    document = store.translate(
+        "inputs/flow.txt", "generated/flow.py"
+    ).view
+
+    writes = [
+        operation
+        for operation in document.semantic_operations
+        if operation.kind == "ctx.write_file"
+    ]
+    query = next(
+        operation
+        for operation in document.semantic_operations
+        if operation.kind == "ctx.run_query"
+    )
+    assert len(writes) == 2
+    query_input = next(
+        binding for binding in query.bindings
+        if "file-input" in binding.capabilities
+    )
+    assert "generated/first.csv" in query_input.file_choices
+    assert "generated/later.csv" not in query_input.file_choices
+
+    first_output = next(
+        binding for binding in writes[0].bindings
+        if "file-output" in binding.capabilities
+    )
+    snapshot = DocumentSnapshot.model_validate(document.model_dump())
+    projected = store.project_workspace(
+        WorkspaceProjectionRequest(
+            documents=[
+                WorkspaceDocumentRequest(
+                    document_id=document.id,
+                    **snapshot.model_dump(),
+                    changes=[
+                        SemanticChangeRequest(
+                            binding_id=first_output.id,
+                            value="renamed.csv",
+                        )
+                    ],
+                )
+            ]
+        )
+    )
+    choices = projected.documents[0].file_choices[query.id]
+    assert "generated/renamed.csv" in choices
+    assert "generated/first.csv" not in choices
+    assert "generated/later.csv" not in choices
