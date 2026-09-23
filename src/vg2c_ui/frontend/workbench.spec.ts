@@ -488,8 +488,8 @@ test('generated file choices follow execution order and unsaved upstream output 
   await pane(page, 'Configuration')
   let input = page.getByRole('combobox', { name: 'Input files 1' })
   let choices = await input.locator('option').allTextContents()
-  expect(choices).toContain('generated/first.csv')
-  expect(choices).not.toContain('generated/later.csv')
+  expect(choices).toContain('generated/inputs/first.csv')
+  expect(choices).not.toContain('generated/inputs/later.csv')
 
   await page.locator(`[data-semantic-tree-item="${first.id}"]`).click()
   const output = page.getByLabel('Output file path', { exact: true })
@@ -497,10 +497,10 @@ test('generated file choices follow execution order and unsaved upstream output 
 
   await page.locator(`[data-semantic-tree-item="${query.id}"]`).click()
   input = page.getByRole('combobox', { name: 'Input files 1' })
-  await expect.poll(async () => input.locator('option').allTextContents()).toContain('generated/renamed.csv')
+  await expect.poll(async () => input.locator('option').allTextContents()).toContain('generated/inputs/renamed.csv')
   choices = await input.locator('option').allTextContents()
-  expect(choices).not.toContain('generated/first.csv')
-  expect(choices).not.toContain('generated/later.csv')
+  expect(choices).not.toContain('generated/inputs/first.csv')
+  expect(choices).not.toContain('generated/inputs/later.csv')
 })
 
 test('nested Script Logic toggles with pointer and keyboard without reserving layout space', async ({ page }, testInfo) => {
