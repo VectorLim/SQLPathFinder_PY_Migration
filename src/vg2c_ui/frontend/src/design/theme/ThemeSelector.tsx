@@ -1,3 +1,4 @@
+import './ThemeSelector.css'
 import './themeSelector.css'
 
 import { THEMES, type ThemePreference } from './theme'

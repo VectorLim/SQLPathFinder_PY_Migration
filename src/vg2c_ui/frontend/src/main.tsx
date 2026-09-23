@@ -2,10 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
-import { initializeTheme } from './theme'
+import { initializeTheme } from './design/theme/theme'
 import './styles.css'
-import './theme.css'
-import './motion.css'
+import './design/theme/theme.css'
+import './design/motion.css'
 
 initializeTheme()
 
