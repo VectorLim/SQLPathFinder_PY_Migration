@@ -1,8 +1,8 @@
 import './changeToolbar.css'
 import { FileCheck2, Play, Redo2, RefreshCw, Save, Undo2 } from 'lucide-react'
 
-import type { TabState, TabStatus } from './workspaceState'
-import { getChangeActionState } from './workspaceGuards'
+import type { TabState, TabStatus } from './workspace/state'
+import { getChangeActionState } from './workspace/guards'
 
 interface Props {
   tab: TabState

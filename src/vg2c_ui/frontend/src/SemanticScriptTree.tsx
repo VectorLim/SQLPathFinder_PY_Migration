@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { ChevronRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 
 import type { DocumentView, SemanticOperationView } from './api/contracts.generated'
-import { ancestorScopeIds } from './workspaceState'
+import { ancestorScopeIds } from './workspace/state'
 
 interface Props {
   document: DocumentView

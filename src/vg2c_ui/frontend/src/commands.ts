@@ -1,6 +1,6 @@
 import { baseName } from './pathDisplay'
-import type { TabState } from './workspaceState'
-import { getChangeActionState } from './workspaceGuards'
+import type { TabState } from './workspace/state'
+import { getChangeActionState } from './workspace/guards'
 
 export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
 

@@ -6,7 +6,7 @@ import { defaultSchemaValue, SchemaValueField } from './SchemaValueField'
 import type { SemanticEditorSession } from './semanticEditorSession'
 import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { StructuredSqlEditor } from './StructuredSqlEditor'
-import { effectiveBindingValue, RESET_VALUE } from './workspaceState'
+import { effectiveBindingValue, RESET_VALUE } from './workspace/state'
 
 interface Props {
   binding: SemanticBindingView

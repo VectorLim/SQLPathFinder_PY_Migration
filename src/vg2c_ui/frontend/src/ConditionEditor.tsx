@@ -5,7 +5,7 @@ import type {
 } from './api/contracts.generated'
 import type { BindingEdit } from './semanticEditorSession'
 import { OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
-import { effectiveBindingValue } from './workspaceState'
+import { effectiveBindingValue } from './workspace/state'
 
 interface Props {
   operation: SemanticOperationView

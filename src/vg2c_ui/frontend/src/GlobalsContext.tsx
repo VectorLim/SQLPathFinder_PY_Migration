@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DocumentView } from './api/contracts.generated'
 import type { ContextProps } from './contextTypes'
-import { effectiveBindingValue } from './workspaceState'
+import { effectiveBindingValue } from './workspace/state'
 
 export function GlobalsContext({ document, values, onNavigate, onEdit }: {
   document: DocumentView

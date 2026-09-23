@@ -16,9 +16,9 @@ import { SourceIntake } from './SourceIntake'
 import { ThemeSelector } from './ThemeSelector'
 import { useSourceIntake } from './useSourceIntake'
 import { useTheme } from './theme'
-import { useWorkspace } from './useWorkspace'
-import { useWorkspaceFiles } from './useWorkspaceFiles'
-import { hasUnsavedChanges } from './workspaceGuards'
+import { useWorkspace } from './workspace/useWorkspace'
+import { useWorkspaceFiles } from './workspace/useWorkspaceFiles'
+import { hasUnsavedChanges } from './workspace/guards'
 import { WorkbenchLayout } from './WorkbenchLayout'
 
 export function App() {

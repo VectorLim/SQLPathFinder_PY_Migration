@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from 'react'
 
 import { baseName } from './pathDisplay'
-import type { TabState } from './workspaceState'
+import type { TabState } from './workspace/state'
 
 interface Props {
   tabs: TabState[]

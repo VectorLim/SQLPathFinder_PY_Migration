@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import type { SymbolView } from '../api/contracts.generated'
-import { isSymbolSelection, type SymbolSelection } from '../workspaceState'
+import { isSymbolSelection, type SymbolSelection } from '../workspace/state'
 
 export function ValidationMessage({ message, id }: { message: string | null | undefined; id?: string }) {
   if (!message) return null
