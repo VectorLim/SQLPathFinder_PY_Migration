@@ -183,7 +183,7 @@ export function App() {
       uploadFile: async (file) => {
         const saved = await uploadWorkspaceFile(file)
         await fileInventory.refresh()
-        await workspace.refreshFileChoices(active.document.id)
+        await workspace.refreshFileChoices()
         return saved.path
       },
       edit: ({ binding, value, clearDraftPaths }) => workspace.edit(active.document.id, binding, value, clearDraftPaths),
