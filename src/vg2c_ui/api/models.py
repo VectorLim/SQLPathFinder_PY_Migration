@@ -273,6 +273,7 @@ class ProjectedDocumentView(BaseModel):
     document_id: str
     artifacts: list[ArtifactView]
     effects: list[FileEffectView] = Field(default_factory=list)
+    file_choices: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class WorkspaceProjectionView(BaseModel):
