@@ -15,6 +15,12 @@ from vg2c.emitter.models import (
     build_step_emission,
 )
 from vg2c.operands import IfThen, RunLoop, StartMacro
+from vg2c.utilities._emit_helpers import (
+    replace_sql_get_csv_list_path,
+    scan_sql_get_csv_list_calls,
+)
+from vg2c.utilities._sql_globals import extract_sql_globals
+from vg2c.utilities.sqlite_engine import SqliteEngine
 from vg2c.semantics import (
     EditableBinding,
     WorkflowOperation,
@@ -202,7 +208,10 @@ def project_changes(
         effective_values[binding_id] = value
         if binding.source_kind == "parameter":
             for parameter in parameters:
-                if parameter.source_range is not None:
+                if (
+                    parameter.source_range is not None
+                    and not _is_structured_sql_parameter(parameter)
+                ):
                     span = (
                         parameter.source_range.start_offset,
                         parameter.source_range.end_offset,
@@ -244,7 +253,7 @@ def project_changes(
 
     _project_control_replacements(result, operations, accepted_values, replacements)
     _project_embedded_python(result, operations, accepted_values, replacements)
-    _project_omitted_parameters(
+    _project_invocation_replacements(
         result,
         emitted_bindings,
         bindings,
@@ -295,64 +304,88 @@ def apply_changes(
     return projection
 
 
-def _project_omitted_parameters(
+def _project_invocation_replacements(
     result: CompilationResult,
     emitted_bindings: dict[str, list[EmittedParameter]],
     semantic_bindings: tuple[EditableBinding, ...],
     values: dict[str, Any],
     replacements: dict[tuple[int, int], str],
 ) -> None:
+    """Rebuild invocations when an edit changes their generated call structure."""
     parameter_values = {
         binding_id: value
         for binding_id, value in values.items()
         if binding_id in emitted_bindings
     }
+    bindings_by_owner: dict[str, list[EditableBinding]] = {}
+    for binding in semantic_bindings:
+        bindings_by_owner.setdefault(binding.owner_operation_id, []).append(binding)
+
     for step in result.emitted.steps:
         for invocation in step.invocations:
+            parameters_by_name = {
+                parameter.name: parameter for parameter in invocation.parameters
+            }
             omitted = [
                 parameter
                 for parameter in invocation.parameters
                 if parameter.source_range is None and parameter.id in parameter_values
             ]
-            if not omitted:
+            sql_parameter = next(
+                (
+                    parameter
+                    for parameter in invocation.parameters
+                    if _is_structured_sql_parameter(parameter)
+                ),
+                None,
+            )
+            sql_changed = (
+                sql_parameter is not None
+                and sql_parameter.id in parameter_values
+            )
+            file_list_changed = any(
+                binding.source_kind == "sql-file-list" and binding.id in values
+                for binding in bindings_by_owner.get(invocation.id, ())
+            )
+            if not omitted and not sql_changed and not file_list_changed:
                 continue
-            parameters_by_name = {
-                parameter.name: parameter for parameter in invocation.parameters
-            }
+
             args: list[Any] = []
             kwargs: dict[str, Any] = {}
             for argument in invocation.arguments:
                 parameter = parameters_by_name[argument.name]
-                source = argument.source
-                if parameter.name == "sql" and parameter.source_range is not None:
-                    nested = [
-                        (
-                            binding.source_range.start_offset - parameter.source_range.start_offset,
-                            binding.source_range.end_offset - parameter.source_range.start_offset,
-                            repr(values[binding.id]),
-                        )
-                        for binding in semantic_bindings
-                        if binding.owner_operation_id == invocation.id
-                        and binding.source_kind == "sql-file-list"
-                        and binding.source_range is not None
-                        and binding.id in values
-                    ]
-                    for start, end, replacement in sorted(nested, reverse=True):
-                        source = source[:start] + replacement + source[end:]
-                value = (
-                    CodeExpr(_serialize_parameter(parameter, parameter_values[parameter.id]))
-                    if parameter.id in parameter_values
+                if _is_structured_sql_parameter(parameter):
+                    source = _render_structured_sql_argument(
+                        invocation,
+                        parameter,
+                        bindings_by_owner.get(invocation.id, ()),
+                        values,
+                    )
+                    value = CodeExpr(source)
+                elif (
+                    parameter.id in parameter_values
                     and not parameter.id.startswith("global:")
-                    else CodeExpr(source)
-                )
+                ):
+                    value = CodeExpr(
+                        _serialize_parameter(
+                            parameter, parameter_values[parameter.id]
+                        )
+                    )
+                else:
+                    value = CodeExpr(argument.source)
                 if argument.position is None:
                     kwargs[argument.name] = value
                 else:
                     args.append(value)
+
             kwargs.update(
                 (
                     parameter.name,
-                    CodeExpr(_serialize_parameter(parameter, parameter_values[parameter.id])),
+                    CodeExpr(
+                        _serialize_parameter(
+                            parameter, parameter_values[parameter.id]
+                        )
+                    ),
                 )
                 for parameter in omitted
             )
@@ -369,6 +402,77 @@ def _project_omitted_parameters(
                     invocation.operation, args=tuple(args), kwargs=kwargs
                 )
             )
+
+
+def _render_structured_sql_argument(
+    invocation,
+    parameter: EmittedParameter,
+    bindings: Iterable[EditableBinding],
+    values: dict[str, Any],
+) -> str:
+    sql = values.get(parameter.id, parameter.value)
+    if not isinstance(sql, str):
+        return parameter.source
+
+    file_bindings = {
+        binding.id: binding
+        for binding in bindings
+        if binding.source_kind == "sql-file-list"
+    }
+    calls = scan_sql_get_csv_list_calls(sql)
+    for index in reversed(range(len(calls))):
+        binding = file_bindings.get(
+            f"{invocation.id}:sql-file-list:{index}"
+        )
+        if binding is None:
+            continue
+        path = values.get(binding.id, binding.value)
+        if isinstance(path, str):
+            sql = replace_sql_get_csv_list_path(sql, calls[index], path)
+
+    rendered = SqliteEngine.render_sql_text(
+        sql, _sql_global_refs(invocation, parameter)
+    )
+    return rendered.source
+
+
+def _sql_global_refs(invocation, parameter: EmittedParameter) -> dict[str, CodeExpr]:
+    if not isinstance(parameter.value, str):
+        return {}
+    argument = next(
+        (item for item in invocation.arguments if item.name == parameter.name),
+        None,
+    )
+    if argument is None or not argument.global_names:
+        return {}
+
+    unique_globals = []
+    seen: set[str] = set()
+    for item in extract_sql_globals(parameter.value):
+        if item.key in seen:
+            continue
+        seen.add(item.key)
+        unique_globals.append(item)
+    if len(unique_globals) != len(argument.global_names):
+        return {}
+
+    return {
+        item.key: CodeExpr(
+            name,
+            item.value,
+            global_names=(name,),
+        )
+        for item, name in zip(
+            unique_globals, argument.global_names, strict=True
+        )
+    }
+
+
+def _is_structured_sql_parameter(parameter: EmittedParameter) -> bool:
+    return bool(
+        parameter.definition
+        and "structured-sql" in parameter.definition.capabilities
+    )
 
 
 def _project_control_replacements(
@@ -513,6 +617,8 @@ def _validate_binding(
 def _validate_parameter(
     parameter: EmittedParameter, value: Any
 ) -> ValidationIssue | None:
+    if _is_structured_sql_parameter(parameter):
+        return None if isinstance(value, str) else _type_issue(parameter)
     if not parameter.editable:
         return ValidationIssue(
             code="read-only-binding",
