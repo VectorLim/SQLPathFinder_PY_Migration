@@ -1,6 +1,6 @@
 import { RotateCcw } from 'lucide-react'
 
-import type { SemanticBindingView, ValueSchemaView } from './contracts.generated'
+import type { SemanticBindingView, ValueSchemaView } from './api/contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
 import { defaultSchemaValue, SchemaValueField } from './SchemaValueField'
 import type { SemanticEditorSession } from './semanticEditorSession'

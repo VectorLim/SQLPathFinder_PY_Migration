@@ -2,7 +2,7 @@ import type {
   ConditionOperatorView,
   SemanticOperationView,
   SymbolView,
-} from './contracts.generated'
+} from './api/contracts.generated'
 import type { BindingEdit } from './semanticEditorSession'
 import { OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
 import { effectiveBindingValue } from './workspaceState'

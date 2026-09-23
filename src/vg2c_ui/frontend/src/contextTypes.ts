@@ -1,4 +1,4 @@
-import type { DocumentView, SemanticBindingView } from './contracts.generated'
+import type { DocumentView, SemanticBindingView } from './api/contracts.generated'
 
 export interface ContextProps {
   document: DocumentView

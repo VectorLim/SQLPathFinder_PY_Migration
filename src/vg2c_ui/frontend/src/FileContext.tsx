@@ -1,5 +1,5 @@
 import { ExternalLink } from 'lucide-react'
-import type { DocumentView, FileEffectView } from './contracts.generated'
+import type { DocumentView, FileEffectView } from './api/contracts.generated'
 import type { ContextProps } from './contextTypes'
 
 export function FileContext({ document, onNavigate }: ContextProps) {

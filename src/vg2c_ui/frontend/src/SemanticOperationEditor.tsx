@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type {
   HtmlPreviewView,
   SemanticOperationView,
-} from './contracts.generated'
+} from './api/contracts.generated'
 import { ConditionEditor } from './ConditionEditor'
 import { SemanticBindingField } from './SemanticBindingField'
 import type { SemanticEditorSession } from './semanticEditorSession'

@@ -9,9 +9,9 @@ import type {
   SqlModelView,
   SqlPredicateView,
   SqlSelectionView,
-} from './contracts.generated'
+} from './api/contracts.generated'
 import { ReorderableList } from './sql/ReorderableList'
-import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from './sql/sqlCommands'
+import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from './api/sqlActions'
 import { effectiveBindingValue } from './workspaceState'
 
 interface Props {

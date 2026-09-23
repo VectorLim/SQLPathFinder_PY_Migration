@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { DocumentView, SemanticBindingView, SemanticOperationView } from './contracts.generated'
+import type { DocumentView, SemanticBindingView, SemanticOperationView } from './api/contracts.generated'
 import type { ContextProps } from './contextTypes'
 import { effectiveBindingValue } from './workspaceState'
 

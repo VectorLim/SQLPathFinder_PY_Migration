@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 
-import { uploadWorkspaceFile } from './api'
+import { uploadWorkspaceFile } from './api/client'
 import { ChangeToolbar } from './ChangeToolbar'
 import { CommandPalette } from './CommandPalette'
 import { buildCommands, executeCommand } from './commands'
-import type { ChangePreviewView, DiagnosticView } from './contracts.generated'
+import type { ChangePreviewView, DiagnosticView } from './api/contracts.generated'
 import { DirtyCloseDialog } from './DirtyCloseDialog'
 import { FileTabs, fileTabId } from './FileTabs'
 import { SemanticScriptTree } from './SemanticScriptTree'

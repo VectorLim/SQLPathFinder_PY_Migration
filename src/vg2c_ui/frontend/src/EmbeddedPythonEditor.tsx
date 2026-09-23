@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { ChangePreviewView, SemanticBindingView } from './contracts.generated'
+import type { ChangePreviewView, SemanticBindingView } from './api/contracts.generated'
 import { useModalDialog } from './useModalDialog'
 
 interface Props {
