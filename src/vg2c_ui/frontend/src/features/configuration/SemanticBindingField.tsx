@@ -4,7 +4,7 @@ import type { SemanticBindingView, ValueSchemaView } from '../../api/contracts.g
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
 import { defaultSchemaValue, SchemaValueField } from './SchemaValueField'
 import type { SemanticEditorSession } from './semanticEditorSession'
-import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './SemanticControls'
+import { FileListSelector, FileSelector, OptionalValue, OutputPathField, SymbolSelector, ValidationMessage } from './SemanticControls'
 import { StructuredSqlEditor } from '../sql'
 import { effectiveBindingValue, RESET_VALUE } from '../../workspace/state'
 
@@ -103,12 +103,16 @@ function renderBindingControl({
   drafts: SemanticEditorSession['drafts']['values']
   onDraft: SemanticEditorSession['drafts']['update']
 }) {
-  const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
-  if (isFileBinding && schema?.kind === 'list') {
+  const isFileInput = binding.capabilities.includes('file-input')
+  const isFileOutput = binding.capabilities.includes('file-output')
+  if (isFileInput && schema?.kind === 'list') {
     return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={binding.file_choices} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} onUpload={onUploadFile} />
   }
-  if (isFileBinding) {
+  if (isFileInput) {
     return <FileSelector label={binding.display_label} showLabel={false} value={value} files={binding.file_choices} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
+  }
+  if (isFileOutput && schema?.kind !== 'list') {
+    return <OutputPathField label={binding.display_label} value={value} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (binding.capabilities.includes('symbol-or-literal')) {
     return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbolId={binding.symbol_id} symbols={symbols} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
