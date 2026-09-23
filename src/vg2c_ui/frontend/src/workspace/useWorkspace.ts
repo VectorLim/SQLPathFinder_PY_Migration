@@ -68,11 +68,17 @@ export function useWorkspace() {
     }
   }, [])
 
-  const refreshFileChoices = useCallback(async (tabId: string) => {
-    const tab = tabById(stateRef.current, tabId)
-    if (!tab) return
-    const document = await openDocument(tab.document.source_path, tab.document.output_path)
-    dispatch({ type: 'refresh-file-choices', tabId, instanceId: tab.instanceId, document })
+  const refreshFileChoices = useCallback(async () => {
+    const current = stateRef.current
+    if (!current.tabs.length) return
+    dispatch({ type: 'projection-loading' })
+    try {
+      const projection = await projectWorkspace(workspaceProjectionRequest(current))
+      dispatch({ type: 'projection', projection })
+    } catch (error) {
+      dispatch({ type: 'projection-error', message: errorMessage(error, 'Could not update file choices') })
+      throw error
+    }
   }, [])
 
   const edit = useCallback((tabId: string, binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => {
