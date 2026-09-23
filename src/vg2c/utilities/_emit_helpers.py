@@ -15,6 +15,7 @@ __all__ = [
     "parse_table_binding",
     "resolve_output_path",
     "scan_sql_get_csv_list_calls",
+    "replace_sql_get_csv_list_path",
     "extract_crosstab_options",
     "split_utility_command",
     "to_code_expr",
@@ -78,6 +79,24 @@ def scan_sql_get_csv_list_calls(body: str) -> list[SqlGetCsvListCall]:
             )
         cursor = next_cursor
     return calls
+
+
+def replace_sql_get_csv_list_path(
+    source: str, call: SqlGetCsvListCall, path: str
+) -> str:
+    """Replace only the proven path literal of one SQL_Get_CSV_List call."""
+    original = source[call.start:call.end]
+    match = re.match(
+        r"(SQL_Get_CSV_List\s*\(\s*)(['\"])(.*?)\2",
+        original,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if match is None or "'" in path or '"' in path:
+        return source
+    suffix = call.csv_path[len(call.source_path):]
+    replacement = f"{match.group(1)}{match.group(2)}{path}{suffix}{match.group(2)}"
+    updated = replacement + original[match.end():]
+    return source[:call.start] + updated + source[call.end:]
 
 
 def _find_matching_paren(text: str, open_idx: int) -> int:
