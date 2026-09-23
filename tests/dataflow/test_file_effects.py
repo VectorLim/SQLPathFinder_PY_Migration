@@ -197,7 +197,7 @@ def test_file_choices_use_server_workspace_paths_only(tmp_path):
 def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_path):
     from vg2c import compile_document
     from vg2c.editing import SemanticChange
-    from vg2c.workflow import project_workflow
+    from vg2c.workflow import project_document
 
     source = tmp_path / "source.txt"
     source.write_text(
@@ -210,8 +210,8 @@ def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_p
         for parameter in step.parameters
         if parameter.name == "inputs"
     )
-    baseline = project_workflow(result)
-    projected = project_workflow(result, [SemanticChange(inputs.id, ["new.csv"])])
+    baseline = project_document(result)
+    projected = project_document(result, [SemanticChange(inputs.id, ["new.csv"])])
     assert baseline.effects[0].kind == "write"
     assert projected.effects[0].kind == "transform"
     assert projected.effects[0].inputs[0].path == "new.csv"
@@ -221,8 +221,7 @@ def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_p
 def test_workspace_links_use_output_directory_and_do_not_resurrect_deleted_files(
     tmp_path,
 ):
-    from vg2c.editing import ChangeProjection
-    from vg2c.workflow import WorkflowDocument, WorkflowProjection, workspace_links
+    from vg2c.workflow import WorkflowDocument, EffectiveDocument, workspace_links
 
     write = _effects(PipelineContext.write_file.render("out.csv", "body"))[0]
     read = _effects(
@@ -237,16 +236,15 @@ def test_workspace_links_use_output_directory_and_do_not_resurrect_deleted_files
             for item in read.inputs
         ),
     )
-    changes = ChangeProjection("", (), ())
     producer = WorkflowDocument(
         "producer",
         tmp_path / "one" / "generated.py",
-        WorkflowProjection(changes, (write,)),
+        EffectiveDocument(source="", effects=(write,)),
     )
     consumer = WorkflowDocument(
         "consumer",
         tmp_path / "two" / "generated.py",
-        WorkflowProjection(changes, (read,)),
+        EffectiveDocument(source="", effects=(read,)),
     )
     assert not workspace_links((producer, consumer))
     consumer = replace(consumer, output_path=producer.output_path)
@@ -254,14 +252,14 @@ def test_workspace_links_use_output_directory_and_do_not_resurrect_deleted_files
     delete = _effects(
         FileSystemOps.delete.render([str(producer.output_path.parent / "out.csv")])
     )[0]
-    producer = replace(producer, workflow=WorkflowProjection(changes, (write, delete)))
+    producer = replace(producer, workflow=EffectiveDocument(source="", effects=(write, delete)))
     assert not workspace_links((producer, consumer))
 
 
 def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
     from vg2c import compile_document
     from vg2c.editing import SemanticChange
-    from vg2c.workflow import WorkflowDocument, project_workflow, workspace_issues
+    from vg2c.workflow import WorkflowDocument, project_document, workspace_issues
 
     documents = []
     results = []
@@ -277,7 +275,7 @@ def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
         result = compile_document(source)
         results.append(result)
         documents.append(
-            WorkflowDocument(name, source.with_suffix(".py"), project_workflow(result))
+            WorkflowDocument(name, source.with_suffix(".py"), project_document(result))
         )
     assert documents[1].workflow.effects[0].inputs[0].path == shared
     output = next(
@@ -288,7 +286,7 @@ def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
     )
     changed = replace(
         documents[0],
-        workflow=project_workflow(
+        workflow=project_document(
             results[0], [SemanticChange(output.id, "renamed.csv")]
         ),
     )
@@ -298,15 +296,13 @@ def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
 
 
 def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
-    from vg2c.editing import ChangeProjection
     from vg2c.workflow import (
         WorkflowDocument,
-        WorkflowProjection,
+        EffectiveDocument,
         workspace_issues,
         workspace_links,
     )
 
-    changes = ChangeProjection("", (), ())
     first = _effects(PipelineContext.write_file.render("first.csv", "body"))[0]
     second = _effects(PipelineContext.write_file.render("second.csv", "body"))[0]
     read = _effects(
@@ -326,14 +322,14 @@ def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
     )
     documents = tuple(
         WorkflowDocument(
-            name, tmp_path / f"{name}.py", WorkflowProjection(changes, (effect,))
+            name, tmp_path / f"{name}.py", EffectiveDocument(source="", effects=(effect,))
         )
         for name, effect in (("first", first), ("second", second), ("consumer", read))
     )
     assert len(workspace_links(documents)) == 2
     renamed = replace(first, outputs=(replace(first.outputs[0], path="renamed.csv"),))
     changed = (
-        replace(documents[0], workflow=WorkflowProjection(changes, (renamed,))),
+        replace(documents[0], workflow=EffectiveDocument(source="", effects=(renamed,))),
         *documents[1:],
     )
     issues = workspace_issues(changed, documents)
@@ -342,7 +338,7 @@ def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
     ]
 
     removed = replace(read, inputs=(read.inputs[1],))
-    consumer = replace(documents[2], workflow=WorkflowProjection(changes, (removed,)))
+    consumer = replace(documents[2], workflow=EffectiveDocument(source="", effects=(removed,)))
     assert not workspace_issues((*changed[:2], consumer), documents)
 
     replacement = replace(documents[0], document_id="replacement")

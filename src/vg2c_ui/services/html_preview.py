@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal
 
-from vg2c.semantics import SemanticModel
+from vg2c.workflow import EffectiveDocument
 from vg2c.utilities.html_report import HtmlReport
 
 
@@ -38,14 +38,14 @@ class _PreviewMacro:
 
 
 def preview_html_report(
-    model: SemanticModel,
+    document: EffectiveDocument,
     *,
     target_operation_id: str,
     resolve_path: Callable[[str | None], Path],
 ) -> HtmlPreviewResult:
     """Safely replay HTML report state and render one layout in memory."""
     target = next(
-        (item for item in model.operations if item.id == target_operation_id),
+        (item for item in document.operations if item.id == target_operation_id),
         None,
     )
     if target is not None and target.kind in {"ctx.write_file", "fs_ops.write_file"}:
@@ -60,7 +60,7 @@ def preview_html_report(
     preview_macro = _PreviewMacro(resolve_path)
     context = SimpleNamespace(macro=preview_macro)
 
-    for operation in model.operations:
+    for operation in document.operations:
         if not operation.kind.startswith("html_report."):
             continue
 

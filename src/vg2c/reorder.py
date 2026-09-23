@@ -6,11 +6,10 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 from vg2c.compilation import CompilationResult
-from vg2c.dataflow.file_effects import endpoint_keys
 from vg2c.editing import SemanticChange
 from vg2c.emitter import emit
 from vg2c.operands import ScopeNode
-from vg2c.workflow import project_workflow
+from vg2c.workflow import project_document, _reorder_safe_outputs
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,59 +22,29 @@ class InvalidOrderChange(ValueError):
     pass
 
 
-def _safe_leaf_ids(result: CompilationResult, changes: Iterable[SemanticChange]) -> dict[int, set[str]]:
-    workflow = project_workflow(result, changes)
-    operations_by_block: dict[int, list] = {}
-    for operation in workflow.operations:
-        operations_by_block.setdefault(operation.block_index, []).append(operation)
-    effects_by_operation: dict[str, list] = {}
-    for effect in workflow.effects:
-        effects_by_operation.setdefault(effect.operation_id, []).append(effect)
-
-    safe: dict[int, set[str]] = {}
-    for node in _walk(result.resolved.scope_tree):
-        if node.kind != "leaf" or node.block_index is None:
-            continue
-        operations = operations_by_block.get(node.block_index, [])
-        if len(operations) != 1 or operations[0].kind != "ctx.write_file":
-            continue
-        effects = effects_by_operation.get(operations[0].id, [])
-        if len(effects) != 1 or effects[0].kind != "write":
-            continue
-        effect = effects[0]
-        if effect.inputs or not effect.outputs or any(
-            endpoint.path is None or endpoint.status != "known"
-            for endpoint in effect.outputs
-        ):
-            continue
-        keys = {
-            key
-            for endpoint in effect.outputs
-            for key in endpoint_keys(endpoint, result.input_path.with_suffix(".py"))
-        }
-        if keys:
-            safe[node.scope_id] = keys
-    return safe
+def _safe_leaf_ids(
+    result: CompilationResult, changes: Iterable[SemanticChange]
+) -> dict[int, set[str]]:
+    document = project_document(result, changes)
+    return _reorder_safe_outputs(
+        result,
+        document.operations,
+        document.effects,
+        result.input_path.with_suffix(".py"),
+    )
 
 
 def legal_reorder_targets(
     result: CompilationResult,
     changes: Iterable[SemanticChange] = (),
 ) -> dict[int, tuple[int, ...]]:
-    """Return adjacent safe sibling targets, keyed by leaf scope ID."""
-    safe = _safe_leaf_ids(result, changes)
-    targets: dict[int, list[int]] = {}
-    for parent in _walk(result.resolved.scope_tree):
-        if parent.kind not in {"program", "if-branch", "else-branch"}:
-            continue
-        for left, right in zip(parent.children, parent.children[1:]):
-            if left.scope_id not in safe or right.scope_id not in safe:
-                continue
-            if safe[left.scope_id] & safe[right.scope_id]:
-                continue
-            targets.setdefault(left.scope_id, []).append(right.scope_id)
-            targets.setdefault(right.scope_id, []).append(left.scope_id)
-    return {key: tuple(value) for key, value in targets.items()}
+    """Return adjacent safe sibling targets from the effective document."""
+    document = project_document(result, changes)
+    return {
+        operation.scope_id: operation.reorder_targets
+        for operation in document.operations
+        if operation.scope_id is not None and operation.reorder_targets
+    }
 
 
 def swap_adjacent(
@@ -143,7 +112,7 @@ def apply_order_changes(
         raise InvalidOrderChange("Saved order refers to an unknown scope.")
     resolved = replace(result.resolved, scope_tree=tree)
     dispatched = replace(result.dispatched, resolved=resolved)
-    return replace(result, resolved=resolved, dispatched=dispatched, emitted=emit(dispatched))
+    return replace(result, dispatched=dispatched, emitted=emit(dispatched))
 
 
 def _walk(node: ScopeNode):

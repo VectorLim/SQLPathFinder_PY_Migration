@@ -18,7 +18,7 @@ from vg2c.operands import IfThen, RunLoop, StartMacro
 from vg2c.semantics import (
     EditableBinding,
     WorkflowOperation,
-    build_semantic_model,
+    _build_semantics,
     condition_symbol_token,
 )
 
@@ -78,9 +78,9 @@ def project_changes(
 ) -> ChangeProjection:
     """Project semantic binding intent onto canonical emitted source without writing files."""
     requested = tuple(changes)
-    model = build_semantic_model(result)
-    semantic_bindings = {binding.id: binding for binding in model.bindings}
-    symbols = {symbol.id: symbol for symbol in model.symbols}
+    operations, bindings, semantic_symbols = _build_semantics(result)
+    semantic_bindings = {binding.id: binding for binding in bindings}
+    symbols = {symbol.id: symbol for symbol in semantic_symbols}
     requested_by_id = {change.binding_id: change for change in requested}
 
     emitted_bindings: dict[str, list[EmittedParameter]] = {}
@@ -216,7 +216,7 @@ def project_changes(
             replacements[span] = repr(value)
 
     accepted_values = effective_values
-    for operation in model.operations:
+    for operation in operations:
         if operation.kind != "condition":
             continue
         by_name = {binding.name: binding for binding in operation.bindings}
@@ -233,7 +233,7 @@ def project_changes(
                     accepted_values[operand.id] = condition_symbol_token(
                         symbol, accepted_values[operator_binding.id]
                     )
-    _validate_changed_controls(result, model.operations, accepted_values, issues)
+    _validate_changed_controls(result, operations, accepted_values, issues)
     if issues:
         return ChangeProjection(
             source=result.emitted.source,
@@ -242,12 +242,12 @@ def project_changes(
             effective_values=accepted_values,
         )
 
-    _project_control_replacements(result, model.operations, accepted_values, replacements)
-    _project_embedded_python(result, model.operations, accepted_values, replacements)
+    _project_control_replacements(result, operations, accepted_values, replacements)
+    _project_embedded_python(result, operations, accepted_values, replacements)
     _project_omitted_parameters(
         result,
         emitted_bindings,
-        model.bindings,
+        bindings,
         accepted_values,
         replacements,
     )
@@ -445,8 +445,8 @@ def _validate_changed_controls(
     }
     if not touched:
         return
-    projected = build_semantic_model(result, values)
-    for operation in projected.operations:
+    projected_operations, _, _ = _build_semantics(result, values)
+    for operation in projected_operations:
         if operation.id not in touched:
             continue
         if operation.kind == "condition":

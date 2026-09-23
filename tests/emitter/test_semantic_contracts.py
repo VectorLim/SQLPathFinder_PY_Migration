@@ -5,7 +5,8 @@ import pytest
 from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
 from vg2c.operands import IfThen
-from vg2c.semantics import CONDITION_OPERATORS, build_semantic_model
+from vg2c.semantics import CONDITION_OPERATORS
+from vg2c.workflow import project_document
 
 
 def _condition_source() -> str:
@@ -47,7 +48,7 @@ def _compile(tmp_path: Path, text: str):
 
 def test_rows_in_file_is_one_composite_operation_and_defines_symbol(tmp_path):
     result = _compile(tmp_path, _condition_source())
-    model = build_semantic_model(result)
+    model = project_document(result)
 
     row_count = next(op for op in model.operations if op.kind == "check-row-count")
     assert row_count.display_name == "Check Row Count"
@@ -66,14 +67,14 @@ def test_source_comments_attach_to_visible_operation_once(tmp_path):
         "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=note.txt\n</OPTIONS>\n"
         "# Review this output before sending\ncontent\n<---- New Query ---->\n",
     )
-    operations = build_semantic_model(result).operations
+    operations = project_document(result).operations
     assert len(operations) == 1
     assert operations[0].comments == ("Review this output before sending",)
 
 
 def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(tmp_path):
     result = _compile(tmp_path, _condition_source())
-    model = build_semantic_model(result)
+    model = project_document(result)
     condition = next(op for op in model.operations if op.kind == "condition")
     bindings = {binding.name: binding for binding in condition.bindings}
 
@@ -110,7 +111,7 @@ def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
 def test_condition_rejects_unresolved_manual_symbol_without_rewriting_source(tmp_path):
     result = _compile(tmp_path, _condition_source())
     condition = next(
-        op for op in build_semantic_model(result).operations if op.kind == "condition"
+        op for op in project_document(result).operations if op.kind == "condition"
     )
     lhs = next(binding for binding in condition.bindings if binding.name == "lhs")
 
@@ -143,7 +144,7 @@ inside
 <---- New Query ---->
 """,
     )
-    model = build_semantic_model(result)
+    model = project_document(result)
     symbols = {symbol.display_name: symbol.kind for symbol in model.symbols}
     assert symbols["LOT"] == "macro-row"
     assert symbols["PRODUCT"] == "macro-row"
@@ -169,7 +170,7 @@ inside
 """,
     )
     operation = next(
-        op for op in build_semantic_model(result).operations if op.kind == "macro-loop"
+        op for op in project_document(result).operations if op.kind == "macro-loop"
     )
     binding = operation.bindings[0]
 
@@ -191,7 +192,7 @@ print("before")
 """,
     )
     operation = next(
-        op for op in build_semantic_model(result).operations if op.kind == "embedded-python"
+        op for op in project_document(result).operations if op.kind == "embedded-python"
     )
     source = operation.bindings[0]
 
@@ -213,7 +214,7 @@ def test_shared_generated_global_records_each_semantic_operation_reference(tmp_p
         '<---- New Query ---->\n'
     )
     result = _compile(tmp_path, mail + mail)
-    model = build_semantic_model(result)
+    model = project_document(result)
 
     email_operations = [op for op in model.operations if op.display_name == "Send Email"]
     recipient = next(symbol for symbol in model.symbols if symbol.display_name == "EMAIL_TO")
@@ -238,7 +239,7 @@ def test_macro_placeholder_reference_is_captured_before_python_rendering(tmp_pat
 <---- New Query ---->
 """,
     )
-    model = build_semantic_model(result)
+    model = project_document(result)
 
     count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
     wait = next(op for op in model.operations if op.display_name == "Wait for File")
@@ -281,7 +282,7 @@ def test_condition_operand_characterization_covers_placeholder_literal_empty_and
 
 def test_condition_bindings_and_symbols_are_frontend_ready(tmp_path):
     result = _compile(tmp_path, _condition_source())
-    model = build_semantic_model(result)
+    model = project_document(result)
     condition = next(op for op in model.operations if op.kind == "condition")
     by_name = {binding.name: binding for binding in condition.bindings}
     count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
@@ -298,7 +299,7 @@ def test_condition_bindings_and_symbols_are_frontend_ready(tmp_path):
 
 def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
     result = _compile(tmp_path, _condition_source())
-    model = build_semantic_model(result)
+    model = project_document(result)
     condition = next(op for op in model.operations if op.kind == "condition")
     bindings = {binding.name: binding for binding in condition.bindings}
     count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
@@ -327,7 +328,7 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
 def test_rows_in_file_target_macro_is_editable(tmp_path):
     result = _compile(tmp_path, _condition_source())
     row_count = next(
-        op for op in build_semantic_model(result).operations if op.kind == "check-row-count"
+        op for op in project_document(result).operations if op.kind == "check-row-count"
     )
     target = next(binding for binding in row_count.bindings if binding.name == "target")
 
@@ -376,7 +377,7 @@ second
     )
     conditions = [
         operation
-        for operation in build_semantic_model(result).operations
+        for operation in project_document(result).operations
         if operation.kind == "condition"
     ]
     assert len(conditions) == 2
@@ -398,7 +399,7 @@ def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_pat
         '<---- New Query ---->\n',
     )
     operation = next(
-        op for op in build_semantic_model(result).operations
+        op for op in project_document(result).operations
         if "email" in op.capabilities
     )
     bindings = {binding.name: binding for binding in operation.bindings}
@@ -426,14 +427,14 @@ def test_required_parameter_default_is_generated_reset_value(tmp_path):
         "SELECT 1 AS value\n"
         "<---- New Query ---->\n",
     )
-    model = build_semantic_model(result)
+    model = project_document(result)
     sql = next(
         binding
         for operation in model.operations
         for binding in operation.bindings
         if "structured-sql" in binding.capabilities
     )
-    overridden = build_semantic_model(result, {sql.id: "SELECT 2 AS value"})
+    overridden = project_document(result, [SemanticChange(sql.id, "SELECT 2 AS value")])
     overridden_sql = next(
         binding
         for operation in overridden.operations
@@ -460,7 +461,7 @@ second line
 """,
     )
     operation = next(
-        item for item in build_semantic_model(result).operations
+        item for item in project_document(result).operations
         if item.display_name == "Write File"
     )
     template = next(binding for binding in operation.bindings if binding.name == "template")

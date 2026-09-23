@@ -9,7 +9,7 @@ from vg2c.reorder import (
     legal_reorder_targets,
     swap_adjacent,
 )
-from vg2c.workflow import project_workflow
+from vg2c.workflow import project_document
 
 
 def _source(tmp_path: Path, second_path: str = "second.txt"):
@@ -32,7 +32,7 @@ def test_independent_writes_reorder_execution_semantics_and_effects(tmp_path):
     reordered = apply_order_changes(result, [order])
     run_body = reordered.emitted.source.split("def run() -> None:", 1)[1]
     assert run_body.index("step_0001") < run_body.index("step_0000")
-    workflow = project_workflow(reordered)
+    workflow = project_document(reordered)
     assert [item.block_index for item in workflow.operations] == [1, 0]
     assert [item.block_index for item in workflow.effects] == [1, 0]
     assert [item.path for item in workflow.effects[1].available_before] == ["second.txt"]
