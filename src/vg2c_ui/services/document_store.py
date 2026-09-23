@@ -354,6 +354,12 @@ class DocumentStore:
                 document_id=item.document_id,
                 artifacts=_workspace_artifact_views(item.workflow.effects),
                 effects=effect_views(item.workflow.effects),
+                file_choices=file_choices_by_operation(
+                    item.workflow.effects,
+                    self.inventory_paths(),
+                    output_path=item.output_path,
+                    workspace_root=self.workspace,
+                ),
             )
             for item in workflows
         )
