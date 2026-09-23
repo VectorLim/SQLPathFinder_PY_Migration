@@ -116,6 +116,17 @@ export function SemanticScriptTree({
           setDragSourceId(null)
         }}>
         <div className="semantic-tree-row-wrap">
+        {hasChildren
+          ? <button
+              type="button"
+              className="tree-toggle"
+              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${operation.display_name}`}
+              title={`${expanded ? 'Collapse' : 'Expand'} ${operation.display_name}`}
+              aria-expanded={expanded}
+              tabIndex={-1}
+              onClick={() => onToggle(operation.id)}
+            ><ChevronRight className="chevron" size={15} aria-hidden="true" /></button>
+          : <span className="tree-toggle tree-toggle--step" aria-hidden="true">•</span>}
         <button
           type="button"
           role="treeitem"
@@ -136,9 +147,6 @@ export function SemanticScriptTree({
             } else handleTreeKey(event, operation, hasChildren, expanded, onToggle)
           }}
         >
-          <span className={`tree-toggle${hasChildren ? '' : ' tree-toggle--step'}`} aria-hidden="true">
-            {hasChildren ? <ChevronRight className="chevron" size={15} /> : '•'}
-          </span>
           <span className="tree-label">
             <strong>{operation.display_name}</strong>
             {operation.summary && <small>{operation.summary}</small>}
@@ -163,7 +171,7 @@ export function SemanticScriptTree({
             onClick={() => move(operation, next)}><ArrowDown size={14} /></button>}
         </span>}
         </div>
-        {hasChildren && <div className={`tree-branch${expanded ? ' is-open' : ''}`}><ul role="group">{render(operation.id, depth + 1)}</ul></div>}
+        {expanded && <ul className="tree-children" role="group">{render(operation.id, depth + 1)}</ul>}
       </li>
     })
   }
