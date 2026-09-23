@@ -60,7 +60,8 @@ def test_sql_action_returns_normal_parameter_change_for_preview_apply_pipeline(
     projection = project_changes(result, [change])
     assert projection.valid
     assert "owner] || '_x'" in change.value
-    assert repr(change.value) in projection.source
+    assert "owner] || '_x'" in projection.source
+    assert "ctx.run_query(" in projection.source
 
 
 def test_reset_then_inspect_and_apply_sql_action(tmp_path):
@@ -215,3 +216,94 @@ def test_file_backed_filters_bind_only_proven_compiler_calls(tmp_path):
     )
     literal_list = compile_document(source)
     assert not structured_sql_model(literal_list, _sql_parameter(literal_list).id).file_lists
+
+
+
+def test_file_backed_sql_remains_structurally_editable_and_reuses_runtime_renderer(
+    tmp_path,
+):
+    source = tmp_path / "file-backed-structured.txt"
+    source.write_text(
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n"
+        "SELECT t.lot FROM lots t WHERE t.lot IN "
+        "SQL_Get_CSV_List('old.csv->500', lot, 't.lot In')\n"
+        "<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    result = compile_document(source)
+    sql = _sql_parameter(result)
+    assert not sql.editable
+    assert isinstance(sql.value, str)
+
+    model = structured_sql_model(
+        result, sql.id, file_choices=("inputs/new.csv",)
+    )
+    assert model.capabilities.selected
+    assert model.selections
+    assert len(model.file_lists) == 1
+
+    structural = apply_sql_action(
+        result,
+        SqlAction(sql.id, "add-selection", {"expression": "42 AS answer"}),
+        file_choices=("inputs/new.csv",),
+    )
+    file_list = apply_sql_action(
+        result,
+        SqlAction(
+            sql.id,
+            "update-file-list",
+            {
+                "file_list_id": model.file_lists[0].id,
+                "path": "inputs/new.csv",
+            },
+        ),
+        [structural],
+        file_choices=("inputs/new.csv",),
+    )
+    projection = project_changes(result, [structural, file_list])
+    assert projection.valid
+    assert "42 AS answer" in projection.source
+    assert "ctx.csv_io.sql_get_csv_list(" in projection.source
+    assert "'inputs/new.csv'" in projection.source
+    assert "chunk_size=VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE" in projection.source
+
+    inspected = structured_sql_model(
+        result,
+        sql.id,
+        [structural, file_list],
+        file_choices=("inputs/new.csv",),
+    )
+    assert any(item.display_label == "answer" for item in inspected.selections)
+    assert inspected.file_lists[0].path == "inputs/new.csv"
+
+
+def test_structured_sql_projection_preserves_existing_global_references(tmp_path):
+    source = tmp_path / "global-sql.txt"
+    source.write_text(
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n"
+        "SELECT t.lot FROM lots t WHERE t.owner = 'alice'\n"
+        "<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    result = compile_document(source)
+    sql = _sql_parameter(result)
+    assert not sql.editable
+
+    global_parameter = next(
+        parameter
+        for step in result.emitted.steps
+        for parameter in step.parameters
+        if parameter.id.startswith("global:")
+    )
+    structural = apply_sql_action(
+        result,
+        SqlAction(sql.id, "add-selection", {"expression": "42 AS answer"}),
+    )
+    projection = project_changes(
+        result,
+        [structural, SemanticChange(global_parameter.id, "bob")],
+    )
+    assert projection.valid
+    assert "42 AS answer" in projection.source
+    assert f"{global_parameter.name} = 'bob'" in projection.source
+    assert f"global_sql({global_parameter.name}" in projection.source
