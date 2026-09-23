@@ -19,6 +19,7 @@ import { ThemeSelector } from '../design/theme/ThemeSelector'
 import { useSourceIntake } from '../features/source-intake/useSourceIntake'
 import { useTheme } from '../design/theme/theme'
 import { useWorkspace } from '../workspace/useWorkspace'
+import { allExpandableScopesExpanded, expandableScopeIds } from '../workspace/state'
 import { useWorkspaceFiles } from '../workspace/useWorkspaceFiles'
 import { hasUnsavedChanges } from '../workspace/guards'
 import { WorkbenchLayout } from '../workbench/WorkbenchLayout'
@@ -102,6 +103,16 @@ export function App() {
     if (active) void workspace.reload(active.document.id).catch(() => undefined)
   }
 
+  const expandableScopes = active ? expandableScopeIds(active.document) : []
+  const allScopesExpanded = active
+    ? allExpandableScopesExpanded(active.document, active.expandedScopeIds)
+    : false
+  const toggleAllScopes = () => active && dispatch({
+    type: 'set-all-scopes',
+    tabId: active.document.id,
+    expanded: !allScopesExpanded,
+  })
+
   const commands = buildCommands({
     tabs: state.tabs,
     active,
@@ -124,8 +135,7 @@ export function App() {
       save: saveActive,
       generate: generateActive,
       reload: reloadActive,
-      expandAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true }),
-      collapseAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false }),
+      toggleAllScopes,
     },
   })
 
@@ -202,7 +212,7 @@ export function App() {
 
     {active ? <section className={`workspace workbench workbench--${pane}`} id="script-workspace" role="tabpanel" aria-labelledby={fileTabId(active.document.id)}>
       <div className="workbench-actions">
-        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label="Expand all scopes" title="Expand all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true })} disabled={!active.document.semantic_operations.some((operation) => active.document.semantic_operations.some((child) => child.parent_operation_id === operation.id))}><ChevronsUpDown size={16} /></button><button className="icon-button" type="button" aria-label="Collapse all scopes" title="Collapse all scopes" onClick={() => dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false })} disabled={!active.document.semantic_operations.some((operation) => active.document.semantic_operations.some((child) => child.parent_operation_id === operation.id))}><ChevronsDownUp size={16} /></button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
+        <div className="editor-toolbar"><label className="search-field"><span className="sr-only">Search operations</span><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search operations" /></label><div className="toolbar-group tree-controls"><button className="icon-button" type="button" aria-label={allScopesExpanded ? 'Collapse all scopes' : 'Expand all scopes'} title={allScopesExpanded ? 'Collapse all scopes' : 'Expand all scopes'} onClick={toggleAllScopes} disabled={!expandableScopes.length}>{allScopesExpanded ? <ChevronsDownUp size={16} /> : <ChevronsUpDown size={16} />}</button></div><button className="icon-button" aria-label="Open commands" title="Open commands" type="button" onClick={() => setCommandOpen(true)} aria-keyshortcuts="Control+K Meta+K"><Command size={16} /></button></div>
 
         <ChangeToolbar
           tab={active}
