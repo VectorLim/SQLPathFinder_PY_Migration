@@ -184,37 +184,6 @@ def remove_selection(source: str, selection_id: str) -> SqlTransformResult:
     return _finish(_replace_span(source, start, end, ""), "selected")
 
 
-def move_selection(
-    source: str, selection_id: str, direction: Literal[-1, 1]
-) -> SqlTransformResult:
-    model = parse_sql(source)
-    if not model.select_list_span:
-        raise SqlEditError("SELECT list is not structurally editable.")
-    index = next(
-        (index for index, item in enumerate(model.selections) if item.id == selection_id),
-        -1,
-    )
-    target = index + direction
-    if index < 0 or target < 0 or target >= len(model.selections):
-        raise SqlEditError("Selection cannot move further.")
-    if not model.selections[index].editable or not model.selections[target].editable:
-        raise SqlEditError("Read-only selections cannot be reordered.")
-    rows = [
-        source[item.span.start:item.span.end] for item in model.selections
-    ]
-    rows[index], rows[target] = rows[target], rows[index]
-    separator = _selection_separator(source, model)
-    return _finish(
-        _replace_span(
-            source,
-            model.select_list_span.start,
-            model.select_list_span.end,
-            separator.join(rows),
-        ),
-        "selected",
-    )
-
-
 def reorder_selection(
     source: str, selection_id: str, target_index: int
 ) -> SqlTransformResult:
@@ -555,7 +524,6 @@ __all__ = [
     "add_filter",
     "add_join",
     "add_selection",
-    "move_selection",
     "remove_filter",
     "remove_join",
     "remove_join_predicate",

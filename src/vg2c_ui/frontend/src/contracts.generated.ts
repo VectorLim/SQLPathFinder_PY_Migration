@@ -1,6 +1,6 @@
 // Generated from vg2c_ui.api.models. DO NOT EDIT.
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 6
 
 export interface SourceSpanView {
   file: string | null
@@ -21,71 +21,78 @@ export interface ValueSchemaView {
   tuple_value: boolean
 }
 
-export interface ParameterView {
+export interface SemanticBindingView {
   id: string
+  owner_operation_id: string
   name: string
-  position: number | null
-  source: string
+  display_label: string
   value: unknown
-  editor_type: 'string' | 'multiline' | 'integer' | 'number' | 'boolean' | 'list' | 'object' | 'union' | 'dynamic'
+  symbol_id: string | null
+  default_symbol_id: string | null
+  default: unknown
+  required: boolean
+  visibility: 'normal' | 'advanced' | 'internal'
+  capabilities: Array<string>
+  validation_state: 'valid' | 'warning' | 'unresolved' | 'unsupported'
+  resettable: boolean
   editable: boolean
   read_only_reason: string | null
-  constraints: Record<string, unknown>
-  annotation: string | null
-  required: boolean
-  default: unknown
-  capabilities: Array<string>
   value_schema: ValueSchemaView | null
-  internal: boolean
-  omitted: boolean
-  overridden: boolean
-  generated_value: unknown
+  file_choices: Array<string>
 }
 
-export interface UtilityView {
-  name: string
-  class_name: string
-  module: string
-  title: string
-  description: string
-  method: string | null
-  method_description: string | null
-  return_type: string | null
-  capabilities: Array<string>
-  supported_mutations: Array<string>
-}
-
-export interface OperationView {
+export interface SemanticOperationView {
   id: string
-  utility: UtilityView
-  parameters: Array<ParameterView>
-}
-
-export interface StepView {
-  id: string
-  node_kind: 'step'
-  function_name: string
-  block_index: number
-  source_span: SourceSpanView
-  functional_kind: string
-  display_label: string
-  description: string
-  parent_scope_id: string | null
+  kind: string
+  display_name: string
+  summary: string
+  scope_id: number | null
+  reorder_targets: Array<number>
+  parent_operation_id: string | null
   branch: 'true' | 'false' | null
-  validation_state: 'valid' | 'warning' | 'unsupported'
-  raw_code: string | null
-  read_only: boolean
-  operations: Array<OperationView>
+  source_span: SourceSpanView
+  bindings: Array<SemanticBindingView>
+  capabilities: Array<string>
+  comments: Array<string>
+  validation_state: 'valid' | 'warning' | 'unresolved' | 'unsupported'
+  visibility: 'normal' | 'advanced' | 'internal'
 }
 
-export interface ScopeView {
+export interface OperationReferenceView {
+  operation_id: string
+  binding_id: string | null
+}
+
+export interface SymbolReferenceView {
+  operation_id: string
+  binding_id: string
+  context: 'condition' | 'parameter' | 'global-value'
+}
+
+export interface SymbolView {
   id: string
-  node_kind: 'if' | 'branch' | 'loop'
-  scope_kind: string
-  label: string
-  start_index: number
-  end_index: number
-  parent_scope_id: string | null
+  display_name: string
+  kind: 'global' | 'macro' | 'macro-row' | 'unresolved'
+  value_state: 'known' | 'runtime' | 'unknown'
+  value: unknown
+  value_binding_id: string | null
+  introduction: OperationReferenceView | null
+  references: Array<SymbolReferenceView>
+}
+
+export interface FileResourceView {
+  id: string
+  path: string | null
+  status: 'workspace' | 'generated' | 'external' | 'missing' | 'dynamic' | 'possible'
+  producer_refs: Array<OperationReferenceView>
+  consumer_refs: Array<OperationReferenceView>
+  lifecycle_refs: Array<OperationReferenceView>
+}
+
+export interface ConditionOperatorView {
+  code: string
+  symbol: string
+  operand_type: 'string' | 'numeric'
 }
 
 export interface ArtifactView {
@@ -111,7 +118,8 @@ export interface DiagnosticView {
 
 export interface FileEndpointView {
   id: string
-  parameter_id: string | null
+  file_resource_id: string | null
+  binding_id: string | null
   path: string | null
   expression: string | null
   path_base: 'working-directory' | 'script-directory' | 'runtime-search'
@@ -145,23 +153,25 @@ export interface DocumentView {
   output_hash: string
   revision: string
   compiler_hash: string
-  synchronized: boolean
+  generation_state: 'current' | 'stale' | 'missing'
   read_only_reason: string | null
-  steps: Array<StepView>
-  scopes: Array<ScopeView>
-  artifacts: Array<ArtifactView>
   diagnostics: Array<DiagnosticView>
   effects: Array<FileEffectView>
+  semantic_operations: Array<SemanticOperationView>
+  files: Array<FileResourceView>
+  symbols: Array<SymbolView>
+  condition_operators: Array<ConditionOperatorView>
 }
 
-export interface ParameterChangeRequest {
-  parameter_id: string
+export interface SemanticChangeRequest {
+  binding_id: string
   value: unknown
+  symbol_id: string | null
   reset: boolean
 }
 
 export interface DocumentSnapshot {
-  schema_version: 4
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
@@ -171,21 +181,33 @@ export interface DocumentSnapshot {
 }
 
 export interface ChangeBatch {
-  schema_version: 4
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
+}
+
+export interface ReorderRequest {
+  schema_version: 6
+  source_path: string
+  output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
+  source_scope_id: number
+  target_scope_id: number
 }
 
 export interface ValidationIssueView {
   level: 'warning' | 'error'
   code: string
   message: string
-  parameter_id: string | null
+  binding_id: string | null
 }
 
 export interface ChangePreviewView {
@@ -198,31 +220,28 @@ export interface ChangeResultView {
   document: DocumentView
 }
 
-export interface CsvPreviewView {
-  path: string
-  columns: Array<string>
-  rows: Array<Array<string>>
-  truncated: boolean
-  size_bytes: number
-}
-
 export interface DocumentReference {
   source_path: string
   output_path: string | null
 }
 
-export interface CsvPreviewRequest {
-  schema_version: 4
+export interface HtmlPreviewRequest {
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  effect_id: string
-  endpoint_id: string
-  expected_path: string
-  changes: Array<ParameterChangeRequest>
+  operation_id: string
+  changes: Array<SemanticChangeRequest>
+}
+
+export interface HtmlPreviewView {
+  state: 'exact' | 'approximate' | 'error'
+  html: string
+  output_path: string | null
+  message: string | null
 }
 
 export interface BatchTranslationRequest {
@@ -236,7 +255,7 @@ export interface BatchTranslationResponse {
 }
 
 export interface WorkspaceDocumentRequest {
-  schema_version: 4
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
@@ -244,7 +263,7 @@ export interface WorkspaceDocumentRequest {
   revision: string
   compiler_hash: string
   document_id: string
-  changes: Array<ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface WorkspaceProjectionRequest {
@@ -307,10 +326,22 @@ export interface SqlSelectionView {
   id: string
   expression: string
   alias: string | null
+  display_label: string
   raw: string
   editable: boolean
   read_only_reason: string | null
   span: SqlSpanView
+}
+
+export interface SqlColumnChoiceView {
+  id: string
+  label: string
+  source_id: string
+}
+
+export interface SqlTableChoiceView {
+  id: string
+  label: string
 }
 
 export interface SqlSourceView {
@@ -336,6 +367,14 @@ export interface SqlPredicateView {
   connector_span: SqlSpanView | null
 }
 
+export interface SqlFileListView {
+  id: string
+  path: string
+  column_ref: number | string
+  lead_in: string
+  choices: Array<string>
+}
+
 export interface SqlJoinView {
   id: string
   join_type: string
@@ -353,7 +392,6 @@ export interface SqlEditCapabilitiesView {
   selected: boolean
   filters: boolean
   joins: boolean
-  raw_sql: boolean
 }
 
 export interface SqlModelView {
@@ -363,7 +401,10 @@ export interface SqlModelView {
   logical_connectors: Array<string>
   statement_span: SqlSpanView
   selections: Array<SqlSelectionView>
+  column_choices: Array<SqlColumnChoiceView>
+  table_choices: Array<SqlTableChoiceView>
   filters: Array<SqlPredicateView>
+  file_lists: Array<SqlFileListView>
   joins: Array<SqlJoinView>
   sources: Array<SqlSourceView>
   capabilities: SqlEditCapabilitiesView
@@ -375,33 +416,33 @@ export interface SqlModelView {
 }
 
 export interface SqlModelRequest {
-  schema_version: 4
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  parameter_id: string
-  changes: Array<ParameterChangeRequest>
+  binding_id: string
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface SqlActionRequest {
-  schema_version: 4
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  parameter_id: string
-  changes: Array<ParameterChangeRequest>
+  binding_id: string
+  changes: Array<SemanticChangeRequest>
   action: string
   arguments: Record<string, unknown>
 }
 
 export interface SqlActionResponse {
-  change: ParameterChangeRequest
+  change: SemanticChangeRequest
   model: SqlModelView
 }
 

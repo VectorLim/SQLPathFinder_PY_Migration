@@ -7,7 +7,7 @@ import pytest
 from vg2c import compile_document
 from vg2c.editing import (
     ChangeValidationError,
-    ParameterChange,
+    SemanticChange,
     apply_changes,
     preview_changes,
     project_changes,
@@ -34,7 +34,7 @@ def test_parameter_change_projects_from_compiler_manifest(tmp_path):
 
     projection = project_changes(
         result,
-        [ParameterChange(parameter_id=output.id, value="renamed.csv")],
+        [SemanticChange(binding_id=output.id, value="renamed.csv")],
     )
 
     assert projection.valid
@@ -50,7 +50,7 @@ def test_preview_is_side_effect_free_and_reports_diff(tmp_path):
 
     preview = preview_changes(
         result,
-        [ParameterChange(parameter_id=output.id, value="renamed.csv")],
+        [SemanticChange(binding_id=output.id, value="renamed.csv")],
     )
 
     assert preview.valid
@@ -66,13 +66,13 @@ def test_invalid_change_is_rejected_by_core(tmp_path):
 
     projection = project_changes(
         result,
-        [ParameterChange(parameter_id=output.id, value=123)],
+        [SemanticChange(binding_id=output.id, value=123)],
     )
 
     assert not projection.valid
     assert projection.issues[0].code == "invalid-type"
     with pytest.raises(ChangeValidationError):
-        apply_changes(result, [ParameterChange(parameter_id=output.id, value=123)])
+        apply_changes(result, [SemanticChange(binding_id=output.id, value=123)])
 
 
 def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
@@ -84,7 +84,7 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
     assert node.source_range is None and node.value is None
     projection = project_changes(
         result,
-        [ParameterChange(node.id, "TEST"), ParameterChange(output.id, "changed.csv")],
+        [SemanticChange(node.id, "TEST"), SemanticChange(output.id, "changed.csv")],
     )
     assert projection.valid
     tree = ast.parse(projection.source)
@@ -106,7 +106,7 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
     assert ast.literal_eval(keywords["output"]) == "changed.csv"
     assert isinstance(keywords["reader"], ast.Call)
     assert project_changes(result, []).source == result.emitted.source
-    assert not project_changes(result, [ParameterChange(node.id, True)]).valid
+    assert not project_changes(result, [SemanticChange(node.id, True)]).valid
 
 
 def test_shared_value_must_satisfy_every_binding(tmp_path):
@@ -129,7 +129,7 @@ def test_shared_value_must_satisfy_every_binding(tmp_path):
             result.emitted, steps=(replace(step, invocations=(invocation,)),)
         ),
     )
-    assert not project_changes(result, [ParameterChange(output.id, "other.csv")]).valid
+    assert not project_changes(result, [SemanticChange(output.id, "other.csv")]).valid
 
 
 def test_table_binding_json_edits_preserve_runtime_tuple_shape(tmp_path):
@@ -141,9 +141,9 @@ def test_table_binding_json_edits_preserve_runtime_tuple_shape(tmp_path):
     parameter = _parameter(result, "inputs")
     assert parameter.editable and parameter.value == [("input.csv", "records")]
     projected = project_changes(
-        result, [ParameterChange(parameter.id, [["changed.csv", "renamed"]])]
+        result, [SemanticChange(parameter.id, [["changed.csv", "renamed"]])]
     )
     assert projected.valid and "[('changed.csv', 'renamed')]" in projected.source
     assert not project_changes(
-        result, [ParameterChange(parameter.id, [["changed.csv"]])]
+        result, [SemanticChange(parameter.id, [["changed.csv"]])]
     ).valid

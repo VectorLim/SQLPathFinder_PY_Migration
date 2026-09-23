@@ -5,7 +5,6 @@ from vg2c.sql_editor import (
     add_filter,
     add_join,
     add_selection,
-    move_selection,
     parse_sql,
     remove_filter,
     remove_join,
@@ -45,6 +44,19 @@ def test_parser_preserves_structured_sql_shape():
     assert [item.connector for item in model.filters] == [None, "AND"]
 
 
+def test_column_labels_use_only_proven_identifiers_or_aliases():
+    model = parse_sql(
+        'SELECT t.[order id], "gross", COUNT(*) AS total, a + b '
+        'FROM table1 t'
+    )
+    assert [item.display_label for item in model.selections] == [
+        "order id", "gross", "total", "Expression 4"
+    ]
+    assert [item.editable for item in model.selections] == [True, True, True, False]
+    assert "preserved as raw SQL" in model.selections[-1].read_only_reason
+    assert model.selections[-1].raw == "a + b"
+
+
 def test_parser_keeps_complex_queries_read_only():
     assert parse_sql("WITH q AS (SELECT 1) SELECT * FROM q").read_only_reason
     assert parse_sql("SELECT a FROM t UNION SELECT a FROM u").read_only_reason
@@ -58,7 +70,6 @@ def test_selection_transforms_match_existing_editor_behavior():
         BASE, "selection-0", expression="z", alias="zz"
     ).sql
     assert remove_selection(BASE, "selection-0").sql.startswith("SELECT b FROM")
-    assert move_selection(BASE, "selection-0", 1).sql.startswith("SELECT b, a AS x")
     assert reorder_selection(BASE, "selection-1", 0).sql.startswith("SELECT b, a AS x")
     with pytest.raises(SqlEditError):
         remove_selection("SELECT a FROM t", "selection-0")

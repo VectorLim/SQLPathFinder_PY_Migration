@@ -186,7 +186,7 @@ tr th {{ background-color:#f5f5f5; }}
     # Emittable runtime methods
     # ------------------------------------------------------------------
 
-    @emittable
+    @emittable(display_name="Start HTML Report", file_effects=())
     def run(
         self,
         instance: str | None = None,
@@ -202,7 +202,7 @@ tr th {{ background-color:#f5f5f5; }}
             elif key == "FORMAT" and len(parts) >= 3:
                 self.styles[parts[1]] = parts[2:]
 
-    @emittable
+    @emittable(display_name="Define HTML Report Section", file_effects=())
     def defer(
         self,
         id: str,
@@ -217,13 +217,13 @@ tr th {{ background-color:#f5f5f5; }}
             "options": self._parse_options(template),
         }
 
-    @emittable
+    @emittable(display_name="Clear HTML Report State", file_effects=())
     def delete(self, instance: str | None = None) -> None:
         self.styles.clear()
         self.css_file = None
         self.deferred_reports.clear()
 
-    @emittable
+    @emittable(display_name="Generate HTML Report", capabilities=("html-preview",), parameter_visibility={"ctx": "internal"}, file_effects=())
     def layout(
         self,
         ctx: Any,
@@ -234,6 +234,24 @@ tr th {{ background-color:#f5f5f5; }}
         chart_instance: str | None = None,
         app_server_default: str | None = None,
     ) -> None:
+        filename, body = self.render_layout(ctx, template, instance=instance)
+        if ctx and hasattr(ctx, "write_file"):
+            ctx.write_file(filename, body)
+        else:
+            out = Path(filename)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(body, encoding="utf-8")
+
+    def render_layout(
+        self,
+        ctx: Any,
+        template: str,
+        *,
+        instance: str | None = None,
+        css_resolver=None,
+        write_css: bool = True,
+    ) -> tuple[str, str]:
+        """Render a layout in memory. Runtime layout and safe preview share this path."""
         directives, body = self._split_layout(template)
 
         body = re.sub(
@@ -248,7 +266,12 @@ tr th {{ background-color:#f5f5f5; }}
 
         css_file = directives.get("CSS") or self.css_file
         css_embed = directives.get("CSSEMBED", "").upper() in self._TRUE_VALUES
-        css_decl = self._resolve_css(css_file, css_embed)
+        css_decl = self._resolve_css(
+            css_file,
+            css_embed,
+            resolver=css_resolver,
+            write_missing=write_css,
+        )
         title = directives.get("TITLE", "SQLPathFinder Report")
 
         if "<html>" not in body.lower():
@@ -262,12 +285,7 @@ tr th {{ background-color:#f5f5f5; }}
         filename = self._resolve_output_filename(directives.get("FILE", "report.html"), instance)
         if ctx and hasattr(ctx, "macro"):
             filename = ctx.macro.substitute(filename)
-        if ctx and hasattr(ctx, "write_file"):
-            ctx.write_file(filename, body)
-        else:
-            out = Path(filename)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(body, encoding="utf-8")
+        return filename, body
 
     # ------------------------------------------------------------------
     # Layout template split
@@ -291,20 +309,21 @@ tr th {{ background-color:#f5f5f5; }}
     # CSS
     # ------------------------------------------------------------------
 
-    def _resolve_css(self, css_file: str | None, css_embed: bool) -> str:
+    def _resolve_css(self, css_file: str | None, css_embed: bool, *, resolver=None, write_missing: bool = True) -> str:
         """Return a <style> or <link> tag string (or empty string)."""
         content = ""
         if css_file:
-            path = Path(css_file)
+            path = resolver(css_file) if resolver else Path(css_file)
             if path.exists():
                 content = path.read_text(encoding="utf-8", errors="replace")
             elif self.styles:
                 content = self._build_css()
-                try:
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(content, encoding="utf-8")
-                except OSError:
-                    pass
+                if write_missing:
+                    try:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_text(content, encoding="utf-8")
+                    except OSError:
+                        pass
         elif self.styles:
             content = self._build_css()
 

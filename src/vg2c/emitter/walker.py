@@ -23,14 +23,14 @@ def walk_and_emit(
     reserved: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[list[StepEmission], str]:
     """Walk the scope tree and return emitted steps plus the run() body."""
-    block_by_index = {b.index: b for b in dispatched.analyzed.resolved.blocks}
+    block_by_index = {b.index: b for b in dispatched.resolved.blocks}
     dispatch_map = {db.index: db for db in dispatched.dispatched}
 
     steps: list[StepEmission] = []
     writer = IndentWriter()
 
     _walk_scope(
-        dispatched.analyzed.resolved.scope_tree,
+        dispatched.resolved.scope_tree,
         dispatch_map,
         block_by_index,
         writer,

@@ -3,9 +3,17 @@
   --motion-content: 160ms;
   --motion-collapse: 180ms;
   --motion-ease: ease-out;
+  --motion-pane: 300ms;
+  --motion-layout: 360ms;
+  --motion-paper-ease: cubic-bezier(.22, 1, .36, 1);
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .adaptive-workbench-panes { transition: grid-template-columns var(--motion-layout) var(--motion-paper-ease); }
+  .pane-separator { transition: background var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease); }
+  .paper-pane-surface { transition: transform var(--motion-pane) var(--motion-paper-ease), opacity var(--motion-collapse) ease, box-shadow var(--motion-pane) ease; }
+  .paper-pull-tab { transition: transform var(--motion-collapse) var(--motion-paper-ease), color var(--motion-content) ease, background var(--motion-content) ease, box-shadow var(--motion-collapse) ease; }
+  .semantic-tree-row .tree-toggle svg { transition: transform var(--motion-fast); }
   button, input, textarea, select, .tree-row, .chevron {
     transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
   }

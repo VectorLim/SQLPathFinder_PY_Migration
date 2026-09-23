@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import threading
 import time
@@ -48,7 +49,7 @@ class WorkspaceManager:
     """Own anonymous, cookie-scoped workspaces under one persistent data root."""
 
     cookie_name = "vg2c_workspace"
-    allowed_upload_suffixes = {".txt", ".csv", ".tab", ".dat", ".xlsx", ".xls"}
+    allowed_upload_suffixes = {".txt", ".csv", ".tab", ".dat", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
     translation_source_suffixes = {".txt"}
 
     def __init__(
@@ -194,7 +195,8 @@ def get_workspace_manager(request) -> WorkspaceManager:
 def _safe_relative_path(value: str) -> PurePosixPath:
     normalized = value.replace("\\", "/")
     path = PurePosixPath(normalized)
-    if not normalized or path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    if (not normalized or path.is_absolute() or re.match(r"^[A-Za-z]:", normalized)
+        or any(part in {"", ".", ".."} for part in path.parts)):
         raise WorkspacePathError("A non-empty relative path is required.")
     return path
 

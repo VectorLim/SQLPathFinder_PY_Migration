@@ -217,14 +217,24 @@ def to_code_expr(value: str | None) -> CodeExpr:
         return CodeExpr("None")
     text = strip_quotes(value)
     source = placeholders_to_python_expr(text)
+    symbol_names = tuple(
+        dict.fromkeys(
+            normalize_macro_name(match.group(1))
+            for match in MacroState.PLACEHOLDER_RE.finditer(text)
+            if match.group(1) is not None
+        )
+    )
     if MacroState.PLACEHOLDER_RE.search(text):
-        return CodeExpr(source)
+        return CodeExpr(source, symbol_names=symbol_names)
     return CodeExpr(source, text)
 
 
 def list_code_expr(values: list[str]) -> CodeExpr:
     items = [to_code_expr(value) for value in values]
     source = "[" + ", ".join(item.source for item in items) + "]"
+    symbol_names = tuple(
+        dict.fromkeys(name for item in items for name in item.symbol_names)
+    )
     if all(item.has_value for item in items):
-        return CodeExpr(source, [item.value for item in items])
-    return CodeExpr(source)
+        return CodeExpr(source, [item.value for item in items], symbol_names=symbol_names)
+    return CodeExpr(source, symbol_names=symbol_names)

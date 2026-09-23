@@ -2,7 +2,7 @@ import './dirtyCloseDialog.css'
 
 import { useRef } from 'react'
 
-import { baseName } from './operationLabels'
+import { baseName } from './pathDisplay'
 import type { TabState } from './workspaceState'
 import { useModalDialog } from './useModalDialog'
 
@@ -17,7 +17,7 @@ export function DirtyCloseDialog({ tab, onCancel, onDiscard }: Props) {
   const modal = useModalDialog(Boolean(tab), onCancel, { onOpened: () => keepEditingRef.current?.focus() })
   if (!tab) return <dialog ref={modal.dialogRef} className="dirty-close-dialog" />
 
-  const name = baseName(tab.document.output_path || tab.document.source_path)
+  const name = baseName(tab.document.source_path || tab.document.output_path)
   const changeCount = Object.keys(tab.edits.values).length
 
   function discard() {

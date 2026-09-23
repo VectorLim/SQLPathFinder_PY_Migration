@@ -4,10 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from vg2c.emitter.models import EditorType
 from vg2c.utility_metadata import FileEffectKind, PathBase, ValueKind
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 
 class SourceSpanView(BaseModel):
@@ -29,71 +28,78 @@ class ValueSchemaView(BaseModel):
     tuple_value: bool = False
 
 
-class ParameterView(BaseModel):
+class SemanticBindingView(BaseModel):
     id: str
+    owner_operation_id: str
     name: str
-    position: int | None = None
-    source: str
-    value: Any = None
-    editor_type: EditorType
-    editable: bool
-    read_only_reason: str | None = None
-    constraints: dict[str, Any] = Field(default_factory=dict)
-    annotation: str | None = None
-    required: bool = True
-    default: Any = None
-    capabilities: list[str] = Field(default_factory=list)
-    value_schema: ValueSchemaView | None = None
-    internal: bool = False
-    omitted: bool = False
-    overridden: bool = False
-    generated_value: Any = None
-
-
-class UtilityView(BaseModel):
-    name: str
-    class_name: str
-    module: str
-    title: str
-    description: str
-    method: str | None = None
-    method_description: str | None = None
-    return_type: str | None = None
-    capabilities: list[str] = Field(default_factory=list)
-    supported_mutations: list[str] = Field(default_factory=list)
-
-
-class OperationView(BaseModel):
-    id: str
-    utility: UtilityView
-    parameters: list[ParameterView] = Field(default_factory=list)
-
-
-class StepView(BaseModel):
-    id: str
-    node_kind: Literal["step"] = "step"
-    function_name: str
-    block_index: int
-    source_span: SourceSpanView
-    functional_kind: str
     display_label: str
-    description: str
-    parent_scope_id: str | None = None
-    branch: Literal["true", "false"] | None = None
-    validation_state: Literal["valid", "warning", "unsupported"] = "valid"
-    raw_code: str | None = None
-    read_only: bool = True
-    operations: list[OperationView] = Field(default_factory=list)
+    value: Any = None
+    symbol_id: str | None = None
+    default_symbol_id: str | None = None
+    default: Any = None
+    required: bool = True
+    visibility: Literal["normal", "advanced", "internal"] = "normal"
+    capabilities: list[str] = Field(default_factory=list)
+    validation_state: Literal["valid", "warning", "unresolved", "unsupported"] = "valid"
+    resettable: bool = True
+    editable: bool = True
+    read_only_reason: str | None = None
+    value_schema: ValueSchemaView | None = None
+    file_choices: list[str] = Field(default_factory=list)
 
 
-class ScopeView(BaseModel):
+class SemanticOperationView(BaseModel):
     id: str
-    node_kind: Literal["if", "branch", "loop"]
-    scope_kind: str
-    label: str
-    start_index: int
-    end_index: int
-    parent_scope_id: str | None = None
+    kind: str
+    display_name: str
+    summary: str
+    scope_id: int | None = None
+    reorder_targets: list[int] = Field(default_factory=list)
+    parent_operation_id: str | None = None
+    branch: Literal["true", "false"] | None = None
+    source_span: SourceSpanView
+    bindings: list[SemanticBindingView] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    comments: list[str] = Field(default_factory=list)
+    validation_state: Literal["valid", "warning", "unresolved", "unsupported"] = "valid"
+    visibility: Literal["normal", "advanced", "internal"] = "normal"
+
+
+class OperationReferenceView(BaseModel):
+    operation_id: str
+    binding_id: str | None = None
+
+
+class SymbolReferenceView(BaseModel):
+    operation_id: str
+    binding_id: str
+    context: Literal["condition", "parameter", "global-value"] = "parameter"
+
+
+class SymbolView(BaseModel):
+    id: str
+    display_name: str
+    kind: Literal["global", "macro", "macro-row", "unresolved"]
+    value_state: Literal["known", "runtime", "unknown"]
+    value: Any = None
+    value_binding_id: str | None = None
+    introduction: OperationReferenceView | None = None
+    references: list[SymbolReferenceView] = Field(default_factory=list)
+
+
+class FileResourceView(BaseModel):
+    id: str
+    path: str | None = None
+    status: Literal["workspace", "generated", "external", "missing", "dynamic", "possible"]
+    producer_refs: list[OperationReferenceView] = Field(default_factory=list)
+    consumer_refs: list[OperationReferenceView] = Field(default_factory=list)
+    lifecycle_refs: list[OperationReferenceView] = Field(default_factory=list)
+
+
+class ConditionOperatorView(BaseModel):
+    code: str
+    symbol: str
+    operand_type: Literal["string", "numeric"]
 
 
 class ArtifactView(BaseModel):
@@ -119,7 +125,8 @@ class DiagnosticView(BaseModel):
 
 class FileEndpointView(BaseModel):
     id: str
-    parameter_id: str | None
+    file_resource_id: str | None = None
+    binding_id: str | None = None
     path: str | None
     expression: str | None
     path_base: PathBase
@@ -153,23 +160,25 @@ class DocumentView(BaseModel):
     output_hash: str
     revision: str
     compiler_hash: str
-    synchronized: bool = True
+    generation_state: Literal["current", "stale", "missing"] = "current"
     read_only_reason: str | None = None
-    steps: list[StepView]
-    scopes: list[ScopeView]
-    artifacts: list[ArtifactView]
     diagnostics: list[DiagnosticView]
     effects: list[FileEffectView] = Field(default_factory=list)
+    semantic_operations: list[SemanticOperationView] = Field(default_factory=list)
+    files: list[FileResourceView] = Field(default_factory=list)
+    symbols: list[SymbolView] = Field(default_factory=list)
+    condition_operators: list[ConditionOperatorView] = Field(default_factory=list)
 
 
-class ParameterChangeRequest(BaseModel):
-    parameter_id: str
+class SemanticChangeRequest(BaseModel):
+    binding_id: str
     value: Any = None
+    symbol_id: str | None = None
     reset: bool = False
 
 
 class DocumentSnapshot(BaseModel):
-    schema_version: Literal[4]
+    schema_version: Literal[6]
     source_path: str
     output_path: str
     source_hash: str
@@ -179,14 +188,19 @@ class DocumentSnapshot(BaseModel):
 
 
 class ChangeBatch(DocumentSnapshot):
-    changes: list[ParameterChangeRequest] = Field(min_length=1)
+    changes: list[SemanticChangeRequest] = Field(min_length=1)
+
+
+class ReorderRequest(DocumentSnapshot):
+    source_scope_id: int
+    target_scope_id: int
 
 
 class ValidationIssueView(BaseModel):
     level: Literal["warning", "error"] = "error"
     code: str
     message: str
-    parameter_id: str | None = None
+    binding_id: str | None = None
 
 
 class ChangePreviewView(BaseModel):
@@ -199,24 +213,21 @@ class ChangeResultView(BaseModel):
     document: DocumentView
 
 
-class CsvPreviewView(BaseModel):
-    path: str
-    columns: list[str]
-    rows: list[list[str]]
-    truncated: bool
-    size_bytes: int
-
-
 class DocumentReference(BaseModel):
     source_path: str
     output_path: str | None = None
 
 
-class CsvPreviewRequest(DocumentSnapshot):
-    effect_id: str
-    endpoint_id: str
-    expected_path: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+class HtmlPreviewRequest(DocumentSnapshot):
+    operation_id: str
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
+
+
+class HtmlPreviewView(BaseModel):
+    state: Literal["exact", "approximate", "error"]
+    html: str
+    output_path: str | None = None
+    message: str | None = None
 
 
 class BatchTranslationRequest(BaseModel):
@@ -231,7 +242,7 @@ class BatchTranslationResponse(BaseModel):
 
 class WorkspaceDocumentRequest(DocumentSnapshot):
     document_id: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
 
 
 class WorkspaceProjectionRequest(BaseModel):
@@ -294,10 +305,22 @@ class SqlSelectionView(BaseModel):
     id: str
     expression: str
     alias: str | None = None
+    display_label: str
     raw: str
     editable: bool
     read_only_reason: str | None = None
     span: SqlSpanView
+
+
+class SqlColumnChoiceView(BaseModel):
+    id: str
+    label: str
+    source_id: str
+
+
+class SqlTableChoiceView(BaseModel):
+    id: str
+    label: str
 
 
 class SqlSourceView(BaseModel):
@@ -323,6 +346,14 @@ class SqlPredicateView(BaseModel):
     connector_span: SqlSpanView | None = None
 
 
+class SqlFileListView(BaseModel):
+    id: str
+    path: str
+    column_ref: int | str
+    lead_in: str
+    choices: list[str]
+
+
 class SqlJoinView(BaseModel):
     id: str
     join_type: str
@@ -340,7 +371,6 @@ class SqlEditCapabilitiesView(BaseModel):
     selected: bool
     filters: bool
     joins: bool
-    raw_sql: bool = True
 
 
 class SqlModelView(BaseModel):
@@ -350,7 +380,10 @@ class SqlModelView(BaseModel):
     logical_connectors: list[str]
     statement_span: SqlSpanView
     selections: list[SqlSelectionView]
+    column_choices: list[SqlColumnChoiceView] = Field(default_factory=list)
+    table_choices: list[SqlTableChoiceView] = Field(default_factory=list)
     filters: list[SqlPredicateView]
+    file_lists: list[SqlFileListView] = Field(default_factory=list)
     joins: list[SqlJoinView]
     sources: list[SqlSourceView]
     capabilities: SqlEditCapabilitiesView
@@ -362,8 +395,8 @@ class SqlModelView(BaseModel):
 
 
 class SqlModelRequest(DocumentSnapshot):
-    parameter_id: str
-    changes: list[ParameterChangeRequest] = Field(default_factory=list)
+    binding_id: str
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
 
 
 class SqlActionRequest(SqlModelRequest):
@@ -372,32 +405,35 @@ class SqlActionRequest(SqlModelRequest):
 
 
 class SqlActionResponse(BaseModel):
-    change: ParameterChangeRequest
+    change: SemanticChangeRequest
     model: SqlModelView
 
 
 CONTRACT_MODELS = (
     SourceSpanView,
     ValueSchemaView,
-    ParameterView,
-    UtilityView,
-    OperationView,
-    StepView,
-    ScopeView,
+    SemanticBindingView,
+    SemanticOperationView,
+    OperationReferenceView,
+    SymbolReferenceView,
+    SymbolView,
+    FileResourceView,
+    ConditionOperatorView,
     ArtifactView,
     DiagnosticView,
     FileEndpointView,
     FileEffectView,
     DocumentView,
-    ParameterChangeRequest,
+    SemanticChangeRequest,
     DocumentSnapshot,
     ChangeBatch,
+    ReorderRequest,
     ValidationIssueView,
     ChangePreviewView,
     ChangeResultView,
-    CsvPreviewView,
     DocumentReference,
-    CsvPreviewRequest,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
     BatchTranslationRequest,
     BatchTranslationResponse,
     WorkspaceDocumentRequest,
@@ -410,8 +446,11 @@ CONTRACT_MODELS = (
     WorkspaceUploadPolicyView,
     SqlSpanView,
     SqlSelectionView,
+    SqlColumnChoiceView,
+    SqlTableChoiceView,
     SqlSourceView,
     SqlPredicateView,
+    SqlFileListView,
     SqlJoinView,
     SqlEditCapabilitiesView,
     SqlModelView,

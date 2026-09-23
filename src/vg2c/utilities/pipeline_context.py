@@ -20,6 +20,8 @@ class PipelineContext(UtilitySpec):
         self.__dict__.update(utilities)
 
     @emittable(
+        display_name="Write File",
+        summary="{path}",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(
@@ -40,13 +42,15 @@ class PipelineContext(UtilitySpec):
         return result
 
     @emittable(
+        display_name="Run Query",
+        summary="Output: {output}",
         file_effects=(
             FileEffectDefinition(
                 "query",
                 "transform",
                 inputs=("inputs",),
                 outputs=("output",),
-                input_base="working-directory",
+                input_base="runtime-search",
                 input_format="table-binding",
             ),
         ),
@@ -55,7 +59,7 @@ class PipelineContext(UtilitySpec):
             "output": ArtifactRole("output"),
             "inputs": ArtifactRole("input", many=True),
         },
-        internal_parameters=("reader",),
+        parameter_visibility={"reader": "internal"},
         parameter_schemas={
             "crosstab": ValueSchema(
                 "object",
@@ -79,6 +83,7 @@ class PipelineContext(UtilitySpec):
         crosstab: dict | None = None,
         node: str | None = None,
     ):
+        """Run a SQL query and save its result to the selected output file."""
         sql = self.macro.substitute(sql)
         effective_node = (
             node
@@ -101,6 +106,6 @@ class PipelineContext(UtilitySpec):
 
         self.csv_io.write(output, result, header=header)
 
-    @emittable(file_effects=())
+    @emittable(file_effects=(), visibility="internal")
     def eval_condition(self, lhs: str, op: str, rhs: str, *args: Any) -> bool:
         return self.macro.eval_condition(lhs, op, rhs)

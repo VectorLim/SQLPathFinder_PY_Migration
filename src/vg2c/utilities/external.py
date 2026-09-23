@@ -71,7 +71,8 @@ class ExternalProcess(EmitterUtility):
         ]
 
     @emittable(
-        internal_parameters=("env",),
+        display_name="Run External Program",
+        parameter_visibility={"env": "internal"},
         file_effects=(
             FileEffectDefinition(
                 "process",

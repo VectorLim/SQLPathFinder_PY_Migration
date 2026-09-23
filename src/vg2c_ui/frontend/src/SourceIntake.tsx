@@ -46,6 +46,7 @@ export function SourceIntake({ intake, hasOpenDocument }: Props) {
           ].filter(Boolean).join(' · ')) || 'Upload or select sources'
   const shellClassName = [
     'source-intake-shell',
+    hasOpenDocument ? 'has-open-document' : '',
     compactCollapsed ? 'is-compact-collapsed' : '',
     compactError ? 'has-error' : '',
   ].filter(Boolean).join(' ')

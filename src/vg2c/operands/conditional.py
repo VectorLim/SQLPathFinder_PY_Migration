@@ -168,6 +168,12 @@ class IfThen:
 
         return expr
 
+    def render_header(self) -> str:
+        """Render the generated Python condition header from authoritative VG2 semantics."""
+        condition_expr = self._build_condition_expr()
+        prompt = f"/PROMPT-TEXT={self.prompt_text}"
+        return f"if Logger.condition({prompt!r}, {condition_expr}):"
+
     def emit_scope(
         self,
         writer: IndentWriter,
@@ -183,9 +189,7 @@ class IfThen:
             elif child.kind == "else-branch":
                 else_branch = child
 
-        condition_expr = self._build_condition_expr()
-        prompt = f"/PROMPT-TEXT={self.prompt_text}"
-        writer.write(f"if Logger.condition({prompt!r}, {condition_expr}):")
+        writer.write(self.render_header())
         writer.push_indent()
         if if_branch:
             for child in if_branch.children:

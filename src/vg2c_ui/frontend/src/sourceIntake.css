@@ -4,6 +4,27 @@
 
 .source-intake-shell { min-width: 0; }
 .source-intake__compact-toggle { display: none; }
+.source-intake-shell.has-open-document .source-intake__compact-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 18px;
+  color: var(--text);
+  background: var(--panel);
+  text-align: left;
+}
+.source-intake-shell.has-open-document .source-intake__compact-toggle > span:first-child { display: grid; min-width: 0; gap: 1px; }
+.source-intake-shell.has-open-document .source-intake__compact-toggle strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.source-intake-shell.has-open-document .source-intake__compact-toggle small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.source-intake-shell.has-error .source-intake__compact-toggle small { color: var(--danger); }
+.source-intake-shell.has-open-document .source-intake__compact-action { flex: 0 0 auto; color: var(--accent-strong); font-size: 10px; font-weight: 700; }
+.source-intake-shell.is-compact-collapsed .source-intake { display: none; }
 
 .source-intake {
   display: grid;
@@ -131,25 +152,14 @@
 @media (max-width: 820px) {
   .source-intake__compact-toggle {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    width: 100%;
     min-height: 44px;
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    border-radius: 0;
     padding: 7px 12px;
-    color: var(--text);
-    background: var(--panel);
-    text-align: left;
   }
   .source-intake__compact-toggle > span:first-child { display: grid; min-width: 0; gap: 1px; }
   .source-intake__compact-toggle strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .source-intake__compact-toggle small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
   .source-intake-shell.has-error .source-intake__compact-toggle small { color: var(--danger); }
   .source-intake__compact-action { flex: 0 0 auto; color: var(--accent-strong); font-size: 10px; font-weight: 700; }
-  .source-intake-shell.is-compact-collapsed .source-intake { display: none; }
   .source-intake { grid-template-columns: 1fr; padding: 10px 12px; }
   .upload-queue, .source-intake__diagnostics { grid-column: 1; }
 }

@@ -186,3 +186,29 @@
   .sql-add-panel__actions > button { flex: 1 1 auto; }
   .raw-sql-details > summary { display: flex; align-items: center; min-height: 44px; }
 }
+
+
+.sql-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--line); }
+.sql-tabs button { display: flex; justify-content: center; gap: var(--space-1); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); }
+.sql-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.sql-tabs button span { color: var(--muted); font-size: 11px; }
+.sql-tab-panel { min-width: 0; }
+.reorderable-list { display: grid; gap: var(--space-2); }
+.reorderable-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); border-radius: var(--radius-sm); }
+.reorderable-item.is-drop-target { outline: 1px dashed var(--accent); }
+.reorder-drag-handle { display: grid; place-items: center; min-width: 32px; min-height: 32px; cursor: grab; color: var(--muted); background: transparent; user-select: none; touch-action: none; }
+.reorder-drag-handle:active { cursor: grabbing; }
+.reorder-touch-controls { display: inline-flex; gap: 2px; }
+.reorder-touch-controls button { display: grid; place-items: center; min-width: 30px; min-height: 30px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); }
+.reorder-touch-controls button:disabled { opacity: .45; }
+.reorderable-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sql-column-row { min-width: 0; }
+.sql-advanced { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); }
+.sql-advanced > summary, .raw-sql-details > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
+.raw-sql-details { margin-top: var(--space-2); }
+
+.sql-source-context { margin-top: var(--space-2); border-top: 1px solid var(--line-soft); padding-top: var(--space-2); }
+.sql-source-context > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); font-weight: 650; }
+.sql-source-context pre { max-height: 180px; margin: var(--space-2) 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sql-file-list { display: grid; gap: 5px; margin: 8px 0; color: var(--text); font-size: 12px; }
+.sql-file-list select { min-height: 34px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--control-bg); color: var(--ink); }

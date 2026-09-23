@@ -4,9 +4,11 @@ import type {
   ChangeBatch,
   ChangePreviewView,
   ChangeResultView,
-  CsvPreviewView,
-  CsvPreviewRequest,
+  HtmlPreviewRequest,
+  HtmlPreviewView,
   DocumentView,
+  DocumentSnapshot,
+  ReorderRequest,
   SqlActionRequest,
   SqlActionResponse,
   SqlModelRequest,
@@ -37,7 +39,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const payload = await response.json()
   const documents = path === '/api/documents/open' ? [payload]
     : path === '/api/translations/batch' ? payload.documents
-    : path === '/api/changes/apply' ? [payload.document] : []
+    : ['/api/changes/save', '/api/changes/generate', '/api/changes/reorder'].includes(path) ? [payload.document] : []
   for (const document of documents ?? []) {
     if (document?.schema_version !== SCHEMA_VERSION || typeof document?.revision !== 'string') {
       throw new ApiError('Unsupported workbench contract. Reload after updating the client and server together.', 426)
@@ -58,8 +60,16 @@ export function previewChanges(batch: ChangeBatch): Promise<ChangePreviewView> {
   return post('/api/changes/preview', batch)
 }
 
-export function applyChanges(batch: ChangeBatch): Promise<ChangeResultView> {
-  return post('/api/changes/apply', batch)
+export function saveChanges(batch: ChangeBatch): Promise<ChangeResultView> {
+  return post('/api/changes/save', batch)
+}
+
+export function generateOutput(snapshot: DocumentSnapshot): Promise<ChangeResultView> {
+  return post('/api/changes/generate', snapshot)
+}
+
+export function reorderExecution(request: ReorderRequest): Promise<ChangeResultView> {
+  return post('/api/changes/reorder', request)
 }
 
 export function projectWorkspace(request: WorkspaceProjectionRequest): Promise<WorkspaceProjectionView> {
@@ -74,8 +84,8 @@ export function applySqlAction(request: SqlActionRequest): Promise<SqlActionResp
   return post('/api/sql/apply-action', request)
 }
 
-export function previewCsv(request: CsvPreviewRequest): Promise<CsvPreviewView> {
-  return post('/api/documents/preview-csv', request)
+export function previewHtml(request: HtmlPreviewRequest): Promise<HtmlPreviewView> {
+  return post('/api/documents/preview-html', request)
 }
 
 export async function uploadWorkspaceFile(file: File): Promise<WorkspaceFileView> {

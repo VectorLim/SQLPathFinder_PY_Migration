@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './workspaceGuards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './workspaceState.ts'
-import type { DocumentView } from './contracts.generated.ts'
+import { solvePanes } from './paneSolver.ts'
+import { SCHEMA_VERSION, type DocumentView } from './contracts.generated.ts'
 
 function doc(id: string): DocumentView {
   return {
-    schema_version: 4,
+    schema_version: SCHEMA_VERSION,
     id,
     source_path: `${id}.txt`,
     output_path: `${id}.py`,
@@ -13,33 +14,68 @@ function doc(id: string): DocumentView {
     output_hash: `out-${id}`,
     revision: '5755395593540295586',
     compiler_hash: `compiler-${id}`,
-    synchronized: true,
+    generation_state: 'current',
     read_only_reason: null,
-    steps: [], scopes: [], artifacts: [], diagnostics: [], effects: [],
+    diagnostics: [], effects: [],
+    semantic_operations: [], files: [], symbols: [], condition_operators: [],
   }
 }
 
 let state = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('a'), doc('b')], activateFirst: true })
-state = workspaceReducer(state, { type: 'edit', tabId: 'a', parameterId: 'p1', value: 'draft' })
+state = workspaceReducer(state, { type: 'edit', tabId: 'a', bindingId: 'p1', value: 'draft' })
 state = workspaceReducer(state, { type: 'activate', tabId: 'b' })
 assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.edits.values.p1, 'draft', 'inactive dirty tab must retain its draft')
 assert.equal(state.tabs.find((tab) => tab.document.id === 'a')?.status, 'dirty')
 
+const refreshedA = { ...doc('a'), revision: 'translated-revision' }
+const preserved = workspaceReducer(state, {
+  type: 'merge-documents',
+  documents: [refreshedA, doc('c')],
+  activateFirst: true,
+  preserveDirty: true,
+})
+assert.equal(
+  preserved.tabs.find((tab) => tab.document.id === 'a'),
+  state.tabs.find((tab) => tab.document.id === 'a'),
+  'batch translation must not replace an existing tab with unsaved edits',
+)
+assert.equal(preserved.tabs.find((tab) => tab.document.id === 'a')?.document.revision, doc('a').revision)
+assert.equal(preserved.activeId, 'c', 'a skipped dirty collision must not become the active translation result')
+assert.ok(preserved.tabs.some((tab) => tab.document.id === 'c'))
+
 const projection = workspaceProjectionRequest(state)
-assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ parameter_id: 'p1', value: 'draft', reset: false }])
+assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', symbol_id: null, reset: false }])
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
+
+const fileDoc = doc('files')
+fileDoc.semantic_operations = [{
+  id: 'copy', kind: 'copy', display_name: 'Copy', summary: '',
+  parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 1 },
+  capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal',
+  bindings: [{
+    id: 'source', owner_operation_id: 'copy', name: 'src', display_label: 'Source',
+    value: '', default: null, required: true, visibility: 'normal', capabilities: ['file-input'],
+    validation_state: 'valid', resettable: true, editable: true, read_only_reason: null,
+    value_schema: null, file_choices: [],
+  }],
+}]
+let fileState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [fileDoc] })
+fileState = workspaceReducer(fileState, { type: 'edit', tabId: 'files', bindingId: 'source', value: 'draft.csv' })
+const refreshedFiles = structuredClone(fileDoc)
+refreshedFiles.semantic_operations[0].bindings[0].file_choices = ['inputs/uploaded.csv']
+fileState = workspaceReducer(fileState, {
+  type: 'refresh-file-choices', tabId: 'files', instanceId: fileState.tabs[0].instanceId,
+  document: refreshedFiles,
+})
+assert.deepEqual(fileState.tabs[0].document.semantic_operations[0].bindings[0].file_choices, ['inputs/uploaded.csv'])
+assert.equal(fileState.tabs[0].edits.values.source, 'draft.csv', 'upload refresh must preserve unsaved edits')
 
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const navigationDoc = doc('navigation')
-navigationDoc.scopes = [{ id: 'scope-a', node_kind: 'loop', scope_kind: 'loop', label: 'Loop', start_index: 0, end_index: 1, parent_scope_id: null }]
-navigationDoc.steps = [{
-  id: 'step-a', node_kind: 'step', function_name: 'step_a', block_index: 0,
-  source_span: { file: null, start_line: 1, end_line: 2 }, functional_kind: 'TEST', display_label: 'Test', description: '',
-  parent_scope_id: 'scope-a', branch: null,
-  validation_state: 'valid', raw_code: null, read_only: false,
-  operations: [],
-}]
-navigationDoc.steps[0].operations = ['operation-a', 'operation-b'].map((id) => ({ id, utility: { name: 'probe', class_name: 'Probe', module: 'test', title: 'Probe', description: '', method: 'run', method_description: null, return_type: null, capabilities: [], supported_mutations: [] }, parameters: [] }))
+navigationDoc.semantic_operations = [
+  { id: 'scope-a', kind: 'loop', display_name: 'Loop', parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal' },
+  ...['operation-a', 'operation-b'].map((id) => ({ id, kind: 'probe', display_name: 'Probe', parent_operation_id: 'scope-a', branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid' as const, visibility: 'normal' as const })),
+]
 let navigation = workspaceReducer(state, { type: 'merge-documents', documents: [navigationDoc] })
 navigation = workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b', focus: true })
 const navigationTab = navigation.tabs.find((tab) => tab.document.id === 'navigation')!
@@ -49,14 +85,14 @@ assert.ok(navigationTab.expandedScopeIds.has('scope-a'))
 assert.equal(navigationTab.revealFocus, true)
 assert.equal(workspaceReducer(navigation, { type: 'toggle-scope', tabId: 'navigation', scopeId: 'scope-a', expanded: true }).tabs.at(-1)?.selectedId, 'operation-b')
 assert.equal(workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b' }).tabs.at(-1)?.revealVersion, 2)
-const resetState = workspaceReducer(state, { type: 'edit', tabId: 'a', parameterId: 'p1', value: RESET_VALUE })
-assert.deepEqual(draftChanges(resetState.tabs[0]), [{ parameter_id: 'p1', value: null, reset: true }])
+const resetState = workspaceReducer(state, { type: 'edit', tabId: 'a', bindingId: 'p1', value: RESET_VALUE })
+assert.deepEqual(draftChanges(resetState.tabs[0]), [{ binding_id: 'p1', value: null, symbol_id: null, reset: true }])
 assert.equal(workspaceReducer(resetState, { type: 'undo', tabId: 'a' }).tabs[0].edits.values.p1, 'draft')
-let invalidFields = workspaceReducer(state, { type: 'field-draft', tabId: 'a', key: 'number', draft: { parameterId: 'numeric', text: '', error: 'Enter a number' } })
-invalidFields = workspaceReducer(invalidFields, { type: 'edit', tabId: 'a', parameterId: 'other', value: 'changed' })
+let invalidFields = workspaceReducer(state, { type: 'field-draft', tabId: 'a', key: 'number', draft: { bindingId: 'numeric', text: '', error: 'Enter a number' } })
+invalidFields = workspaceReducer(invalidFields, { type: 'edit', tabId: 'a', bindingId: 'other', value: 'changed' })
 assert.equal(invalidFields.tabs[0].fieldDrafts.number.text, '')
 assert.equal(getChangeActionState(invalidFields.tabs[0]).canPreview, false)
-assert.equal(getChangeActionState(invalidFields.tabs[0]).canApply, false)
+assert.equal(getChangeActionState(invalidFields.tabs[0]).canSave, false)
 assert.deepEqual(workspaceReducer(invalidFields, { type: 'undo', tabId: 'a' }).tabs[0].fieldDrafts, {})
 const a = state.tabs.find((tab) => tab.document.id === 'a')!
 state = workspaceReducer(state, {
@@ -65,7 +101,7 @@ state = workspaceReducer(state, {
 })
 assert.equal(state.tabs.find((tab) => tab.document.id === 'b'), beforeB, 'targeted async state must not mutate active-but-unrelated tab')
 
-state = workspaceReducer(state, { type: 'edit', tabId: 'a', parameterId: 'p2', value: 'newer', baseVersion: 1 })
+state = workspaceReducer(state, { type: 'edit', tabId: 'a', bindingId: 'p2', value: 'newer', baseVersion: 1 })
 state = workspaceReducer(state, {
   type: 'preview-result', tabId: 'a', instanceId: a.instanceId,
   requestId: 'preview-1', baseVersion: 1,
@@ -112,26 +148,31 @@ reopened = workspaceReducer(reopened, {
 })
 assert.equal(reopened.tabs[0].preview, null, 'closed tab response must not leak into reopened document')
 
-const csvInstance = reopened.tabs[0].instanceId
-reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', path: 'a.csv' })
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: oldInstance, requestId: 'csv-new', csv: null, error: 'stale csv error' })
-assert.equal(reopened.tabs[0].csvRequestId, 'csv-new', 'CSV result from a prior tab instance must be ignored')
-assert.equal(reopened.tabs[0].csvError, null, 'stale CSV errors must not leak into a reopened document')
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', csv: null, error: 'CSV preview failed' })
-assert.equal(reopened.tabs[0].csvError, 'CSV preview failed', 'current CSV error should stay with the tab/artifact request')
-reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-retry', path: 'a.csv' })
-assert.equal(reopened.tabs[0].csvError, null, 'starting a new CSV request should clear the prior CSV error')
-reopened = workspaceReducer(reopened, { type: 'edit', tabId: 'reopen', parameterId: 'output', value: 'changed.csv' })
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-retry', csv: null, error: 'stale after edit' })
-assert.equal(reopened.tabs[0].csvError, null, 'CSV response cannot survive a newer draft')
-assert.equal(reopened.tabs[0].csvArtifactPath, null)
+const narrowPanes = solvePanes(390, 360, 460, false, false, null)
+assert.equal(narrowPanes.single, true)
+const twoPanes = solvePanes(800, 360, 460, false, false, null)
+assert.deepEqual([twoPanes.showConfig, twoPanes.showContext], [false, true])
+assert.ok(twoPanes.logicWidth + 6 + 320 <= 800)
+const focusedConfig = solvePanes(800, 360, 460, false, false, 'config')
+assert.deepEqual([focusedConfig.showConfig, focusedConfig.showContext], [true, false])
+const threePanes = solvePanes(1200, 360, 460, false, false, null)
+assert.deepEqual([threePanes.showConfig, threePanes.showContext], [true, true])
+const manuallyClosed = solvePanes(1200, 360, 460, true, false, 'config')
+assert.deepEqual([manuallyClosed.showConfig, manuallyClosed.showContext], [false, true])
 
 let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
-actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p1', value: 'draft' })
+actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', bindingId: 'p1', value: 'draft' })
 let actionsTab = actionsState.tabs[0]
 let availability = getChangeActionState(actionsTab)
-assert.equal(availability.canPreview, true, 'dirty synchronized tab should be previewable')
-assert.equal(availability.canApply, false, 'unvalidated draft must not be applicable')
+assert.equal(availability.canPreview, true, 'dirty editable tab should be previewable')
+assert.equal(availability.canSave, true, 'valid draft may be saved without preview')
+assert.equal(availability.canGenerate, false, 'unsaved draft must block generation')
+const savedStale = doc('saved-stale')
+savedStale.generation_state = 'stale'
+let generatedState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [savedStale] })
+assert.equal(getChangeActionState(generatedState.tabs[0]).canGenerate, true, 'saved stale state can generate')
+generatedState = workspaceReducer(generatedState, { type: 'edit', tabId: 'saved-stale', bindingId: 'p1', value: 'draft' })
+assert.equal(getChangeActionState(generatedState.tabs[0]).canGenerate, false, 'draft blocks generation')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -140,7 +181,7 @@ actionsState = workspaceReducer(actionsState, {
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
 assert.equal(availability.canPreview, false, 'pending validation must block a second preview mutation')
-assert.equal(availability.canApply, false, 'pending validation must block apply')
+assert.equal(availability.canSave, false, 'pending validation must block save')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'preview-result', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -149,7 +190,7 @@ actionsState = workspaceReducer(actionsState, {
 })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
-assert.equal(availability.canApply, true, 'fresh valid preview should enable apply')
+assert.equal(availability.canSave, true, 'validated draft remains saveable')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -157,8 +198,8 @@ actionsState = workspaceReducer(actionsState, {
 })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
-assert.equal(availability.canPreview, false, 'pending apply must block preview')
-assert.equal(availability.canApply, false, 'pending apply must block re-entry')
+assert.equal(availability.canPreview, false, 'pending save must block preview')
+assert.equal(availability.canSave, false, 'pending save must block re-entry')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -168,11 +209,11 @@ actionsState = workspaceReducer(actionsState, {
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
 assert.equal(actionsTab.mutationError, 'File changed externally', 'mutation errors should stay on the affected tab')
-assert.equal(availability.canApply, false, 'stale valid preview must not remain applicable after conflict')
+assert.equal(availability.canSave, false, 'conflict must block save')
 assert.equal(availability.canPreview, false, 'conflict requires reload before another preview')
 assert.equal(availability.canReload, true, 'conflicted tab should enable reload')
 
-actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', parameterId: 'p2', value: 'newer' })
+actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', bindingId: 'p2', value: 'newer' })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
 assert.equal(actionsTab.status, 'conflict', 'editing must not bypass an unresolved external conflict')
@@ -209,21 +250,21 @@ assert.equal(JSON.parse(JSON.stringify(doc('revision'))).revision, doc('revision
 
 let nestedDrafts = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('nested')] })
 for (const path of [['options', 'left', 1], ['options', 'left', 2], ['options', 'right'], ['other']]) {
-  nestedDrafts = workspaceReducer(nestedDrafts, { type: 'field-draft', tabId: 'nested', key: JSON.stringify(path), draft: { parameterId: String(path[0]), text: '-', error: 'Invalid number' } })
+  nestedDrafts = workspaceReducer(nestedDrafts, { type: 'field-draft', tabId: 'nested', key: JSON.stringify(path), draft: { bindingId: String(path[0]), text: '-', error: 'Invalid number' } })
 }
-const pruned = workspaceReducer(nestedDrafts, { type: 'edit', tabId: 'nested', parameterId: 'options', value: { left: null }, clearDraftPaths: [['left']] })
+const pruned = workspaceReducer(nestedDrafts, { type: 'edit', tabId: 'nested', bindingId: 'options', value: { left: null }, clearDraftPaths: [['left']] })
 assert.deepEqual(Object.keys(pruned.tabs[0].fieldDrafts), ['["options","right"]', '["other"]'], 'structural replacement clears only its draft subtree')
-const shifted = workspaceReducer(nestedDrafts, { type: 'edit', tabId: 'nested', parameterId: 'options', value: { left: [0] }, clearDraftPaths: [['left', 2]] })
+const shifted = workspaceReducer(nestedDrafts, { type: 'edit', tabId: 'nested', bindingId: 'options', value: { left: [0] }, clearDraftPaths: [['left', 2]] })
 assert.ok(shifted.tabs[0].fieldDrafts['["options","left",1]'], 'list edit preserves earlier item drafts')
 assert.ok(!shifted.tabs[0].fieldDrafts['["options","left",2]'], 'removed or shifted list drafts cannot attach to another item')
 
 let saving = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('saving')] })
-saving = workspaceReducer(saving, { type: 'edit', tabId: 'saving', parameterId: 'value', value: 'saved' })
+saving = workspaceReducer(saving, { type: 'edit', tabId: 'saving', bindingId: 'value', value: 'saved' })
 const saveTab = saving.tabs[0]
 saving = workspaceReducer(saving, { type: 'mutation-started', tabId: 'saving', instanceId: saveTab.instanceId, requestId: 'save', baseVersion: saveTab.edits.version, status: 'saving' })
 for (const action of [
-  { type: 'edit', tabId: 'saving', parameterId: 'value', value: 'newer' },
-  { type: 'field-draft', tabId: 'saving', key: '["value"]', draft: { parameterId: 'value', text: '-', error: 'Invalid' } },
+  { type: 'edit', tabId: 'saving', bindingId: 'value', value: 'newer' },
+  { type: 'field-draft', tabId: 'saving', key: '["value"]', draft: { bindingId: 'value', text: '-', error: 'Invalid' } },
   { type: 'undo', tabId: 'saving' },
   { type: 'redo', tabId: 'saving' },
 ] as const) assert.equal(workspaceReducer(saving, action).tabs[0], saving.tabs[0], 'save must freeze draft mutations')

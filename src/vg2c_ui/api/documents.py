@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from vg2c_ui.api.models import (
-    CsvPreviewRequest,
-    CsvPreviewView,
     DocumentReference,
     DocumentView,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
 )
 from vg2c_ui.services.document_store import (
     DocumentStore,
@@ -31,10 +31,10 @@ def open_document(payload: DocumentReference, request: Request) -> DocumentView:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/preview-csv", response_model=CsvPreviewView)
-def preview_csv(payload: CsvPreviewRequest, request: Request) -> CsvPreviewView:
+@router.post("/preview-html", response_model=HtmlPreviewView)
+def preview_html(payload: HtmlPreviewRequest, request: Request) -> HtmlPreviewView:
     try:
-        return _store(request).preview_csv(payload)
+        return _store(request).preview_html(payload)
     except RevisionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except FileNotFoundError as exc:

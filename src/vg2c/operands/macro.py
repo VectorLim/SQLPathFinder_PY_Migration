@@ -91,13 +91,8 @@ class StartMacro:
     # Emission
     # ------------------------------------------------------------------
 
-    def emit_scope(
-        self,
-        writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
-        children: tuple[ScopeNode, ...],
-    ) -> None:
-        """Emit a CSV-backed or static macro scope using a single context manager."""
+    def render_header(self) -> str:
+        """Render the generated Python macro-scope header."""
         from vg2c.emitter.models import CodeExpr
         from vg2c.utilities.csv_io import CsvIO
         from vg2c.utilities.macro_state import MacroState
@@ -107,8 +102,16 @@ class StartMacro:
             scope_call = MacroState.scope.render(CodeExpr(str(row_expr)))
         else:
             scope_call = MacroState.scope.render()
+        return f"with {scope_call}:"
 
-        writer.write(f"with {scope_call}:")
+    def emit_scope(
+        self,
+        writer: IndentWriter,
+        walk: Callable[[ScopeNode], None],
+        children: tuple[ScopeNode, ...],
+    ) -> None:
+        """Emit a CSV-backed or static macro scope using a single context manager."""
+        writer.write(self.render_header())
         writer.push_indent()
 
         for child in children:

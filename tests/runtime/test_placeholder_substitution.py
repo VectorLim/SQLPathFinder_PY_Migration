@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
@@ -21,8 +20,7 @@ def test_mars_placeholder_in_emitted_sql():
     p = parse(text, source=FIXTURES / "actual_script.txt")
     c = classify(p)
     r = resolve(c)
-    a = analyze(r)
-    d = dispatch(a)
+    d = dispatch(r)
     e = emit(d)
 
     source = e.source
