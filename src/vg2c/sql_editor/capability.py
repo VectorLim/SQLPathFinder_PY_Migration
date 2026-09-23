@@ -16,22 +16,7 @@ from vg2c.sql_editor.models import (
 )
 from vg2c.sql_editor.parser import parse_sql
 from vg2c.sql_editor.schema import SqlTableSchema, with_input_schemas
-from vg2c.sql_editor.transform import (
-    add_filter,
-    add_join,
-    add_selection,
-    remove_filter,
-    remove_join,
-    remove_join_predicate,
-    remove_selection,
-    reorder_selection,
-    update_filter,
-    update_join_predicate,
-    update_join_source,
-    update_join_type,
-    update_selection,
-    update_source,
-)
+from vg2c.sql_editor.operations import get_sql_operation
 from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 
 
@@ -173,81 +158,7 @@ def apply_sql_action(
         if choice is None:
             raise SqlEditError("SQL column choice is no longer available; refresh the editor.")
         args[target_key] = choice.expression
-    name = action.action
-    if name == "add-selection":
-        transformed = add_selection(sql, _require(args, "expression"))
-    elif name == "update-selection":
-        selection_id = _require(args, "selection_id")
-        kwargs: dict[str, Any] = {}
-        if "expression" in args:
-            kwargs["expression"] = args["expression"]
-        if "alias" in args:
-            kwargs["alias"] = args["alias"]
-        transformed = update_selection(sql, selection_id, **kwargs)
-    elif name == "remove-selection":
-        transformed = remove_selection(sql, _require(args, "selection_id"))
-    elif name == "reorder-selection":
-        transformed = reorder_selection(
-            sql,
-            _require(args, "selection_id"),
-            int(_require(args, "target_index")),
-        )
-    elif name == "add-filter":
-        transformed = add_filter(
-            sql,
-            left=_require(args, "left"),
-            operator=_require(args, "operator"),
-            right=_require(args, "right"),
-            connector=args.get("connector", "AND"),
-        )
-    elif name == "update-filter":
-        transformed = update_filter(
-            sql,
-            _require(args, "filter_id"),
-            **{
-                key: args[key]
-                for key in ("left", "operator", "right", "connector")
-                if key in args
-            },
-        )
-    elif name == "remove-filter":
-        transformed = remove_filter(sql, _require(args, "filter_id"))
-    elif name == "add-join":
-        transformed = add_join(
-            sql,
-            join_type=_require(args, "join_type"),
-            source_expression=_require(args, "source"),
-            left=_require(args, "left"),
-            right=_require(args, "right"),
-            operator=args.get("operator", "="),
-        )
-    elif name == "update-join-type":
-        transformed = update_join_type(
-            sql, _require(args, "join_id"), _require(args, "join_type")
-        )
-    elif name == "update-join-source":
-        transformed = update_join_source(
-            sql, _require(args, "join_id"), _require(args, "source")
-        )
-    elif name == "update-join-predicate":
-        transformed = update_join_predicate(
-            sql,
-            _require(args, "join_id"),
-            _require(args, "predicate_id"),
-            **{key: args[key] for key in ("left", "operator", "right") if key in args},
-        )
-    elif name == "remove-join-predicate":
-        transformed = remove_join_predicate(
-            sql, _require(args, "join_id"), _require(args, "predicate_id")
-        )
-    elif name == "remove-join":
-        transformed = remove_join(sql, _require(args, "join_id"))
-    elif name == "update-source":
-        transformed = update_source(
-            sql, _require(args, "source_id"), _require(args, "source")
-        )
-    else:
-        raise SqlEditError(f"Unsupported structured SQL action: {name}")
+    transformed = get_sql_operation(action.action).apply(sql, args)
 
     return SemanticChange(binding_id=parameter.id, value=transformed.sql)
 
@@ -307,11 +218,6 @@ def _effective_parameter_value(
         parameter.value,
     )
 
-
-def _require(arguments: Mapping[str, Any], key: str) -> Any:
-    if key not in arguments:
-        raise SqlEditError(f"Missing SQL action argument: {key}")
-    return arguments[key]
 
 
 __all__ = [
