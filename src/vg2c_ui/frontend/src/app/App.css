@@ -1,0 +1,183 @@
+/* Application shell and top-level document states. */
+
+.app-shell {
+display: grid;
+  grid-template-rows: auto 44px minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.topbar {
+display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 70px;
+  padding: 10px 18px;
+  color: var(--header-text);
+  background: var(--header-bg);
+}
+
+.brand {
+flex: 0 0 auto;
+  min-width: 170px;
+  font-weight: 720;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.brand span {
+display: inline-grid;
+  place-items: center;
+  margin-right: 7px;
+  min-width: 42px;
+  height: 31px;
+  padding: 0 7px;
+  border-radius: 8px;
+  color: var(--on-brand-accent);
+  background: var(--brand-accent);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.workspace-downloads {
+display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-width: 360px;
+}
+
+.workspace-downloads a {
+overflow: hidden;
+  color: var(--header-link);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics summary,
+.change-preview summary {
+cursor: pointer;
+  color: var(--text);
+  font-weight: 670;
+}
+
+.change-preview pre {
+max-height: 300px;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 11px;
+  color: var(--code-text);
+  background: var(--code-bg);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.change-preview,
+.diagnostics {
+width: min(1120px, calc(100% - 28px));
+  margin: 0 auto 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.change-preview > summary,
+.diagnostics > summary {
+padding: 10px 12px;
+}
+
+.change-preview > div,
+.diagnostics > div {
+border-top: 1px solid var(--line-soft); padding: 10px 12px;
+}
+
+.change-preview.is-valid {
+border-color: var(--success-line);
+}
+
+.change-preview.is-invalid {
+border-color: var(--danger-line);
+}
+
+.diagnostics summary span {
+display: inline-block;
+  margin-left: 5px;
+  border-radius: 99px;
+  padding: 1px 6px;
+  color: var(--on-accent);
+  background: var(--muted);
+  font-size: 10px;
+}
+
+.diagnostic {
+margin: 7px 0; border-left: 3px solid var(--subtle); padding-left: 8px; color: var(--text); font-size: 12px; line-height: 1.45;
+}
+
+.diagnostic--warning {
+border-color: var(--warning);
+}
+
+.diagnostic--error {
+border-color: var(--danger);
+}
+
+.diagnostic small {
+margin-left: 8px; color: var(--muted);
+}
+
+.empty-state {
+display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 260px;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-state strong {
+color: var(--text); font-size: 18px;
+}
+
+@media (max-width: 1100px) {
+.brand {
+min-width: auto;
+}
+}
+
+@media (max-width: 780px) {
+.app-shell {
+grid-template-rows: auto 44px minmax(0, 1fr);
+}
+
+.topbar {
+display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 9px 12px;
+}
+
+.brand {
+flex: 1 0 150px; min-width: 150px;
+}
+
+.workspace-downloads {
+flex: 1 0 100%;
+    max-width: none;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+}
+
+@media (max-width: 640px) {
+.topbar {
+gap: 7px;
+}
+
+.brand {
+font-size: 14px;
+}
+}

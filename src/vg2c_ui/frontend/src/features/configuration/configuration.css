@@ -1,0 +1,406 @@
+/* Semantic configuration controls and editors. */
+
+.operation-editor {
+min-width: 0;
+  margin: 7px 8px 13px 38px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: clamp(14px, 2vw, 20px);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.operation-editor__header {
+display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.operation-editor h3 {
+margin: 4px 0 0; color: var(--ink); font-size: 18px; letter-spacing: -.015em;
+}
+
+.parameter-grid {
+display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.parameter {
+display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.parameter__label {
+display: block;
+}
+
+.parameter input:not([type="checkbox"]),
+.parameter textarea,
+.parameter select {
+width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: var(--ink);
+  background: var(--control-bg);
+}
+
+.parameter textarea {
+resize: vertical; line-height: 1.45;
+}
+
+.parameter--readonly input:not([type="checkbox"]),
+.parameter--readonly textarea,
+.parameter--readonly select {
+color: var(--muted);
+  background: var(--control-readonly);
+}
+
+.parameter small {
+color: var(--muted); font-size: 10px; font-weight: 450; line-height: 1.35;
+}
+
+.read-only-note {
+margin: 14px 0 0;
+  border-left: 3px solid var(--warning);
+  padding: 8px 10px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  font-size: 12px;
+}
+
+.raw-code {
+max-height: 300px;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 11px;
+  color: var(--code-text);
+  background: var(--code-bg);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 780px) {
+.operation-editor {
+margin-left: 30px; margin-right: 0;
+}
+
+.parameter-grid {
+grid-template-columns: 1fr;
+}
+}
+
+@media (max-width: 640px) {
+.operation-editor {
+margin-left: 20px; max-width: calc(100% - 10px); padding: 13px;
+}
+
+.operation-editor__header {
+flex-wrap: wrap; gap: 8px;
+}
+
+.operation-editor__header > div {
+flex: 1 1 220px; min-width: 0;
+}
+
+.operation-editor h3 {
+font-size: 16px;
+}
+
+.parameter input:not([type="checkbox"]),
+.parameter textarea,
+.parameter select {
+min-height: 44px;
+}
+}
+
+@media (max-width: 430px) {
+.operation-editor {
+margin-left: 10px; max-width: 100%;
+}
+}
+
+.configuration-pane .operation-editor {
+margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; padding: var(--space-4); background: var(--panel);
+}
+
+.configuration-pane .operation-editor h3 {
+font-size: var(--text-lg);
+}
+
+.configuration-pane .parameter-grid {
+grid-template-columns: minmax(0, 1fr); gap: var(--space-4); border: 0; padding: 0; margin: 0; min-width: 0;
+}
+
+.configuration-pane .parameter {
+min-width: 0;
+}
+
+.configuration-pane .parameter input,
+.configuration-pane .parameter select,
+.configuration-pane .parameter textarea {
+border-radius: var(--radius-sm); min-width: 0;
+}
+
+.workbench .operation-editor {
+letter-spacing: 0;
+}
+
+.parameter-field {
+margin: 0; padding: 0; border: 0; min-width: 0;
+}
+
+.parameter-field > legend {
+padding: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 600;
+}
+
+.parameter-field__meta,
+.sql-parameter-heading {
+display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 32px;
+}
+
+.parameter-field__meta > small {
+font-size: 11px; color: var(--muted);
+}
+
+.parameter-source {
+white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; margin: var(--space-2) 0; padding: var(--space-2); background: var(--control-readonly); border-left: 2px solid var(--line); font-size: var(--text-xs);
+}
+
+.parameter-field input:not([type="checkbox"]),
+.parameter-field select,
+.parameter-field textarea {
+width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--control-bg); color: var(--ink); font-size: var(--text-sm);
+}
+
+.parameter-field input[aria-invalid="true"] {
+border-color: var(--danger);
+}
+
+.parameter-field input[type="checkbox"] {
+width: 16px; height: 16px; flex-shrink: 0;
+}
+
+.nullable-field,
+.union-field,
+.collection-field,
+.object-field {
+display: grid; gap: var(--space-2); min-width: 0;
+}
+
+.collection-row {
+display: flex; align-items: start; gap: var(--space-1); min-width: 0;
+}
+
+.collection-row > :first-child {
+flex: 1; min-width: 0;
+}
+
+.collection-row .collection-field {
+border-left: 1px solid var(--line); padding-left: var(--space-2);
+}
+
+.object-row {
+display: grid; gap: var(--space-1); border-left: 1px solid var(--line); padding-left: var(--space-3);
+}
+
+.object-key {
+display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-xs);
+}
+
+.field-command {
+display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); background: var(--control-bg); color: var(--accent-strong); font-size: var(--text-xs); justify-self: start;
+}
+
+.map-add {
+display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2);
+}
+
+.sql-parameter-heading strong {
+color: var(--ink); font-size: var(--text-sm);
+}
+
+.configuration-pane .sql-join-row,
+.configuration-pane .sql-add-panel {
+border-radius: var(--radius-sm);
+}
+
+.paper-pane-slot--config .configuration-pane .pane-scroll > * {
+width: min(100%, 1120px);
+  margin-inline: auto;
+}
+
+@container (min-width: 760px) {
+.configuration-pane .parameter-grid {
+grid-template-columns: repeat(2, minmax(260px, 1fr));
+}
+
+.configuration-pane .semantic-file-list,
+.configuration-pane .field-command-row {
+max-width: 920px;
+}
+}
+
+@container (min-width: 980px) {
+.configuration-pane .parameter-grid {
+gap: var(--space-5);
+}
+}
+
+.semantic-operation-editor .operation-editor__header {
+align-items: flex-start;
+}
+
+.semantic-binding {
+display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-inline-size: 0;
+}
+
+.semantic-binding > .parameter-field__meta > strong,
+.field-label {
+font-size: var(--text-sm); color: var(--ink);
+}
+
+.semantic-file-selector {
+display: grid; gap: var(--space-2);
+}
+
+.semantic-file-selector label {
+display: grid; gap: var(--space-1); font-size: var(--text-xs);
+}
+
+.semantic-file-list {
+display: grid; gap: var(--space-2);
+}
+
+.semantic-file-list .field-command-row {
+display: flex; flex-wrap: wrap; gap: var(--space-2);
+}
+
+.optional-value {
+display: grid; gap: var(--space-2);
+}
+
+.optional-value__header {
+display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 32px;
+}
+
+.condition-editor,
+.condition-clause {
+display: grid; gap: var(--space-3);
+}
+
+.condition-clause {
+grid-template-columns: minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr);
+}
+
+.condition-clause--secondary {
+grid-template-columns: minmax(100px, .45fr) minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr);
+}
+
+.advanced-settings,
+.operation-comments {
+margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3);
+}
+
+.embedded-python-dialog {
+width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0; background: var(--panel); color: var(--ink);
+}
+
+.embedded-python-dialog::backdrop {
+background: rgb(0 0 0 / .45);
+}
+
+.embedded-python-card {
+display: grid; gap: var(--space-3); padding: var(--space-4);
+}
+
+.embedded-python-dialog header h3 {
+margin: 0;
+}
+
+.embedded-python-dialog header p {
+margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs);
+}
+
+.embedded-python-dialog textarea {
+width: 100%; min-height: 320px; resize: vertical; font-family: var(--font-mono);
+}
+
+.dialog-actions {
+display: flex; justify-content: flex-end; gap: var(--space-2);
+}
+
+.embedded-python-dialog .dialog-actions button {
+min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  color: var(--text);
+  background: var(--control-bg);
+  font-weight: 650;
+}
+
+.embedded-python-dialog .dialog-actions button:hover:not(:disabled) {
+border-color: var(--line-strong); background: var(--control-hover);
+}
+
+.embedded-python-dialog .dialog-actions .primary-button {
+border-color: var(--accent); color: var(--on-accent); background: var(--accent);
+}
+
+.embedded-python-dialog .dialog-actions .primary-button:hover:not(:disabled) {
+border-color: var(--accent-strong); background: var(--accent-strong);
+}
+
+.html-preview {
+display: grid; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line);
+}
+
+.html-preview > header {
+display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+}
+
+.html-preview > header div {
+display: grid; gap: 2px;
+}
+
+.html-preview > header small {
+color: var(--muted);
+}
+
+.html-preview__state {
+margin: 0; font-size: var(--text-xs);
+}
+
+.html-preview__state--error {
+color: var(--danger);
+}
+
+.html-preview__state--approximate {
+color: var(--warning);
+}
+
+.html-preview iframe {
+width: 100%; min-height: 360px; border: 1px solid var(--line); background: white;
+}
+
+@media (max-width: 860px) {
+.condition-clause,
+.condition-clause--secondary {
+grid-template-columns: minmax(0, 1fr);
+}
+}
+
+.embedded-python-card > footer {
+display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2);
+}
