@@ -5,9 +5,9 @@ import type {
   SemanticBindingView,
   SqlModelView,
   SymbolView,
-} from './api/contracts.generated'
-import type { SqlCommand } from './api/sqlActions'
-import type { FieldPath, TabState } from './workspace/state'
+} from '../../api/contracts.generated'
+import type { SqlCommand } from '../../api/sqlActions'
+import type { FieldPath, TabState } from '../../workspace/state'
 
 export interface BindingEdit {
   binding: SemanticBindingView

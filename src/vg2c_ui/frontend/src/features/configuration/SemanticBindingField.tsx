@@ -1,12 +1,12 @@
 import { RotateCcw } from 'lucide-react'
 
-import type { SemanticBindingView, ValueSchemaView } from './api/contracts.generated'
+import type { SemanticBindingView, ValueSchemaView } from '../../api/contracts.generated'
 import { EmbeddedPythonEditor } from './EmbeddedPythonEditor'
 import { defaultSchemaValue, SchemaValueField } from './SchemaValueField'
 import type { SemanticEditorSession } from './semanticEditorSession'
-import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './shared/SemanticControls'
-import { StructuredSqlEditor } from './StructuredSqlEditor'
-import { effectiveBindingValue, RESET_VALUE } from './workspace/state'
+import { FileListSelector, FileSelector, OptionalValue, SymbolSelector, ValidationMessage } from './SemanticControls'
+import { StructuredSqlEditor } from './sql/StructuredSqlEditor'
+import { effectiveBindingValue, RESET_VALUE } from '../../workspace/state'
 
 interface Props {
   binding: SemanticBindingView

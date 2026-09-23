@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { ChangePreviewView, SemanticBindingView } from './api/contracts.generated'
-import { useModalDialog } from './shared/hooks/useModalDialog'
+import type { ChangePreviewView, SemanticBindingView } from '../../api/contracts.generated'
+import { useModalDialog } from '../../shared/hooks/useModalDialog'
 
 interface Props {
   binding: SemanticBindingView

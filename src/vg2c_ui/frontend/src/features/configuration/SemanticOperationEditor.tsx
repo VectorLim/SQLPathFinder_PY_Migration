@@ -3,11 +3,11 @@ import { useState } from 'react'
 import type {
   HtmlPreviewView,
   SemanticOperationView,
-} from './api/contracts.generated'
+} from '../../api/contracts.generated'
 import { ConditionEditor } from './ConditionEditor'
 import { SemanticBindingField } from './SemanticBindingField'
 import type { SemanticEditorSession } from './semanticEditorSession'
-import { ValidationMessage } from './shared/SemanticControls'
+import { ValidationMessage } from './SemanticControls'
 
 interface Props {
   operation: SemanticOperationView

@@ -1,8 +1,8 @@
 import { useId, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 
-import type { ValueSchemaView } from './api/contracts.generated'
-import type { FieldPath, TabState } from './workspace/state'
+import type { ValueSchemaView } from '../../api/contracts.generated'
+import type { FieldPath, TabState } from '../../workspace/state'
 
 export interface FieldDraftProps {
   drafts: TabState['fieldDrafts']

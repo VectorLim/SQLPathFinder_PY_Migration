@@ -1,3 +1,4 @@
+import './sqlEditor.css'
 import './sql/sqlEditor.css'
 
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -9,10 +10,10 @@ import type {
   SqlModelView,
   SqlPredicateView,
   SqlSelectionView,
-} from './api/contracts.generated'
-import { ReorderableList } from './sql/ReorderableList'
-import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from './api/sqlActions'
-import { effectiveBindingValue } from './workspace/state'
+} from '../../../api/contracts.generated'
+import { ReorderableList } from './ReorderableList'
+import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from '../../../api/sqlActions'
+import { effectiveBindingValue } from '../../../workspace/state'
 
 interface Props {
   binding: SemanticBindingView
