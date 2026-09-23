@@ -53,7 +53,9 @@ class SqliteEngine(EmitterUtility):
 
     @staticmethod
     def _format_sql_literal(sql: str) -> str:
-        escaped = sql.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+        # Triple-quoted source stays readable, but every embedded quote must be
+        # escaped so a quoted identifier at the end cannot merge with the delimiter.
+        escaped = sql.replace("\\", "\\\\").replace('"', '\\"')
         return f'"""{escaped}"""'
 
     @staticmethod
