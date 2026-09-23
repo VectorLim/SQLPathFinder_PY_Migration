@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from vg2c_ui.api.contracts import render_typescript_contracts
-TARGET = ROOT / "src/vg2c_ui/frontend/src/contracts.generated.ts"
+TARGET = ROOT / "src/vg2c_ui/frontend/src/api/contracts.generated.ts"
 
 
 def main() -> int:

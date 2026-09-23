@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { DocumentView } from './src/contracts.generated'
+import type { DocumentView } from './src/api/contracts.generated'
 
 async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
   const target = page.locator(name === 'Script Logic' ? '#pane-logic' : name === 'Configuration' ? '#pane-config' : '#pane-context')

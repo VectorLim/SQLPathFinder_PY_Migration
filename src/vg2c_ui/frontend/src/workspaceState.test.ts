@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { getChangeActionState } from './workspaceGuards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './workspaceState.ts'
 import { solvePanes } from './paneSolver.ts'
-import { SCHEMA_VERSION, type DocumentView } from './contracts.generated.ts'
+import { SCHEMA_VERSION, type DocumentView } from './api/contracts.generated.ts'
 
 function doc(id: string): DocumentView {
   return {

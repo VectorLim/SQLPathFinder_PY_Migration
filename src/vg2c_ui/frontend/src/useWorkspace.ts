@@ -12,12 +12,12 @@ import {
   projectWorkspace,
   saveChanges,
   translateBatch,
-} from './api'
+} from './api/client'
 import type {
   SemanticBindingView,
   SqlModelView,
-} from './contracts.generated'
-import type { SqlCommand } from './sql/sqlCommands'
+} from './api/contracts.generated'
+import type { SqlCommand } from './api/sqlActions'
 import {
   activeTab,
   changeBatch,

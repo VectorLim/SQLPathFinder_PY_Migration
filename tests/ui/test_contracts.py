@@ -8,7 +8,7 @@ ROOT = Path(__file__).parents[2]
 
 
 def test_generated_typescript_contracts_are_in_sync():
-    target = ROOT / "src/vg2c_ui/frontend/src/contracts.generated.ts"
+    target = ROOT / "src/vg2c_ui/frontend/src/api/contracts.generated.ts"
     assert target.read_text(encoding="utf-8") == render_typescript_contracts()
 
 

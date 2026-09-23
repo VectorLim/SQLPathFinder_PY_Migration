@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getWorkspaceUploadPolicy, listWorkspaceFiles } from './api'
-import type { WorkspaceFileView, WorkspaceUploadPolicyView } from './contracts.generated'
+import { getWorkspaceUploadPolicy, listWorkspaceFiles } from './api/client'
+import type { WorkspaceFileView, WorkspaceUploadPolicyView } from './api/contracts.generated'
 
 export function useWorkspaceFiles() {
   const [files, setFiles] = useState<WorkspaceFileView[]>([])

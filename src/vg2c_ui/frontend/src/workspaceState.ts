@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION } from './contracts.generated.ts'
+import { SCHEMA_VERSION } from './api/contracts.generated.ts'
 import type {
   ChangeBatch,
   ChangePreviewView,
@@ -8,7 +8,7 @@ import type {
   SemanticChangeRequest,
   WorkspaceProjectionRequest,
   WorkspaceProjectionView,
-} from './contracts.generated'
+} from './api/contracts.generated'
 
 export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'generating' | 'conflict' | 'error'
 
