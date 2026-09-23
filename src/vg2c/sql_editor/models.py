@@ -7,6 +7,7 @@ SqlLogicalConnector = Literal["AND", "OR"]
 SqlActionName = Literal[
     "add-selection", "update-selection", "remove-selection",
     "reorder-selection", "add-filter", "update-filter", "remove-filter",
+    "update-file-list",
     "add-join", "update-join-type", "update-join-source",
     "update-join-predicate", "remove-join-predicate", "remove-join", "update-source",
 ]
@@ -71,6 +72,15 @@ class SqlPredicate:
 
 
 @dataclass(frozen=True, slots=True)
+class SqlFileList:
+    id: str
+    path: str
+    column_ref: int | str
+    lead_in: str
+    choices: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SqlJoin:
     id: str
     join_type: str
@@ -89,7 +99,6 @@ class SqlEditCapabilities:
     selected: bool
     filters: bool
     joins: bool
-    raw_sql: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +117,7 @@ class SqlEditableModel:
     from_clause_span: SqlSpan | None
     column_choices: tuple[SqlColumnChoice, ...] = ()
     table_choices: tuple[SqlTableChoice, ...] = ()
+    file_lists: tuple[SqlFileList, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +132,6 @@ class SqlEditError(ValueError):
 
 __all__ = [
     "SqlActionName", "SqlEditCapabilities", "SqlEditError", "SqlEditableModel",
-    "SqlColumnChoice", "SqlJoin", "SqlLogicalConnector", "SqlPredicate", "SqlSelection", "SqlSource", "SqlTableChoice",
+    "SqlColumnChoice", "SqlFileList", "SqlJoin", "SqlLogicalConnector", "SqlPredicate", "SqlSelection", "SqlSource", "SqlTableChoice",
     "SqlSpan", "SqlTransformResult",
 ]

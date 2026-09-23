@@ -315,8 +315,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 }
 .operation-editor h3 { margin: 4px 0 0; color: var(--ink); font-size: 18px; letter-spacing: -.015em; }
 .eyebrow { color: var(--accent); font-size: 10px; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
-.operation-secondary { margin: 3px 0 0; color: var(--muted); font-size: 12px; font-style: italic; }
-.operation-description { max-width: 82ch; margin: 0 0 17px; color: var(--text); font-size: 13px; line-height: 1.55; }
 .state-pill {
   flex: 0 0 auto;
   border-radius: 99px;
@@ -367,16 +365,11 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   background: var(--warning-soft);
   font-size: 12px;
 }
-.generated-details { margin-top: 15px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
-.generated-details summary, .diagnostics summary, .change-preview summary, .context-section summary {
+.diagnostics summary, .change-preview summary {
   cursor: pointer;
   color: var(--text);
   font-weight: 670;
 }
-.generated-details dl, .file-details { display: grid; gap: 7px; margin: 10px 0 0; }
-.generated-details dl > div, .file-details > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
-.generated-details dt, .file-details dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-.generated-details dd, .file-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text); font-size: 11px; }
 .raw-code, .change-preview pre {
   max-height: 300px;
   overflow: auto;
@@ -415,7 +408,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .diagnostic--error { border-color: var(--danger); }
 .diagnostic small { margin-left: 8px; color: var(--muted); }
 
-.context-section { border-bottom: 1px solid var(--line-soft); }
 
 .empty-state {
   display: grid;
@@ -517,7 +509,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .workbench-actions .change-toolbar { flex: 1 1 480px; border: 0; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
 .workbench-actions .change-status { min-width: 0; }
 .workbench-actions button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border-radius: var(--radius-sm); }
-.workbench-panes { display: grid; grid-template-columns: minmax(230px, .85fr) minmax(360px, 1.3fr) minmax(330px, 1.15fr); flex: 1; min-height: 0; min-width: 0; }
+.workbench-panes { display: grid; flex: 1; min-height: 0; min-width: 0; }
 .workbench-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
 .workbench-pane:last-child { border-right: 0; }
 .pane-heading { display: flex; align-items: center; gap: var(--space-2); min-height: 48px; flex: 0 0 48px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line-soft); background: var(--surface); color: var(--ink); }
@@ -588,14 +580,13 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  transition: grid-template-columns 360ms cubic-bezier(.22, 1, .36, 1);
 }
 .workbench-panes--single { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workbench-panes--single > .workbench-pane { flex: 1; border: 0; }
 
 .pane-separator-slot { position: relative; z-index: 4; min-width: 0; min-height: 0; overflow: visible; }
 .pane-separator-slot.is-active { width: 6px; }
-.pane-separator { width: 6px; height: 100%; cursor: col-resize; background: var(--line-soft); touch-action: none; transition: background 140ms ease, box-shadow 140ms ease; }
+.pane-separator { width: 6px; height: 100%; cursor: col-resize; background: var(--line-soft); touch-action: none; }
 .pane-separator:hover, .pane-separator:focus-visible { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); outline: none; }
 
 .paper-pane-slot {
@@ -618,10 +609,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   transform: translateX(0) scaleX(1);
   transform-origin: left center;
   opacity: 1;
-  transition:
-    transform 300ms cubic-bezier(.22, 1, .36, 1),
-    opacity 180ms ease,
-    box-shadow 260ms ease;
 }
 .paper-pane-surface::before {
   content: "";
@@ -660,11 +647,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   background: linear-gradient(180deg, var(--panel), var(--surface));
   box-shadow: -7px 7px 20px rgba(20, 31, 48, .10), inset 0 1px 0 rgba(255, 255, 255, .5);
   transform: translate(-100%, -50%);
-  transition:
-    transform 180ms cubic-bezier(.22, 1, .36, 1),
-    color 160ms ease,
-    background 160ms ease,
-    box-shadow 180ms ease;
 }
 .paper-pane-slot--config .paper-pull-tab { top: calc(50% - 36px); }
 .paper-pane-slot--context .paper-pull-tab { top: calc(50% + 36px); }
@@ -714,8 +696,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .adaptive-pane-tabs button { flex: 1 1 max-content; min-width: max-content; min-height: 44px; border: 0; border-bottom: 2px solid transparent; background: var(--panel); color: var(--muted); }
 .adaptive-pane-tabs button[aria-pressed="true"] { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
 
-.semantic-tree-row .tree-toggle svg { transition: transform var(--motion-fast); }
-.semantic-tree-row[aria-expanded="true"] .tree-toggle svg { transform: rotate(90deg); }
 .semantic-tree-row .tree-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .semantic-tree-row-wrap { display: flex; align-items: center; min-width: 0; }
 .semantic-tree-row-wrap > .tree-row { flex: 1; min-width: 0; }
@@ -723,6 +703,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .tree-reorder-controls button { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; }
 .tree-reorder-controls button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .tree-reorder-controls button:disabled { opacity: .45; cursor: default; }
+.semantic-script-tree .is-drop-target > .semantic-tree-row-wrap { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .semantic-operation-editor .operation-editor__header { align-items: flex-start; }
 .semantic-binding { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-inline-size: 0; }
 .semantic-binding > .parameter-field__meta > strong, .field-label { font-size: var(--text-sm); color: var(--ink); }
@@ -738,41 +719,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .condition-clause { grid-template-columns: minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
 .condition-clause--secondary { grid-template-columns: minmax(100px, .45fr) minmax(0, 1fr) minmax(110px, .45fr) minmax(0, 1fr); }
 .advanced-settings, .operation-comments { margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
-
-.context-workbench-pane .pane-scroll { background: var(--panel); }
-.context-pane { min-height: 100%; }
-.context-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: var(--panel); }
-.context-tabs button { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--text-xs); }
-.context-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
-.context-section > header { padding: var(--space-3); }
-.context-section > header h3 { margin: 0; font-size: var(--text-sm); }
-.context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
-.context-empty-copy { margin: 0; padding: var(--space-3); }
-.file-effect-row { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
-.file-effect-row > header { display: flex; align-items: center; gap: var(--space-2); }
-.file-effect-row > header .state-pill { margin-left: auto; }
-.file-effect-operation { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--accent-strong); text-align: left; font-weight: 650; }
-.file-effect-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
-.file-endpoints { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
-.file-endpoint { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: 11px; }
-.file-endpoint > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-endpoint button { padding: 2px 5px; font-size: 10px; }
-.file-endpoint--missing, .file-endpoint--dynamic, .file-endpoint--possible { border-color: var(--warning); }
-.file-endpoint--deleted { color: var(--danger); }
-.file-flow-arrow { color: var(--muted); }
-.file-effect-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-xs); }
-.email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
-.symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
-.symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
-.symbol-row p { margin: var(--space-1) 0; color: var(--muted); font-size: var(--text-xs); }
-.operation-references { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
-.operation-references button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--accent-strong); font-size: 11px; }
-.email-bulk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-soft); }
-.email-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
-.email-summary { display: grid; gap: 2px; min-width: 0; border: 0; background: transparent; text-align: left; }
-.email-summary strong, .email-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.globals-context .search-field { display: block; padding: var(--space-2) var(--space-3); }
-.state-pill--missing, .state-pill--dynamic, .state-pill--possible { color: var(--warning); }
 
 .embedded-python-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0; background: var(--panel); color: var(--ink); }
 .embedded-python-dialog::backdrop { background: rgb(0 0 0 / .45); }
@@ -805,14 +751,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 @media (max-width: 860px) {
   .condition-clause, .condition-clause--secondary { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .semantic-tree-row .tree-toggle svg,
-  .adaptive-workbench-panes,
-  .paper-pane-surface,
-  .paper-pull-tab,
-  .pane-separator { transition: none; }
 }
 
 .embedded-python-card > footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }

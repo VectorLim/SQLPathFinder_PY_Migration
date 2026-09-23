@@ -10,13 +10,14 @@ import type {
   SqlPredicateView,
   SqlSelectionView,
 } from './contracts.generated'
-import { ReorderableList } from './shared/SemanticControls'
+import { ReorderableList } from './sql/ReorderableList'
 import { sqlCommand, type SqlCommand, type SqlCommandArguments, type SqlCommandName } from './sql/sqlCommands'
 import { effectiveBindingValue } from './workspaceState'
 
 interface Props {
   binding: SemanticBindingView
   readOnly: boolean
+  fileListReadOnly: boolean
   onReset: () => void
   values: Record<string, unknown>
   inspect: (bindingId: string) => Promise<SqlModelView>
@@ -31,7 +32,7 @@ const SQL_TABS: Array<{ id: SqlTab; label: string }> = [
 ]
 
 
-export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCommand, onReset }: Props) {
+export function StructuredSqlEditor({ binding, values, readOnly, fileListReadOnly, inspect, runCommand, onReset }: Props) {
   const effectiveSql = effectiveBindingValue(values, binding)
   const [model, setModel] = useState<SqlModelView | null>(null)
   const [error, setError] = useState('')
@@ -72,7 +73,7 @@ export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCom
     {model && <>
       <nav className="sql-tabs" aria-label="Query configuration" role="tablist">
         {SQL_TABS.map(({ id, label }, index) => {
-          const count = id === 'columns' ? model.selections.length : id === 'filters' ? model.filters.length : model.joins.length
+          const count = id === 'columns' ? model.selections.length : id === 'filters' ? model.filters.length + model.file_lists.length : model.joins.length
           return <button
             id={`sql-tab-${id}`}
             key={id}
@@ -88,7 +89,7 @@ export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCom
       </nav>
       <div id="sql-tab-panel" className="sql-tab-panel" role="tabpanel" aria-labelledby={`sql-tab-${tab}`}>
         {tab === 'columns' && <Selections model={model} onAction={act} disabled={busy || readOnly} />}
-        {tab === 'filters' && <Filters model={model} onAction={act} disabled={busy || readOnly} />}
+        {tab === 'filters' && <Filters model={model} onAction={act} disabled={busy || readOnly} fileDisabled={busy || fileListReadOnly} />}
         {tab === 'joins' && <Joins model={model} onAction={act} disabled={busy || readOnly} />}
       </div>
       {model.read_only_reason && <p className="read-only-note">{model.read_only_reason}</p>}
@@ -114,7 +115,10 @@ function Selections({ model, onAction, disabled }: SectionProps) {
       items={model.selections}
       getId={(item) => item.id}
       disabled={disabled || !model.capabilities.selected || model.selections.some((item) => !item.editable)}
-      onReorder={(fromIndex, targetIndex) => void onAction('reorder-selection', { selection_id: model.selections[fromIndex].id, target_index: targetIndex })}
+      onReorder={(sourceId, targetId) => void onAction('reorder-selection', {
+        selection_id: sourceId,
+        target_index: model.selections.findIndex((item) => item.id === targetId),
+      })}
       renderItem={(item) => <SelectionRow item={item} choices={choices} count={model.selections.length} disabled={disabled} onAction={onAction} />}
     />
     {!model.selections.length && !adding && <p className="empty-copy">No selected columns.</p>}
@@ -147,13 +151,22 @@ function SelectionRow({ item, choices, count, disabled, onAction }: { item: SqlS
   </div>
 }
 
-function Filters({ model, onAction, disabled }: SectionProps) {
+function Filters({ model, onAction, disabled, fileDisabled }: SectionProps & { fileDisabled: boolean }) {
   const [adding, setAdding] = useState(false)
   const choices = model.column_choices.filter((choice) => model.sources.some((source) => source.id === choice.source_id))
   return <section className="sql-section">
     <header><h4>Filters</h4><button type="button" disabled={disabled || !model.capabilities.filters || !choices.length} onClick={() => setAdding(true)}>Add filter</button></header>
     {adding && <FilterAddForm model={model} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
     {model.filters.map((item) => <PredicateRow key={item.id} item={item} choices={choices} operators={model.filter_operators} connectors={model.logical_connectors} disabled={disabled} onAction={onAction} />)}
+    {model.file_lists.map((item) => <label className="sql-file-list" key={item.id}>
+      <span>File list · {item.lead_in || String(item.column_ref)}</span>
+      <select aria-label={`File list for ${item.lead_in || item.column_ref}`} value={item.path}
+        disabled={fileDisabled || !item.choices.length}
+        onChange={(event) => void onAction('update-file-list', { file_list_id: item.id, path: event.target.value })}>
+        {!item.choices.includes(item.path) && <option value={item.path}>Current: {item.path}</option>}
+        {item.choices.map((path) => <option key={path} value={path}>{path}</option>)}
+      </select>
+    </label>)}
     {!model.filters.length && !adding && <p className="empty-copy">No filters.</p>}
   </section>
 }

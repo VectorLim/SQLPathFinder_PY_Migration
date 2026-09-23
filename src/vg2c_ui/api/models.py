@@ -4,7 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from vg2c.emitter.models import EditorType
 from vg2c.utility_metadata import FileEffectKind, PathBase, ValueKind
 
 SCHEMA_VERSION = 6
@@ -56,7 +55,6 @@ class SemanticOperationView(BaseModel):
     summary: str
     scope_id: int | None = None
     reorder_targets: list[int] = Field(default_factory=list)
-    description: str
     parent_operation_id: str | None = None
     branch: Literal["true", "false"] | None = None
     source_span: SourceSpanView
@@ -102,73 +100,6 @@ class ConditionOperatorView(BaseModel):
     code: str
     symbol: str
     operand_type: Literal["string", "numeric"]
-
-
-class ParameterView(BaseModel):
-    id: str
-    name: str
-    position: int | None = None
-    source: str
-    value: Any = None
-    editor_type: EditorType
-    editable: bool
-    read_only_reason: str | None = None
-    constraints: dict[str, Any] = Field(default_factory=dict)
-    annotation: str | None = None
-    required: bool = True
-    default: Any = None
-    capabilities: list[str] = Field(default_factory=list)
-    value_schema: ValueSchemaView | None = None
-    internal: bool = False
-    omitted: bool = False
-    overridden: bool = False
-    generated_value: Any = None
-
-
-class UtilityView(BaseModel):
-    name: str
-    class_name: str
-    module: str
-    title: str
-    description: str
-    method: str | None = None
-    method_description: str | None = None
-    return_type: str | None = None
-    capabilities: list[str] = Field(default_factory=list)
-    supported_mutations: list[str] = Field(default_factory=list)
-
-
-class OperationView(BaseModel):
-    id: str
-    utility: UtilityView
-    parameters: list[ParameterView] = Field(default_factory=list)
-
-
-class StepView(BaseModel):
-    id: str
-    node_kind: Literal["step"] = "step"
-    function_name: str
-    block_index: int
-    source_span: SourceSpanView
-    functional_kind: str
-    display_label: str
-    description: str
-    parent_scope_id: str | None = None
-    branch: Literal["true", "false"] | None = None
-    validation_state: Literal["valid", "warning", "unsupported"] = "valid"
-    raw_code: str | None = None
-    read_only: bool = True
-    operations: list[OperationView] = Field(default_factory=list)
-
-
-class ScopeView(BaseModel):
-    id: str
-    node_kind: Literal["if", "branch", "loop"]
-    scope_kind: str
-    label: str
-    start_index: int
-    end_index: int
-    parent_scope_id: str | None = None
 
 
 class ArtifactView(BaseModel):
@@ -231,9 +162,6 @@ class DocumentView(BaseModel):
     compiler_hash: str
     generation_state: Literal["current", "stale", "missing"] = "current"
     read_only_reason: str | None = None
-    steps: list[StepView]
-    scopes: list[ScopeView]
-    artifacts: list[ArtifactView]
     diagnostics: list[DiagnosticView]
     effects: list[FileEffectView] = Field(default_factory=list)
     semantic_operations: list[SemanticOperationView] = Field(default_factory=list)
@@ -418,6 +346,14 @@ class SqlPredicateView(BaseModel):
     connector_span: SqlSpanView | None = None
 
 
+class SqlFileListView(BaseModel):
+    id: str
+    path: str
+    column_ref: int | str
+    lead_in: str
+    choices: list[str]
+
+
 class SqlJoinView(BaseModel):
     id: str
     join_type: str
@@ -435,7 +371,6 @@ class SqlEditCapabilitiesView(BaseModel):
     selected: bool
     filters: bool
     joins: bool
-    raw_sql: bool = True
 
 
 class SqlModelView(BaseModel):
@@ -448,6 +383,7 @@ class SqlModelView(BaseModel):
     column_choices: list[SqlColumnChoiceView] = Field(default_factory=list)
     table_choices: list[SqlTableChoiceView] = Field(default_factory=list)
     filters: list[SqlPredicateView]
+    file_lists: list[SqlFileListView] = Field(default_factory=list)
     joins: list[SqlJoinView]
     sources: list[SqlSourceView]
     capabilities: SqlEditCapabilitiesView
@@ -483,11 +419,6 @@ CONTRACT_MODELS = (
     SymbolView,
     FileResourceView,
     ConditionOperatorView,
-    ParameterView,
-    UtilityView,
-    OperationView,
-    StepView,
-    ScopeView,
     ArtifactView,
     DiagnosticView,
     FileEndpointView,
@@ -519,6 +450,7 @@ CONTRACT_MODELS = (
     SqlTableChoiceView,
     SqlSourceView,
     SqlPredicateView,
+    SqlFileListView,
     SqlJoinView,
     SqlEditCapabilitiesView,
     SqlModelView,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import inspect
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -92,27 +91,6 @@ class UtilitySpec(ABC):
             (name, default, description)
             for name, (default, description) in sorted(cls._script_settings.items())
         )
-
-    @classmethod
-    def get_source(cls) -> str:
-        """Return a standalone, metadata-free class source for compatibility tools.
-
-        Runtime emission uses the symbol resolver; this helper remains useful to
-        callers that inspect a utility class directly.
-        """
-        custom = getattr(cls, "__vg2c_source__", None)
-        if custom is not None:
-            return str(custom).rstrip()
-
-        tree = ast.parse(inspect.getsource(cls))
-        class_def = next(node for node in tree.body if isinstance(node, ast.ClassDef))
-        class_def.bases = []
-        class_def.keywords = []
-        class_def.decorator_list = []
-        for node in ast.walk(class_def):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                node.decorator_list = []
-        return ast.unparse(class_def)
 
     @classmethod
     def operation_definitions(cls) -> tuple[UtilityOperationDefinition, ...]:

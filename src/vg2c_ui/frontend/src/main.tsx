@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { initializeTheme } from './theme'
 import './styles.css'
+import './context.css'
 import './theme.css'
 import './motion.css'
 

@@ -38,10 +38,9 @@ def _copy_fixture(tmp_path: Path) -> Path:
 def _editable_string(document: DocumentView):
     return next(
         parameter
-        for step in document.steps
-        for operation in step.operations
-        for parameter in operation.parameters
-        if parameter.editable and parameter.editor_type == "string"
+        for operation in document.semantic_operations
+        for parameter in operation.bindings
+        if parameter.editable and parameter.value_schema and parameter.value_schema.kind == "string"
     )
 
 
@@ -66,9 +65,8 @@ def test_shared_global_edits_persist_across_steps(tmp_path):
     document = store.translate(str(source)).view
     globals = [
         p
-        for step in document.steps
-        for operation in step.operations
-        for p in operation.parameters
+        for operation in document.semantic_operations
+        for p in operation.bindings
         if p.name == "LOT"
     ]
     assert len(globals) == 2 and globals[0].id == globals[1].id
@@ -79,9 +77,8 @@ def test_shared_global_edits_persist_across_steps(tmp_path):
     assert reopened.read_only_reason is None
     assert [
         p.value
-        for step in reopened.steps
-        for operation in step.operations
-        for p in operation.parameters
+        for operation in reopened.semantic_operations
+        for p in operation.bindings
         if p.name == "LOT"
     ] == [
         "2",
@@ -125,7 +122,7 @@ def test_batch_translation_resolves_out_dir_to_output_files(tmp_path):
     source = _copy_fixture(tmp_path)
     store = DocumentStore(tmp_path)
     request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(document_store=store))
+        state=SimpleNamespace(document_store=store)
     )
     response = translate_batch(
         BatchTranslationRequest(
@@ -166,9 +163,8 @@ def test_parameter_change_uses_core_preview_save_and_reopens_with_effective_valu
     reopened = store.open_document(source, document.output_path).view
     reopened_parameter = next(
         item
-        for step in reopened.steps
-        for operation in step.operations
-        for item in operation.parameters
+        for operation in reopened.semantic_operations
+        for item in operation.bindings
         if item.id == parameter.id
     )
     assert reopened_parameter.value == "edited by script editor"
@@ -235,9 +231,8 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v4(tmp_path):
     ]
     reopened_parameter = next(
         item
-        for step in reopened.steps
-        for operation in step.operations
-        for item in operation.parameters
+        for operation in reopened.semantic_operations
+        for item in operation.bindings
         if item.id == parameter.id
     )
     assert reopened_parameter.value == "legacy edit"
@@ -356,7 +351,11 @@ def test_external_python_change_becomes_read_only_without_semantic_reparse(tmp_p
     reopened = store.open_document(source, output).view
     assert reopened.read_only_reason is not None
     assert reopened.read_only_reason
-    assert all(step.read_only for step in reopened.steps)
+    assert all(
+        not binding.editable
+        for op in reopened.semantic_operations
+        for binding in op.bindings
+    )
 
 
 def test_revision_is_an_opaque_json_string(tmp_path):
@@ -385,10 +384,10 @@ def test_workspace_projection_preserves_step_references(tmp_path):
     )
     assert projected.documents[0].artifacts
     operation_ids = {
-        operation.id for step in document.steps for operation in step.operations
+        operation.id for operation in document.semantic_operations
     }
     assert all(effect.operation_id in operation_ids for effect in document.effects)
-    step_ids = {step.id for step in document.steps}
+    step_ids = {effect.step_id for effect in document.effects}
     for artifact in projected.documents[0].artifacts:
         assert set(artifact.producer_step_ids + artifact.consumer_step_ids) <= step_ids
 
@@ -404,16 +403,15 @@ def test_saved_output_change_reopens_with_effective_artifacts(tmp_path):
     document = store.translate(str(source)).view
     output = next(
         parameter
-        for step in document.steps
-        for operation in step.operations
-        for parameter in operation.parameters
+        for operation in document.semantic_operations
+        for parameter in operation.bindings
         if parameter.name == "output"
     )
     reopened = store.save(_batch(document, output.id, "changed.csv")).document
-    assert [artifact.path for artifact in reopened.artifacts] == ["changed.csv"]
+    assert [file.path for file in reopened.files if file.producer_refs] == ["changed.csv"]
     assert reopened.effects[0].outputs[0].path == "changed.csv"
     operation_ids = {
-        operation.id for step in reopened.steps for operation in step.operations
+        operation.id for operation in reopened.semantic_operations
     }
     assert reopened.effects[0].operation_id in operation_ids
 
@@ -424,9 +422,8 @@ def test_workspace_effects_match_reopened_effects_after_default_edit(tmp_path):
     document = store.translate(str(source)).view
     parameter = next(
         item
-        for step in document.steps
-        for operation in step.operations
-        for item in operation.parameters
+        for operation in document.semantic_operations
+        for item in operation.bindings
         if item.name == "inputs"
     )
     request = WorkspaceDocumentRequest(
@@ -446,12 +443,11 @@ def test_reset_removes_saved_override_and_restores_omitted_default(tmp_path):
     original = store.translate(str(source)).view
     node = next(
         item
-        for step in original.steps
-        for operation in step.operations
-        for item in operation.parameters
+        for operation in original.semantic_operations
+        for item in operation.bindings
         if item.name == "node"
     )
-    assert node.omitted and node.generated_value is None
+    assert node.value is None
     saved = store.save(_batch(original, node.id, "TEST")).document
     saved = store.generate(DocumentSnapshot.model_validate(saved.model_dump())).document
     reset = _batch(saved, node.id, None)
@@ -461,12 +457,11 @@ def test_reset_removes_saved_override_and_restores_omitted_default(tmp_path):
     restored = store.generate(DocumentSnapshot.model_validate(restored.model_dump())).document
     restored_node = next(
         item
-        for step in restored.steps
-        for operation in step.operations
-        for item in operation.parameters
+        for operation in restored.semantic_operations
+        for item in operation.bindings
         if item.id == node.id
     )
-    assert restored_node.value is None and not restored_node.overridden
+    assert restored_node.value is None
     assert (
         Path(restored.output_path).read_text(encoding="utf-8").find("node='TEST'") == -1
     )
@@ -520,9 +515,8 @@ def test_read_projections_reject_stale_document_identity(tmp_path, field):
     payload = document.model_dump() | {field: "stale"}
     sql = next(
         parameter
-        for step in document.steps
-        for operation in step.operations
-        for parameter in operation.parameters
+        for operation in document.semantic_operations
+        for parameter in operation.bindings
         if "structured-sql" in parameter.capabilities
     )
     with pytest.raises(RevisionConflict):
@@ -541,7 +535,43 @@ def test_normal_document_view_never_exposes_generated_python(tmp_path):
     source = _copy_fixture(tmp_path)
     document = DocumentStore(tmp_path).translate(str(source)).view
 
-    assert all(step.raw_code is None for step in document.steps)
+    assert "steps" not in document.model_dump()
+
+
+def test_known_write_file_html_previews_without_running_workflow(tmp_path):
+    source = tmp_path / "html-write.txt"
+    source.write_text(
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=report.html\n</OPTIONS>\n"
+        "<html><body><h1>Known report</h1></body></html>\n"
+        "<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    store = DocumentStore(tmp_path)
+    document = store.translate(str(source)).view
+    operation = next(
+        item for item in document.semantic_operations if "html-preview" in item.capabilities
+    )
+    preview = store.preview_html(
+        HtmlPreviewRequest(**document.model_dump(), operation_id=operation.id)
+    )
+    assert preview.state == "exact"
+    assert "Known report" in preview.html
+    assert preview.output_path == "report.html"
+    assert not (tmp_path / "report.html").exists()
+
+    source.write_text(
+        source.read_text(encoding="utf-8").replace("Known report", "<<<runtime_title>>>"),
+        encoding="utf-8",
+    )
+    dynamic = store.translate(str(source)).view
+    operation = next(
+        item for item in dynamic.semantic_operations if "html-preview" in item.capabilities
+    )
+    blocked = store.preview_html(
+        HtmlPreviewRequest(**dynamic.model_dump(), operation_id=operation.id)
+    )
+    assert blocked.state == "error"
+    assert not blocked.html
 
 
 def test_condition_semantic_edit_persists_through_reopen(tmp_path):

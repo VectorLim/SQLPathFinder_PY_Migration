@@ -18,6 +18,7 @@ export interface BindingEdit {
 export interface SemanticEditorSession {
   values: Record<string, unknown>
   saving: boolean
+  readOnly: boolean
   resources: {
     symbols: SymbolView[]
     conditionOperators: ConditionOperatorView[]

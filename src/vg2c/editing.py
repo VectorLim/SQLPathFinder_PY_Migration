@@ -4,6 +4,7 @@ import ast
 import difflib
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from vg2c.compilation import CompilationResult
@@ -22,39 +23,12 @@ from vg2c.semantics import (
 )
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class SemanticChange:
     binding_id: str
     value: Any = None
     symbol_id: str | None = None
     reset: bool = False
-
-    def __init__(
-        self,
-        binding_id: str | None = None,
-        value: Any = None,
-        reset: bool = False,
-        *,
-        symbol_id: str | None = None,
-        parameter_id: str | None = None,
-    ) -> None:
-        identity = binding_id if binding_id is not None else parameter_id
-        if not identity:
-            raise ValueError("A binding_id is required.")
-        object.__setattr__(self, "binding_id", identity)
-        object.__setattr__(self, "value", value)
-        object.__setattr__(self, "symbol_id", symbol_id)
-        object.__setattr__(self, "reset", reset)
-
-    @property
-    def parameter_id(self) -> str:
-        """Compatibility alias for pre-v5 callers."""
-        return self.binding_id
-
-
-# Compatibility name retained while API/sidecars migrate to binding terminology.
-ParameterChange = SemanticChange
-
 
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
@@ -63,10 +37,6 @@ class ValidationIssue:
     binding_id: str | None = None
     level: Literal["warning", "error"] = "error"
 
-    @property
-    def parameter_id(self) -> str | None:
-        """Compatibility alias for pre-v5 callers."""
-        return self.binding_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +211,9 @@ def project_changes(
         elif binding.source_kind == "rows-in-file" and binding.source_range is not None:
             span = (binding.source_range.start_offset, binding.source_range.end_offset)
             replacements[span] = repr(value)
+        elif binding.source_kind == "sql-file-list" and binding.source_range is not None:
+            span = (binding.source_range.start_offset, binding.source_range.end_offset)
+            replacements[span] = repr(value)
 
     accepted_values = effective_values
     for operation in model.operations:
@@ -274,6 +247,7 @@ def project_changes(
     _project_omitted_parameters(
         result,
         emitted_bindings,
+        model.bindings,
         accepted_values,
         replacements,
     )
@@ -324,6 +298,7 @@ def apply_changes(
 def _project_omitted_parameters(
     result: CompilationResult,
     emitted_bindings: dict[str, list[EmittedParameter]],
+    semantic_bindings: tuple[EditableBinding, ...],
     values: dict[str, Any],
     replacements: dict[tuple[int, int], str],
 ) -> None:
@@ -348,11 +323,27 @@ def _project_omitted_parameters(
             kwargs: dict[str, Any] = {}
             for argument in invocation.arguments:
                 parameter = parameters_by_name[argument.name]
+                source = argument.source
+                if parameter.name == "sql" and parameter.source_range is not None:
+                    nested = [
+                        (
+                            binding.source_range.start_offset - parameter.source_range.start_offset,
+                            binding.source_range.end_offset - parameter.source_range.start_offset,
+                            repr(values[binding.id]),
+                        )
+                        for binding in semantic_bindings
+                        if binding.owner_operation_id == invocation.id
+                        and binding.source_kind == "sql-file-list"
+                        and binding.source_range is not None
+                        and binding.id in values
+                    ]
+                    for start, end, replacement in sorted(nested, reverse=True):
+                        source = source[:start] + replacement + source[end:]
                 value = (
                     CodeExpr(_serialize_parameter(parameter, parameter_values[parameter.id]))
                     if parameter.id in parameter_values
                     and not parameter.id.startswith("global:")
-                    else CodeExpr(argument.source)
+                    else CodeExpr(source)
                 )
                 if argument.position is None:
                     kwargs[argument.name] = value
@@ -498,6 +489,17 @@ def _validate_binding(
             message=binding.read_only_reason or "Binding is read-only.",
             binding_id=binding.id,
         )
+    if binding.source_kind == "sql-file-list" and isinstance(value, str):
+        normalized = value.replace("\\", "/")
+        path = PurePosixPath(normalized)
+        if (not normalized or path.is_absolute() or ".." in path.parts
+            or "'" in normalized or '"' in normalized
+            or (len(normalized) >= 2 and normalized[0].isalpha() and normalized[1] == ":")):
+            return ValidationIssue(
+                code="invalid-workspace-path",
+                message="File-list paths must be relative to the server workspace.",
+                binding_id=binding.id,
+            )
     schema = binding.schema
     if schema is not None and schema.kind != "dynamic" and not schema.accepts(value):
         return ValidationIssue(
@@ -606,7 +608,6 @@ __all__ = [
     "ChangePreview",
     "ChangeProjection",
     "ChangeValidationError",
-    "ParameterChange",
     "SemanticChange",
     "ValidationIssue",
     "apply_changes",

@@ -73,11 +73,11 @@ class MetadataProbeUtility(UtilitySpec):
 
 
 def test_parameterized_emittable_metadata_is_stripped_from_embedded_source():
-    source = PipelineContext.get_source()
+    source = compile_document(FIXTURES / "script_short.txt").emitted.source
 
     assert "@emittable" not in source
     assert "parameter_capabilities=" not in source
-    compile(source, "<pipeline-context>", "exec")
+    compile(source, "<generated-workflow>", "exec")
 
 
 def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import type { SymbolView } from '../contracts.generated'
 import { isSymbolSelection, type SymbolSelection } from '../workspaceState'
@@ -164,65 +164,5 @@ export function OptionalValue({
       {action}
     </div>
     {enabled && children}
-  </div>
-}
-
-export function ReorderableList<T>({
-  items,
-  getId,
-  disabled = false,
-  onReorder,
-  renderItem,
-}: {
-  items: T[]
-  getId: (item: T) => string
-  disabled?: boolean
-  onReorder: (fromIndex: number, toIndex: number) => void
-  renderItem: (item: T, index: number) => ReactNode
-}) {
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [announcement, setAnnouncement] = useState('')
-
-  function move(fromIndex: number, toIndex: number) {
-    if (disabled || fromIndex === toIndex || toIndex < 0 || toIndex >= items.length) return
-    onReorder(fromIndex, toIndex)
-    setAnnouncement(`Moved item ${fromIndex + 1} to position ${toIndex + 1}.`)
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>, index: number) {
-    if (!event.altKey || disabled) return
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      move(index, index - 1)
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      move(index, index + 1)
-    }
-  }
-
-  return <div className="reorderable-list" role="list">
-    <span className="sr-only" aria-live="polite">{announcement}</span>
-    {items.map((item, index) => <div
-      key={getId(item)}
-      className="reorderable-item"
-      tabIndex={disabled ? -1 : 0}
-      role="listitem"
-      aria-label={`Item ${index + 1} of ${items.length}. Alt plus arrow keys reorder.`}
-      onKeyDown={(event) => onKeyDown(event, index)}
-      onDragOver={(event) => { if (!disabled) event.preventDefault() }}
-      onDrop={() => {
-        if (dragIndex !== null) move(dragIndex, index)
-        setDragIndex(null)
-      }}
-    >
-      <span
-        className="reorder-drag-handle"
-        draggable={!disabled}
-        aria-hidden="true"
-        onDragStart={() => setDragIndex(index)}
-        onDragEnd={() => setDragIndex(null)}
-      >⋮⋮</span>
-      {renderItem(item, index)}
-    </div>)}
   </div>
 }

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from vg2c import compile_document
-from vg2c.editing import ParameterChange
+from vg2c.editing import SemanticChange
 from vg2c.workflow import (
     WorkflowDocument,
     project_workflow,
@@ -39,7 +39,7 @@ def test_artifact_output_draft_projects_semantic_file_effects(tmp_path):
     baseline = project_workflow(result)
     projected = project_workflow(
         result,
-        [ParameterChange(parameter_id=output.id, value="renamed.csv")],
+        [SemanticChange(binding_id=output.id, value="renamed.csv")],
     )
 
     assert _paths(baseline, "output") == {"owner.csv"}
@@ -54,7 +54,7 @@ def test_artifact_input_draft_projects_semantic_file_effects(tmp_path):
 
     projected = project_workflow(
         result,
-        [ParameterChange(parameter_id=input_parameter.id, value=["renamed-input.csv"])],
+        [SemanticChange(binding_id=input_parameter.id, value=["renamed-input.csv"])],
     )
 
     assert "renamed-input.csv" in _paths(projected, "input")
@@ -86,7 +86,7 @@ def test_workspace_projection_includes_inactive_dirty_producer(tmp_path):
             producer_source.with_suffix(".py"),
             project_workflow(
                 producer,
-                [ParameterChange(parameter_id=producer_output.id, value="renamed.csv")],
+                [SemanticChange(binding_id=producer_output.id, value="renamed.csv")],
             ),
         ),
         baseline[1],
@@ -120,7 +120,7 @@ def test_workspace_projection_detects_duplicate_effective_outputs(tmp_path):
             second_source.with_suffix(".py"),
             project_workflow(
                 second,
-                [ParameterChange(parameter_id=second_output.id, value="owner.csv")],
+                [SemanticChange(binding_id=second_output.id, value="owner.csv")],
             ),
         ),
     )

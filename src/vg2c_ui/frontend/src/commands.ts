@@ -93,14 +93,13 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
   }
 
   if (active) {
-    for (const operation of active.document.semantic_operations.filter((item) => item.visibility !== 'internal')) {
+    for (const operation of active.document.semantic_operations) {
       commands.push({
         id: `navigation.item:${operation.id}`,
         group: 'Navigation',
         label: `Go to ${operation.display_name}`,
         keywords: [
           operation.kind,
-          operation.description,
           ...operation.comments,
           ...operation.bindings.flatMap((binding) => [
             binding.display_label,

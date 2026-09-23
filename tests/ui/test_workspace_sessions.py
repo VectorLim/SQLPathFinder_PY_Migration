@@ -5,13 +5,33 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
 
-from vg2c_ui.api.models import SqlActionRequest, SqlModelRequest
+from vg2c_ui.api.models import ChangeBatch, DocumentSnapshot, SemanticChangeRequest, SqlActionRequest, SqlModelRequest
+from vg2c.sql_editor import SqlEditError
 from vg2c_ui.services.document_store import DocumentStore
+from vg2c_ui.app import create_app
 from vg2c_ui.services.workspaces import WorkspaceManager, WorkspacePathError
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
+
+
+def test_http_sessions_cannot_see_each_others_uploaded_server_files(tmp_path: Path):
+    app = create_app(tmp_path)
+    first = TestClient(app)
+    second = TestClient(app)
+    upload = first.post(
+        "/api/workspace/files",
+        files={"files": ("private.csv", b"id\n1\n", "text/csv")},
+        data={"paths": "private.csv"},
+    )
+    assert upload.status_code == 200
+    assert [item["path"] for item in first.get("/api/workspace/files").json()] == [
+        "inputs/private.csv"
+    ]
+    assert second.get("/api/workspace/files").json() == []
+    assert second.get("/api/workspace/download/inputs/private.csv").status_code == 404
 
 
 def _upload(manager: WorkspaceManager, workspace, name: str = "script_short.txt"):
@@ -109,6 +129,19 @@ def test_document_file_choices_use_each_users_server_workspace(tmp_path: Path):
     assert "inputs/private.csv" not in inputs.file_choices
     assert "generated/inputs/owner.csv" not in inputs.file_choices
     assert str(tmp_path) not in document.model_dump_json()
+    editable = next(
+        binding
+        for operation in document.semantic_operations
+        for binding in operation.bindings
+        if binding.editable and binding.value_schema and binding.value_schema.kind == "string"
+    )
+    preview = store.preview(ChangeBatch(
+        **document.model_dump(),
+        changes=[SemanticChangeRequest(binding_id=editable.id, value="server-only-value")],
+    ))
+    assert preview.valid
+    assert "+++ generated/inputs/script_short.py" in preview.diff
+    assert str(tmp_path) not in preview.diff
 
 
 def test_sql_column_choices_read_uploaded_server_csv_headers(tmp_path: Path):
@@ -152,6 +185,59 @@ def test_sql_column_choices_read_uploaded_server_csv_headers(tmp_path: Path):
     assert '"a0"."amount"' in change.value
 
 
+def test_file_backed_sql_filter_uses_workspace_choices_through_save_and_generate(tmp_path: Path):
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    workspace, _ = manager.resolve_or_create(None)
+    source = workspace.root / "inputs" / "filter.txt"
+    source.write_text(
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n"
+        "SELECT * FROM lots t WHERE t.lot IN "
+        "SQL_Get_CSV_List('old.csv->500', lot, 't.lot In')\n"
+        "<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    (workspace.root / "inputs" / "new.csv").write_text("lot\nA\n", encoding="utf-8")
+    store = DocumentStore(
+        workspace.root,
+        inventory_paths=lambda: (
+            item.path for item in manager.list_files(workspace) if item.role == "data"
+        ),
+    )
+    document = store.translate("inputs/filter.txt", "generated/filter.py").view
+    sql = next(
+        binding for operation in document.semantic_operations for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    model = store.inspect_sql(SqlModelRequest(**document.model_dump(), binding_id=sql.id))
+    assert len(model.file_lists) == 1
+    assert "inputs/new.csv" in model.file_lists[0].choices
+    assert model.file_lists[0].path == "old.csv"
+    with pytest.raises(SqlEditError, match="not available"):
+        store.apply_sql_action(SqlActionRequest(
+            **document.model_dump(), binding_id=sql.id, action="update-file-list",
+            arguments={"file_list_id": model.file_lists[0].id, "path": "future.csv"},
+        ))
+    action = store.apply_sql_action(SqlActionRequest(
+        **document.model_dump(), binding_id=sql.id, action="update-file-list",
+        arguments={"file_list_id": model.file_lists[0].id, "path": "inputs/new.csv"},
+    ))
+    assert action.change.binding_id == model.file_lists[0].id
+    saved = store.save(ChangeBatch(
+        **document.model_dump(), changes=[action.change]
+    )).document
+    assert saved.generation_state == "stale"
+    file_effect = next(
+        effect for effect in saved.effects if "sql-get-csv-list" in effect.id
+    )
+    assert file_effect.inputs[0].path == "inputs/new.csv"
+    reopened = store.open_document(source, saved.output_path).view
+    inspected = store.inspect_sql(SqlModelRequest(**reopened.model_dump(), binding_id=sql.id))
+    assert inspected.file_lists[0].path == "inputs/new.csv"
+    generated = store.generate(DocumentSnapshot.model_validate(reopened.model_dump())).document
+    assert generated.generation_state == "current"
+    assert "inputs/new.csv" in Path(generated.output_path).read_text(encoding="utf-8")
+
+
 def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):
     manager = WorkspaceManager(tmp_path / "workspaces")
     workspace, _ = manager.resolve_or_create(None)
@@ -167,6 +253,9 @@ def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):
                 workspace, UploadFile(filename="bad.py", file=BytesIO(b"print('bad')")), "bad.py"
             )
         )
+    for client_path in ("C:/Users/alice/report.csv", "D:\\Data\\report.csv"):
+        with pytest.raises(WorkspacePathError):
+            manager.resolve_file(workspace, client_path)
 
 
 def test_workspace_accepts_image_attachments_inside_inputs(tmp_path: Path):

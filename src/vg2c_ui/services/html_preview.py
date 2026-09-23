@@ -48,6 +48,8 @@ def preview_html_report(
         (item for item in model.operations if item.id == target_operation_id),
         None,
     )
+    if target is not None and target.kind in {"ctx.write_file", "fs_ops.write_file"}:
+        return _preview_known_html_write(target, resolve_path)
     if target is None or target.kind != "html_report.layout":
         return HtmlPreviewResult(
             state="error",
@@ -143,6 +145,32 @@ def preview_html_report(
     return HtmlPreviewResult(
         state="error",
         message="HTML layout operation could not be replayed safely.",
+    )
+
+
+def _preview_known_html_write(
+    operation, resolve_path: Callable[[str | None], Path]
+) -> HtmlPreviewResult:
+    bindings = {item.name: item.value for item in operation.bindings}
+    path = bindings.get("path")
+    content = bindings.get("template", bindings.get("content"))
+    if not isinstance(path, str) or not path.lower().endswith((".html", ".htm")):
+        return HtmlPreviewResult(state="error", message="Select a known HTML output to preview.")
+    if not isinstance(content, str) or bindings.get("vars") not in (None, {}):
+        return HtmlPreviewResult(state="error", message="HTML content requires runtime values.")
+    if re.search(r"VAR\s*\(|\{\{|\}\}|<<<[^>]+>>>|<<>>", content + path, re.IGNORECASE):
+        return HtmlPreviewResult(state="error", message="HTML content requires runtime values.")
+    try:
+        output_path = resolve_path(path)
+    except (OSError, ValueError) as exc:
+        return HtmlPreviewResult(state="error", message=f"Blocked workspace output: {exc}")
+    content = content.lstrip("\n") if operation.kind == "ctx.write_file" else content
+    external = bool(re.search(r"(?:src|href)\s*=\s*[\"'](?!data:|#)", content, re.IGNORECASE))
+    return HtmlPreviewResult(
+        state="approximate" if external else "exact",
+        html=content,
+        output_path=output_path,
+        message="External resources are blocked in preview." if external else None,
     )
 
 

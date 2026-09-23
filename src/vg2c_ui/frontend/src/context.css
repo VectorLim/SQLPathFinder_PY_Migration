@@ -1,0 +1,39 @@
+.context-section { border-bottom: 1px solid var(--line-soft); }
+.context-section summary { cursor: pointer; color: var(--text); font-weight: 670; }
+.context-workbench-pane .pane-scroll { background: var(--panel); }
+.context-pane { min-height: 100%; }
+.context-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: var(--panel); }
+.context-tabs button { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--text-xs); }
+.context-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.context-section > header { padding: var(--space-3); }
+.context-section > header h3 { margin: 0; font-size: var(--text-sm); }
+.context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.context-empty-copy { margin: 0; padding: var(--space-3); }
+.file-effect-row { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.file-effect-row > header { display: flex; align-items: center; gap: var(--space-2); }
+.file-effect-row > header .state-pill { margin-left: auto; }
+.file-effect-operation { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--accent-strong); text-align: left; font-weight: 650; }
+.file-effect-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.file-endpoints { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
+.file-endpoint { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: 11px; }
+.file-endpoint > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-endpoint button { padding: 2px 5px; font-size: 10px; }
+.file-endpoint--missing, .file-endpoint--dynamic, .file-endpoint--possible { border-color: var(--warning); }
+.file-endpoint--deleted { color: var(--danger); }
+.file-resource-details { position: relative; min-width: 0; }
+.file-resource-details summary { cursor: pointer; }
+.file-resource-popover { position: absolute; z-index: 5; left: 0; top: 100%; display: grid; gap: 5px; min-width: 210px; max-width: min(340px, 80vw); padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-soft); }
+.file-resource-popover button { text-align: left; color: var(--accent-strong); }
+.file-flow-arrow { color: var(--muted); }
+.file-effect-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-xs); }
+.email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
+.symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
+.symbol-row p { margin: var(--space-1) 0; color: var(--muted); font-size: var(--text-xs); }
+.operation-references { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+.operation-references button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--accent-strong); font-size: 11px; }
+.email-bulk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.email-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.email-summary { display: grid; gap: 2px; min-width: 0; border: 0; background: transparent; text-align: left; }
+.email-summary strong, .email-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.globals-context .search-field { display: block; padding: var(--space-2) var(--space-3); }

@@ -24,7 +24,6 @@ export function SemanticOperationEditor({ operation, session }: Props) {
     <header className="operation-editor__header">
       <div>
         <h3>{operation.display_name}</h3>
-        {operation.description && <p className="operation-description">{operation.description}</p>}
       </div>
       <span className={`state-pill${readOnly ? ' state-pill--readonly' : ''}`}>
         {readOnly ? 'Read only' : operation.validation_state === 'unresolved' ? 'Needs attention' : 'Editable'}
@@ -95,7 +94,7 @@ function HtmlPreviewPanel({
   return <section className="html-preview">
     <header>
       <div>
-        <strong>Report Preview</strong>
+        <strong>HTML Preview</strong>
         <small>Rendered safely from the current draft without running the workflow.</small>
       </div>
       <button type="button" disabled={loading} onClick={() => void load()}>{loading ? 'Rendering…' : 'Preview'}</button>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import csv
 import re
 from collections import defaultdict
@@ -15,6 +16,7 @@ from vg2c.utilities._emit_helpers import split_utility_command
 from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
 from vg2c.utilities.macro_state import MacroState
 from vg2c.utility_metadata import ValueSchema
+from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 
 if TYPE_CHECKING:
     from vg2c.compilation import CompilationResult
@@ -60,7 +62,6 @@ class WorkflowOperation:
     id: str
     kind: str
     display_name: str
-    description: str
     parent_operation_id: str | None
     branch: Literal["true", "false"] | None
     source_span: SourceSpan
@@ -254,7 +255,6 @@ def _control_operation(
             id=operation_id,
             kind="condition",
             display_name="IF",
-            description="Conditional branch using the compiler's VG2 condition semantics.",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
@@ -282,7 +282,6 @@ def _control_operation(
             id=operation_id,
             kind="macro-loop",
             display_name="For Each Macro Row",
-            description="Iterate once over each row-backed macro scope.",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
@@ -317,7 +316,6 @@ def _control_operation(
             id=operation_id,
             kind="chunk-loop",
             display_name="For Each Chunk",
-            description="Iterate over fixed-size chunks of an input file.",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
@@ -332,7 +330,6 @@ def _control_operation(
         id=operation_id,
         kind="unsupported",
         display_name="Unsupported / Unknown",
-        description="Unsupported control operation.",
         parent_operation_id=parent_operation_id,
         branch=branch,
         source_span=block.span,
@@ -362,7 +359,6 @@ def _leaf_operations(
                 id=operation_id,
                 kind="embedded-python",
                 display_name="Embedded Python",
-                description="Embedded Python source for this block.",
                 parent_operation_id=parent_operation_id,
                 branch=branch,
                 source_span=block.span,
@@ -435,18 +431,31 @@ def _leaf_operations(
                         source_kind="parameter",
                     )
                 )
+            if definition.id == "ctx.run_query":
+                bindings.extend(
+                    _sql_file_list_bindings(block, invocation, values)
+                )
             operations.append(
                 WorkflowOperation(
                     id=invocation.id,
                     kind=definition.id,
                     display_name=definition.display_name,
-                    description=definition.method_description or definition.description,
                     parent_operation_id=parent_operation_id,
                     branch=branch,
                     source_span=block.span,
                     summary=_utility_summary(definition.summary_template, bindings),
                     bindings=tuple(bindings),
-                    capabilities=definition.capabilities,
+                    capabilities=(
+                        (*definition.capabilities, "html-preview")
+                        if definition.id in {"ctx.write_file", "fs_ops.write_file"}
+                        and any(
+                            item.name == "path"
+                            and isinstance(item.value, str)
+                            and item.value.lower().endswith((".html", ".htm"))
+                            for item in bindings
+                        )
+                        else definition.capabilities
+                    ),
                     visibility=definition.visibility,
                     block_index=block.index,
                     source_range=invocation.source_range,
@@ -461,7 +470,6 @@ def _leaf_operations(
             id=f"block-{block.index}:unsupported",
             kind="unsupported",
             display_name="Unsupported / Unknown",
-            description=f"{block.kind.value.replace('_', ' ').title()} block",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
@@ -470,6 +478,71 @@ def _leaf_operations(
             source_range=step.source_range if step else None,
         )
     ]
+
+
+def _sql_file_list_bindings(block, invocation, values: dict[str, Any]) -> list[EditableBinding]:
+    """Bind proven source calls to their emitted Python path literals."""
+    calls = scan_sql_get_csv_list_calls(block.resolved_body)
+    sql = next((item for item in invocation.parameters if item.name == "sql"), None)
+    if not calls or sql is None or sql.source_range is None:
+        return []
+    try:
+        expression = ast.parse(sql.source, mode="eval")
+    except SyntaxError:
+        return []
+    generated = sorted(
+        (
+            node for node in ast.walk(expression)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and ast.unparse(node.func) == "ctx.csv_io.sql_get_csv_list"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    if len(generated) != len(calls):
+        return []
+    def normalize(path: str) -> str:
+        return path.replace("\\", "/").removeprefix("./")
+
+    bindings = []
+    for index, (call, emitted_call) in enumerate(zip(calls, generated, strict=True)):
+        if "'" in call.csv_path or '"' in call.csv_path:
+            return []
+        literal = emitted_call.args[0]
+        generated_path = literal.value
+        if normalize(generated_path) != normalize(call.source_path):
+            return []
+        start = _ast_offset(sql.source, literal.lineno, literal.col_offset)
+        end = _ast_offset(sql.source, literal.end_lineno, literal.end_col_offset)
+        source_range = SourceRange(
+            sql.source_range.start_offset + start,
+            sql.source_range.start_offset + end,
+        )
+        binding_id = f"{invocation.id}:sql-file-list:{index}"
+        bindings.append(EditableBinding(
+            id=binding_id,
+            owner_operation_id=invocation.id,
+            name=f"sql_file_list_{index + 1}",
+            display_label=f"File list {index + 1}",
+            schema=ValueSchema("string", path=True),
+            value=values.get(binding_id, call.source_path),
+            default=call.source_path,
+            visibility="internal",
+            capabilities=("file-input", "sql-file-list"),
+            source_range=source_range,
+            source_kind="sql-file-list",
+        ))
+    return bindings
+
+
+def _ast_offset(source: str, line_number: int, byte_column: int) -> int:
+    lines = source.splitlines(keepends=True)
+    return sum(map(len, lines[:line_number - 1])) + len(
+        lines[line_number - 1].encode("utf-8")[:byte_column].decode("utf-8")
+    )
 
 
 def _rows_in_file_operation(
@@ -529,7 +602,6 @@ def _rows_in_file_operation(
         id=operation_id,
         kind="check-row-count",
         display_name="Check Row Count",
-        description="Count rows in a file and store the result in a macro variable.",
         parent_operation_id=parent_operation_id,
         branch=branch,
         source_span=block.span,

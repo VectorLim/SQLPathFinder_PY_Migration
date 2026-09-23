@@ -38,7 +38,7 @@ def test_append_has_prior_destination_and_separate_next_state():
 def test_file_effect_identity_survives_path_edits_and_delete_never_produces():
     call = FileSystemOps.rename.render("before.csv", "after.csv")
     baseline = _effects(call)[0]
-    parameter_id = baseline.outputs[0].parameter_id
+    parameter_id = baseline.outputs[0].binding_id
     edited = _effects(call, {parameter_id: "changed.csv"})[0]
     assert baseline.id == edited.id and baseline.operation_id == edited.operation_id
     assert edited.outputs[0].path == "changed.csv"
@@ -196,7 +196,7 @@ def test_file_choices_use_server_workspace_paths_only(tmp_path):
 
 def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_path):
     from vg2c import compile_document
-    from vg2c.editing import ParameterChange
+    from vg2c.editing import SemanticChange
     from vg2c.workflow import project_workflow
 
     source = tmp_path / "source.txt"
@@ -211,7 +211,7 @@ def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_p
         if parameter.name == "inputs"
     )
     baseline = project_workflow(result)
-    projected = project_workflow(result, [ParameterChange(inputs.id, ["new.csv"])])
+    projected = project_workflow(result, [SemanticChange(inputs.id, ["new.csv"])])
     assert baseline.effects[0].kind == "write"
     assert projected.effects[0].kind == "transform"
     assert projected.effects[0].inputs[0].path == "new.csv"
@@ -260,7 +260,7 @@ def test_workspace_links_use_output_directory_and_do_not_resurrect_deleted_files
 
 def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
     from vg2c import compile_document
-    from vg2c.editing import ParameterChange
+    from vg2c.editing import SemanticChange
     from vg2c.workflow import WorkflowDocument, project_workflow, workspace_issues
 
     documents = []
@@ -289,7 +289,7 @@ def test_workspace_issues_follow_effects_after_output_edits(tmp_path):
     changed = replace(
         documents[0],
         workflow=project_workflow(
-            results[0], [ParameterChange(output.id, "renamed.csv")]
+            results[0], [SemanticChange(output.id, "renamed.csv")]
         ),
     )
     assert [

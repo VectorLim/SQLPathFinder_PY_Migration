@@ -41,6 +41,7 @@ export function SemanticBindingField({ binding, readOnly, session }: Props) {
         binding={binding}
         values={values}
         readOnly={disabled}
+        fileListReadOnly={readOnly || session.readOnly}
         inspect={actions.inspectSql}
         runCommand={actions.runSqlCommand}
         onReset={() => actions.edit({ binding, value: RESET_VALUE })}

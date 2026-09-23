@@ -297,6 +297,11 @@ test('independent writes reorder in saved execution order', async ({ page }, tes
   const second = original.semantic_operations[1]
   await page.locator(`[data-semantic-tree-item="${first.id}"]`).locator('..').getByRole('button', { name: /Move .* down/ }).click()
   await expect.poll(async () => (await currentDocument(page, name)).semantic_operations[0].id).toBe(second.id)
+  await page.locator(`[data-semantic-tree-item="${first.id}"]`).press('Alt+ArrowUp')
+  await expect.poll(async () => (await currentDocument(page, name)).semantic_operations[0].id).toBe(first.id)
+  await page.locator(`[data-semantic-tree-item="${first.id}"]`).locator('..').getByRole('button', { name: /Drag .* to reorder/ })
+    .dragTo(page.locator(`[data-semantic-tree-item="${second.id}"]`))
+  await expect.poll(async () => (await currentDocument(page, name)).semantic_operations[0].id).toBe(second.id)
   await expect(page.getByText('Generate required', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Generate', exact: true }).click()
   await expect(page.getByText('Generated', { exact: true })).toBeVisible()
@@ -347,6 +352,25 @@ test('SQLite choices come from uploaded table headers and drive typed SQL edits'
   await expect(page.locator('.sql-join-row')).toContainText('teams')
 })
 
+test('SQL columns reorder by identity with pointer, keyboard, and touch controls', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await uploadAndTranslate(page, 'column-order.txt',
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n'
+    + 'SELECT 1 AS one, 2 AS two FROM t\n<---- New Query ---->\n')
+  await selectSemanticOperation(page, 'column-order.txt',
+    (operation) => operation.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
+  await pane(page, 'Configuration')
+  await page.getByRole('button', { name: 'Drag item 1' })
+    .dragTo(page.locator('.reorderable-item').nth(1))
+  await expect(page.locator('.reorderable-item').first()).toContainText('two')
+  await expect(page.locator('.reorderable-item').nth(1)).toHaveAttribute('tabindex', '0')
+  await page.locator('.reorderable-item').nth(1).press('Alt+ArrowUp')
+  await expect(page.locator('.reorderable-item').first()).toContainText('one')
+  await expect(page.getByRole('button', { name: 'Move item 1 down' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Move item 1 down' }).click()
+  await expect(page.locator('.reorderable-item').first()).toContainText('two')
+})
+
 test('Embedded Python edits stay modal and must validate before commit', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
   await uploadAndTranslate(
@@ -390,4 +414,38 @@ test('HTML preview renders the current draft without exposing generated Python',
   await expect(preview.locator('iframe[title="HTML report preview"]')).toBeVisible()
   await expect(page.getByText('Generated information', { exact: true })).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('html-preview.png'), fullPage: true })
+})
+
+test('file-backed SQL filter chooses an uploaded server file', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  const name = 'file-filter.txt'
+  await uploadAndTranslate(page, name,
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\n'
+    + "SELECT * FROM lots t WHERE t.lot IN SQL_Get_CSV_List('old.csv', lot, 't.lot In')\n"
+    + '<---- New Query ---->\n')
+  const upload = await page.request.post('/api/workspace/files', {
+    multipart: {
+      files: { name: 'new.csv', mimeType: 'text/csv', buffer: Buffer.from('lot\nA\n') },
+      paths: 'new.csv',
+    },
+  })
+  expect(upload.ok()).toBeTruthy()
+  const operation = await selectSemanticOperation(page, name,
+    (item) => item.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
+  await pane(page, 'Configuration')
+  await page.getByRole('tab', { name: /Filters/ }).click()
+  const selector = page.getByRole('combobox', { name: /File list for t.lot In/ })
+  await expect(selector).toBeEnabled()
+  await selector.selectOption('inputs/new.csv')
+  await expect(selector).toHaveValue('inputs/new.csv')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Generate required', { exact: true })).toBeVisible()
+  const document = await currentDocument(page, name)
+  expect(document.effects.find((effect) => effect.id.includes('sql-get-csv-list'))?.inputs[0].path).toBe('inputs/new.csv')
+  const sql = operation.bindings.find((binding) => binding.capabilities.includes('structured-sql'))!
+  const modelResponse = await page.request.post('/api/sql/inspect', {
+    data: { ...document, binding_id: sql.id },
+  })
+  expect(modelResponse.ok()).toBeTruthy()
+  expect((await modelResponse.json()).file_lists[0].path).toBe('inputs/new.csv')
 })

@@ -158,6 +158,7 @@ export function App() {
   const editorSession = active ? {
     values: active.edits.values,
     saving: active.status === 'saving',
+    readOnly: Boolean(active.document.read_only_reason),
     resources: {
       symbols: active.document.symbols,
       conditionOperators: active.document.condition_operators,
@@ -215,7 +216,7 @@ export function App() {
       <WorkbenchLayout
         activePane={pane}
         onActivePaneChange={setPane}
-        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onReorder={(source, target) => { void workspace.reorder(active.document.id, source, target) }} reorderDisabled={Boolean(active.document.read_only_reason) || active.status === 'saving' || active.status === 'generating' || Object.keys(active.edits.values).length > 0 || Object.keys(active.fieldDrafts).length > 0} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
+        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onReorder={(source, target) => { void workspace.reorder(active.document.id, source, target) }} reorderDisabled={Boolean(active.document.read_only_reason) || active.status === 'saving' || active.status === 'generating' || Object.keys(active.edits.values).length > 0 || Object.keys(active.fieldDrafts).length > 0} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
         configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">

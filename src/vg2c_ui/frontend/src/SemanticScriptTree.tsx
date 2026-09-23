@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { ChevronRight, ArrowUp, ArrowDown } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { ChevronRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 
 import type { DocumentView, SemanticOperationView } from './contracts.generated'
 import { ancestorScopeIds } from './workspaceState'
@@ -30,7 +30,9 @@ export function SemanticScriptTree({
   reorderDisabled = false,
 }: Props) {
   const treeRef = useRef<HTMLUListElement>(null)
-  const operations = document.semantic_operations.filter((operation) => operation.visibility !== 'internal')
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const operations = document.semantic_operations
   const children = useMemo(() => {
     const index = new Map<string, SemanticOperationView[]>()
     for (const operation of operations) {
@@ -48,7 +50,6 @@ export function SemanticScriptTree({
       const haystack = [
         operation.display_name,
         operation.summary,
-        operation.description,
         ...operation.comments,
         ...operation.bindings.flatMap((binding) => [binding.display_label, String(binding.value ?? '')]),
       ].join(' ').toLowerCase()
@@ -79,6 +80,13 @@ export function SemanticScriptTree({
     ? selectedId
     : visibleOperations[0]?.id ?? null
 
+  function move(source: SemanticOperationView, target: SemanticOperationView) {
+    if (reorderDisabled || query || source.scope_id === null || target.scope_id === null
+      || !source.reorder_targets.includes(target.scope_id)) return
+    onReorder(source.scope_id, target.scope_id)
+    setAnnouncement(`Requested move of ${source.display_name} ${operations.indexOf(source) < operations.indexOf(target) ? 'down' : 'up'}.`)
+  }
+
   function render(parentId: string, depth: number): ReactNode {
     return (children.get(parentId) ?? []).map((operation) => {
       if (visibleIds && !visibleIds.has(operation.id)) return null
@@ -93,7 +101,18 @@ export function SemanticScriptTree({
       const canMove = (target: SemanticOperationView | undefined) =>
         operation.scope_id !== null && target?.scope_id !== null &&
         target?.scope_id !== undefined && operation.reorder_targets.includes(target.scope_id)
-      return <li key={operation.id} role="none" className={`tree-node${selected ? ' is-selected' : ''}`}>
+      const source = operations.find((item) => item.id === dragSourceId)
+      const validDrop = source && source.id !== operation.id && source.reorder_targets.includes(operation.scope_id ?? -1)
+      return <li key={operation.id} role="none" className={`tree-node${selected ? ' is-selected' : ''}${validDrop ? ' is-drop-target' : ''}`}
+        onDragOver={(event) => { if (validDrop && !reorderDisabled && !query) { event.preventDefault(); event.stopPropagation() } }}
+        onDrop={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const sourceId = event.dataTransfer.getData('application/x-sqlpathfinder-operation-id')
+          const dragged = operations.find((item) => item.id === sourceId)
+          if (dragged) move(dragged, operation)
+          setDragSourceId(null)
+        }}>
         <div className="semantic-tree-row-wrap">
         <button
           type="button"
@@ -107,7 +126,13 @@ export function SemanticScriptTree({
           data-semantic-tree-item={operation.id}
           data-parent-id={operation.parent_operation_id ?? ''}
           onClick={() => onSelect(operation.id)}
-          onKeyDown={(event) => handleTreeKey(event, operation, hasChildren, expanded, onToggle)}
+          onKeyDown={(event) => {
+            if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+              event.preventDefault()
+              const target = event.key === 'ArrowUp' ? previous : next
+              if (target) move(operation, target)
+            } else handleTreeKey(event, operation, hasChildren, expanded, onToggle)
+          }}
         >
           <span className={`tree-toggle${hasChildren ? '' : ' tree-toggle--step'}`} aria-hidden="true">
             {hasChildren ? <ChevronRight className="chevron" size={15} /> : '•'}
@@ -119,12 +144,21 @@ export function SemanticScriptTree({
           {operation.validation_state !== 'valid' && <span className="operation-warning" aria-label={operation.validation_state}>!</span>}
         </button>
         {(canMove(previous) || canMove(next)) && <span className="tree-reorder-controls">
+          <button type="button" className="tree-drag-handle" aria-label={`Drag ${operation.display_name} to reorder`}
+            draggable={!reorderDisabled && !query}
+            disabled={reorderDisabled || Boolean(query)}
+            onDragStart={(event) => {
+              event.dataTransfer.setData('application/x-sqlpathfinder-operation-id', operation.id)
+              event.dataTransfer.effectAllowed = 'move'
+              setDragSourceId(operation.id)
+            }}
+            onDragEnd={() => setDragSourceId(null)}><GripVertical size={14} /></button>
           {canMove(previous) && <button type="button" aria-label={`Move ${operation.display_name} up`}
             disabled={reorderDisabled || Boolean(query)}
-            onClick={() => onReorder(operation.scope_id!, previous.scope_id!)}><ArrowUp size={14} /></button>}
+            onClick={() => move(operation, previous)}><ArrowUp size={14} /></button>}
           {canMove(next) && <button type="button" aria-label={`Move ${operation.display_name} down`}
             disabled={reorderDisabled || Boolean(query)}
-            onClick={() => onReorder(operation.scope_id!, next.scope_id!)}><ArrowDown size={14} /></button>}
+            onClick={() => move(operation, next)}><ArrowDown size={14} /></button>}
         </span>}
         </div>
         {hasChildren && <div className={`tree-branch${expanded ? ' is-open' : ''}`}><ul role="group">{render(operation.id, depth + 1)}</ul></div>}
@@ -133,7 +167,7 @@ export function SemanticScriptTree({
   }
 
   if (!operations.length) return <p className="empty-copy">No semantic operations were produced for this script.</p>
-  return <ul ref={treeRef} className="script-tree semantic-script-tree" role="tree" aria-label="Script Logic">{render('__root__', 1)}</ul>
+  return <><ul ref={treeRef} className="script-tree semantic-script-tree" role="tree" aria-label="Script Logic">{render('__root__', 1)}</ul><span className="sr-only" role="status" aria-live="polite">{announcement}</span></>
 }
 
 function handleTreeKey(

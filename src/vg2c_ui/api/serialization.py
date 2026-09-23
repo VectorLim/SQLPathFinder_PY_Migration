@@ -9,9 +9,7 @@ from typing import get_args
 
 from vg2c import CompilationResult
 from vg2c.dataflow.file_effects import FileEffect
-from vg2c.editing import ParameterChange
-from vg2c.kind import Kind
-from vg2c.operands import ScopeNode as CompilerScopeNode
+from vg2c.editing import SemanticChange
 from vg2c.reorder import legal_reorder_targets
 from vg2c.semantics import CONDITION_OPERATORS
 from vg2c.sql_editor import (
@@ -29,14 +27,12 @@ from vg2c_ui.api.models import (
     FileEffectView,
     FileResourceView,
     OperationReferenceView,
-    OperationView,
-    ParameterView,
-    ScopeView,
     SemanticBindingView,
     SemanticOperationView,
     SourceSpanView,
     SqlColumnChoiceView,
     SqlEditCapabilitiesView,
+    SqlFileListView,
     SqlJoinView,
     SqlModelView,
     SqlPredicateView,
@@ -44,10 +40,8 @@ from vg2c_ui.api.models import (
     SqlSourceView,
     SqlSpanView,
     SqlTableChoiceView,
-    StepView,
     SymbolReferenceView,
     SymbolView,
-    UtilityView,
     ValueSchemaView,
 )
 from vg2c_ui.services.file_choices import file_choices_by_operation
@@ -73,7 +67,7 @@ def document_view(
     source_hash: str,
     output_hash: str,
     revision: str,
-    saved_changes: Iterable[ParameterChange] = (),
+    saved_changes: Iterable[SemanticChange] = (),
     read_only_reason: str | None = None,
     generation_state: str = "current",
     workspace_root: Path | None = None,
@@ -81,167 +75,15 @@ def document_view(
     compiler_hash: str | None = None,
 ) -> DocumentView:
     """Serialize compiler-owned semantics without re-discovering or re-inferring them."""
-    editable = read_only_reason is None
     saved_changes = tuple(saved_changes)
     workflow = project_workflow(result, saved_changes, output_path=output_path)
     reorder_targets = legal_reorder_targets(result, saved_changes)
-    values = workflow.changes.effective_values
     file_choices = file_choices_by_operation(
         workflow.effects,
         inventory_paths,
         output_path=output_path,
         workspace_root=workspace_root or output_path.parent,
     )
-    artifacts = artifact_views_for_effects(workflow.effects)
-    block_by_index = {block.index: block for block in result.resolved.blocks}
-    parent_by_scope, scope_by_id = _scope_indexes(result.resolved.scope_tree)
-    leaf_parent = {
-        node.block_index: parent_by_scope.get(node.scope_id)
-        for node in scope_by_id.values()
-        if node.kind == "leaf" and node.block_index is not None
-    }
-    branch_by_scope = {
-        scope_id: (
-            "true"
-            if scope.kind == "if-branch"
-            else "false" if scope.kind == "else-branch" else None
-        )
-        for scope_id, scope in scope_by_id.items()
-    }
-
-    steps: list[StepView] = []
-    for emitted_step in result.emitted.steps:
-        block = block_by_index.get(emitted_step.block_index)
-        if block is None:
-            continue
-        primary = emitted_step.invocations[0] if emitted_step.invocations else None
-        unsupported = block.kind in {Kind.PYTHON_EMBED, Kind.UNKNOWN} or primary is None
-        step_read_only = unsupported or not editable
-        operations: list[OperationView] = []
-        for invocation in emitted_step.invocations:
-            invocation_parameters: list[ParameterView] = []
-            for parameter in invocation.parameters:
-                capabilities = parameter.definition.capabilities if parameter.definition else ()
-                effective_value = values.get(parameter.id, parameter.value)
-                editable = parameter.editable and not step_read_only
-                reason = parameter.read_only_reason
-                if not editable:
-                    reason = (
-                        read_only_reason
-                        or "Saved edits cannot be reconciled with compiler metadata."
-                    )
-                elif unsupported:
-                    reason = f"{block.kind.value} blocks are read-only"
-                definition = parameter.definition
-                invocation_parameters.append(
-                    ParameterView(
-                        id=parameter.id,
-                        name=parameter.name,
-                        position=parameter.position,
-                        source=(
-                            repr(effective_value)
-                            if parameter.id in values
-                            else parameter.source
-                        ),
-                        value=effective_value,
-                        editor_type=parameter.editor_type,
-                        editable=editable,
-                        read_only_reason=reason,
-                        constraints=(
-                            {"choices": list(definition.schema.choices)}
-                            if definition and definition.schema and definition.schema.choices
-                            else {}
-                        ),
-                        annotation=definition.annotation if definition else None,
-                        required=definition.required if definition else True,
-                        default=definition.default if definition else None,
-                        capabilities=list(capabilities),
-                        value_schema=(
-                            _value_schema_view(definition.schema)
-                            if definition
-                            else None
-                        ),
-                        internal=definition.visibility == "internal" if definition else False,
-                        omitted=parameter.source_range is None,
-                        overridden=parameter.id in values,
-                        generated_value=parameter.value,
-                    )
-                )
-            operations.append(
-                OperationView(
-                    id=invocation.id,
-                    utility=_utility_view(invocation.operation),
-                    parameters=invocation_parameters,
-                )
-            )
-
-        utility = _utility_view(primary.operation if primary else None)
-        if not operations:
-            operations.append(
-                OperationView(id=f"block-{block.index}:source", utility=utility)
-            )
-        display_label = block.resolved_options.lookup.get("PROMPT-TEXT") or (
-            primary.operation.title
-            if primary
-            else block.kind.value.replace("_", " ").title()
-        )
-        description = (
-            (primary.operation.method_description or primary.operation.description)
-            if primary
-            else f"{block.kind.value.replace('_', ' ').title()} block"
-        )
-        parent_scope = leaf_parent.get(block.index)
-        steps.append(
-            StepView(
-                id=emitted_step.function_name,
-                function_name=emitted_step.function_name,
-                block_index=block.index,
-                source_span=SourceSpanView(
-                    file=str(block.span.file) if block.span.file else None,
-                    start_line=block.span.start_line,
-                    end_line=block.span.end_line,
-                ),
-                functional_kind=block.kind.value,
-                display_label=display_label,
-                description=description,
-                parent_scope_id=_scope_view_id(parent_scope, scope_by_id),
-                branch=branch_by_scope.get(parent_scope),
-                validation_state="unsupported" if step_read_only else "valid",
-                raw_code=None,
-                read_only=step_read_only,
-                operations=operations,
-            )
-        )
-
-    known_steps = {step.id for step in steps}
-    for effect in workflow.effects:
-        if effect.step_id in known_steps:
-            continue
-        block = block_by_index[effect.block_index]
-        utility = _utility_view(None)
-        label = block.kind.value.replace("_", " ").title()
-        steps.append(
-            StepView(
-                id=effect.step_id,
-                function_name="",
-                block_index=block.index,
-                source_span=SourceSpanView(
-                    file=str(block.span.file) if block.span.file else None,
-                    start_line=block.span.start_line,
-                    end_line=block.span.end_line,
-                ),
-                functional_kind=block.kind.value,
-                display_label=label,
-                description="Compiler source/control operation",
-                read_only=True,
-                validation_state="unsupported",
-                raw_code=None,
-                parent_scope_id=_scope_view_id(block.scope_id, scope_by_id),
-                operations=[OperationView(id=effect.operation_id, utility=utility)],
-            )
-        )
-        known_steps.add(effect.step_id)
-
     diagnostics = _diagnostics(result, workflow.effects)
     return DocumentView(
         id=str(result.input_path.resolve()),
@@ -253,13 +95,11 @@ def document_view(
         revision=revision,
         read_only_reason=read_only_reason,
         generation_state=generation_state,
-        steps=steps,
-        scopes=_scope_views(result.resolved.scope_tree, parent_by_scope),
-        artifacts=artifacts,
         diagnostics=diagnostics,
         effects=effect_views(workflow.effects),
         semantic_operations=semantic_operation_views(
-            workflow.operations, file_choices, result.resolved.scope_tree, reorder_targets
+            workflow.operations, file_choices, result.resolved.scope_tree, reorder_targets,
+            read_only_reason=read_only_reason,
         ),
         files=file_resource_views(workflow.files),
         symbols=symbol_views(workflow.symbols),
@@ -275,6 +115,7 @@ def semantic_operation_views(
     file_choices: dict[str, list[str]] | None = None,
     scope_tree=None,
     reorder_targets: dict[int, tuple[int, ...]] | None = None,
+    read_only_reason: str | None = None,
 ) -> list[SemanticOperationView]:
     file_choices = file_choices or {}
     scope_by_block = {}
@@ -294,7 +135,6 @@ def semantic_operation_views(
             summary=operation.summary,
             scope_id=scope_by_block.get(operation.block_index),
             reorder_targets=list(reorder_targets.get(scope_by_block.get(operation.block_index), ())),
-            description=operation.description,
             parent_operation_id=operation.parent_operation_id,
             branch=operation.branch,
             source_span=SourceSpanView(
@@ -317,8 +157,8 @@ def semantic_operation_views(
                     capabilities=list(binding.capabilities),
                     validation_state=binding.validation_state,
                     resettable=binding.resettable,
-                    editable=binding.editable,
-                    read_only_reason=binding.read_only_reason,
+                    editable=binding.editable and read_only_reason is None,
+                    read_only_reason=read_only_reason or binding.read_only_reason,
                     value_schema=_value_schema_view(binding.schema),
                     file_choices=(
                         file_choices.get(operation.id, [])
@@ -479,6 +319,13 @@ def sql_model_view(model: SqlEditableModel) -> SqlModelView:
             for item in model.table_choices
         ],
         filters=predicates(model.filters),
+        file_lists=[
+            SqlFileListView(
+                id=item.id, path=item.path, column_ref=item.column_ref,
+                lead_in=item.lead_in, choices=list(item.choices),
+            )
+            for item in model.file_lists
+        ],
         joins=[
             SqlJoinView(
                 id=item.id,
@@ -510,7 +357,6 @@ def sql_model_view(model: SqlEditableModel) -> SqlModelView:
             selected=model.capabilities.selected,
             filters=model.capabilities.filters,
             joins=model.capabilities.joins,
-            raw_sql=model.capabilities.raw_sql,
         ),
         read_only_reason=model.read_only_reason,
         select_list_span=span(model.select_list_span),
@@ -534,29 +380,6 @@ def _value_schema_view(schema) -> ValueSchemaView | None:
         path=schema.path,
         prefix_items=[_value_schema_view(item) for item in schema.prefix_items],
         tuple_value=schema.tuple_value,
-    )
-
-
-def _utility_view(operation) -> UtilityView:
-    if operation is None:
-        return UtilityView(
-            name="unsupported",
-            class_name="UnsupportedOperation",
-            module="vg2c",
-            title="Unsupported operation",
-            description="No emitted utility invocation is available for this block.",
-        )
-    return UtilityView(
-        name=operation.utility_name,
-        class_name=operation.class_name,
-        module=operation.module,
-        title=operation.title,
-        description=operation.description,
-        method=operation.method,
-        method_description=operation.method_description,
-        return_type=operation.return_type,
-        capabilities=list(operation.capabilities),
-        supported_mutations=list(operation.supported_mutations),
     )
 
 
@@ -596,69 +419,6 @@ def _diagnostics(
                     )
                 )
     return diagnostics
-
-
-def _scope_indexes(
-    root: CompilerScopeNode,
-) -> tuple[dict[int, int | None], dict[int, CompilerScopeNode]]:
-    parent_by_scope: dict[int, int | None] = {}
-    scope_by_id: dict[int, CompilerScopeNode] = {}
-    stack = [(root, None)]
-    while stack:
-        node, parent = stack.pop()
-        parent_by_scope[node.scope_id] = parent
-        scope_by_id[node.scope_id] = node
-        for child in reversed(node.children):
-            stack.append((child, node.scope_id))
-    return parent_by_scope, scope_by_id
-
-
-def _scope_view_id(
-    scope_id: int | None, scope_by_id: dict[int, CompilerScopeNode]
-) -> str | None:
-    if scope_id is None or scope_id not in scope_by_id:
-        return None
-    return None if scope_by_id[scope_id].kind == "program" else f"scope-{scope_id}"
-
-
-def _scope_views(
-    root: CompilerScopeNode, parent_by_scope: dict[int, int | None]
-) -> list[ScopeView]:
-    _, scope_by_id = _scope_indexes(root)
-    scopes: list[ScopeView] = []
-    for scope in scope_by_id.values():
-        if scope.kind == "program" or scope.kind == "leaf":
-            continue
-        node_kind = (
-            "branch"
-            if scope.kind in {"if-branch", "else-branch"}
-            else "if" if scope.kind == "if" else "loop"
-        )
-        scopes.append(
-            ScopeView(
-                id=f"scope-{scope.scope_id}",
-                node_kind=node_kind,
-                scope_kind=scope.kind,
-                label=_scope_label(scope.kind),
-                start_index=scope.start_index,
-                end_index=scope.end_index,
-                parent_scope_id=_scope_view_id(
-                    parent_by_scope[scope.scope_id], scope_by_id
-                ),
-            )
-        )
-    return sorted(scopes, key=lambda item: (item.start_index, item.id))
-
-
-def _scope_label(kind: str) -> str:
-    labels = {
-        "if": "Condition",
-        "if-branch": "True branch",
-        "else-branch": "Else branch",
-        "macro": "For each macro row",
-        "loop": "For each row",
-    }
-    return labels.get(kind, kind.replace("-", " ").title())
 
 
 def _diagnostic_level(value: str) -> str:

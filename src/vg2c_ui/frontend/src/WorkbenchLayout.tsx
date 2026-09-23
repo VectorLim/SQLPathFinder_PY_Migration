@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
+import { solvePanes, type SecondaryPane } from './paneSolver'
 
 export type WorkbenchPane = 'logic' | 'config' | 'context'
-type SecondaryPane = Exclude<WorkbenchPane, 'logic'>
 
 export function WorkbenchLayout({
   activePane,
@@ -23,7 +23,7 @@ export function WorkbenchLayout({
   const [configWidth, setConfigWidth] = useState(460)
   const [manualConfigCollapsed, setManualConfigCollapsed] = useState(false)
   const [manualContextCollapsed, setManualContextCollapsed] = useState(false)
-  const [secondaryOverride, setSecondaryOverride] = useState<SecondaryPane | null>(null)
+  const [focusedSecondary, setFocusedSecondary] = useState<SecondaryPane | null>(null)
 
   useEffect(() => {
     const root = rootRef.current
@@ -33,43 +33,28 @@ export function WorkbenchLayout({
     return () => observer.disconnect()
   }, [])
 
-  const narrow = width < 720
-  const wide = width >= 1200
-  const medium = width >= 930 && width < 1200
-
-  let showConfig = false
-  let showContext = false
-  if (wide) {
-    showConfig = !manualConfigCollapsed
-    showContext = !manualContextCollapsed
-  } else if (secondaryOverride) {
-    showConfig = secondaryOverride === 'config'
-    showContext = secondaryOverride === 'context'
-  } else if (medium) {
-    // Configuration folds away first; Context remains visible until the next breakpoint.
-    showContext = true
-  }
+  const layout = solvePanes(
+    width, logicWidth, configWidth,
+    manualConfigCollapsed, manualContextCollapsed, focusedSecondary,
+  )
+  const { single: narrow, showConfig, showContext } = layout
 
   useEffect(() => {
     if (narrow) return
     if (activePane === 'config') {
-      if (wide) setManualConfigCollapsed(false)
-      else setSecondaryOverride('config')
+      setManualConfigCollapsed(false)
+      setFocusedSecondary('config')
     } else if (activePane === 'context') {
-      if (wide) setManualContextCollapsed(false)
-      else setSecondaryOverride('context')
+      setManualContextCollapsed(false)
+      setFocusedSecondary('context')
     }
-  }, [activePane, narrow, wide])
+  }, [activePane, narrow])
 
   function toggleSecondary(pane: SecondaryPane) {
     const visible = pane === 'config' ? showConfig : showContext
-    if (wide) {
-      if (pane === 'config') setManualConfigCollapsed((value) => !value)
-      else setManualContextCollapsed((value) => !value)
-    } else {
-      setSecondaryOverride(visible ? null : pane)
-    }
-    if (!visible) onActivePaneChange(pane)
+    if (pane === 'config') setManualConfigCollapsed(visible)
+    else setManualContextCollapsed(visible)
+    setFocusedSecondary(visible ? null : pane)
   }
 
   function resizeLogic(delta: number) {
@@ -96,11 +81,11 @@ export function WorkbenchLayout({
       className="workbench-panes adaptive-workbench-panes"
       data-config-collapsed={!showConfig}
       data-context-collapsed={!showContext}
-      style={{ gridTemplateColumns: gridColumns(logicWidth, configWidth, showConfig, showContext) }}
+      style={{ gridTemplateColumns: gridColumns(layout.logicWidth, layout.configWidth, showConfig, showContext) }}
     >
       {logic}
       <SeparatorSlot visible={showConfig}>
-        <PaneSeparator label="Resize Script Logic and Configuration" value={logicWidth} min={260} max={560} onDelta={resizeLogic} />
+        <PaneSeparator label="Resize Script Logic and Configuration" value={layout.logicWidth} min={260} max={560} onDelta={resizeLogic} />
       </SeparatorSlot>
       <PaperPaneSlot pane="config" label="Configuration" expanded={showConfig} onToggle={() => toggleSecondary('config')}>
         {configuration}
@@ -108,7 +93,7 @@ export function WorkbenchLayout({
       <SeparatorSlot visible={showContext}>
         <PaneSeparator
           label={showConfig ? 'Resize Configuration and Context' : 'Resize Script Logic and Context'}
-          value={showConfig ? configWidth : logicWidth}
+          value={showConfig ? layout.configWidth : layout.logicWidth}
           min={showConfig ? 320 : 260}
           max={showConfig ? 680 : 560}
           onDelta={showConfig ? resizeConfig : resizeLogic}
@@ -216,8 +201,8 @@ function PaneSeparator({
 
 function gridColumns(logicWidth: number, configWidth: number, showConfig: boolean, showContext: boolean): string {
   if (showConfig && showContext) return `${logicWidth}px 6px ${configWidth}px 6px minmax(320px, 1fr)`
-  if (showConfig) return `${logicWidth}px 6px minmax(360px, 1fr) 0px 0px`
-  if (showContext) return `${logicWidth}px 0px 0px 6px minmax(340px, 1fr)`
+  if (showConfig) return `${logicWidth}px 6px minmax(320px, 1fr) 0px 0px`
+  if (showContext) return `${logicWidth}px 0px 0px 6px minmax(320px, 1fr)`
   return 'minmax(0, 1fr) 0px 0px 0px 0px'
 }
 

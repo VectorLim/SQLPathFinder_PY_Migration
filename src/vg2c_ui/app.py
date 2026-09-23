@@ -30,9 +30,6 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     )
     app.state.workspace_manager = manager
     app.state.execution_service = DisabledExecutionService()
-    # Kept for direct service tests; HTTP requests always receive their own store below.
-    app.state.document_store = DocumentStore(root)
-
     @app.middleware("http")
     async def workspace_session(request, call_next):
         if not request.url.path.startswith("/api/") or request.url.path == "/api/health":

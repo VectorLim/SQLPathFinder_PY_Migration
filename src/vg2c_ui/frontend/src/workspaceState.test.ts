@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './workspaceGuards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './workspaceState.ts'
+import { solvePanes } from './paneSolver.ts'
 import { SCHEMA_VERSION, type DocumentView } from './contracts.generated.ts'
 
 function doc(id: string): DocumentView {
@@ -15,7 +16,7 @@ function doc(id: string): DocumentView {
     compiler_hash: `compiler-${id}`,
     generation_state: 'current',
     read_only_reason: null,
-    steps: [], scopes: [], artifacts: [], diagnostics: [], effects: [],
+    diagnostics: [], effects: [],
     semantic_operations: [], files: [], symbols: [], condition_operators: [],
   }
 }
@@ -48,7 +49,7 @@ assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.
 
 const fileDoc = doc('files')
 fileDoc.semantic_operations = [{
-  id: 'copy', kind: 'copy', display_name: 'Copy', summary: '', description: '',
+  id: 'copy', kind: 'copy', display_name: 'Copy', summary: '',
   parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 1 },
   capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal',
   bindings: [{
@@ -72,8 +73,8 @@ assert.equal(fileState.tabs[0].edits.values.source, 'draft.csv', 'upload refresh
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const navigationDoc = doc('navigation')
 navigationDoc.semantic_operations = [
-  { id: 'scope-a', kind: 'loop', display_name: 'Loop', description: '', parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal' },
-  ...['operation-a', 'operation-b'].map((id) => ({ id, kind: 'probe', display_name: 'Probe', description: '', parent_operation_id: 'scope-a', branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid' as const, visibility: 'normal' as const })),
+  { id: 'scope-a', kind: 'loop', display_name: 'Loop', parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal' },
+  ...['operation-a', 'operation-b'].map((id) => ({ id, kind: 'probe', display_name: 'Probe', parent_operation_id: 'scope-a', branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid' as const, visibility: 'normal' as const })),
 ]
 let navigation = workspaceReducer(state, { type: 'merge-documents', documents: [navigationDoc] })
 navigation = workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b', focus: true })
@@ -146,6 +147,18 @@ reopened = workspaceReducer(reopened, {
   preview: { valid: true, diff: 'leaked', issues: [] },
 })
 assert.equal(reopened.tabs[0].preview, null, 'closed tab response must not leak into reopened document')
+
+const narrowPanes = solvePanes(390, 360, 460, false, false, null)
+assert.equal(narrowPanes.single, true)
+const twoPanes = solvePanes(800, 360, 460, false, false, null)
+assert.deepEqual([twoPanes.showConfig, twoPanes.showContext], [false, true])
+assert.ok(twoPanes.logicWidth + 6 + 320 <= 800)
+const focusedConfig = solvePanes(800, 360, 460, false, false, 'config')
+assert.deepEqual([focusedConfig.showConfig, focusedConfig.showContext], [true, false])
+const threePanes = solvePanes(1200, 360, 460, false, false, null)
+assert.deepEqual([threePanes.showConfig, threePanes.showContext], [true, true])
+const manuallyClosed = solvePanes(1200, 360, 460, true, false, 'config')
+assert.deepEqual([manuallyClosed.showConfig, manuallyClosed.showContext], [false, true])
 
 let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
 actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', bindingId: 'p1', value: 'draft' })

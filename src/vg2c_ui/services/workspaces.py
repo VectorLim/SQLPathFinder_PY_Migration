@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import threading
 import time
@@ -194,7 +195,8 @@ def get_workspace_manager(request) -> WorkspaceManager:
 def _safe_relative_path(value: str) -> PurePosixPath:
     normalized = value.replace("\\", "/")
     path = PurePosixPath(normalized)
-    if not normalized or path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    if (not normalized or path.is_absolute() or re.match(r"^[A-Za-z]:", normalized)
+        or any(part in {"", ".", ".."} for part in path.parts)):
         raise WorkspacePathError("A non-empty relative path is required.")
     return path
 

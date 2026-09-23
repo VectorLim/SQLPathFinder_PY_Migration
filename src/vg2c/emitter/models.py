@@ -94,11 +94,7 @@ class UtilityOperationDefinition:
     class_name: str
     module: str
     method: str
-    title: str
     display_name: str
-    description: str
-    method_description: str | None
-    return_type: str | None
     parameters: tuple[ParameterDefinition, ...]
     summary_template: str | None = None
     capabilities: tuple[str, ...] = ()
@@ -207,14 +203,6 @@ class EmittedScript:
         return next(
             (step for step in self.steps if step.block_index == block_index), None
         )
-
-    def parameter(self, parameter_id: str) -> EmittedParameter | None:
-        for step in self.steps:
-            for parameter in step.parameters:
-                if parameter.id == parameter_id:
-                    return parameter
-        return None
-
 
 @dataclass(frozen=True, slots=True)
 class _RelativeInvocation:
@@ -798,18 +786,13 @@ def _operation_definition(
             raise ValueError(f"Invalid visibility for {func.__name__}.{parameter.name}")
     if operation.summary is not None:
         _validate_summary(operation.summary, parameters)
-    class_doc = inspect.cleandoc(owner.__doc__) if owner.__doc__ else ""
     return UtilityOperationDefinition(
         id=f"{utility_name}.{func.__name__}",
         utility_name=utility_name,
         class_name=owner.__name__,
         module=owner.__module__,
         method=func.__name__,
-        title=_title(owner.__name__),
         display_name=operation.display_name or _title(func.__name__),
-        description=class_doc or f"{_title(owner.__name__)} utility",
-        method_description=inspect.getdoc(func),
-        return_type=_annotation(signature.return_annotation),
         parameters=tuple(parameters),
         summary_template=operation.summary,
         capabilities=operation.capabilities,

@@ -290,6 +290,10 @@ def project_workflow(
         if block is not None and operation.kind == "ctx.run_query":
             for index, call in enumerate(scan_sql_get_csv_list_calls(block.resolved_body)):
                 effect_id = f"{operation.id}:effect:sql-get-csv-list:{index}"
+                binding_id = f"{operation.id}:sql-file-list:{index}"
+                file_binding = next(
+                    (item for item in operation.bindings if item.id == binding_id), None
+                )
                 bound.append(
                     FileEffect(
                         effect_id,
@@ -302,8 +306,8 @@ def project_workflow(
                         (
                             FileEndpoint(
                                 f"{effect_id}:prior:path:0",
-                                None,
-                                call.source_path,
+                                binding_id if file_binding else None,
+                                file_binding.value if file_binding else call.source_path,
                                 None,
                                 "runtime-search",
                                 "prior",

@@ -6,6 +6,7 @@ export type SqlCommand =
   | { action: 'add-filter'; arguments: { left_choice_id: string; operator: string; right: string; connector?: string } }
   | { action: 'update-filter'; arguments: { filter_id: string; left_choice_id?: string; operator?: string; right?: string; connector?: string } }
   | { action: 'remove-filter'; arguments: { filter_id: string } }
+  | { action: 'update-file-list'; arguments: { file_list_id: string; path: string } }
   | { action: 'add-join'; arguments: { join_type: string; table_choice_id: string; left_choice_id: string; right_choice_id: string; operator?: string } }
   | { action: 'update-join-type'; arguments: { join_id: string; join_type: string } }
   | { action: 'update-join-predicate'; arguments: { join_id: string; predicate_id: string; left_choice_id?: string; operator?: string; right_choice_id?: string } }

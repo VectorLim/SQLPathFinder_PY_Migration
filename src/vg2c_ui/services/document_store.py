@@ -17,7 +17,7 @@ from vg2c.editing import (
     project_changes,
 )
 from vg2c.editing import (
-    apply_changes as apply_parameter_changes,
+    apply_changes,
 )
 from vg2c.reorder import OrderChange, apply_order_changes, swap_adjacent
 from vg2c.semantics import build_semantic_model
@@ -92,9 +92,12 @@ def _serialized(method):
 
 
 def get_document_store(request) -> "DocumentStore":
-    """Return the caller-scoped store, retaining the legacy app store for tests."""
+    """Return the caller's server workspace store."""
     state = getattr(request, "state", None)
-    return getattr(state, "document_store", request.app.state.document_store)
+    store = getattr(state, "document_store", None)
+    if store is None:
+        raise RuntimeError("Workspace session is unavailable.")
+    return store
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,14 +199,19 @@ class DocumentStore:
             if output.exists()
             else result.emitted.source
         )
+        display_path = (
+            self._relative_display(str(output))
+            if self.expose_relative_paths
+            else str(output)
+        )
         return ChangePreviewView(
             valid=projected.valid,
             diff="".join(
                 difflib.unified_diff(
                     previous.splitlines(keepends=True),
                     projected.source.splitlines(keepends=True),
-                    fromfile=str(output),
-                    tofile=str(output),
+                    fromfile=display_path,
+                    tofile=display_path,
                 )
             ),
             issues=tuple(_issue_view(issue) for issue in projected.issues),
@@ -246,7 +254,7 @@ class DocumentStore:
         orders = _saved_orders(sidecar)
         if orders:
             result = apply_order_changes(compile_document(source), orders, merged)
-        projected = apply_parameter_changes(result, merged)
+        projected = apply_changes(result, merged)
         if batch.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while validating edits.")
         provenance = (
@@ -260,7 +268,7 @@ class DocumentStore:
     @_serialized
     def generate(self, snapshot: DocumentSnapshot) -> ChangeResultView:
         source, output, result, persisted = self._load_for_change(snapshot)
-        projected = apply_parameter_changes(result, persisted)
+        projected = apply_changes(result, persisted)
         if snapshot.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while generating output.")
         self._write_generated_state(source, output, projected, _saved_orders(read_sidecar(output)))
@@ -278,7 +286,7 @@ class DocumentStore:
             if item.parent_scope_id != next_order.parent_scope_id
         ] + [next_order]
         candidate = apply_order_changes(compile_document(source), orders, persisted)
-        apply_parameter_changes(candidate, persisted)
+        apply_changes(candidate, persisted)
         if request.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while reordering operations.")
         provenance = (
@@ -367,12 +375,14 @@ class DocumentStore:
     def inspect_sql(self, request: SqlModelRequest) -> SqlModelView:
         source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
+        file_choices, csv_header = self._sql_context(result, merged, request.binding_id, output)
         return sql_model_view(
             structured_sql_model(
                 result,
                 request.binding_id,
                 merged,
-                csv_header=self._sql_header_reader(result, merged, request.binding_id, output),
+                csv_header=csv_header,
+                file_choices=file_choices,
             )
         )
 
@@ -380,17 +390,22 @@ class DocumentStore:
     def apply_sql_action(self, request: SqlActionRequest) -> SqlActionResponse:
         source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
+        file_choices, csv_header = self._sql_context(result, merged, request.binding_id, output)
         change = apply_sql_action(
             result,
             SqlAction(
-                parameter_id=request.binding_id,
+                binding_id=request.binding_id,
                 action=request.action,
                 arguments=request.arguments,
             ),
             merged,
-            csv_header=self._sql_header_reader(result, merged, request.binding_id, output),
+            csv_header=csv_header,
+            file_choices=file_choices,
         )
         next_changes = _merge_changes(merged, [change])
+        next_file_choices, next_csv_header = self._sql_context(
+            result, next_changes, request.binding_id, output
+        )
         return SqlActionResponse(
             change=SemanticChangeRequest(
                 binding_id=change.binding_id,
@@ -401,26 +416,28 @@ class DocumentStore:
                     result,
                     request.binding_id,
                     next_changes,
-                    csv_header=self._sql_header_reader(result, next_changes, request.binding_id, output),
+                    csv_header=next_csv_header,
+                    file_choices=next_file_choices,
                 )
             ),
         )
 
-    def _sql_header_reader(
+    def _sql_context(
         self, result: CompilationResult, changes: list[SemanticChange],
         binding_id: str, output: Path,
     ):
         workflow = project_workflow(result, changes, output_path=output)
         binding = next((item for item in workflow.bindings if item.id == binding_id), None)
         if binding is None:
-            return lambda path: None
+            return (), lambda path: None
         choices = file_choices_by_operation(
             workflow.effects,
             self.inventory_paths(),
             output_path=output,
             workspace_root=self.workspace,
         )
-        allowed = set(choices.get(binding.owner_operation_id, ()))
+        file_choices = tuple(choices.get(binding.owner_operation_id, ()))
+        allowed = set(file_choices)
 
         def read_header(path: str) -> tuple[str, ...] | None:
             try:
@@ -433,7 +450,7 @@ class DocumentStore:
                 row = next(csv.reader(handle), None)
             return tuple(row) if row else None
 
-        return read_header
+        return file_choices, read_header
 
     def _load_for_change(
         self, batch: DocumentSnapshot
@@ -540,28 +557,11 @@ class DocumentStore:
             )
             for operation in view.semantic_operations
         ]
-        steps = [
-            step.model_copy(
-                update={
-                    "source_span": step.source_span.model_copy(
-                        update={
-                            "file": (
-                                self._relative_display(step.source_span.file)
-                                if step.source_span.file
-                                else None
-                            )
-                        }
-                    )
-                }
-            )
-            for step in view.steps
-        ]
         return view.model_copy(
             update={
                 "id": self._relative_display(view.source_path),
                 "source_path": self._relative_display(view.source_path),
                 "output_path": self._relative_display(view.output_path),
-                "steps": steps,
                 "semantic_operations": semantic_operations,
             }
         )

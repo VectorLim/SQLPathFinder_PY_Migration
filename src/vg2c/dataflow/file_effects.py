@@ -22,12 +22,6 @@ class FileEndpoint:
     status: Literal["known", "dynamic", "external", "missing", "possible"] = "known"
     file_resource_id: str | None = None
 
-    @property
-    def parameter_id(self) -> str | None:
-        """Compatibility alias for pre-v5 file-effect consumers."""
-        return self.binding_id
-
-
 @dataclass(frozen=True, slots=True)
 class FileEffect:
     id: str
