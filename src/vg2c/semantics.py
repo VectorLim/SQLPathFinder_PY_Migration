@@ -405,6 +405,7 @@ def _leaf_operations(
                     capabilities.append("multiline")
                 if parameter.artifact_role is not None:
                     capabilities.append(f"file-{parameter.artifact_role.direction}")
+                semantic_editable = parameter.editable or "structured-sql" in capabilities
                 bindings.append(
                     EditableBinding(
                         id=parameter.id,
@@ -422,13 +423,16 @@ def _leaf_operations(
                             definition_parameter.visibility if definition_parameter else "normal"
                         ),
                         capabilities=tuple(dict.fromkeys(capabilities)),
-                        validation_state="valid" if parameter.editable else "warning",
+                        validation_state="valid" if semantic_editable else "warning",
                         resettable=(
                             parameter.source_range is None
                             or not parameter.id.startswith("global:")
                         ),
-                        editable=parameter.editable,
-                        read_only_reason=parameter.read_only_reason,
+                        editable=semantic_editable,
+                        read_only_reason=(
+                            None if "structured-sql" in capabilities
+                            else parameter.read_only_reason
+                        ),
                         source_range=parameter.source_range,
                         source_kind="parameter",
                     )
