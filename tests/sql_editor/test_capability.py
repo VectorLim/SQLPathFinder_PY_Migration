@@ -307,3 +307,54 @@ def test_structured_sql_projection_preserves_existing_global_references(tmp_path
     assert "42 AS answer" in projection.source
     assert f"{global_parameter.name} = 'bob'" in projection.source
     assert f"global_sql({global_parameter.name}" in projection.source
+
+
+
+def test_structured_sql_actions_chain_through_projection(tmp_path):
+    source = tmp_path / "chained-sql.txt"
+    source.write_text(
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n"
+        "/TABLE=people.csv:people\n/TABLE=teams.csv:teams\n</OPTIONS>\n"
+        "SELECT p.id FROM people p\n<---- New Query ---->\n",
+        encoding="utf-8",
+    )
+    result = compile_document(source)
+    sql = _sql_parameter(result)
+
+    def header(_path):
+        return ("id", "name")
+
+    initial = structured_sql_model(result, sql.id, csv_header=header)
+    name = next(item for item in initial.column_choices if item.label == "p.name")
+    selection = apply_sql_action(
+        result,
+        SqlAction(sql.id, "add-selection", {"column_choice_id": name.id}),
+        csv_header=header,
+    )
+
+    current = structured_sql_model(
+        result, sql.id, [selection], csv_header=header
+    )
+    table = next(item for item in current.table_choices if item.label == "teams")
+    left = next(item for item in current.column_choices if item.label == "p.id")
+    right = next(item for item in current.column_choices if item.label == "teams.id")
+    join = apply_sql_action(
+        result,
+        SqlAction(
+            sql.id,
+            "add-join",
+            {
+                "join_type": "INNER",
+                "table_choice_id": table.id,
+                "left_choice_id": left.id,
+                "right_choice_id": right.id,
+                "operator": "=",
+            },
+        ),
+        [selection],
+        csv_header=header,
+    )
+    projection = project_changes(result, [join])
+    assert projection.valid, projection.issues
+    assert "JOIN" in join.value
+    assert "JOIN" in projection.source
