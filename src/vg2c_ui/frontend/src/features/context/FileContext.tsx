@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react'
-import type { DocumentView, FileEffectView } from './api/contracts.generated'
-import type { ContextProps } from './contextTypes'
+import type { DocumentView, FileEffectView } from '../../api/contracts.generated'
+import type { ContextProps } from './types'
 
 export function FileContext({ document, onNavigate }: ContextProps) {
   const lifecycleKinds = new Set<FileEffectView['kind']>(['write', 'copy', 'move', 'transform', 'append', 'delete'])

@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import type { DocumentView, SemanticBindingView, SemanticOperationView } from './api/contracts.generated'
-import type { ContextProps } from './contextTypes'
-import { effectiveBindingValue } from './workspace/state'
+import type { DocumentView, SemanticBindingView, SemanticOperationView } from '../../api/contracts.generated'
+import type { ContextProps } from './types'
+import { effectiveBindingValue } from '../../workspace/state'
 
 export function EmailContext({
   document,

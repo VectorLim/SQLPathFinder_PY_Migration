@@ -1,7 +1,8 @@
+import './context.css'
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FileClock, Globe2, Mail } from 'lucide-react'
 
-import type { ContextProps } from './contextTypes'
+import type { ContextProps } from './types'
 import { EmailContext, isEmail } from './EmailContext'
 import { FileContext } from './FileContext'
 import { GlobalsContext } from './GlobalsContext'
