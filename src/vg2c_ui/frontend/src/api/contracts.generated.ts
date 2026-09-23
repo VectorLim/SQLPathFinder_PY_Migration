@@ -294,6 +294,7 @@ export interface ProjectedDocumentView {
   document_id: string
   artifacts: Array<ArtifactView>
   effects: Array<FileEffectView>
+  file_choices: Record<string, Array<string>>
 }
 
 export interface WorkspaceProjectionView {
