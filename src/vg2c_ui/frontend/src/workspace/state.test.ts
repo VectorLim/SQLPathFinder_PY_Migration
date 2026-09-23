@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './guards.ts'
-import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './state.ts'
+import {
+  allExpandableScopesExpanded,
+  draftChanges,
+  expandableScopeIds,
+  initialWorkspaceState,
+  RESET_VALUE,
+  workspaceProjectionRequest,
+  workspaceReducer,
+} from './state.ts'
 import { SCHEMA_VERSION, type DocumentView } from '../api/contracts.generated.ts'
 
 function doc(id: string): DocumentView {
@@ -60,14 +68,21 @@ fileDoc.semantic_operations = [{
 }]
 let fileState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [fileDoc] })
 fileState = workspaceReducer(fileState, { type: 'edit', tabId: 'files', bindingId: 'source', value: 'draft.csv' })
-const refreshedFiles = structuredClone(fileDoc)
-refreshedFiles.semantic_operations[0].bindings[0].file_choices = ['inputs/uploaded.csv']
 fileState = workspaceReducer(fileState, {
-  type: 'refresh-file-choices', tabId: 'files', instanceId: fileState.tabs[0].instanceId,
-  document: refreshedFiles,
+  type: 'projection',
+  projection: {
+    documents: [{
+      document_id: 'files',
+      artifacts: [],
+      effects: [],
+      file_choices: { copy: ['inputs/uploaded.csv'] },
+    }],
+    dependencies: [],
+    issues: [],
+  },
 })
 assert.deepEqual(fileState.tabs[0].document.semantic_operations[0].bindings[0].file_choices, ['inputs/uploaded.csv'])
-assert.equal(fileState.tabs[0].edits.values.source, 'draft.csv', 'upload refresh must preserve unsaved edits')
+assert.equal(fileState.tabs[0].edits.values.source, 'draft.csv', 'projection refresh must preserve unsaved edits')
 
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const navigationDoc = doc('navigation')
@@ -75,7 +90,12 @@ navigationDoc.semantic_operations = [
   { id: 'scope-a', kind: 'loop', display_name: 'Loop', parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal' },
   ...['operation-a', 'operation-b'].map((id) => ({ id, kind: 'probe', display_name: 'Probe', parent_operation_id: 'scope-a', branch: null, source_span: { file: null, start_line: 1, end_line: 2 }, bindings: [], capabilities: [], comments: [], validation_state: 'valid' as const, visibility: 'normal' as const })),
 ]
+assert.deepEqual(expandableScopeIds(navigationDoc), ['scope-a'])
+assert.equal(allExpandableScopesExpanded(navigationDoc, new Set()), false)
 let navigation = workspaceReducer(state, { type: 'merge-documents', documents: [navigationDoc] })
+navigation = workspaceReducer(navigation, { type: 'set-all-scopes', tabId: 'navigation', expanded: true })
+assert.equal(allExpandableScopesExpanded(navigationDoc, navigation.tabs.at(-1)!.expandedScopeIds), true)
+navigation = workspaceReducer(navigation, { type: 'set-all-scopes', tabId: 'navigation', expanded: false })
 navigation = workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b', focus: true })
 const navigationTab = navigation.tabs.find((tab) => tab.document.id === 'navigation')!
 assert.equal(navigation.activeId, 'navigation')
