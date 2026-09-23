@@ -110,7 +110,7 @@ function renderBindingControl({
     return <FileSelector label={binding.display_label} showLabel={false} value={value} files={binding.file_choices} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (binding.capabilities.includes('symbol-or-literal')) {
-    return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
+    return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbolId={binding.symbol_id} symbols={symbols} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (schema) {
     return <SchemaValueField

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, ArrowUp, ArrowDown } from 'lucide-react'
 
 import type { DocumentView, SemanticOperationView } from './contracts.generated'
 import { ancestorScopeIds } from './workspaceState'
@@ -13,6 +13,8 @@ interface Props {
   revealFocus: boolean
   onSelect: (id: string) => void
   onToggle: (id: string, expanded?: boolean) => void
+  onReorder: (sourceScopeId: number, targetScopeId: number) => void
+  reorderDisabled?: boolean
 }
 
 export function SemanticScriptTree({
@@ -24,6 +26,8 @@ export function SemanticScriptTree({
   revealFocus,
   onSelect,
   onToggle,
+  onReorder,
+  reorderDisabled = false,
 }: Props) {
   const treeRef = useRef<HTMLUListElement>(null)
   const operations = document.semantic_operations.filter((operation) => operation.visibility !== 'internal')
@@ -82,7 +86,15 @@ export function SemanticScriptTree({
       const hasChildren = childOperations.some((child) => !visibleIds || visibleIds.has(child.id))
       const expanded = hasChildren && effectiveExpanded.has(operation.id)
       const selected = operation.id === selectedId
+      const siblings = children.get(parentId) ?? []
+      const siblingIndex = siblings.findIndex((item) => item.id === operation.id)
+      const previous = siblings[siblingIndex - 1]
+      const next = siblings[siblingIndex + 1]
+      const canMove = (target: SemanticOperationView | undefined) =>
+        operation.scope_id !== null && target?.scope_id !== null &&
+        target?.scope_id !== undefined && operation.reorder_targets.includes(target.scope_id)
       return <li key={operation.id} role="none" className={`tree-node${selected ? ' is-selected' : ''}`}>
+        <div className="semantic-tree-row-wrap">
         <button
           type="button"
           role="treeitem"
@@ -106,6 +118,15 @@ export function SemanticScriptTree({
           </span>
           {operation.validation_state !== 'valid' && <span className="operation-warning" aria-label={operation.validation_state}>!</span>}
         </button>
+        {(canMove(previous) || canMove(next)) && <span className="tree-reorder-controls">
+          {canMove(previous) && <button type="button" aria-label={`Move ${operation.display_name} up`}
+            disabled={reorderDisabled || Boolean(query)}
+            onClick={() => onReorder(operation.scope_id!, previous.scope_id!)}><ArrowUp size={14} /></button>}
+          {canMove(next) && <button type="button" aria-label={`Move ${operation.display_name} down`}
+            disabled={reorderDisabled || Boolean(query)}
+            onClick={() => onReorder(operation.scope_id!, next.scope_id!)}><ArrowDown size={14} /></button>}
+        </span>}
+        </div>
         {hasChildren && <div className={`tree-branch${expanded ? ' is-open' : ''}`}><ul role="group">{render(operation.id, depth + 1)}</ul></div>}
       </li>
     })

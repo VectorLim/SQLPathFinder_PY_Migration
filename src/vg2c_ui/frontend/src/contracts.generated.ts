@@ -1,6 +1,6 @@
 // Generated from vg2c_ui.api.models. DO NOT EDIT.
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 export interface SourceSpanView {
   file: string | null
@@ -27,6 +27,8 @@ export interface SemanticBindingView {
   name: string
   display_label: string
   value: unknown
+  symbol_id: string | null
+  default_symbol_id: string | null
   default: unknown
   required: boolean
   visibility: 'normal' | 'advanced' | 'internal'
@@ -44,6 +46,8 @@ export interface SemanticOperationView {
   kind: string
   display_name: string
   summary: string
+  scope_id: number | null
+  reorder_targets: Array<number>
   description: string
   parent_operation_id: string | null
   branch: 'true' | 'false' | null
@@ -63,6 +67,7 @@ export interface OperationReferenceView {
 export interface SymbolReferenceView {
   operation_id: string
   binding_id: string
+  context: 'condition' | 'parameter' | 'global-value'
 }
 
 export interface SymbolView {
@@ -71,7 +76,7 @@ export interface SymbolView {
   kind: 'global' | 'macro' | 'macro-row' | 'unresolved'
   value_state: 'known' | 'runtime' | 'unknown'
   value: unknown
-  condition_value: string | null
+  value_binding_id: string | null
   introduction: OperationReferenceView | null
   references: Array<SymbolReferenceView>
 }
@@ -183,7 +188,6 @@ export interface FileEndpointView {
   id: string
   file_resource_id: string | null
   binding_id: string | null
-  parameter_id: string | null
   path: string | null
   expression: string | null
   path_base: 'working-directory' | 'script-directory' | 'runtime-search'
@@ -217,7 +221,7 @@ export interface DocumentView {
   output_hash: string
   revision: string
   compiler_hash: string
-  synchronized: boolean
+  generation_state: 'current' | 'stale' | 'missing'
   read_only_reason: string | null
   steps: Array<StepView>
   scopes: Array<ScopeView>
@@ -233,17 +237,12 @@ export interface DocumentView {
 export interface SemanticChangeRequest {
   binding_id: string
   value: unknown
-  reset: boolean
-}
-
-export interface ParameterChangeRequest {
-  parameter_id: string
-  value: unknown
+  symbol_id: string | null
   reset: boolean
 }
 
 export interface DocumentSnapshot {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
@@ -253,14 +252,26 @@ export interface DocumentSnapshot {
 }
 
 export interface ChangeBatch {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
+}
+
+export interface ReorderRequest {
+  schema_version: 6
+  source_path: string
+  output_path: string
+  source_hash: string
+  output_hash: string
+  revision: string
+  compiler_hash: string
+  source_scope_id: number
+  target_scope_id: number
 }
 
 export interface ValidationIssueView {
@@ -268,7 +279,6 @@ export interface ValidationIssueView {
   code: string
   message: string
   binding_id: string | null
-  parameter_id: string | null
 }
 
 export interface ChangePreviewView {
@@ -281,35 +291,13 @@ export interface ChangeResultView {
   document: DocumentView
 }
 
-export interface CsvPreviewView {
-  path: string
-  columns: Array<string>
-  rows: Array<Array<string>>
-  truncated: boolean
-  size_bytes: number
-}
-
 export interface DocumentReference {
   source_path: string
   output_path: string | null
 }
 
-export interface CsvPreviewRequest {
-  schema_version: 4 | 5
-  source_path: string
-  output_path: string
-  source_hash: string
-  output_hash: string
-  revision: string
-  compiler_hash: string
-  effect_id: string
-  endpoint_id: string
-  expected_path: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
-}
-
 export interface HtmlPreviewRequest {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
@@ -317,7 +305,7 @@ export interface HtmlPreviewRequest {
   revision: string
   compiler_hash: string
   operation_id: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface HtmlPreviewView {
@@ -338,7 +326,7 @@ export interface BatchTranslationResponse {
 }
 
 export interface WorkspaceDocumentRequest {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
@@ -346,7 +334,7 @@ export interface WorkspaceDocumentRequest {
   revision: string
   compiler_hash: string
   document_id: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface WorkspaceProjectionRequest {
@@ -409,10 +397,22 @@ export interface SqlSelectionView {
   id: string
   expression: string
   alias: string | null
+  display_label: string
   raw: string
   editable: boolean
   read_only_reason: string | null
   span: SqlSpanView
+}
+
+export interface SqlColumnChoiceView {
+  id: string
+  label: string
+  source_id: string
+}
+
+export interface SqlTableChoiceView {
+  id: string
+  label: string
 }
 
 export interface SqlSourceView {
@@ -464,9 +464,9 @@ export interface SqlModelView {
   join_types: Array<string>
   logical_connectors: Array<string>
   statement_span: SqlSpanView
-  before_statement: string
-  after_statement: string
   selections: Array<SqlSelectionView>
+  column_choices: Array<SqlColumnChoiceView>
+  table_choices: Array<SqlTableChoiceView>
   filters: Array<SqlPredicateView>
   joins: Array<SqlJoinView>
   sources: Array<SqlSourceView>
@@ -479,27 +479,27 @@ export interface SqlModelView {
 }
 
 export interface SqlModelRequest {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  parameter_id: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+  binding_id: string
+  changes: Array<SemanticChangeRequest>
 }
 
 export interface SqlActionRequest {
-  schema_version: 4 | 5
+  schema_version: 6
   source_path: string
   output_path: string
   source_hash: string
   output_hash: string
   revision: string
   compiler_hash: string
-  parameter_id: string
-  changes: Array<SemanticChangeRequest | ParameterChangeRequest>
+  binding_id: string
+  changes: Array<SemanticChangeRequest>
   action: string
   arguments: Record<string, unknown>
 }

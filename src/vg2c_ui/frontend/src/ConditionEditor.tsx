@@ -35,6 +35,7 @@ export function ConditionEditor({ operation, values, symbols, operators, saving,
       <SymbolSelector
         label={binding.display_label}
         value={value(name)}
+        symbolId={binding.symbol_id}
         symbols={symbols}
         disabled={saving || !binding.editable}
         onChange={(next) => onEdit({ binding, value: next })}

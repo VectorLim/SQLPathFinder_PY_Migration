@@ -2,18 +2,18 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 
 import {
   ApiError,
-  applyChanges,
   applySqlAction,
+  generateOutput,
+  reorderExecution,
   inspectSql,
   openDocument,
   previewChanges,
-  previewCsv,
   previewHtml,
   projectWorkspace,
+  saveChanges,
   translateBatch,
 } from './api'
 import type {
-  FileEndpointView,
   SemanticBindingView,
   SqlModelView,
 } from './contracts.generated'
@@ -33,7 +33,6 @@ import {
 export function useWorkspace() {
   const [state, dispatch] = useReducer(workspaceReducer, initialWorkspaceState)
   const stateRef = useRef(state)
-  const csvCounter = useRef(0)
   const mutationCounter = useRef(0)
   stateRef.current = state
 
@@ -85,7 +84,7 @@ export function useWorkspace() {
     if (!tab) throw new Error('Document is no longer open.')
     const changes = [
       ...draftChanges(tab).filter((change) => change.binding_id !== bindingId),
-      { binding_id: bindingId, value, reset: false },
+      { binding_id: bindingId, value, symbol_id: null, reset: false },
     ]
     return previewChanges({ ...documentSnapshot(tab.document), changes })
   }, [])
@@ -113,7 +112,7 @@ export function useWorkspace() {
     }
   }, [])
 
-  const apply = useCallback(async (tabId: string) => {
+  const save = useCallback(async (tabId: string) => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) return null
     const batch = changeBatch(tab)
@@ -123,14 +122,60 @@ export function useWorkspace() {
     const requestId = mutationId(tabId, instanceId, ++mutationCounter.current)
     dispatch({ type: 'mutation-started', tabId, instanceId, requestId, baseVersion: version, status: 'saving' })
     try {
-      const result = await applyChanges(batch)
+      const result = await saveChanges(batch)
       dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document: result.document })
       return result
     } catch (error) {
       dispatch({
         type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
         conflict: error instanceof ApiError && error.status === 409,
-        message: errorMessage(error, 'Could not apply changes'),
+        message: errorMessage(error, 'Could not save changes'),
+      })
+      throw error
+    }
+  }, [])
+
+  const generate = useCallback(async (tabId: string) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab || draftChanges(tab).length || Object.keys(tab.fieldDrafts).length) return null
+    const version = tab.edits.version
+    const instanceId = tab.instanceId
+    const requestId = mutationId(tabId, instanceId, ++mutationCounter.current)
+    dispatch({ type: 'mutation-started', tabId, instanceId, requestId, baseVersion: version, status: 'generating' })
+    try {
+      const result = await generateOutput(documentSnapshot(tab.document))
+      dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document: result.document })
+      return result
+    } catch (error) {
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not generate output'),
+      })
+      throw error
+    }
+  }, [])
+
+  const reorder = useCallback(async (tabId: string, sourceScopeId: number, targetScopeId: number) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab || draftChanges(tab).length || Object.keys(tab.fieldDrafts).length) return null
+    const version = tab.edits.version
+    const instanceId = tab.instanceId
+    const requestId = mutationId(tabId, instanceId, ++mutationCounter.current)
+    dispatch({ type: 'mutation-started', tabId, instanceId, requestId, baseVersion: version, status: 'saving' })
+    try {
+      const result = await reorderExecution({
+        ...documentSnapshot(tab.document),
+        source_scope_id: sourceScopeId,
+        target_scope_id: targetScopeId,
+      })
+      dispatch({ type: 'replace-document', tabId, instanceId, requestId, baseVersion: version, document: result.document })
+      return result
+    } catch (error) {
+      dispatch({
+        type: 'mutation-error', tabId, instanceId, requestId, baseVersion: version,
+        conflict: error instanceof ApiError && error.status === 409,
+        message: errorMessage(error, 'Could not reorder operations'),
       })
       throw error
     }
@@ -146,33 +191,13 @@ export function useWorkspace() {
     })
   }, [])
 
-  const loadCsv = useCallback(async (tabId: string, effectId: string, endpoint: FileEndpointView) => {
-    const tab = tabById(stateRef.current, tabId)
-    if (!tab || !endpoint.path) return null
-    const instanceId = tab.instanceId
-    const requestId = `${tabId}:${instanceId}:csv:${++csvCounter.current}`
-    dispatch({ type: 'csv-loading', tabId, instanceId, requestId, path: endpoint.path })
-    try {
-      const csv = await previewCsv({ ...documentSnapshot(tab.document), effect_id: effectId,
-        endpoint_id: endpoint.id, expected_path: endpoint.path, changes: draftChanges(tab) })
-      dispatch({ type: 'csv-result', tabId, instanceId, requestId, csv, error: null })
-      return csv
-    } catch (error) {
-      dispatch({
-        type: 'csv-result', tabId, instanceId, requestId, csv: null,
-        error: errorMessage(error, 'CSV preview failed'),
-      })
-      throw error
-    }
-  }, [])
-
   const inspectStructuredSql = useCallback(async (tabId: string, bindingId: string): Promise<SqlModelView> => {
     const tab = tabById(stateRef.current, tabId)
     if (!tab) throw new Error('Document is no longer open.')
     const instanceId = tab.instanceId
     const model = await inspectSql({
       ...documentSnapshot(tab.document),
-      parameter_id: bindingId,
+      binding_id: bindingId,
       changes: draftChanges(tab),
     })
     const current = tabById(stateRef.current, tabId)
@@ -193,7 +218,7 @@ export function useWorkspace() {
     const instanceId = tab.instanceId
     const response = await applySqlAction({
       ...documentSnapshot(tab.document),
-      parameter_id: bindingId,
+      binding_id: bindingId,
       changes: draftChanges(tab),
       action: command.action,
       arguments: { ...command.arguments },
@@ -242,8 +267,9 @@ export function useWorkspace() {
     edit,
     validateCandidate,
     validate,
-    apply,
-    loadCsv,
+    save,
+    generate,
+    reorder,
     previewHtmlOperation,
     inspectStructuredSql,
     runSqlCommand,

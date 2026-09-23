@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vg2c_ui.api.models import HtmlPreviewRequest
+from vg2c_ui.api.models import SCHEMA_VERSION, HtmlPreviewRequest
 from vg2c_ui.services.document_store import DocumentStore
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
@@ -20,7 +20,7 @@ def test_html_preview_replays_safely_and_does_not_write_outputs(tmp_path: Path):
     assert "ctx" not in {binding.name for binding in operation.bindings}
 
     request = HtmlPreviewRequest(
-        schema_version=5,
+        schema_version=SCHEMA_VERSION,
         source_path=view.source_path,
         output_path=view.output_path,
         source_hash=view.source_hash,

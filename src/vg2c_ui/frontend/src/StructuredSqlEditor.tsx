@@ -91,14 +91,6 @@ export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCom
         {tab === 'filters' && <Filters model={model} onAction={act} disabled={busy || readOnly} />}
         {tab === 'joins' && <Joins model={model} onAction={act} disabled={busy || readOnly} />}
       </div>
-      {model.before_statement.trim() && <details className="sql-source-context">
-        <summary>Before query</summary>
-        <pre>{model.before_statement}</pre>
-      </details>}
-      {model.after_statement.trim() && <details className="sql-source-context">
-        <summary>After query</summary>
-        <pre>{model.after_statement}</pre>
-      </details>}
       {model.read_only_reason && <p className="read-only-note">{model.read_only_reason}</p>}
       <details className="sql-advanced">
         <summary>Advanced</summary>
@@ -114,37 +106,42 @@ export function StructuredSqlEditor({ binding, values, readOnly, inspect, runCom
 
 function Selections({ model, onAction, disabled }: SectionProps) {
   const [adding, setAdding] = useState(false)
+  const choices = model.column_choices.filter((choice) => model.sources.some((source) => source.id === choice.source_id))
   return <section className="sql-section">
-    <header><h4>Columns</h4><button type="button" disabled={disabled || !model.capabilities.selected} onClick={() => setAdding(true)}>Add column</button></header>
-    {adding && <SelectionAddForm disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
+    <header><h4>Columns</h4><button type="button" disabled={disabled || !model.capabilities.selected || !choices.length} onClick={() => setAdding(true)}>Add column</button></header>
+    {adding && <SelectionAddForm choices={choices} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
     <ReorderableList
       items={model.selections}
       getId={(item) => item.id}
-      disabled={disabled || !model.capabilities.selected}
+      disabled={disabled || !model.capabilities.selected || model.selections.some((item) => !item.editable)}
       onReorder={(fromIndex, targetIndex) => void onAction('reorder-selection', { selection_id: model.selections[fromIndex].id, target_index: targetIndex })}
-      renderItem={(item) => <SelectionRow item={item} count={model.selections.length} disabled={disabled} onAction={onAction} />}
+      renderItem={(item) => <SelectionRow item={item} choices={choices} count={model.selections.length} disabled={disabled} onAction={onAction} />}
     />
     {!model.selections.length && !adding && <p className="empty-copy">No selected columns.</p>}
+    {!choices.length && <p className="empty-copy">Column choices need an uploaded SQLite table with a readable header.</p>}
   </section>
 }
 
-function SelectionAddForm({ disabled, onAction, onClose }: AddFormProps) {
-  const [expression, setExpression] = useState('')
+function SelectionAddForm({ choices, disabled, onAction, onClose }: AddFormProps & { choices: SqlModelView['column_choices'] }) {
+  const [choiceId, setChoiceId] = useState(choices[0]?.id ?? '')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const next = expression.trim()
-    if (!next) return
-    void onAction('add-selection', { expression: next }).then((success) => { if (success) onClose() })
+    if (!choiceId) return
+    void onAction('add-selection', { column_choice_id: choiceId }).then((success) => { if (success) onClose() })
   }
   return <form className="sql-add-panel" onSubmit={submit}>
-    <label>Expression<input autoFocus value={expression} disabled={disabled} onChange={(event) => setExpression(event.target.value)} /></label>
-    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !expression.trim()}>Add column</button></div>
+    <label>Column<select autoFocus value={choiceId} disabled={disabled} onChange={(event) => setChoiceId(event.target.value)}>{choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !choiceId}>Add column</button></div>
   </form>
 }
 
-function SelectionRow({ item, count, disabled, onAction }: { item: SqlSelectionView; count: number; disabled: boolean; onAction: ActionFn }) {
+function SelectionRow({ item, choices, count, disabled, onAction }: { item: SqlSelectionView; choices: SqlModelView['column_choices']; count: number; disabled: boolean; onAction: ActionFn }) {
   return <div className="sql-row sql-column-row">
-    <CommitInput value={item.expression} disabled={disabled || !item.editable} ariaLabel="Column expression" onCommit={(expression) => onAction('update-selection', { selection_id: item.id, expression })} />
+    <strong className="sql-column-label" title={item.raw}>{item.display_label}</strong>
+    {choices.length > 0 && <select aria-label={`Change ${item.display_label} column`} value="" disabled={disabled || !item.editable} onChange={(event) => void onAction('update-selection', { selection_id: item.id, column_choice_id: event.target.value })}>
+      <option value="">Change column…</option>
+      {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+    </select>}
     <CommitInput value={item.alias ?? ''} disabled={disabled || !item.editable} ariaLabel="Column alias" placeholder="alias" onCommit={(alias) => onAction('update-selection', { selection_id: item.id, alias: alias || null })} />
     <button type="button" disabled={disabled || count <= 1 || !item.editable} onClick={() => void onAction('remove-selection', { selection_id: item.id })}>Remove</button>
   </div>
@@ -152,39 +149,45 @@ function SelectionRow({ item, count, disabled, onAction }: { item: SqlSelectionV
 
 function Filters({ model, onAction, disabled }: SectionProps) {
   const [adding, setAdding] = useState(false)
+  const choices = model.column_choices.filter((choice) => model.sources.some((source) => source.id === choice.source_id))
   return <section className="sql-section">
-    <header><h4>Filters</h4><button type="button" disabled={disabled || !model.capabilities.filters} onClick={() => setAdding(true)}>Add filter</button></header>
+    <header><h4>Filters</h4><button type="button" disabled={disabled || !model.capabilities.filters || !choices.length} onClick={() => setAdding(true)}>Add filter</button></header>
     {adding && <FilterAddForm model={model} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
-    {model.filters.map((item) => <PredicateRow key={item.id} item={item} operators={model.filter_operators} connectors={model.logical_connectors} disabled={disabled} onAction={onAction} />)}
+    {model.filters.map((item) => <PredicateRow key={item.id} item={item} choices={choices} operators={model.filter_operators} connectors={model.logical_connectors} disabled={disabled} onAction={onAction} />)}
     {!model.filters.length && !adding && <p className="empty-copy">No filters.</p>}
   </section>
 }
 
 function FilterAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps) {
-  const [left, setLeft] = useState('')
+  const choices = model.column_choices.filter((choice) => model.sources.some((source) => source.id === choice.source_id))
+  const [leftId, setLeftId] = useState(choices[0]?.id ?? '')
   const [operator, setOperator] = useState(model.filter_operators[0] ?? '')
   const [right, setRight] = useState('')
   const [connector, setConnector] = useState(model.logical_connectors[0] ?? 'AND')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!left.trim() || !right.trim() || !operator) return
-    void onAction('add-filter', { left: left.trim(), operator, right: right.trim(), connector }).then((success) => { if (success) onClose() })
+    if (!leftId || !right.trim() || !operator) return
+    void onAction('add-filter', { left_choice_id: leftId, operator, right: right.trim(), connector }).then((success) => { if (success) onClose() })
   }
   return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
     <div className="sql-add-panel__row">
-      <label>Left<input autoFocus value={left} disabled={disabled} onChange={(event) => setLeft(event.target.value)} /></label>
+      <label>Column<select autoFocus value={leftId} disabled={disabled} onChange={(event) => setLeftId(event.target.value)}>{choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label>
       <label>Operator<select value={operator} disabled={disabled} onChange={(event) => setOperator(event.target.value)}>{model.filter_operators.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Right<input value={right} disabled={disabled} onChange={(event) => setRight(event.target.value)} /></label>
       <label>Connector<select value={connector} disabled={disabled} onChange={(event) => setConnector(event.target.value)}>{model.logical_connectors.map((item) => <option key={item}>{item}</option>)}</select></label>
     </div>
-    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !left.trim() || !right.trim() || !operator}>Add filter</button></div>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !leftId || !right.trim() || !operator}>Add filter</button></div>
   </form>
 }
 
-function PredicateRow({ item, operators, connectors, disabled, onAction }: { item: SqlPredicateView; operators: string[]; connectors: string[]; disabled: boolean; onAction: ActionFn }) {
+function PredicateRow({ item, choices, operators, connectors, disabled, onAction }: { item: SqlPredicateView; choices: SqlModelView['column_choices']; operators: string[]; connectors: string[]; disabled: boolean; onAction: ActionFn }) {
   return <div className="sql-row">
     {item.connector && <select aria-label="Filter connector" disabled={disabled || !item.editable} value={item.connector} onChange={(event) => void onAction('update-filter', { filter_id: item.id, connector: event.target.value })}>{connectors.map((connector) => <option key={connector}>{connector}</option>)}</select>}
-    <CommitInput value={item.left} disabled={disabled || !item.editable} ariaLabel="Filter left" onCommit={(left) => onAction('update-filter', { filter_id: item.id, left })} />
+    <span title={item.raw}>{item.left}</span>
+    {choices.length > 0 && <select aria-label="Filter column" value="" disabled={disabled || !item.editable} onChange={(event) => void onAction('update-filter', { filter_id: item.id, left_choice_id: event.target.value })}>
+      <option value="">Change column…</option>
+      {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+    </select>}
     <select aria-label="Filter operator" disabled={disabled || !item.editable} value={item.operator} onChange={(event) => void onAction('update-filter', { filter_id: item.id, operator: event.target.value })}>{operators.map((operator) => <option key={operator}>{operator}</option>)}</select>
     <CommitInput value={item.right} disabled={disabled || !item.editable} ariaLabel="Filter right" onCommit={(right) => onAction('update-filter', { filter_id: item.id, right })} />
     <button type="button" disabled={disabled || !item.editable} onClick={() => void onAction('remove-filter', { filter_id: item.id })}>Remove</button>
@@ -193,8 +196,9 @@ function PredicateRow({ item, operators, connectors, disabled, onAction }: { ite
 
 function Joins({ model, onAction, disabled }: SectionProps) {
   const [adding, setAdding] = useState(false)
+  const canAdd = model.table_choices.length > 0 && model.column_choices.some((choice) => model.sources.some((source) => source.id === choice.source_id))
   return <section className="sql-section">
-    <header><h4>Joins</h4><button type="button" disabled={disabled || !model.capabilities.joins} onClick={() => setAdding(true)}>Add join</button></header>
+    <header><h4>Joins</h4><button type="button" disabled={disabled || !model.capabilities.joins || !canAdd} onClick={() => setAdding(true)}>Add join</button></header>
     {adding && <JoinAddForm model={model} disabled={disabled} onAction={onAction} onClose={() => setAdding(false)} />}
     {model.joins.map((item) => <JoinRow key={item.id} item={item} model={model} disabled={disabled} onAction={onAction} />)}
     {!model.joins.length && !adding && <p className="empty-copy">No joins.</p>}
@@ -203,26 +207,29 @@ function Joins({ model, onAction, disabled }: SectionProps) {
 
 function JoinAddForm({ model, disabled, onAction, onClose }: ModelAddFormProps) {
   const [joinType, setJoinType] = useState(model.join_types[0] ?? '')
-  const [source, setSource] = useState('')
-  const [left, setLeft] = useState('')
+  const [tableId, setTableId] = useState(model.table_choices[0]?.id ?? '')
+  const leftChoices = model.column_choices.filter((choice) => model.sources.some((source) => source.id === choice.source_id))
+  const rightChoices = model.column_choices.filter((choice) => choice.source_id === tableId)
+  const [leftId, setLeftId] = useState(leftChoices[0]?.id ?? '')
   const [operator, setOperator] = useState(model.filter_operators[0] ?? '')
-  const [right, setRight] = useState('')
+  const [rightId, setRightId] = useState(rightChoices[0]?.id ?? '')
+  const selectedRightId = rightChoices.some((choice) => choice.id === rightId) ? rightId : rightChoices[0]?.id ?? ''
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!joinType || !source.trim() || !left.trim() || !operator || !right.trim()) return
-    void onAction('add-join', { join_type: joinType, source: source.trim(), left: left.trim(), right: right.trim(), operator }).then((success) => { if (success) onClose() })
+    if (!joinType || !tableId || !leftId || !operator || !selectedRightId) return
+    void onAction('add-join', { join_type: joinType, table_choice_id: tableId, left_choice_id: leftId, right_choice_id: selectedRightId, operator }).then((success) => { if (success) onClose() })
   }
   return <form className="sql-add-panel sql-add-panel--join" onSubmit={submit}>
     <div className="sql-add-panel__row">
       <label>Join type<select value={joinType} disabled={disabled} onChange={(event) => setJoinType(event.target.value)}>{model.join_types.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label>Source<input autoFocus value={source} disabled={disabled} onChange={(event) => setSource(event.target.value)} /></label>
+      <label>Table<select autoFocus value={tableId} disabled={disabled} onChange={(event) => setTableId(event.target.value)}>{model.table_choices.map((table) => <option key={table.id} value={table.id}>{table.label}</option>)}</select></label>
     </div>
     <div className="sql-add-panel__row">
-      <label>Left key<input value={left} disabled={disabled} onChange={(event) => setLeft(event.target.value)} /></label>
+      <label>Left key<select value={leftId} disabled={disabled} onChange={(event) => setLeftId(event.target.value)}>{leftChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label>
       <label>Operator<select value={operator} disabled={disabled} onChange={(event) => setOperator(event.target.value)}>{model.filter_operators.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label>Right key<input value={right} disabled={disabled} onChange={(event) => setRight(event.target.value)} /></label>
+      <label>Right key<select value={selectedRightId} disabled={disabled} onChange={(event) => setRightId(event.target.value)}>{rightChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label>
     </div>
-    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !joinType || !source.trim() || !left.trim() || !operator || !right.trim()}>Add join</button></div>
+    <div className="sql-add-panel__actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={disabled || !joinType || !tableId || !leftId || !operator || !selectedRightId}>Add join</button></div>
   </form>
 }
 
@@ -230,13 +237,21 @@ function JoinRow({ item, model, disabled, onAction }: { item: SqlJoinView; model
   return <div className="sql-join-row">
     <div className="sql-row">
       <select aria-label="Join type" disabled={disabled || !item.editable_type} value={item.join_type} onChange={(event) => void onAction('update-join-type', { join_id: item.id, join_type: event.target.value })}>{model.join_types.map((joinType) => <option key={joinType}>{joinType}</option>)}</select>
-      <CommitInput value={item.source} disabled={disabled || !item.editable_source} ariaLabel="Join source" onCommit={(source) => onAction('update-join-source', { join_id: item.id, source })} />
+      <strong title={item.source}>{item.source}</strong>
       <button type="button" disabled={disabled} onClick={() => void onAction('remove-join', { join_id: item.id })}>Remove join</button>
     </div>
     {item.predicates.map((predicate) => <div className="sql-row" key={predicate.id}>
-      <CommitInput value={predicate.left} disabled={disabled || !predicate.editable} ariaLabel="Join left key" onCommit={(left) => onAction('update-join-predicate', { join_id: item.id, predicate_id: predicate.id, left })} />
+      <span>{predicate.left}</span>
+      {model.column_choices.length > 0 && <select aria-label="Join left key" value="" disabled={disabled || !predicate.editable} onChange={(event) => void onAction('update-join-predicate', { join_id: item.id, predicate_id: predicate.id, left_choice_id: event.target.value })}>
+        <option value="">Change key…</option>
+        {model.column_choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+      </select>}
       <select aria-label="Join operator" disabled={disabled || !predicate.editable} value={predicate.operator} onChange={(event) => void onAction('update-join-predicate', { join_id: item.id, predicate_id: predicate.id, operator: event.target.value })}>{model.filter_operators.map((operator) => <option key={operator}>{operator}</option>)}</select>
-      <CommitInput value={predicate.right} disabled={disabled || !predicate.editable} ariaLabel="Join right key" onCommit={(right) => onAction('update-join-predicate', { join_id: item.id, predicate_id: predicate.id, right })} />
+      <span>{predicate.right}</span>
+      {model.column_choices.length > 0 && <select aria-label="Join right key" value="" disabled={disabled || !predicate.editable} onChange={(event) => void onAction('update-join-predicate', { join_id: item.id, predicate_id: predicate.id, right_choice_id: event.target.value })}>
+        <option value="">Change key…</option>
+        {model.column_choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+      </select>}
       <button type="button" disabled={disabled || item.predicates.length <= 1 || !predicate.editable} onClick={() => void onAction('remove-join-predicate', { join_id: item.id, predicate_id: predicate.id })}>Remove key</button>
     </div>)}
   </div>

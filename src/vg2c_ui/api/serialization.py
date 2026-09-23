@@ -12,6 +12,7 @@ from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import ParameterChange
 from vg2c.kind import Kind
 from vg2c.operands import ScopeNode as CompilerScopeNode
+from vg2c.reorder import legal_reorder_targets
 from vg2c.semantics import CONDITION_OPERATORS
 from vg2c.sql_editor import (
     FILTER_OPERATORS,
@@ -34,6 +35,7 @@ from vg2c_ui.api.models import (
     SemanticBindingView,
     SemanticOperationView,
     SourceSpanView,
+    SqlColumnChoiceView,
     SqlEditCapabilitiesView,
     SqlJoinView,
     SqlModelView,
@@ -41,6 +43,7 @@ from vg2c_ui.api.models import (
     SqlSelectionView,
     SqlSourceView,
     SqlSpanView,
+    SqlTableChoiceView,
     StepView,
     SymbolReferenceView,
     SymbolView,
@@ -71,15 +74,18 @@ def document_view(
     output_hash: str,
     revision: str,
     saved_changes: Iterable[ParameterChange] = (),
-    synchronized: bool = True,
     read_only_reason: str | None = None,
+    generation_state: str = "current",
     workspace_root: Path | None = None,
     inventory_paths: Iterable[str] = (),
+    compiler_hash: str | None = None,
 ) -> DocumentView:
     """Serialize compiler-owned semantics without re-discovering or re-inferring them."""
+    editable = read_only_reason is None
     saved_changes = tuple(saved_changes)
-    values = {change.parameter_id: change.value for change in saved_changes}
     workflow = project_workflow(result, saved_changes, output_path=output_path)
+    reorder_targets = legal_reorder_targets(result, saved_changes)
+    values = workflow.changes.effective_values
     file_choices = file_choices_by_operation(
         workflow.effects,
         inventory_paths,
@@ -110,7 +116,7 @@ def document_view(
             continue
         primary = emitted_step.invocations[0] if emitted_step.invocations else None
         unsupported = block.kind in {Kind.PYTHON_EMBED, Kind.UNKNOWN} or primary is None
-        step_read_only = unsupported or not synchronized
+        step_read_only = unsupported or not editable
         operations: list[OperationView] = []
         for invocation in emitted_step.invocations:
             invocation_parameters: list[ParameterView] = []
@@ -119,10 +125,10 @@ def document_view(
                 effective_value = values.get(parameter.id, parameter.value)
                 editable = parameter.editable and not step_read_only
                 reason = parameter.read_only_reason
-                if not synchronized:
+                if not editable:
                     reason = (
                         read_only_reason
-                        or "Generated output is not synchronized with compiler metadata."
+                        or "Saved edits cannot be reconciled with compiler metadata."
                     )
                 elif unsupported:
                     reason = f"{block.kind.value} blocks are read-only"
@@ -237,33 +243,24 @@ def document_view(
         known_steps.add(effect.step_id)
 
     diagnostics = _diagnostics(result, workflow.effects)
-    if not synchronized:
-        diagnostics.append(
-            DiagnosticView(
-                level="warning",
-                code="output-unsynchronized",
-                message=read_only_reason
-                or "Generated output cannot be reconciled with compiler metadata; "
-                "retranslate before editing.",
-            )
-        )
-
     return DocumentView(
         id=str(result.input_path.resolve()),
         source_path=str(result.input_path.resolve()),
         output_path=str(output_path.resolve()),
         source_hash=source_hash,
-        compiler_hash=compiler_manifest_hash(result),
+        compiler_hash=compiler_hash or compiler_manifest_hash(result),
         output_hash=output_hash,
         revision=revision,
-        synchronized=synchronized,
         read_only_reason=read_only_reason,
-        steps=sorted(steps, key=lambda item: item.block_index),
+        generation_state=generation_state,
+        steps=steps,
         scopes=_scope_views(result.resolved.scope_tree, parent_by_scope),
         artifacts=artifacts,
         diagnostics=diagnostics,
         effects=effect_views(workflow.effects),
-        semantic_operations=semantic_operation_views(workflow.operations, file_choices),
+        semantic_operations=semantic_operation_views(
+            workflow.operations, file_choices, result.resolved.scope_tree, reorder_targets
+        ),
         files=file_resource_views(workflow.files),
         symbols=symbol_views(workflow.symbols),
         condition_operators=[
@@ -274,15 +271,29 @@ def document_view(
 
 
 def semantic_operation_views(
-    operations, file_choices: dict[str, list[str]] | None = None
+    operations,
+    file_choices: dict[str, list[str]] | None = None,
+    scope_tree=None,
+    reorder_targets: dict[int, tuple[int, ...]] | None = None,
 ) -> list[SemanticOperationView]:
     file_choices = file_choices or {}
+    scope_by_block = {}
+    def collect(node):
+        if node.kind == "leaf" and node.block_index is not None:
+            scope_by_block[node.block_index] = node.scope_id
+        for child in node.children:
+            collect(child)
+    if scope_tree is not None:
+        collect(scope_tree)
+    reorder_targets = reorder_targets or {}
     return [
         SemanticOperationView(
             id=operation.id,
             kind=operation.kind,
             display_name=operation.display_name,
             summary=operation.summary,
+            scope_id=scope_by_block.get(operation.block_index),
+            reorder_targets=list(reorder_targets.get(scope_by_block.get(operation.block_index), ())),
             description=operation.description,
             parent_operation_id=operation.parent_operation_id,
             branch=operation.branch,
@@ -297,7 +308,9 @@ def semantic_operation_views(
                     owner_operation_id=binding.owner_operation_id,
                     name=binding.name,
                     display_label=binding.display_label,
-                    value=binding.value,
+                    value=None if binding.symbol_id else binding.value,
+                    symbol_id=binding.symbol_id,
+                    default_symbol_id=binding.default_symbol_id,
                     default=binding.default,
                     required=binding.required,
                     visibility=binding.visibility,
@@ -354,7 +367,7 @@ def symbol_views(symbols) -> list[SymbolView]:
             kind=item.kind,
             value_state=item.value_state,
             value=item.value,
-            condition_value=item.condition_value,
+            value_binding_id=item.value_binding_id,
             introduction=(
                 OperationReferenceView(
                     operation_id=item.introduction.operation_id,
@@ -367,6 +380,7 @@ def symbol_views(symbols) -> list[SymbolView]:
                 SymbolReferenceView(
                     operation_id=ref.operation_id,
                     binding_id=ref.binding_id,
+                    context=ref.context,
                 )
                 for ref in item.references
             ],
@@ -443,19 +457,26 @@ def sql_model_view(model: SqlEditableModel) -> SqlModelView:
         join_types=list(JOIN_TYPES),
         logical_connectors=list(get_args(SqlLogicalConnector)),
         statement_span=span(model.statement_span),
-        before_statement=model.source[: model.statement_span.start],
-        after_statement=model.source[model.statement_span.end :],
         selections=[
             SqlSelectionView(
                 id=item.id,
                 expression=item.expression,
                 alias=item.alias,
+                display_label=item.display_label,
                 raw=item.raw,
                 editable=item.editable,
                 read_only_reason=item.read_only_reason,
                 span=span(item.span),
             )
             for item in model.selections
+        ],
+        column_choices=[
+            SqlColumnChoiceView.model_validate(item, from_attributes=True)
+            for item in model.column_choices
+        ],
+        table_choices=[
+            SqlTableChoiceView.model_validate(item, from_attributes=True)
+            for item in model.table_choices
         ],
         filters=predicates(model.filters),
         joins=[

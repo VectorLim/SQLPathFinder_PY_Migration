@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import difflib
 import hashlib
 from collections.abc import Callable, Iterable
@@ -18,6 +19,7 @@ from vg2c.editing import (
 from vg2c.editing import (
     apply_changes as apply_parameter_changes,
 )
+from vg2c.reorder import OrderChange, apply_order_changes, swap_adjacent
 from vg2c.semantics import build_semantic_model
 from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
 from vg2c.workflow import (
@@ -30,8 +32,6 @@ from vg2c_ui.api.models import (
     ChangeBatch,
     ChangePreviewView,
     ChangeResultView,
-    CsvPreviewRequest,
-    CsvPreviewView,
     DependencyIssueView,
     DependencyLinkView,
     DiagnosticView,
@@ -39,8 +39,8 @@ from vg2c_ui.api.models import (
     DocumentView,
     HtmlPreviewRequest,
     HtmlPreviewView,
-    ParameterChangeRequest,
     ProjectedDocumentView,
+    ReorderRequest,
     SemanticChangeRequest,
     SqlActionRequest,
     SqlActionResponse,
@@ -58,11 +58,12 @@ from vg2c_ui.api.serialization import (
     sql_model_view,
 )
 from vg2c_ui.services.atomic_io import atomic_write_text
-from vg2c_ui.services.csv_preview import read_csv_preview
+from vg2c_ui.services.file_choices import file_choices_by_operation
 from vg2c_ui.services.html_preview import preview_html_report
 from vg2c_ui.services.sidecar import (
     EditorSidecar,
     InvalidSidecar,
+    SavedOrderChange,
     SavedSemanticChange,
     read_sidecar,
     sidecar_path,
@@ -125,22 +126,25 @@ class DocumentStore:
             self._resolve(output_path) if output_path else source.with_suffix(".py")
         )
         result = compile_document(source)
+        base_compiler_hash = compiler_manifest_hash(result)
         recovery_reason = None
+        generation_state = "missing"
         try:
             sidecar = read_sidecar(output)
             persisted = self._read_effective_changes(source, output, sidecar)
+            result = apply_order_changes(result, _saved_orders(sidecar), persisted)
             projected = project_changes(result, persisted)
             if not projected.valid:
                 raise InvalidSidecar(
                     "Saved edits no longer match the compiler manifest. Original files are preserved."
                 )
-            self._generation_state(output, projected.source, sidecar)
-        except InvalidSidecar as exc:
+            generation_state = self._generation_state(output, projected.source, sidecar)
+        except (InvalidSidecar, ValueError) as exc:
             persisted = []
             recovery_reason = str(exc)
-        synchronized = recovery_reason is None
+            result = compile_document(source)
         read_only_reason = None
-        if not synchronized:
+        if recovery_reason:
             read_only_reason = (
                 recovery_reason
                 or "Generated output cannot be reconciled with compiler metadata; "
@@ -153,10 +157,11 @@ class DocumentStore:
             source_hash=_hash_file(source),
             output_hash=_hash_file(output) if output.exists() else "",
             saved_changes=persisted,
-            synchronized=synchronized,
             read_only_reason=read_only_reason,
+            generation_state=generation_state,
             workspace_root=self.workspace,
             inventory_paths=self.inventory_paths(),
+            compiler_hash=base_compiler_hash,
         )
         if recovery_reason:
             view.diagnostics.append(
@@ -237,16 +242,19 @@ class DocumentStore:
     def save(self, batch: ChangeBatch) -> ChangeResultView:
         source, output, result, persisted = self._load_for_change(batch)
         merged = _merge_changes(persisted, _changes(batch.changes))
+        sidecar = read_sidecar(output)
+        orders = _saved_orders(sidecar)
+        if orders:
+            result = apply_order_changes(compile_document(source), orders, merged)
         projected = apply_parameter_changes(result, merged)
         if batch.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while validating edits.")
-        sidecar = read_sidecar(output)
         provenance = (
             sidecar.last_generated_hash
             if sidecar is not None
             else _hash_file(output) if output.exists() else None
         )
-        write_sidecar(output, _saved_sidecar(source, projected.values, provenance))
+        write_sidecar(output, _saved_sidecar(source, projected.values, provenance, orders))
         return ChangeResultView(document=self.open_document(str(source), str(output)).view)
 
     @_serialized
@@ -255,30 +263,41 @@ class DocumentStore:
         projected = apply_parameter_changes(result, persisted)
         if snapshot.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while generating output.")
-        self._write_generated_state(source, output, projected)
+        self._write_generated_state(source, output, projected, _saved_orders(read_sidecar(output)))
         return ChangeResultView(document=self.open_document(str(source), str(output)).view)
 
     @_serialized
-    def apply(self, batch: ChangeBatch) -> ChangeResultView:
-        source, output, result, persisted = self._load_for_change(batch)
-        merged = _merge_changes(persisted, _changes(batch.changes))
-        projected = apply_parameter_changes(result, merged)
-
-        if batch.revision != self._revision(source, output):
-            raise RevisionConflict("Document changed while validating edits.")
-        self._write_generated_state(source, output, projected)
-        opened = self.open_document(str(source), str(output))
-        return ChangeResultView(document=opened.view)
+    def reorder(self, request: ReorderRequest) -> ChangeResultView:
+        source, output, result, persisted = self._load_for_change(request)
+        next_order = swap_adjacent(
+            result, request.source_scope_id, request.target_scope_id, persisted
+        )
+        sidecar = read_sidecar(output)
+        orders = [
+            item for item in _saved_orders(sidecar)
+            if item.parent_scope_id != next_order.parent_scope_id
+        ] + [next_order]
+        candidate = apply_order_changes(compile_document(source), orders, persisted)
+        apply_parameter_changes(candidate, persisted)
+        if request.revision != self._revision(source, output):
+            raise RevisionConflict("Document changed while reordering operations.")
+        provenance = (
+            sidecar.last_generated_hash if sidecar is not None
+            else _hash_file(output) if output.exists() else None
+        )
+        write_sidecar(output, _saved_sidecar(source, persisted, provenance, orders))
+        return ChangeResultView(document=self.open_document(str(source), str(output)).view)
 
     def _write_generated_state(
-        self, source: Path, output: Path, projected: ChangeProjection
+        self, source: Path, output: Path, projected: ChangeProjection,
+        orders: Iterable[OrderChange] = (),
     ) -> None:
         previous = output.read_text(encoding="utf-8") if output.exists() else None
         try:
             atomic_write_text(output, projected.source)
             write_sidecar(
                 output,
-                _saved_sidecar(source, projected.values, _hash_file(output)),
+                _saved_sidecar(source, projected.values, _hash_file(output), orders),
             )
         except OSError:
             if output.exists() and _hash_text(
@@ -349,7 +368,12 @@ class DocumentStore:
         source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
         return sql_model_view(
-            structured_sql_model(result, request.parameter_id, merged)
+            structured_sql_model(
+                result,
+                request.binding_id,
+                merged,
+                csv_header=self._sql_header_reader(result, merged, request.binding_id, output),
+            )
         )
 
     @_serialized
@@ -359,11 +383,12 @@ class DocumentStore:
         change = apply_sql_action(
             result,
             SqlAction(
-                parameter_id=request.parameter_id,
+                parameter_id=request.binding_id,
                 action=request.action,
                 arguments=request.arguments,
             ),
             merged,
+            csv_header=self._sql_header_reader(result, merged, request.binding_id, output),
         )
         next_changes = _merge_changes(merged, [change])
         return SqlActionResponse(
@@ -372,45 +397,43 @@ class DocumentStore:
                 value=change.value,
             ),
             model=sql_model_view(
-                structured_sql_model(result, request.parameter_id, next_changes)
+                structured_sql_model(
+                    result,
+                    request.binding_id,
+                    next_changes,
+                    csv_header=self._sql_header_reader(result, next_changes, request.binding_id, output),
+                )
             ),
         )
 
-    @_serialized
-    def preview_csv(self, request: CsvPreviewRequest) -> CsvPreviewView:
-        source, output, result, persisted = self._load_for_change(request)
-        workflow = project_workflow(
-            result,
-            _merge_changes(persisted, _changes(request.changes)),
+    def _sql_header_reader(
+        self, result: CompilationResult, changes: list[SemanticChange],
+        binding_id: str, output: Path,
+    ):
+        workflow = project_workflow(result, changes, output_path=output)
+        binding = next((item for item in workflow.bindings if item.id == binding_id), None)
+        if binding is None:
+            return lambda path: None
+        choices = file_choices_by_operation(
+            workflow.effects,
+            self.inventory_paths(),
             output_path=output,
+            workspace_root=self.workspace,
         )
-        endpoint = next(
-            (
-                endpoint
-                for effect in workflow.effects
-                if effect.id == request.effect_id
-                for endpoint in (*effect.inputs, *effect.outputs)
-                if endpoint.id == request.endpoint_id
-            ),
-            None,
-        )
-        if endpoint is None or endpoint.path != request.expected_path:
-            raise RevisionConflict(
-                "File endpoint changed; refresh the file flow before previewing."
-            )
-        if not endpoint.path:
-            raise ValueError("Dynamic file paths cannot be previewed.")
-        candidate = Path(endpoint.path)
-        if not candidate.is_absolute():
-            if endpoint.path_base != "script-directory":
-                raise ValueError(
-                    "Preview unavailable: runtime working directory is unknown."
-                )
-            candidate = output.parent / candidate
-        preview = read_csv_preview(self._resolve(str(candidate)))
-        if self.expose_relative_paths:
-            preview.path = self._relative_display(preview.path)
-        return preview
+        allowed = set(choices.get(binding.owner_operation_id, ()))
+
+        def read_header(path: str) -> tuple[str, ...] | None:
+            try:
+                candidate = self._resolve(path)
+            except PathOutsideWorkspace:
+                return None
+            if candidate.relative_to(self.workspace).as_posix() not in allowed or not candidate.is_file():
+                return None
+            with candidate.open(newline="", encoding="utf-8-sig", errors="replace") as handle:
+                row = next(csv.reader(handle), None)
+            return tuple(row) if row else None
+
+        return read_header
 
     def _load_for_change(
         self, batch: DocumentSnapshot
@@ -435,6 +458,7 @@ class DocumentStore:
             )
         sidecar = read_sidecar(output)
         persisted = self._read_effective_changes(source, output, sidecar)
+        result = apply_order_changes(result, _saved_orders(sidecar), persisted)
         projected = project_changes(result, persisted)
         if not projected.valid:
             raise RevisionConflict(
@@ -465,6 +489,7 @@ class DocumentStore:
             SemanticChange(
                 binding_id=item.binding_id,
                 value=item.value,
+                symbol_id=item.symbol_id,
             )
             for item in sidecar.value_changes
         ]
@@ -560,16 +585,13 @@ class DocumentStore:
 
 
 def _changes(
-    items: Iterable[SemanticChangeRequest | ParameterChangeRequest],
+    items: Iterable[SemanticChangeRequest],
 ) -> list[SemanticChange]:
     return [
         SemanticChange(
-            binding_id=(
-                item.binding_id
-                if isinstance(item, SemanticChangeRequest)
-                else item.parameter_id
-            ),
+            binding_id=item.binding_id,
             value=item.value,
+            symbol_id=item.symbol_id,
             reset=item.reset,
         )
         for item in items
@@ -587,16 +609,35 @@ def _merge_changes(
 
 
 def _saved_sidecar(
-    source: Path, changes: Iterable[SemanticChange], provenance: str | None
+    source: Path, changes: Iterable[SemanticChange], provenance: str | None,
+    orders: Iterable[OrderChange] = (),
 ) -> EditorSidecar:
     return EditorSidecar(
         source_hash=_hash_file(source),
         last_generated_hash=provenance,
         value_changes=[
-            SavedSemanticChange(binding_id=item.binding_id, value=item.value)
+            SavedSemanticChange(
+                binding_id=item.binding_id,
+                value=item.value,
+                symbol_id=item.symbol_id,
+            )
             for item in changes
         ],
+        order_changes=[
+            SavedOrderChange(
+                parent_scope_id=item.parent_scope_id,
+                child_scope_ids=list(item.child_scope_ids),
+            )
+            for item in orders
+        ],
     )
+
+
+def _saved_orders(sidecar: EditorSidecar | None) -> tuple[OrderChange, ...]:
+    return tuple(
+        OrderChange(item.parent_scope_id, tuple(item.child_scope_ids))
+        for item in sidecar.order_changes
+    ) if sidecar is not None else ()
 
 
 def _issue_view(issue: ValidationIssue) -> ValidationIssueView:
@@ -605,7 +646,6 @@ def _issue_view(issue: ValidationIssue) -> ValidationIssueView:
         code=issue.code,
         message=issue.message,
         binding_id=issue.binding_id,
-        parameter_id=issue.binding_id,
     )
 
 

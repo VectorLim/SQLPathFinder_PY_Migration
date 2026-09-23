@@ -1,7 +1,7 @@
+import { SCHEMA_VERSION } from './contracts.generated.ts'
 import type {
   ChangeBatch,
   ChangePreviewView,
-  CsvPreviewView,
   DocumentView,
   DocumentSnapshot,
   SemanticBindingView,
@@ -10,14 +10,23 @@ import type {
   WorkspaceProjectionView,
 } from './contracts.generated'
 
-export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'conflict' | 'error'
+export type TabStatus = 'ready' | 'dirty' | 'validating' | 'valid' | 'invalid' | 'saving' | 'generating' | 'conflict' | 'error'
 
 export const RESET_VALUE = Symbol('reset-to-generated')
+export interface SymbolSelection { symbol_id: string }
+export function isSymbolSelection(value: unknown): value is SymbolSelection {
+  return typeof value === 'object' && value !== null &&
+    'symbol_id' in value && typeof value.symbol_id === 'string'
+}
 export type FieldPath = Array<string | number>
 
 export function effectiveBindingValue(values: Record<string, unknown>, binding: SemanticBindingView): unknown {
-  const value = Object.hasOwn(values, binding.id) ? values[binding.id] : binding.value
-  return value === RESET_VALUE ? binding.default : value
+  const value = Object.hasOwn(values, binding.id)
+    ? values[binding.id]
+    : binding.symbol_id ? { symbol_id: binding.symbol_id } : binding.value
+  return value === RESET_VALUE
+    ? binding.default_symbol_id ? { symbol_id: binding.default_symbol_id } : binding.default
+    : value
 }
 
 export interface EditState {
@@ -40,10 +49,6 @@ export interface TabState {
   preview: ChangePreviewView | null
   mutationRequestId: string | null
   mutationError: string | null
-  csv: CsvPreviewView | null
-  csvArtifactPath: string | null
-  csvRequestId: string | null
-  csvError: string | null
 }
 
 export interface WorkspaceState {
@@ -72,8 +77,6 @@ export type WorkspaceAction =
   | { type: 'replace-document'; tabId: string; instanceId: number; requestId: string; baseVersion: number; document: DocumentView }
   | { type: 'refresh-file-choices'; tabId: string; instanceId: number; document: DocumentView }
   | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean; message: string }
-  | { type: 'csv-loading'; tabId: string; instanceId: number; requestId: string; path: string }
-  | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null; error: string | null }
   | { type: 'projection'; projection: WorkspaceProjectionView | null }
   | { type: 'projection-loading' }
   | { type: 'projection-error'; message: string }
@@ -129,14 +132,13 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 }
 
 function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merge-documents' | 'activate' | 'close' | 'projection' | 'projection-loading' | 'projection-error' | 'navigate-operation' }>): TabState {
-  if (tab.status === 'saving' && ['edit', 'field-draft', 'undo', 'redo'].includes(action.type)) return tab
+  if ((tab.status === 'saving' || tab.status === 'generating') && ['edit', 'field-draft', 'undo', 'redo'].includes(action.type)) return tab
   if (action.type === 'field-draft') {
     if (!action.draft && !tab.fieldDrafts[action.key]) return tab
     const fieldDrafts = { ...tab.fieldDrafts }
     if (action.draft) fieldDrafts[action.key] = action.draft
     else delete fieldDrafts[action.key]
     return { ...tab, fieldDrafts, preview: null, mutationRequestId: null,
-      csv: null, csvRequestId: null, csvArtifactPath: null, csvError: null,
       edits: { ...tab.edits, version: tab.edits.version + 1 } }
   }
   if (action.type === 'select') return selectItem(tab, action.itemId)
@@ -229,14 +231,6 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
       status: action.conflict ? 'conflict' : 'error',
     }
   }
-  if (action.type === 'csv-loading') {
-    if (action.instanceId !== tab.instanceId) return tab
-    return { ...tab, csvRequestId: action.requestId, csvArtifactPath: action.path, csv: null, csvError: null }
-  }
-  if (action.type === 'csv-result') {
-    if (action.instanceId !== tab.instanceId || tab.csvRequestId !== action.requestId) return tab
-    return { ...tab, csvRequestId: null, csv: action.csv, csvError: action.error }
-  }
   return tab
 }
 
@@ -286,10 +280,6 @@ function createTab(document: DocumentView, previous: TabState | undefined, insta
     preview: null,
     mutationRequestId: null,
     mutationError: null,
-    csv: null,
-    csvArtifactPath: null,
-    csvRequestId: null,
-    csvError: null,
   }
 }
 
@@ -306,10 +296,6 @@ function withEditState(tab: TabState, edits: EditState): TabState {
   return {
     ...tab,
     edits,
-    csv: null,
-    csvRequestId: null,
-    csvArtifactPath: null,
-    csvError: null,
     preview: null,
     mutationRequestId: null,
     mutationError: conflict ? tab.mutationError : null,
@@ -327,7 +313,10 @@ export function activeTab(state: WorkspaceState): TabState | null {
 
 export function draftChanges(tab: TabState): SemanticChangeRequest[] {
   return Object.entries(tab.edits.values).map(([binding_id, value]) => ({
-    binding_id, value: value === RESET_VALUE ? null : value, reset: value === RESET_VALUE,
+    binding_id,
+    value: value === RESET_VALUE || isSymbolSelection(value) ? null : value,
+    symbol_id: isSymbolSelection(value) ? value.symbol_id : null,
+    reset: value === RESET_VALUE,
   }))
 }
 
@@ -342,7 +331,7 @@ export function changeBatch(tab: TabState): ChangeBatch | null {
 
 export function documentSnapshot(document: DocumentView): DocumentSnapshot {
   return {
-    schema_version: 5,
+    schema_version: SCHEMA_VERSION,
     source_path: document.source_path,
     output_path: document.output_path,
     source_hash: document.source_hash,

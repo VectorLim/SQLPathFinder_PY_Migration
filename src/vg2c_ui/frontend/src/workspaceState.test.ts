@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './workspaceGuards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './workspaceState.ts'
-import type { DocumentView } from './contracts.generated.ts'
+import { SCHEMA_VERSION, type DocumentView } from './contracts.generated.ts'
 
 function doc(id: string): DocumentView {
   return {
-    schema_version: 5,
+    schema_version: SCHEMA_VERSION,
     id,
     source_path: `${id}.txt`,
     output_path: `${id}.py`,
@@ -13,7 +13,7 @@ function doc(id: string): DocumentView {
     output_hash: `out-${id}`,
     revision: '5755395593540295586',
     compiler_hash: `compiler-${id}`,
-    synchronized: true,
+    generation_state: 'current',
     read_only_reason: null,
     steps: [], scopes: [], artifacts: [], diagnostics: [], effects: [],
     semantic_operations: [], files: [], symbols: [], condition_operators: [],
@@ -43,7 +43,7 @@ assert.equal(preserved.activeId, 'c', 'a skipped dirty collision must not become
 assert.ok(preserved.tabs.some((tab) => tab.document.id === 'c'))
 
 const projection = workspaceProjectionRequest(state)
-assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', reset: false }])
+assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', symbol_id: null, reset: false }])
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
 
 const fileDoc = doc('files')
@@ -85,13 +85,13 @@ assert.equal(navigationTab.revealFocus, true)
 assert.equal(workspaceReducer(navigation, { type: 'toggle-scope', tabId: 'navigation', scopeId: 'scope-a', expanded: true }).tabs.at(-1)?.selectedId, 'operation-b')
 assert.equal(workspaceReducer(navigation, { type: 'navigate-operation', tabId: 'navigation', operationId: 'operation-b' }).tabs.at(-1)?.revealVersion, 2)
 const resetState = workspaceReducer(state, { type: 'edit', tabId: 'a', bindingId: 'p1', value: RESET_VALUE })
-assert.deepEqual(draftChanges(resetState.tabs[0]), [{ binding_id: 'p1', value: null, reset: true }])
+assert.deepEqual(draftChanges(resetState.tabs[0]), [{ binding_id: 'p1', value: null, symbol_id: null, reset: true }])
 assert.equal(workspaceReducer(resetState, { type: 'undo', tabId: 'a' }).tabs[0].edits.values.p1, 'draft')
 let invalidFields = workspaceReducer(state, { type: 'field-draft', tabId: 'a', key: 'number', draft: { bindingId: 'numeric', text: '', error: 'Enter a number' } })
 invalidFields = workspaceReducer(invalidFields, { type: 'edit', tabId: 'a', bindingId: 'other', value: 'changed' })
 assert.equal(invalidFields.tabs[0].fieldDrafts.number.text, '')
 assert.equal(getChangeActionState(invalidFields.tabs[0]).canPreview, false)
-assert.equal(getChangeActionState(invalidFields.tabs[0]).canApply, false)
+assert.equal(getChangeActionState(invalidFields.tabs[0]).canSave, false)
 assert.deepEqual(workspaceReducer(invalidFields, { type: 'undo', tabId: 'a' }).tabs[0].fieldDrafts, {})
 const a = state.tabs.find((tab) => tab.document.id === 'a')!
 state = workspaceReducer(state, {
@@ -147,26 +147,19 @@ reopened = workspaceReducer(reopened, {
 })
 assert.equal(reopened.tabs[0].preview, null, 'closed tab response must not leak into reopened document')
 
-const csvInstance = reopened.tabs[0].instanceId
-reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', path: 'a.csv' })
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: oldInstance, requestId: 'csv-new', csv: null, error: 'stale csv error' })
-assert.equal(reopened.tabs[0].csvRequestId, 'csv-new', 'CSV result from a prior tab instance must be ignored')
-assert.equal(reopened.tabs[0].csvError, null, 'stale CSV errors must not leak into a reopened document')
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-new', csv: null, error: 'CSV preview failed' })
-assert.equal(reopened.tabs[0].csvError, 'CSV preview failed', 'current CSV error should stay with the tab/artifact request')
-reopened = workspaceReducer(reopened, { type: 'csv-loading', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-retry', path: 'a.csv' })
-assert.equal(reopened.tabs[0].csvError, null, 'starting a new CSV request should clear the prior CSV error')
-reopened = workspaceReducer(reopened, { type: 'edit', tabId: 'reopen', bindingId: 'output', value: 'changed.csv' })
-reopened = workspaceReducer(reopened, { type: 'csv-result', tabId: 'reopen', instanceId: csvInstance, requestId: 'csv-retry', csv: null, error: 'stale after edit' })
-assert.equal(reopened.tabs[0].csvError, null, 'CSV response cannot survive a newer draft')
-assert.equal(reopened.tabs[0].csvArtifactPath, null)
-
 let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
 actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', bindingId: 'p1', value: 'draft' })
 let actionsTab = actionsState.tabs[0]
 let availability = getChangeActionState(actionsTab)
-assert.equal(availability.canPreview, true, 'dirty synchronized tab should be previewable')
-assert.equal(availability.canApply, false, 'unvalidated draft must not be applicable')
+assert.equal(availability.canPreview, true, 'dirty editable tab should be previewable')
+assert.equal(availability.canSave, true, 'valid draft may be saved without preview')
+assert.equal(availability.canGenerate, false, 'unsaved draft must block generation')
+const savedStale = doc('saved-stale')
+savedStale.generation_state = 'stale'
+let generatedState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [savedStale] })
+assert.equal(getChangeActionState(generatedState.tabs[0]).canGenerate, true, 'saved stale state can generate')
+generatedState = workspaceReducer(generatedState, { type: 'edit', tabId: 'saved-stale', bindingId: 'p1', value: 'draft' })
+assert.equal(getChangeActionState(generatedState.tabs[0]).canGenerate, false, 'draft blocks generation')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -175,7 +168,7 @@ actionsState = workspaceReducer(actionsState, {
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
 assert.equal(availability.canPreview, false, 'pending validation must block a second preview mutation')
-assert.equal(availability.canApply, false, 'pending validation must block apply')
+assert.equal(availability.canSave, false, 'pending validation must block save')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'preview-result', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -184,7 +177,7 @@ actionsState = workspaceReducer(actionsState, {
 })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
-assert.equal(availability.canApply, true, 'fresh valid preview should enable apply')
+assert.equal(availability.canSave, true, 'validated draft remains saveable')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-started', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -192,8 +185,8 @@ actionsState = workspaceReducer(actionsState, {
 })
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
-assert.equal(availability.canPreview, false, 'pending apply must block preview')
-assert.equal(availability.canApply, false, 'pending apply must block re-entry')
+assert.equal(availability.canPreview, false, 'pending save must block preview')
+assert.equal(availability.canSave, false, 'pending save must block re-entry')
 
 actionsState = workspaceReducer(actionsState, {
   type: 'mutation-error', tabId: 'actions', instanceId: actionsTab.instanceId,
@@ -203,7 +196,7 @@ actionsState = workspaceReducer(actionsState, {
 actionsTab = actionsState.tabs[0]
 availability = getChangeActionState(actionsTab)
 assert.equal(actionsTab.mutationError, 'File changed externally', 'mutation errors should stay on the affected tab')
-assert.equal(availability.canApply, false, 'stale valid preview must not remain applicable after conflict')
+assert.equal(availability.canSave, false, 'conflict must block save')
 assert.equal(availability.canPreview, false, 'conflict requires reload before another preview')
 assert.equal(availability.canReload, true, 'conflicted tab should enable reload')
 

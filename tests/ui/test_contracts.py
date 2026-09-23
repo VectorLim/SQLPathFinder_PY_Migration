@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from vg2c.sql_editor.models import SqlEditCapabilities, SqlEditableModel, SqlSpan
+from vg2c.sql_editor.models import SqlEditableModel, SqlEditCapabilities, SqlSpan
 from vg2c_ui.api.contracts import render_typescript_contracts
 from vg2c_ui.api.serialization import sql_model_view
 
@@ -47,5 +47,5 @@ def test_sql_transport_exposes_backend_owned_before_and_after_slices():
 
     view = sql_model_view(model)
 
-    assert view.before_statement == "-- setup\n"
-    assert view.after_statement == "\n-- cleanup"
+    assert view.source[: view.statement_span.start] == "-- setup\n"
+    assert view.source[view.statement_span.end :] == "\n-- cleanup"

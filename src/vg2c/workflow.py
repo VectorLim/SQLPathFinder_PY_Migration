@@ -206,7 +206,7 @@ def project_workflow(
     if not projection.valid:
         raise ChangeValidationError(projection.issues)
 
-    values = {change.binding_id: change.value for change in projection.values}
+    values = projection.effective_values
     semantic = build_semantic_model(result, values)
     flags = _scope_flags(result)
     invocations = {

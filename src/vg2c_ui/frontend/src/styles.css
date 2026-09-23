@@ -226,7 +226,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   text-align: left;
 }
 .tree-row:hover { background: var(--control-hover); }
-.tree-node.is-selected > .tree-row {
+.tree-node.is-selected > .semantic-tree-row-wrap > .tree-row {
   border-color: var(--accent-line);
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
@@ -416,12 +416,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .diagnostic small { margin-left: 8px; color: var(--muted); }
 
 .context-section { border-bottom: 1px solid var(--line-soft); }
-.csv-preview { margin: 9px 0 0 34px; }
-.csv-preview > small { color: var(--muted); font-size: 8px; }
-.table-scroll { max-height: 250px; overflow: auto; margin-top: 5px; border: 1px solid var(--line); border-radius: 6px; }
-.csv-preview table { border-collapse: collapse; min-width: 100%; font-size: 9px; }
-.csv-preview th, .csv-preview td { border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); padding: 4px 5px; text-align: left; white-space: nowrap; }
-.csv-preview th { position: sticky; top: 0; color: var(--text); background: var(--surface-subtle); }
 
 .empty-state {
   display: grid;
@@ -449,7 +443,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 
 @media (prefers-contrast: more) {
   :root { --line: var(--line-strong); --line-soft: var(--line); }
-  .tree-node.is-selected > .tree-row { border-width: 2px; }
+  .tree-node.is-selected > .semantic-tree-row-wrap > .tree-row { border-width: 2px; }
 }
 
 @media (max-width: 1100px) {
@@ -546,11 +540,6 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .workbench button:focus-visible, .workbench input:focus-visible, .workbench textarea:focus-visible, .workbench select:focus-visible { outline-width: 2px; }
 .workbench .icon-button { position: relative; width: 36px; min-width: 36px; padding: 0; }
 .icon-button[aria-label]:focus-visible::after { content: attr(aria-label); position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; min-width: max-content; padding: 6px 8px; color: var(--on-accent); background: var(--accent-strong); font-size: var(--text-xs); font-weight: 400; }
-.on-disk-preview { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); margin: 0; overflow-wrap: anywhere; }
-.on-disk-preview h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
-.on-disk-preview p { font-size: var(--text-xs); }
-.on-disk-preview .csv-preview { margin: 0; }
-.on-disk-preview table { font-size: var(--text-xs); }
 .workbench .operation-editor, .workbench .pane-heading, .workbench .tree-label { letter-spacing: 0; }
 .parameter-field { margin: 0; padding: 0; border: 0; min-width: 0; }
 .parameter-field > legend { padding: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
@@ -577,14 +566,15 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
   .workbench-actions .change-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .workbench-actions .change-toolbar .toolbar-group {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+    flex-wrap: nowrap;
+    gap: 4px;
     width: 100%;
     margin: 0;
-    overflow: visible;
+    overflow-x: auto;
   }
-  .workbench-actions .change-toolbar .toolbar-group .icon-button { flex: 0 0 44px; }
-  .workbench-actions .change-toolbar .toolbar-group button:not(.icon-button) { flex: 1 1 88px; min-width: max-content; }
+  .workbench-actions .change-toolbar .toolbar-group .icon-button { flex: 0 0 36px; min-height: 40px; }
+  .workbench-actions .change-toolbar .toolbar-group button:not(.icon-button) { flex: 0 0 auto; min-width: max-content; min-height: 40px; padding-inline: 4px; font-size: 12px; }
+  .workbench-actions .change-toolbar .toolbar-group svg { width: 14px; height: 14px; }
   .pane-tabs button { gap: var(--space-1); padding-inline: var(--space-1); }
   .pane-tabs svg { flex: 0 0 16px; }
 }
@@ -727,6 +717,12 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .semantic-tree-row .tree-toggle svg { transition: transform var(--motion-fast); }
 .semantic-tree-row[aria-expanded="true"] .tree-toggle svg { transform: rotate(90deg); }
 .semantic-tree-row .tree-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.semantic-tree-row-wrap { display: flex; align-items: center; min-width: 0; }
+.semantic-tree-row-wrap > .tree-row { flex: 1; min-width: 0; }
+.tree-reorder-controls { display: inline-flex; gap: 2px; padding: 0 4px; }
+.tree-reorder-controls button { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; }
+.tree-reorder-controls button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.tree-reorder-controls button:disabled { opacity: .45; cursor: default; }
 .semantic-operation-editor .operation-editor__header { align-items: flex-start; }
 .semantic-binding { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-inline-size: 0; }
 .semantic-binding > .parameter-field__meta > strong, .field-label { font-size: var(--text-sm); color: var(--ink); }
@@ -748,8 +744,8 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .context-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: var(--panel); }
 .context-tabs button { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--text-xs); }
 .context-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
-.context-section > header, .required-inputs, .on-disk-preview { padding: var(--space-3); }
-.context-section > header h3, .required-inputs h3 { margin: 0; font-size: var(--text-sm); }
+.context-section > header { padding: var(--space-3); }
+.context-section > header h3 { margin: 0; font-size: var(--text-sm); }
 .context-section > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
 .context-empty-copy { margin: 0; padding: var(--space-3); }
 .file-effect-row { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
@@ -765,10 +761,10 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mon
 .file-endpoint--deleted { color: var(--danger); }
 .file-flow-arrow { color: var(--muted); }
 .file-effect-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-xs); }
-.file-resource-row, .email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
-.file-resource-row header, .symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
-.file-resource-row header span, .symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
-.file-resource-row p, .symbol-row p { margin: var(--space-1) 0; color: var(--muted); font-size: var(--text-xs); }
+.email-row, .symbol-row { padding: var(--space-3); border-bottom: 1px solid var(--line-soft); }
+.symbol-row header { display: flex; align-items: center; gap: var(--space-2); }
+.symbol-row header span { margin-left: auto; font-size: 11px; color: var(--muted); }
+.symbol-row p { margin: var(--space-1) 0; color: var(--muted); font-size: var(--text-xs); }
 .operation-references { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
 .operation-references button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--accent-strong); font-size: 11px; }
 .email-bulk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-soft); }

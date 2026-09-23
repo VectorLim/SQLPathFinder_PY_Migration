@@ -41,6 +41,8 @@ class EditableBinding:
     display_label: str
     schema: ValueSchema | None
     value: Any
+    symbol_id: str | None = None
+    default_symbol_id: str | None = None
     default: Any = None
     required: bool = True
     visibility: BindingVisibility = "normal"
@@ -76,6 +78,7 @@ class WorkflowOperation:
 class SymbolReference:
     operation_id: str
     binding_id: str
+    context: Literal["condition", "parameter", "global-value"] = "parameter"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,15 +88,17 @@ class Symbol:
     kind: SymbolKind
     value_state: SymbolValueState
     value: Any = None
+    value_binding_id: str | None = None
     introduction: OperationReference | None = None
     references: tuple[SymbolReference, ...] = ()
 
-    @property
-    def condition_value(self) -> str | None:
-        """Canonical condition token for selectable runtime macro symbols."""
-        if self.kind in {"macro", "macro-row"}:
-            return f"VAR({self.display_name})"
-        return None
+
+def condition_symbol_token(symbol: Symbol, operator: str | None) -> str:
+    """Resolve an eligible symbol for the compiler's condition operand syntax."""
+    if symbol.kind not in {"macro", "macro-row"}:
+        raise ValueError(f"{symbol.display_name} is not a condition symbol.")
+    operand_type = _OPERATOR_TABLE.get((operator or "").upper(), ("", "string"))[1]
+    return symbol.display_name if operand_type == "numeric" else f"VAR({symbol.display_name})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +145,9 @@ def build_semantic_model(
                 values,
                 control_ranges.get(node.scope_id),
             )
+            operation = replace(
+                operation, comments=_source_comments(block_by_index[node.start_index].raw)
+            )
             operations.append(operation)
             handled_blocks.add(node.start_index)
             next_parent = operation.id
@@ -158,6 +166,8 @@ def build_semantic_model(
                     branch,
                     values,
                 )
+                if leaf_ops:
+                    leaf_ops[0] = replace(leaf_ops[0], comments=_source_comments(block.raw))
                 operations.extend(leaf_ops)
                 if leaf_ops:
                     handled_blocks.add(block.index)
@@ -170,10 +180,13 @@ def build_semantic_model(
     for block in result.resolved.blocks:
         if block.index in handled_blocks:
             continue
-        operations.extend(_leaf_operations(result, block, None, None, values))
+        orphan_ops = _leaf_operations(result, block, None, None, values)
+        if orphan_ops:
+            orphan_ops[0] = replace(orphan_ops[0], comments=_source_comments(block.raw))
+        operations.extend(orphan_ops)
 
     bindings = tuple(binding for operation in operations for binding in operation.bindings)
-    symbols = _build_symbols(result, operations)
+    symbols = _build_symbols(result, operations, values)
     operations = _apply_condition_symbol_validation(operations, symbols)
     bindings = tuple(binding for operation in operations for binding in operation.bindings)
     return SemanticModel(tuple(operations), bindings, symbols)
@@ -570,8 +583,24 @@ def _condition_summary(bindings: list[EditableBinding]) -> str:
     return f"{first} {by_name['conj']} {second}" if second and by_name.get("conj") else first
 
 
+def _source_comments(raw: str) -> tuple[str, ...]:
+    """Attach only comments present in the original VG2 source block."""
+    comments: list[str] = []
+    for line in raw.splitlines():
+        text = line.strip()
+        if text.startswith("#"):
+            comment = text[1:].strip()
+        elif text.startswith("--"):
+            comment = text[2:].strip()
+        else:
+            continue
+        if comment:
+            comments.append(comment)
+    return tuple(comments)
+
+
 def _build_symbols(
-    result: CompilationResult, operations: list[WorkflowOperation]
+    result: CompilationResult, operations: list[WorkflowOperation], values: dict[str, Any]
 ) -> tuple[Symbol, ...]:
     symbols: dict[str, Symbol] = {}
 
@@ -604,7 +633,7 @@ def _build_symbols(
                     parameter.id.removeprefix("global:"),
                     "global",
                     "known",
-                    parameter.value,
+                    values.get(parameter.id, parameter.value),
                 )
 
     for operation in operations:
@@ -645,7 +674,7 @@ def _build_symbols(
                 if key not in symbols:
                     add(name, "unresolved", "unknown")
                 references.setdefault(key, []).append(
-                    SymbolReference(operation.id, parameter.id)
+                    SymbolReference(operation.id, parameter.id, "parameter")
                 )
 
     for operation in operations:
@@ -655,7 +684,7 @@ def _build_symbols(
             key = binding.id.removeprefix("global:").upper()
             if key in symbols:
                 references.setdefault(key, []).append(
-                    SymbolReference(operation.id, binding.id)
+                    SymbolReference(operation.id, binding.id, "global-value")
                 )
 
         if operation.kind != "condition":
@@ -676,10 +705,16 @@ def _build_symbols(
             key = normalize_macro_name(name).upper()
             if key not in symbols:
                 add(name, "unresolved", "unknown")
-            references.setdefault(key, []).append(SymbolReference(operation.id, binding.id))
+            references.setdefault(key, []).append(
+                SymbolReference(operation.id, binding.id, "condition")
+            )
 
     return tuple(
-        replace(symbol, references=tuple(references.get(key, ())))
+        replace(
+            symbol,
+            value_binding_id=f"global:{key}" if symbol.kind == "global" else None,
+            references=tuple(references.get(key, ())),
+        )
         for key, symbol in sorted(symbols.items())
     )
 
@@ -711,9 +746,43 @@ def _apply_condition_symbol_validation(
                 if isinstance(binding.value, str)
                 else None
             )
-            if symbol and normalize_macro_name(symbol).upper() not in known:
-                binding = replace(binding, validation_state="unresolved")
-                unresolved = True
+            if symbol:
+                symbol_id = f"symbol:{normalize_macro_name(symbol).upper()}"
+                default_operator = by_name.get("op2" if binding.name.endswith("2") else "op")
+                default_symbol = (
+                    _symbolic_operand(
+                        binding.default,
+                        default_operator.default if default_operator else None,
+                    )
+                    if isinstance(binding.default, str) else None
+                )
+                default_symbol_id = (
+                    f"symbol:{normalize_macro_name(default_symbol).upper()}"
+                    if default_symbol else None
+                )
+                if normalize_macro_name(symbol).upper() not in known:
+                    binding = replace(
+                        binding, symbol_id=symbol_id,
+                        default_symbol_id=default_symbol_id,
+                        validation_state="unresolved",
+                    )
+                    unresolved = True
+                else:
+                    binding = replace(
+                        binding, symbol_id=symbol_id,
+                        default_symbol_id=default_symbol_id,
+                    )
+            elif isinstance(binding.default, str):
+                default_operator = by_name.get("op2" if binding.name.endswith("2") else "op")
+                default_symbol = _symbolic_operand(
+                    binding.default,
+                    default_operator.default if default_operator else None,
+                )
+                if default_symbol:
+                    binding = replace(
+                        binding,
+                        default_symbol_id=f"symbol:{normalize_macro_name(default_symbol).upper()}",
+                    )
             next_bindings.append(binding)
         projected.append(
             replace(
@@ -738,9 +807,10 @@ def _symbolic_operand(value: str, operator: str | None) -> str | None:
 
 
 def _csv_headers(source_path: Path, raw_path: str) -> tuple[str, ...]:
-    path = Path(raw_path)
-    if not path.is_absolute():
-        path = source_path.parent / path
+    root = source_path.parent.resolve()
+    path = (root / raw_path).resolve()
+    if path != root and root not in path.parents:
+        return ()
     if not path.is_file():
         return ()
     try:

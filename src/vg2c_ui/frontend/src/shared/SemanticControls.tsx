@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 
 import type { SymbolView } from '../contracts.generated'
+import { isSymbolSelection, type SymbolSelection } from '../workspaceState'
 
 export function ValidationMessage({ message, id }: { message: string | null | undefined; id?: string }) {
   if (!message) return null
@@ -73,15 +74,18 @@ export function FileListSelector({
   files: string[]
   disabled?: boolean
   showLabel?: boolean
-  onChange: (value: string[]) => void
+  onChange: (value: unknown[]) => void
   onUpload?: (file: File) => Promise<string>
 }) {
-  const items = Array.isArray(value) ? value.map(String) : []
+  const items: unknown[] = Array.isArray(value) ? value : []
+  const pathOf = (item: unknown) => Array.isArray(item) && item.length === 2 ? String(item[0]) : String(item ?? '')
+  const withPath = (item: unknown, path: string) => Array.isArray(item) && item.length === 2 ? [path, item[1]] : path
   const inputId = useId()
   return <div className="semantic-file-list">
     {showLabel && <span className="field-label">{label}</span>}
-    {items.map((item, index) => <div className="collection-row" key={`${index}:${item}`}>
-      <FileSelector label={`${label} ${index + 1}`} showLabel={false} value={item} files={files} disabled={disabled} onChange={(next) => onChange(items.map((current, position) => position === index ? next : current))} />
+    {items.map((item, index) => <div className="collection-row" key={`${index}:${pathOf(item)}`}>
+      <FileSelector label={`${label} ${index + 1}`} showLabel={false} value={pathOf(item)} files={files} disabled={disabled} onChange={(next) => onChange(items.map((current, position) => position === index ? withPath(current, next) : current))} />
+      {Array.isArray(item) && item.length === 2 && <small>Table: {String(item[1])}</small>}
       <button type="button" className="icon-button" disabled={disabled} aria-label={`Remove ${label} ${index + 1}`} onClick={() => onChange(items.filter((_, position) => position !== index))}>×</button>
     </div>)}
     <div className="field-command-row">
@@ -103,6 +107,7 @@ export function SymbolSelector({
   label,
   value,
   symbols,
+  symbolId,
   disabled = false,
   showLabel = true,
   onChange,
@@ -110,27 +115,29 @@ export function SymbolSelector({
   label: string
   value: unknown
   symbols: SymbolView[]
+  symbolId?: string | null
   disabled?: boolean
   showLabel?: boolean
-  onChange: (value: string) => void
+  onChange: (value: string | SymbolSelection) => void
 }) {
-  const listId = useId()
+  const selectedId = isSymbolSelection(value) ? value.symbol_id : typeof value === 'string' ? '' : symbolId ?? ''
+  const eligible = symbols.filter((symbol) => symbol.kind === 'macro' || symbol.kind === 'macro-row' || symbol.id === selectedId)
   const input = <input
       aria-label={label}
       type="text"
-      list={listId}
       value={typeof value === 'string' ? value : ''}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     />
-  return <>
-    {showLabel ? <label>{label}{input}</label> : input}
-    <datalist id={listId}>
-      {symbols
-        .filter((symbol) => symbol.condition_value)
-        .map((symbol) => <option key={symbol.id} value={symbol.condition_value ?? symbol.display_name}>{symbol.display_name}</option>)}
-    </datalist>
-  </>
+  const selector = <div className="symbol-selector">
+    <select aria-label={`${label} mode`} value={selectedId} disabled={disabled}
+      onChange={(event) => onChange(event.target.value ? { symbol_id: event.target.value } : '')}>
+      <option value="">Literal value</option>
+      {eligible.map((symbol) => <option key={symbol.id} value={symbol.id}>{symbol.display_name}{symbol.kind === 'unresolved' ? ' (unresolved)' : ''}</option>)}
+    </select>
+    {!selectedId && input}
+  </div>
+  return showLabel ? <label>{label}{selector}</label> : selector
 }
 
 export function OptionalValue({

@@ -20,6 +20,13 @@ class SavedSemanticChange(BaseModel):
     symbol_id: str | None = None
 
 
+class SavedOrderChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parent_scope_id: int
+    child_scope_ids: list[int]
+
+
 class EditorSidecar(BaseModel):
     """Persistence-only state for validated semantic binding edits."""
 
@@ -29,6 +36,7 @@ class EditorSidecar(BaseModel):
     source_hash: str
     last_generated_hash: str | None = None
     value_changes: list[SavedSemanticChange] = Field(default_factory=list)
+    order_changes: list[SavedOrderChange] = Field(default_factory=list)
     _legacy_version: int | None = PrivateAttr(default=None)
 
     @property
@@ -86,6 +94,7 @@ def _upgrade_legacy(payload: dict[str, Any]) -> dict[str, Any]:
         }
         for item in payload.get("changes", [])
         ],
+        "order_changes": [],
     }
 
 
@@ -101,6 +110,7 @@ __all__ = [
     "LEGACY_SIDECAR_VERSIONS",
     "SIDECAR_VERSION",
     "SavedSemanticChange",
+    "SavedOrderChange",
     "read_sidecar",
     "sidecar_path",
     "write_sidecar",

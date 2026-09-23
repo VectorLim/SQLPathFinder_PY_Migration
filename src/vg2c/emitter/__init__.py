@@ -58,9 +58,6 @@ def emit(dispatched: DispatchedProgram) -> EmittedScript:
     from vg2c.logger import Logger
     from vg2c.utilities import ensure_utility_checks_loaded
     from vg2c.utilities._base import UtilitySpec
-    from vg2c.embedding import assemble_utilities
-    from vg2c.embedding.index import bound_names
-
     ensure_utility_checks_loaded()
     log = Logger.getLogger("vg2c.emitter")
     reader_imports, forced_utility_names = _resolve_reader_imports_and_roots(

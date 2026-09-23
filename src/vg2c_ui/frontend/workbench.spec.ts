@@ -1,6 +1,4 @@
 import { expect, test, type Page } from '@playwright/test'
-import { writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
 import type { DocumentView } from './src/contracts.generated'
 
 async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
@@ -32,7 +30,10 @@ async function uploadAndTranslate(page: Page, name: string, source: string) {
 
 
 async function currentDocument(page: Page, name: string): Promise<DocumentView> {
-  const response = await page.request.post('/api/documents/open', { data: { source_path: `inputs/${name}` } })
+  const output = name.replace(/\.txt$/i, '.py')
+  const response = await page.request.post('/api/documents/open', { data: {
+    source_path: `inputs/${name}`, output_path: `generated/inputs/${output}`,
+  } })
   expect(response.ok()).toBeTruthy()
   return response.json() as Promise<DocumentView>
 }
@@ -93,19 +94,13 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   let outputPath = page.getByLabel('Output file path', { exact: true })
   await outputPath.fill('renamed.csv')
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
-  await expect(outputMode).toHaveValue('out.csv')
-  await expect(page.getByLabel('Output file path', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('Output file path', { exact: true })).toHaveValue('out.csv')
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   outputPath = page.getByLabel('Output file path', { exact: true })
   await expect(outputPath).toHaveValue('renamed.csv')
 
-  const expression = page.getByRole('textbox', { name: 'Column expression', exact: true }).first()
-  await expect(expression).toBeEnabled()
-  await expression.fill('2')
-  await expression.press('Tab')
-  await expect(page.getByRole('button', { name: 'Reset SQL to generated value' })).toBeEnabled()
-  await page.getByRole('button', { name: 'Reset SQL to generated value' }).click()
-  await expect(expression).toHaveValue('1')
+  await expect(page.locator('.sql-column-label').first()).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Column expression', exact: true })).toHaveCount(0)
   await expect(outputPath).toHaveValue('renamed.csv')
 
   await expect(page.getByText('Generated information', { exact: true })).toHaveCount(0)
@@ -119,17 +114,21 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
   await expect(page.getByText('Validated Python diff', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Changes validated', { exact: true })).toBeVisible()
-  const apply = page.getByRole('button', { name: 'Apply', exact: true })
-  await expect(apply).toBeEnabled()
+  const save = page.getByRole('button', { name: 'Save', exact: true })
+  await expect(save).toBeEnabled()
   let releaseSave!: () => void
   const saveGate = new Promise<void>((resolve) => { releaseSave = resolve })
-  await page.route('**/api/changes/apply', async (route) => { await saveGate; await route.continue() })
-  await apply.click()
+  await page.route('**/api/changes/save', async (route) => { await saveGate; await route.continue() })
+  await save.click()
   await expect(outputMode).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled()
   releaseSave()
   await expect(page.getByText('No pending changes', { exact: true })).toBeVisible()
+  await expect(page.getByText('Generate required', { exact: true })).toBeVisible()
   await expect(outputMode).toBeEnabled()
+
+  await page.getByRole('button', { name: 'Generate', exact: true }).click()
+  await expect(page.getByText('Generated', { exact: true })).toBeVisible()
 
   const reopened = await page.request.post('/api/documents/open', { data: { source_path: 'inputs/workbench.txt', output_path: 'generated/inputs/workbench.py' } })
   expect(reopened.ok()).toBeTruthy()
@@ -140,12 +139,7 @@ test('editing, persistence, preview and responsive layout', async ({ page }, tes
   await expect(page.getByRole('tab', { name: 'File Flow', exact: true })).toBeVisible()
   await expect(page.getByRole('tab', { name: /Email/ })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Globals', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Preview CSV', exact: true }).first().click()
-  await expect(page.locator('.on-disk-preview [role=alert]')).toBeVisible()
-  const session = (await page.context().cookies()).find((cookie) => cookie.name === 'vg2c_workspace')!
-  await writeFile(join(process.env.VG2C_TEST_ROOT!, 'workspaces', session.value, dirname(reopenedDocument.output_path), 'renamed.csv'), 'value\nverified\n')
-  await page.getByRole('button', { name: 'Preview CSV', exact: true }).first().click()
-  await expect(page.getByRole('cell', { name: 'verified', exact: true })).toBeVisible()
+  await expect(page.locator('.file-effect-row').first()).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('file-flow.png'), fullPage: true })
 
   await pane(page, 'Configuration')
@@ -275,7 +269,8 @@ test('Email context limits bulk edits to enable state and accepts image attachme
   await expect(page.getByRole('combobox', { name: /Attachments 1/i })).toHaveValue('inputs/chart.png')
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
-  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.getByText('Changes validated', { exact: true })).toBeVisible()
+  await page.keyboard.press('Control+s')
   await expect(page.getByText('No pending changes', { exact: true })).toBeVisible()
 
   const reopened = await page.request.post('/api/documents/open', {
@@ -286,6 +281,70 @@ test('Email context limits bulk edits to enable state and accepts image attachme
   const email = document.semantic_operations.find((operation) => operation.capabilities.includes('email'))
   expect(email?.bindings.find((binding) => binding.name === 'enabled')?.value).toBe(false)
   expect(email?.bindings.find((binding) => binding.name === 'attachments')?.value).toEqual(['inputs/chart.png'])
+})
+
+test('independent writes reorder in saved execution order', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  const name = 'reorder.txt'
+  await uploadAndTranslate(page, name,
+    '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.txt\n</OPTIONS>\nfirst\n'
+    + '<---- New Query ---->\n'
+    + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=second.txt\n</OPTIONS>\nsecond\n'
+    + '<---- New Query ---->\n')
+  const original = await currentDocument(page, name)
+  expect(original.semantic_operations).toHaveLength(2)
+  const first = original.semantic_operations[0]
+  const second = original.semantic_operations[1]
+  await page.locator(`[data-semantic-tree-item="${first.id}"]`).locator('..').getByRole('button', { name: /Move .* down/ }).click()
+  await expect.poll(async () => (await currentDocument(page, name)).semantic_operations[0].id).toBe(second.id)
+  await expect(page.getByText('Generate required', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Generate', exact: true }).click()
+  await expect(page.getByText('Generated', { exact: true })).toBeVisible()
+})
+
+test('SQLite choices come from uploaded table headers and drive typed SQL edits', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  for (const [name, csv] of [
+    ['people.csv', 'id,name\n1,Alice\n'],
+    ['teams.csv', 'id,team\n1,Blue\n'],
+  ]) {
+    const response = await page.request.post('/api/workspace/files', {
+      multipart: {
+        files: { name, mimeType: 'text/csv', buffer: Buffer.from(csv) },
+        paths: name,
+      },
+    })
+    expect(response.ok()).toBeTruthy()
+  }
+  const inventory = await page.request.get('/api/workspace/files')
+  expect((await inventory.json()).map((file: { path: string }) => file.path)).toEqual(expect.arrayContaining(['inputs/people.csv', 'inputs/teams.csv']))
+  await uploadAndTranslate(
+    page,
+    'typed-sql.txt',
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n/TABLE=inputs/people.csv:people\n'
+    + '/TABLE=inputs/teams.csv:teams\n/HEADERS=output_only\n</OPTIONS>\n'
+    + 'SELECT p.id FROM people p\n<---- New Query ---->\n',
+  )
+  await selectSemanticOperation(page, 'typed-sql.txt', (operation) => operation.bindings.some((binding) => binding.capabilities.includes('structured-sql')))
+  await pane(page, 'Configuration')
+  await expect(page.getByRole('combobox', { name: 'Input files 1' })).toHaveValue('inputs/people.csv')
+  await expect(page.getByText('Table: people', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add column' }).click()
+  await page.getByRole('combobox', { name: 'Column', exact: true }).selectOption({ label: 'p.name' })
+  await page.getByRole('button', { name: 'Add column', exact: true }).last().click()
+  await expect(page.locator('.sql-column-label', { hasText: 'name' })).toBeVisible()
+  await expect(page.getByText('output_only', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: /Joins/ }).click()
+  await page.getByRole('button', { name: 'Add join' }).click()
+  await page.getByRole('combobox', { name: 'Table', exact: true }).selectOption({ label: 'teams' })
+  await page.getByRole('combobox', { name: 'Left key', exact: true }).selectOption({ label: 'p.id' })
+  await page.getByRole('combobox', { name: 'Right key', exact: true }).selectOption({ label: 'teams.id' })
+  await page.getByRole('button', { name: 'Add join', exact: true }).last().click()
+  await expect(page.locator('.sql-join-row')).toContainText('teams')
 })
 
 test('Embedded Python edits stay modal and must validate before commit', async ({ page }, testInfo) => {

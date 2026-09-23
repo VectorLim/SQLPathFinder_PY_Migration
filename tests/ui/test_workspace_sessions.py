@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from starlette.datastructures import UploadFile
 
+from vg2c_ui.api.models import SqlActionRequest, SqlModelRequest
 from vg2c_ui.services.document_store import DocumentStore
 from vg2c_ui.services.workspaces import WorkspaceManager, WorkspacePathError
 
@@ -108,6 +109,47 @@ def test_document_file_choices_use_each_users_server_workspace(tmp_path: Path):
     assert "inputs/private.csv" not in inputs.file_choices
     assert "generated/inputs/owner.csv" not in inputs.file_choices
     assert str(tmp_path) not in document.model_dump_json()
+
+
+def test_sql_column_choices_read_uploaded_server_csv_headers(tmp_path: Path):
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    workspace, _ = manager.resolve_or_create(None)
+    source = workspace.root / "inputs" / "script.txt"
+    source.write_text(
+        (FIXTURES / "script_short.txt")
+        .read_text(encoding="utf-8")
+        .replace("/TABLE=ww_yield.csv", "/TABLE=inputs/ww_yield.csv:ww_yield")
+        .replace("/HEADERS=owner", "/HEADERS=output_only"),
+        encoding="utf-8",
+    )
+    (workspace.root / "inputs" / "ww_yield.csv").write_text(
+        "owner,amount\nalice,42\n", encoding="utf-8"
+    )
+    store = DocumentStore(
+        workspace.root,
+        inventory_paths=lambda: (
+            item.path for item in manager.list_files(workspace) if item.role == "data"
+        ),
+    )
+    document = store.translate("inputs/script.txt", "generated/script.py").view
+    sql = next(
+        binding
+        for operation in document.semantic_operations
+        for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    model = store.inspect_sql(SqlModelRequest(**document.model_dump(), binding_id=sql.id))
+    assert [item.label for item in model.column_choices] == ["a0.owner", "a0.amount"]
+    assert all("output_only" not in item.label for item in model.column_choices)
+    change = store.apply_sql_action(
+        SqlActionRequest(
+            **document.model_dump(),
+            binding_id=sql.id,
+            action="add-selection",
+            arguments={"column_choice_id": model.column_choices[1].id},
+        )
+    ).change
+    assert '"a0"."amount"' in change.value
 
 
 def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):

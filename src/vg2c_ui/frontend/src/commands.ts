@@ -21,7 +21,8 @@ interface CommandActions {
   undo: () => void
   redo: () => void
   validate: () => void
-  apply: () => void
+  save: () => void
+  generate: () => void
   reload: () => void
   expandAll: () => void
   collapseAll: () => void
@@ -143,17 +144,23 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
       id: 'editing.preview',
       group: 'Editing',
       label: 'Preview changes',
-      shortcut: 'Ctrl/⌘+S',
       disabled: !changeActions.canPreview,
       run: actions.validate,
     },
     {
-      id: 'editing.apply',
+      id: 'editing.save',
       group: 'Editing',
-      label: 'Apply validated changes',
+      label: 'Save changes',
       shortcut: 'Ctrl/⌘+S',
-      disabled: !changeActions.canApply,
-      run: actions.apply,
+      disabled: !changeActions.canSave,
+      run: actions.save,
+    },
+    {
+      id: 'editing.generate',
+      group: 'Editing',
+      label: 'Generate Python',
+      disabled: !changeActions.canGenerate,
+      run: actions.generate,
     },
     {
       id: 'editing.reload',

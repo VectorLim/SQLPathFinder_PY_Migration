@@ -5,7 +5,7 @@ from typing import Literal
 
 SqlLogicalConnector = Literal["AND", "OR"]
 SqlActionName = Literal[
-    "add-selection", "update-selection", "remove-selection", "move-selection",
+    "add-selection", "update-selection", "remove-selection",
     "reorder-selection", "add-filter", "update-filter", "remove-filter",
     "add-join", "update-join-type", "update-join-source",
     "update-join-predicate", "remove-join-predicate", "remove-join", "update-source",
@@ -23,10 +23,26 @@ class SqlSelection:
     id: str
     expression: str
     alias: str | None
+    display_label: str
     raw: str
     editable: bool
     read_only_reason: str | None
     span: SqlSpan
+
+
+@dataclass(frozen=True, slots=True)
+class SqlColumnChoice:
+    id: str
+    label: str
+    expression: str
+    source_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SqlTableChoice:
+    id: str
+    label: str
+    expression: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +106,8 @@ class SqlEditableModel:
     where_clause_span: SqlSpan | None
     where_body_span: SqlSpan | None
     from_clause_span: SqlSpan | None
+    column_choices: tuple[SqlColumnChoice, ...] = ()
+    table_choices: tuple[SqlTableChoice, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +122,6 @@ class SqlEditError(ValueError):
 
 __all__ = [
     "SqlActionName", "SqlEditCapabilities", "SqlEditError", "SqlEditableModel",
-    "SqlJoin", "SqlLogicalConnector", "SqlPredicate", "SqlSelection", "SqlSource",
+    "SqlColumnChoice", "SqlJoin", "SqlLogicalConnector", "SqlPredicate", "SqlSelection", "SqlSource", "SqlTableChoice",
     "SqlSpan", "SqlTransformResult",
 ]

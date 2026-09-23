@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from vg2c.emitter.models import EditorType
 from vg2c.utility_metadata import FileEffectKind, PathBase, ValueKind
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class SourceSpanView(BaseModel):
@@ -35,6 +35,8 @@ class SemanticBindingView(BaseModel):
     name: str
     display_label: str
     value: Any = None
+    symbol_id: str | None = None
+    default_symbol_id: str | None = None
     default: Any = None
     required: bool = True
     visibility: Literal["normal", "advanced", "internal"] = "normal"
@@ -52,6 +54,8 @@ class SemanticOperationView(BaseModel):
     kind: str
     display_name: str
     summary: str
+    scope_id: int | None = None
+    reorder_targets: list[int] = Field(default_factory=list)
     description: str
     parent_operation_id: str | None = None
     branch: Literal["true", "false"] | None = None
@@ -71,6 +75,7 @@ class OperationReferenceView(BaseModel):
 class SymbolReferenceView(BaseModel):
     operation_id: str
     binding_id: str
+    context: Literal["condition", "parameter", "global-value"] = "parameter"
 
 
 class SymbolView(BaseModel):
@@ -79,7 +84,7 @@ class SymbolView(BaseModel):
     kind: Literal["global", "macro", "macro-row", "unresolved"]
     value_state: Literal["known", "runtime", "unknown"]
     value: Any = None
-    condition_value: str | None = None
+    value_binding_id: str | None = None
     introduction: OperationReferenceView | None = None
     references: list[SymbolReferenceView] = Field(default_factory=list)
 
@@ -191,7 +196,6 @@ class FileEndpointView(BaseModel):
     id: str
     file_resource_id: str | None = None
     binding_id: str | None = None
-    parameter_id: str | None = None
     path: str | None
     expression: str | None
     path_base: PathBase
@@ -225,7 +229,7 @@ class DocumentView(BaseModel):
     output_hash: str
     revision: str
     compiler_hash: str
-    synchronized: bool = True
+    generation_state: Literal["current", "stale", "missing"] = "current"
     read_only_reason: str | None = None
     steps: list[StepView]
     scopes: list[ScopeView]
@@ -241,22 +245,12 @@ class DocumentView(BaseModel):
 class SemanticChangeRequest(BaseModel):
     binding_id: str
     value: Any = None
+    symbol_id: str | None = None
     reset: bool = False
-
-
-class ParameterChangeRequest(BaseModel):
-    """Legacy v4 request accepted during the frontend migration window."""
-
-    parameter_id: str
-    value: Any = None
-    reset: bool = False
-
-
-SemanticChangeInput = SemanticChangeRequest | ParameterChangeRequest
 
 
 class DocumentSnapshot(BaseModel):
-    schema_version: Literal[4, 5]
+    schema_version: Literal[6]
     source_path: str
     output_path: str
     source_hash: str
@@ -266,7 +260,12 @@ class DocumentSnapshot(BaseModel):
 
 
 class ChangeBatch(DocumentSnapshot):
-    changes: list[SemanticChangeInput] = Field(min_length=1)
+    changes: list[SemanticChangeRequest] = Field(min_length=1)
+
+
+class ReorderRequest(DocumentSnapshot):
+    source_scope_id: int
+    target_scope_id: int
 
 
 class ValidationIssueView(BaseModel):
@@ -274,7 +273,6 @@ class ValidationIssueView(BaseModel):
     code: str
     message: str
     binding_id: str | None = None
-    parameter_id: str | None = None
 
 
 class ChangePreviewView(BaseModel):
@@ -287,29 +285,14 @@ class ChangeResultView(BaseModel):
     document: DocumentView
 
 
-class CsvPreviewView(BaseModel):
-    path: str
-    columns: list[str]
-    rows: list[list[str]]
-    truncated: bool
-    size_bytes: int
-
-
 class DocumentReference(BaseModel):
     source_path: str
     output_path: str | None = None
 
 
-class CsvPreviewRequest(DocumentSnapshot):
-    effect_id: str
-    endpoint_id: str
-    expected_path: str
-    changes: list[SemanticChangeInput] = Field(default_factory=list)
-
-
 class HtmlPreviewRequest(DocumentSnapshot):
     operation_id: str
-    changes: list[SemanticChangeInput] = Field(default_factory=list)
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
 
 
 class HtmlPreviewView(BaseModel):
@@ -331,7 +314,7 @@ class BatchTranslationResponse(BaseModel):
 
 class WorkspaceDocumentRequest(DocumentSnapshot):
     document_id: str
-    changes: list[SemanticChangeInput] = Field(default_factory=list)
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
 
 
 class WorkspaceProjectionRequest(BaseModel):
@@ -394,10 +377,22 @@ class SqlSelectionView(BaseModel):
     id: str
     expression: str
     alias: str | None = None
+    display_label: str
     raw: str
     editable: bool
     read_only_reason: str | None = None
     span: SqlSpanView
+
+
+class SqlColumnChoiceView(BaseModel):
+    id: str
+    label: str
+    source_id: str
+
+
+class SqlTableChoiceView(BaseModel):
+    id: str
+    label: str
 
 
 class SqlSourceView(BaseModel):
@@ -449,9 +444,9 @@ class SqlModelView(BaseModel):
     join_types: list[str]
     logical_connectors: list[str]
     statement_span: SqlSpanView
-    before_statement: str
-    after_statement: str
     selections: list[SqlSelectionView]
+    column_choices: list[SqlColumnChoiceView] = Field(default_factory=list)
+    table_choices: list[SqlTableChoiceView] = Field(default_factory=list)
     filters: list[SqlPredicateView]
     joins: list[SqlJoinView]
     sources: list[SqlSourceView]
@@ -464,8 +459,8 @@ class SqlModelView(BaseModel):
 
 
 class SqlModelRequest(DocumentSnapshot):
-    parameter_id: str
-    changes: list[SemanticChangeInput] = Field(default_factory=list)
+    binding_id: str
+    changes: list[SemanticChangeRequest] = Field(default_factory=list)
 
 
 class SqlActionRequest(SqlModelRequest):
@@ -499,15 +494,13 @@ CONTRACT_MODELS = (
     FileEffectView,
     DocumentView,
     SemanticChangeRequest,
-    ParameterChangeRequest,
     DocumentSnapshot,
     ChangeBatch,
+    ReorderRequest,
     ValidationIssueView,
     ChangePreviewView,
     ChangeResultView,
-    CsvPreviewView,
     DocumentReference,
-    CsvPreviewRequest,
     HtmlPreviewRequest,
     HtmlPreviewView,
     BatchTranslationRequest,
@@ -522,6 +515,8 @@ CONTRACT_MODELS = (
     WorkspaceUploadPolicyView,
     SqlSpanView,
     SqlSelectionView,
+    SqlColumnChoiceView,
+    SqlTableChoiceView,
     SqlSourceView,
     SqlPredicateView,
     SqlJoinView,
@@ -535,6 +530,5 @@ CONTRACT_MODELS = (
 
 __all__ = [model.__name__ for model in CONTRACT_MODELS] + [
     "CONTRACT_MODELS",
-    "ParameterChangeRequest",
     "SCHEMA_VERSION",
 ]

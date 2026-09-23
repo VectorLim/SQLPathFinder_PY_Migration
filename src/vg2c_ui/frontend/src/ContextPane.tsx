@@ -2,13 +2,10 @@ import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ExternalLink, FileClock, Globe2, Mail } from 'lucide-react'
 
 import type {
-  CsvPreviewView,
   DocumentView,
   FileEffectView,
-  FileEndpointView,
   SemanticBindingView,
   SemanticOperationView,
-  SymbolView,
 } from './contracts.generated'
 import { effectiveBindingValue } from './workspaceState'
 
@@ -17,13 +14,8 @@ type ContextTab = 'files' | 'email' | 'globals'
 interface Props {
   document: DocumentView
   values: Record<string, unknown>
-  csv: CsvPreviewView | null
-  csvPath: string | null
-  csvError: string | null
-  csvLoading: boolean
   onNavigate: (operationId: string, focus: boolean) => void
   onEdit: (binding: SemanticBindingView, value: unknown) => void
-  onPreview: (effectId: string, endpoint: FileEndpointView) => void
 }
 
 export function ContextPane(props: Props) {
@@ -38,7 +30,7 @@ export function ContextPane(props: Props) {
     <div className="context-content">
       {tab === 'files' && <FileContext {...props} />}
       {tab === 'email' && <EmailContext key={props.document.id} document={props.document} values={props.values} onNavigate={props.onNavigate} onEdit={props.onEdit} />}
-      {tab === 'globals' && <GlobalsContext symbols={props.document.symbols} onNavigate={props.onNavigate} />}
+      {tab === 'globals' && <GlobalsContext document={props.document} values={props.values} onNavigate={props.onNavigate} onEdit={props.onEdit} />}
     </div>
   </section>
 }
@@ -71,25 +63,14 @@ function handleContextTabKey(event: KeyboardEvent<HTMLButtonElement>, index: num
   event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus()
 }
 
-function FileContext({ document, csv, csvPath, csvError, csvLoading, onNavigate, onPreview }: Props) {
+function FileContext({ document, onNavigate }: Props) {
   const lifecycleKinds = new Set<FileEffectView['kind']>(['write', 'copy', 'move', 'transform', 'append', 'delete'])
   const lifecycle = document.effects.filter((effect) => lifecycleKinds.has(effect.kind)).slice().sort((left, right) => left.order - right.order)
-  const required = document.files.filter((file) =>
-    file.producer_refs.length === 0
-    && file.consumer_refs.length > 0
-    && ['external', 'missing', 'dynamic', 'possible'].includes(file.status))
   return <div className="context-section file-context">
     <header><p>Ordered file operations, including fan-in when several inputs produce one output.</p></header>
     {lifecycle.length
-      ? lifecycle.map((effect) => <FileEffectRow key={effect.id} document={document} effect={effect} onNavigate={onNavigate} onPreview={onPreview} />)
+      ? lifecycle.map((effect) => <FileEffectRow key={effect.id} document={document} effect={effect} onNavigate={onNavigate} />)
       : <p className="empty-copy">No file lifecycle changes.</p>}
-    {required.length > 0 && <section className="required-inputs"><h3>Required Inputs</h3>{required.map((file) => <RequiredFileRow key={file.id} document={document} file={file} onNavigate={onNavigate} onPreview={onPreview} />)}</section>}
-    {csvPath && <section className="on-disk-preview" aria-label="On-disk CSV preview">
-      <h3>CSV Preview</h3><p>{csvPath}</p>
-      {csvLoading && <p role="status">Loading file…</p>}
-      {csvError && <p role="alert" className="validation-error">{csvError}</p>}
-      {csv && <CsvTable preview={csv} />}
-    </section>}
   </div>
 }
 
@@ -97,12 +78,10 @@ function FileEffectRow({
   document,
   effect,
   onNavigate,
-  onPreview,
 }: {
   document: DocumentView
   effect: FileEffectView
   onNavigate: Props['onNavigate']
-  onPreview: Props['onPreview']
 }) {
   const operation = document.semantic_operations.find((item) => item.id === effect.operation_id)
   const inputs = effect.inputs
@@ -112,7 +91,7 @@ function FileEffectRow({
       <button type="button" className="file-effect-operation" onClick={() => onNavigate(effect.operation_id, true)}>
         <ExternalLink size={13} />{operation?.display_name ?? humanizeEffect(effect.kind)}
       </button>
-      <span className="state-pill">{humanizeEffect(effect.kind)}</span>
+      <small>{humanizeEffect(effect.kind)}</small>
     </header>
     <div className="file-effect-flow" aria-label={`${inputs.length} inputs to ${outputs.length} outputs`}>
       <div className="file-endpoints">
@@ -121,7 +100,7 @@ function FileEffectRow({
       <span className="file-flow-arrow" aria-hidden="true">→</span>
       <div className="file-endpoints">
         {outputs.length
-          ? outputs.map((endpoint) => <FileEndpointChip key={endpoint.id} endpoint={endpoint} onPreview={() => onPreview(effect.id, endpoint)} />)
+          ? outputs.map((endpoint) => <FileEndpointChip key={endpoint.id} endpoint={endpoint} />)
           : <span className="file-endpoint file-endpoint--deleted">Deleted</span>}
       </div>
     </div>
@@ -136,42 +115,13 @@ function FileEffectRow({
 
 function FileEndpointChip({
   endpoint,
-  onPreview,
 }: {
-  endpoint: FileEndpointView
-  onPreview?: () => void
+  endpoint: FileEffectView['inputs'][number]
 }) {
   const label = endpoint.path ?? endpoint.expression ?? 'Dynamic path'
-  const canPreview = Boolean(onPreview && endpoint.path?.toLowerCase().endsWith('.csv'))
   return <span className={`file-endpoint file-endpoint--${endpoint.status}`}>
     <span title={label}>{label}</span>
-    {canPreview && <button type="button" onClick={onPreview}>Preview CSV</button>}
   </span>
-}
-
-function RequiredFileRow({
-  document,
-  file,
-  onNavigate,
-  onPreview,
-}: {
-  document: DocumentView
-  file: DocumentView['files'][number]
-  onNavigate: Props['onNavigate']
-  onPreview: Props['onPreview']
-}) {
-  const refs = uniqueRefs(file.consumer_refs)
-  const preview = file.path?.toLowerCase().endsWith('.csv') ? findCsvEndpoint(document, file.path) : null
-  return <article className="file-resource-row file-resource-row--compact">
-    <header><strong>{file.path ?? 'Dynamic file'}</strong><span className={`state-pill state-pill--${file.status}`}>{file.status}</span></header>
-    <div className="operation-references" aria-label="Used by">
-      {refs.map((ref) => {
-        const operation = document.semantic_operations.find((item) => item.id === ref.operation_id)
-        return <button key={`${ref.operation_id}:${ref.binding_id ?? ''}`} type="button" onClick={() => onNavigate(ref.operation_id, true)}><ExternalLink size={13} />{operation?.display_name ?? ref.operation_id}</button>
-      })}
-      {preview && <button type="button" onClick={() => onPreview(preview.effectId, preview.endpoint)}>Preview CSV</button>}
-    </div>
-  </article>
 }
 
 function humanizeEffect(kind: FileEffectView['kind']): string {
@@ -180,14 +130,6 @@ function humanizeEffect(kind: FileEffectView['kind']): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1)
 }
 
-function findCsvEndpoint(document: DocumentView, path: string): { effectId: string; endpoint: FileEndpointView } | null {
-  for (const effect of document.effects) {
-    for (const endpoint of [...effect.outputs, ...effect.inputs]) {
-      if (endpoint.path === path) return { effectId: effect.id, endpoint }
-    }
-  }
-  return null
-}
 
 function EmailContext({
   document,
@@ -238,18 +180,33 @@ function EmailContext({
   </div>
 }
 
-function GlobalsContext({ symbols, onNavigate }: { symbols: SymbolView[]; onNavigate: Props['onNavigate'] }) {
+function GlobalsContext({ document, values, onNavigate, onEdit }: {
+  document: DocumentView
+  values: Record<string, unknown>
+  onNavigate: Props['onNavigate']
+  onEdit: Props['onEdit']
+}) {
   const [query, setQuery] = useState('')
-  const filtered = useMemo(() => symbols.filter((symbol) => symbol.display_name.toLowerCase().includes(query.trim().toLowerCase())), [symbols, query])
+  const filtered = useMemo(() => document.symbols.filter((symbol) => symbol.display_name.toLowerCase().includes(query.trim().toLowerCase())), [document.symbols, query])
   return <div className="context-section globals-context">
     <header><h3>Globals & Macros</h3><p>Known values and runtime symbols used by this script.</p></header>
     <label className="search-field"><span className="sr-only">Search globals</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search globals" /></label>
-    {filtered.map((symbol) => <article key={symbol.id} className="symbol-row">
+    {filtered.map((symbol) => {
+      const binding = document.semantic_operations.flatMap((operation) => operation.bindings)
+        .find((item) => item.id === symbol.value_binding_id && item.editable)
+      return <article key={symbol.id} className="symbol-row">
       <header><strong>{symbol.display_name}</strong><span>{symbol.kind}</span></header>
-      <p>{symbol.value_state === 'known' ? String(symbol.value ?? '') : symbol.value_state === 'runtime' ? 'Resolved at runtime' : 'Value unknown'}</p>
+      {binding && symbol.value_state === 'known'
+        ? <label>Value<input type="text" aria-label={`${symbol.display_name} value`}
+            value={String(effectiveBindingValue(values, binding) ?? '')}
+            onChange={(event) => onEdit(binding, event.target.value)} /></label>
+        : <p>{symbol.value_state === 'known' ? String(symbol.value ?? '') : symbol.value_state === 'runtime' ? 'Resolved at runtime' : 'Value unknown'}</p>}
       {symbol.introduction && <button type="button" onClick={(event) => onNavigate(symbol.introduction!.operation_id, event.detail === 0)}>Definition</button>}
-      <div className="operation-references">{symbol.references.map((ref, index) => <button key={`${ref.operation_id}:${ref.binding_id}:${index}`} type="button" onClick={(event) => onNavigate(ref.operation_id, event.detail === 0)}>Reference {index + 1}</button>)}</div>
-    </article>)}
+      <div className="operation-references">{symbol.references.map((ref, index) => {
+        const operation = document.semantic_operations.find((item) => item.id === ref.operation_id)
+        return <button key={`${ref.operation_id}:${ref.binding_id}:${index}`} type="button" onClick={(event) => onNavigate(ref.operation_id, event.detail === 0)}>{operation?.display_name ?? 'Operation'} · {ref.context.replace('-', ' ')}</button>
+      })}</div>
+    </article>})}
     {!filtered.length && <p className="empty-copy">No matching globals or macros.</p>}
   </div>
 }
@@ -258,23 +215,10 @@ function isEmail(operation: SemanticOperationView): boolean {
   return operation.capabilities.includes('email')
 }
 
-function uniqueRefs<T extends { operation_id: string; binding_id: string | null }>(refs: T[]): T[] {
-  const seen = new Set<string>()
-  return refs.filter((ref) => {
-    const key = `${ref.operation_id}:${ref.binding_id ?? ''}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
 
 function toggleSet(current: Set<string>, value: string, enabled: boolean): Set<string> {
   const next = new Set(current)
   if (enabled) next.add(value)
   else next.delete(value)
   return next
-}
-
-function CsvTable({ preview }: { preview: CsvPreviewView }) {
-  return <div className="csv-preview"><small>{preview.size_bytes.toLocaleString()} bytes{preview.truncated ? ' / truncated' : ''}</small><div className="table-scroll"><table><thead><tr>{preview.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table></div></div>
 }

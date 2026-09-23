@@ -88,8 +88,12 @@ export function App() {
     if (active) void workspace.validate(active.document.id).catch(() => undefined)
   }
 
-  function applyActive() {
-    if (active) void workspace.apply(active.document.id).catch(() => undefined)
+  function saveActive() {
+    if (active) void workspace.save(active.document.id).catch(() => undefined)
+  }
+
+  function generateActive() {
+    if (active) void workspace.generate(active.document.id).catch(() => undefined)
   }
 
   function reloadActive() {
@@ -115,7 +119,8 @@ export function App() {
       undo: () => active && dispatch({ type: 'undo', tabId: active.document.id }),
       redo: () => active && dispatch({ type: 'redo', tabId: active.document.id }),
       validate: validateActive,
-      apply: applyActive,
+      save: saveActive,
+      generate: generateActive,
       reload: reloadActive,
       expandAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: true }),
       collapseAll: () => active && dispatch({ type: 'set-all-scopes', tabId: active.document.id, expanded: false }),
@@ -140,7 +145,7 @@ export function App() {
         executeCommand(commands, 'editing.redo')
       } else if (key === 's') {
         event.preventDefault()
-        if (!executeCommand(commands, 'editing.apply')) executeCommand(commands, 'editing.preview')
+        executeCommand(commands, 'editing.save')
       }
     }
     window.addEventListener('keydown', shortcut)
@@ -201,7 +206,8 @@ export function App() {
           onUndo={() => executeCommand(commands, 'editing.undo')}
           onRedo={() => executeCommand(commands, 'editing.redo')}
           onValidate={() => executeCommand(commands, 'editing.preview')}
-          onApply={() => executeCommand(commands, 'editing.apply')}
+          onSave={() => executeCommand(commands, 'editing.save')}
+          onGenerate={() => executeCommand(commands, 'editing.generate')}
           onReload={() => executeCommand(commands, 'editing.reload')}
         />
 
@@ -209,7 +215,7 @@ export function App() {
       <WorkbenchLayout
         activePane={pane}
         onActivePaneChange={setPane}
-        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
+        logic={<section id="pane-logic" className="workbench-pane logic-pane" aria-label="Script Logic"><header className="pane-heading"><ListTree size={17} aria-hidden="true" /><h2>Script Logic</h2><span>{active.document.semantic_operations.filter((operation) => operation.visibility !== 'internal').length}</span></header><div className="pane-scroll"><SemanticScriptTree document={active.document} search={search} expandedIds={active.expandedScopeIds} selectedId={active.selectedId} revealVersion={active.revealVersion} revealFocus={active.revealFocus} onSelect={selectItem} onToggle={(id, expanded) => dispatch({ type: 'toggle-scope', tabId: active.document.id, scopeId: id, expanded })} onReorder={(source, target) => { void workspace.reorder(active.document.id, source, target) }} reorderDisabled={Boolean(active.document.read_only_reason) || active.status === 'saving' || active.status === 'generating' || Object.keys(active.edits.values).length > 0 || Object.keys(active.fieldDrafts).length > 0} /><DocumentDiagnostics diagnostics={active.document.diagnostics} /></div></section>}
         configuration={<section id="pane-config" className="workbench-pane configuration-pane" aria-label="Configuration">
           <header className="pane-heading"><Settings2 size={17} aria-hidden="true" /><h2>Configuration</h2></header>
           <div className="pane-scroll">
@@ -224,13 +230,8 @@ export function App() {
         context={<section id="pane-context" className="workbench-pane context-workbench-pane" aria-label="Context"><header className="pane-heading"><GitBranch size={17} aria-hidden="true" /><h2>Context</h2></header><div className="pane-scroll"><ContextPane
           document={active.document}
           values={active.edits.values}
-          csv={active.csv}
-          csvPath={active.csvArtifactPath}
-          csvError={active.csvError}
-          csvLoading={Boolean(active.csvRequestId)}
           onNavigate={(operationId, focus) => navigateOperation(active.document.id, operationId, focus)}
           onEdit={(binding, value) => workspace.edit(active.document.id, binding, value)}
-          onPreview={(effectId, endpoint) => void workspace.loadCsv(active.document.id, effectId, endpoint).catch(() => undefined)}
         /></div></section>}
       />
     </section> : <section className="empty-state" id="script-workspace" aria-label="Translated script editor"><strong>No translated file open</strong><span>Upload and translate a VG2 source file to begin.</span></section>}
@@ -244,5 +245,5 @@ function DocumentDiagnostics({ diagnostics }: { diagnostics: DiagnosticView[] })
   return <details className="diagnostics" open={diagnostics.some((item) => item.level === 'error')}><summary>Diagnostics <span>{diagnostics.length}</span></summary><div>{diagnostics.length ? diagnostics.map((item, index) => <p key={`${item.code}-${index}`} className={`diagnostic diagnostic--${item.level}`}><strong>{item.code}</strong> {item.message} {item.location && <small>{item.location}</small>}</p>) : <p className="empty-copy">No diagnostics.</p>}</div></details>
 }
 
-function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Changes validated' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}{preview.valid && <p className="empty-copy">The current draft is valid and ready to apply.</p>}</div></details> }
+function ChangePreview({ preview }: { preview: ChangePreviewView }) { return <details className={`change-preview${preview.valid ? ' is-valid' : ' is-invalid'}`} open={!preview.valid}><summary>{preview.valid ? 'Changes validated' : 'Changes need attention'}</summary><div>{preview.issues.map((issue) => <p className="validation-error" key={`${issue.code}-${issue.message}`}>{issue.message}</p>)}{preview.valid && <p className="empty-copy">The current draft is valid and ready to save.</p>}</div></details> }
 

@@ -60,6 +60,17 @@ def test_rows_in_file_is_one_composite_operation_and_defines_symbol(tmp_path):
     assert count.introduction.operation_id == row_count.id
 
 
+def test_source_comments_attach_to_visible_operation_once(tmp_path):
+    result = _compile(
+        tmp_path,
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=note.txt\n</OPTIONS>\n"
+        "# Review this output before sending\ncontent\n<---- New Query ---->\n",
+    )
+    operations = build_semantic_model(result).operations
+    assert len(operations) == 1
+    assert operations[0].comments == ("Review this output before sending",)
+
+
 def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(tmp_path):
     result = _compile(tmp_path, _condition_source())
     model = build_semantic_model(result)
@@ -279,7 +290,38 @@ def test_condition_bindings_and_symbols_are_frontend_ready(tmp_path):
     assert by_name["rhs"].capabilities == ("symbol-or-literal",)
     assert by_name["op"].capabilities == ("condition-operator",)
     assert by_name["conj"].capabilities == ("condition-connector",)
-    assert count.condition_value == "VAR(COUNT)"
+    assert by_name["lhs"].symbol_id == count.id
+    assert by_name["rhs"].symbol_id is None
+    assert count.value_binding_id is None
+    assert by_name["lhs"].default_symbol_id == count.id
+
+
+def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
+    result = _compile(tmp_path, _condition_source())
+    model = build_semantic_model(result)
+    condition = next(op for op in model.operations if op.kind == "condition")
+    bindings = {binding.name: binding for binding in condition.bindings}
+    count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
+
+    for operator, token in (("GT", 'COUNT'), ("EQS", 'VAR(COUNT)')):
+        projection = project_changes(result, [
+            SemanticChange(bindings["op"].id, operator),
+            SemanticChange(bindings["rhs"].id, symbol_id=count.id),
+        ])
+        assert projection.valid
+        assert projection.effective_values[bindings["rhs"].id] == token
+        assert "ctx.macro.named('COUNT')" in projection.source
+
+    assert not project_changes(result, [
+        SemanticChange(bindings["rhs"].id, "literal", symbol_id=count.id)
+    ]).valid
+    assert not project_changes(result, [
+        SemanticChange(bindings["rhs"].id, symbol_id="symbol:MISSING")
+    ]).valid
+
+    operator_only = project_changes(result, [SemanticChange(bindings["op"].id, "EQS")])
+    assert operator_only.valid
+    assert "ctx.macro.named('COUNT') == '0'" in operator_only.source
 
 
 def test_rows_in_file_target_macro_is_editable(tmp_path):

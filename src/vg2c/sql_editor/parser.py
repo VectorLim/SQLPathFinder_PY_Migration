@@ -305,23 +305,55 @@ def _parse_selection(
             alias = source[after[0].start : after[0].end]
 
     expression = source[expression_span.start : expression_span.end].strip()
+    expression_tokens = [
+        token for token in local if token.end <= expression_span.end
+    ]
+    simple_label = _simple_column_label(expression_tokens)
+    display_label = (
+        unquote_identifier(alias)
+        if alias is not None
+        else simple_label or f"Expression {index + 1}"
+    )
     raw = source[span.start : span.end]
-    editable = bool(expression) and not has_comment
+    complex_unaliased = simple_label is None and alias is None
+    editable = bool(expression) and not has_comment and not complex_unaliased
     return SqlSelection(
         id=f"selection-{index}",
         expression=expression,
         alias=alias,
+        display_label=display_label,
         raw=raw,
         editable=editable,
         read_only_reason=(
             "Selections containing comments are preserved raw."
             if has_comment
+            else "Complex expressions without an alias are preserved as raw SQL."
+            if complex_unaliased
             else None
             if editable
             else "Selection is not safely editable."
         ),
         span=span,
     )
+
+
+def _simple_column_label(tokens: list[SqlToken]) -> str | None:
+    if not tokens or len(tokens) % 2 != 1:
+        return None
+    if any(
+        not _is_identifier_token(token) if index % 2 == 0 else token.text != "."
+        for index, token in enumerate(tokens)
+    ):
+        return None
+    return unquote_identifier(tokens[-1].text)
+
+
+def unquote_identifier(value: str) -> str:
+    if value.startswith("[") and value.endswith("]"):
+        return value[1:-1].replace("]]", "]")
+    if value.startswith(('"', "`")) and value.endswith(value[0]):
+        return value[1:-1].replace(value[0] * 2, value[0])
+    return value
 
 
 def _parse_where(

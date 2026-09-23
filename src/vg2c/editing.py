@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import difflib
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from vg2c.compilation import CompilationResult
@@ -14,13 +14,19 @@ from vg2c.emitter.models import (
     build_step_emission,
 )
 from vg2c.operands import IfThen, RunLoop, StartMacro
-from vg2c.semantics import EditableBinding, WorkflowOperation, build_semantic_model
+from vg2c.semantics import (
+    EditableBinding,
+    WorkflowOperation,
+    build_semantic_model,
+    condition_symbol_token,
+)
 
 
 @dataclass(frozen=True, slots=True, init=False)
 class SemanticChange:
     binding_id: str
     value: Any = None
+    symbol_id: str | None = None
     reset: bool = False
 
     def __init__(
@@ -29,6 +35,7 @@ class SemanticChange:
         value: Any = None,
         reset: bool = False,
         *,
+        symbol_id: str | None = None,
         parameter_id: str | None = None,
     ) -> None:
         identity = binding_id if binding_id is not None else parameter_id
@@ -36,6 +43,7 @@ class SemanticChange:
             raise ValueError("A binding_id is required.")
         object.__setattr__(self, "binding_id", identity)
         object.__setattr__(self, "value", value)
+        object.__setattr__(self, "symbol_id", symbol_id)
         object.__setattr__(self, "reset", reset)
 
     @property
@@ -66,6 +74,7 @@ class ChangeProjection:
     source: str
     values: tuple[SemanticChange, ...]
     issues: tuple[ValidationIssue, ...]
+    effective_values: dict[str, Any] = field(default_factory=dict)
 
     @property
     def valid(self) -> bool:
@@ -101,6 +110,8 @@ def project_changes(
     requested = tuple(changes)
     model = build_semantic_model(result)
     semantic_bindings = {binding.id: binding for binding in model.bindings}
+    symbols = {symbol.id: symbol for symbol in model.symbols}
+    requested_by_id = {change.binding_id: change for change in requested}
 
     emitted_bindings: dict[str, list[EmittedParameter]] = {}
     for step in result.emitted.steps:
@@ -110,13 +121,14 @@ def project_changes(
     issues: list[ValidationIssue] = []
     replacements: dict[tuple[int, int], str] = {}
     accepted: list[SemanticChange] = []
+    effective_values: dict[str, Any] = {}
     seen: dict[str, str] = {}
 
     for change in requested:
         binding_id = change.binding_id
         if binding_id in seen:
             if binding_id.startswith("global:"):
-                if seen[binding_id] == repr((change.reset, change.value)):
+                if seen[binding_id] == repr((change.reset, change.value, change.symbol_id)):
                     continue
                 issues.append(
                     ValidationIssue(
@@ -135,7 +147,7 @@ def project_changes(
             )
             continue
 
-        seen[binding_id] = repr((change.reset, change.value))
+        seen[binding_id] = repr((change.reset, change.value, change.symbol_id))
         binding = semantic_bindings.get(binding_id)
         parameters = emitted_bindings.get(binding_id, [])
 
@@ -154,7 +166,49 @@ def project_changes(
             )
             continue
 
-        value = binding.value if change.reset else change.value
+        if change.symbol_id is not None:
+            if change.reset or change.value is not None:
+                issues.append(ValidationIssue(
+                    code="ambiguous-symbol-change",
+                    message="Choose a literal value or a symbol, not both.",
+                    binding_id=binding_id,
+                ))
+                continue
+            symbol = symbols.get(change.symbol_id)
+            if symbol is None or symbol.kind == "unresolved":
+                issues.append(ValidationIssue(
+                    code="unknown-symbol",
+                    message="Selected symbol is not available in this document.",
+                    binding_id=binding_id,
+                ))
+                continue
+            if binding.source_kind != "condition" or binding.name not in {
+                "lhs", "rhs", "lhs2", "rhs2"
+            }:
+                issues.append(ValidationIssue(
+                    code="ineligible-symbol",
+                    message="This binding cannot use the selected symbol.",
+                    binding_id=binding_id,
+                ))
+                continue
+            operator_name = "op2" if binding.name.endswith("2") else "op"
+            operator_id = f"{binding.owner_operation_id}:{operator_name}"
+            operator_change = requested_by_id.get(operator_id)
+            operator_binding = semantic_bindings.get(operator_id)
+            operator = (
+                operator_change.value
+                if operator_change and not operator_change.reset
+                else operator_binding.value if operator_binding else None
+            )
+            try:
+                value = condition_symbol_token(symbol, operator)
+            except ValueError as exc:
+                issues.append(ValidationIssue(
+                    code="ineligible-symbol", message=str(exc), binding_id=binding_id
+                ))
+                continue
+        else:
+            value = binding.value if change.reset else change.value
         if binding.source_kind == "parameter":
             binding_issues = [
                 issue
@@ -175,6 +229,7 @@ def project_changes(
             continue
 
         accepted.append(change)
+        effective_values[binding_id] = value
         if binding.source_kind == "parameter":
             for parameter in parameters:
                 if parameter.source_range is not None:
@@ -182,18 +237,36 @@ def project_changes(
                         parameter.source_range.start_offset,
                         parameter.source_range.end_offset,
                     )
-                    replacements[span] = _serialize_parameter(parameter, change.value)
+                    replacements[span] = _serialize_parameter(parameter, value)
         elif binding.source_kind == "rows-in-file" and binding.source_range is not None:
             span = (binding.source_range.start_offset, binding.source_range.end_offset)
-            replacements[span] = repr(change.value)
+            replacements[span] = repr(value)
 
-    accepted_values = {change.binding_id: change.value for change in accepted}
+    accepted_values = effective_values
+    for operation in model.operations:
+        if operation.kind != "condition":
+            continue
+        by_name = {binding.name: binding for binding in operation.bindings}
+        for operator_name, operand_names in (("op", ("lhs", "rhs")), ("op2", ("lhs2", "rhs2"))):
+            operator_binding = by_name.get(operator_name)
+            if operator_binding is None or operator_binding.id not in accepted_values:
+                continue
+            for operand_name in operand_names:
+                operand = by_name.get(operand_name)
+                if operand is None or operand.id in accepted_values or operand.symbol_id is None:
+                    continue
+                symbol = symbols.get(operand.symbol_id)
+                if symbol is not None and symbol.kind != "unresolved":
+                    accepted_values[operand.id] = condition_symbol_token(
+                        symbol, accepted_values[operator_binding.id]
+                    )
     _validate_changed_controls(result, model.operations, accepted_values, issues)
     if issues:
         return ChangeProjection(
             source=result.emitted.source,
             values=tuple(accepted),
             issues=tuple(issues),
+            effective_values=accepted_values,
         )
 
     _project_control_replacements(result, model.operations, accepted_values, replacements)
@@ -219,6 +292,7 @@ def project_changes(
         source=candidate,
         values=tuple(accepted),
         issues=tuple(issues),
+        effective_values=accepted_values,
     )
 
 
