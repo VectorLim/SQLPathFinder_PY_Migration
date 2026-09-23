@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './guards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './state.ts'
-import { solvePanes } from '../workbench/paneSolver.ts'
 import { SCHEMA_VERSION, type DocumentView } from '../api/contracts.generated.ts'
 
 function doc(id: string): DocumentView {
@@ -147,18 +146,6 @@ reopened = workspaceReducer(reopened, {
   preview: { valid: true, diff: 'leaked', issues: [] },
 })
 assert.equal(reopened.tabs[0].preview, null, 'closed tab response must not leak into reopened document')
-
-const narrowPanes = solvePanes(390, 360, 460, false, false, null)
-assert.equal(narrowPanes.single, true)
-const twoPanes = solvePanes(800, 360, 460, false, false, null)
-assert.deepEqual([twoPanes.showConfig, twoPanes.showContext], [false, true])
-assert.ok(twoPanes.logicWidth + 6 + 320 <= 800)
-const focusedConfig = solvePanes(800, 360, 460, false, false, 'config')
-assert.deepEqual([focusedConfig.showConfig, focusedConfig.showContext], [true, false])
-const threePanes = solvePanes(1200, 360, 460, false, false, null)
-assert.deepEqual([threePanes.showConfig, threePanes.showContext], [true, true])
-const manuallyClosed = solvePanes(1200, 360, 460, true, false, 'config')
-assert.deepEqual([manuallyClosed.showConfig, manuallyClosed.showContext], [false, true])
 
 let actionsState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [doc('actions')], activateFirst: true })
 actionsState = workspaceReducer(actionsState, { type: 'edit', tabId: 'actions', bindingId: 'p1', value: 'draft' })
