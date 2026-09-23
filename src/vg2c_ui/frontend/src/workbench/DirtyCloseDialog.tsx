@@ -4,7 +4,7 @@ import { useRef } from 'react'
 
 import { baseName } from './pathDisplay'
 import type { TabState } from '../workspace/state'
-import { useModalDialog } from '../useModalDialog'
+import { useModalDialog } from '../shared/hooks/useModalDialog'
 
 interface Props {
   tab: TabState | null

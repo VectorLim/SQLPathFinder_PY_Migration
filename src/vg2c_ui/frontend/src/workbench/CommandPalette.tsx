@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import type { CommandGroup, WorkbenchCommand } from './commands'
-import { useModalDialog } from '../useModalDialog'
+import { useModalDialog } from '../shared/hooks/useModalDialog'
 import './commandPalette.css'
 
 interface Props {
