@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { uploadWorkspaceFile } from './api/client'
+import { uploadWorkspaceFile } from '../../api/client'
 import type {
   BatchTranslationResponse,
   DiagnosticView,
   WorkspaceFileView,
   WorkspaceUploadPolicyView,
-} from './api/contracts.generated'
+} from '../../api/contracts.generated'
 
 export type UploadQueueStatus = 'queued' | 'uploading' | 'uploaded' | 'failed'
 export type IntakeNotice = { tone: 'info' | 'error'; message: string }
