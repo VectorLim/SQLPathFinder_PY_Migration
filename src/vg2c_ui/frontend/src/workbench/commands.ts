@@ -1,5 +1,5 @@
 import { baseName } from './pathDisplay'
-import type { TabState } from '../workspace/state'
+import { allExpandableScopesExpanded, expandableScopeIds, type TabState } from '../workspace/state'
 import { getChangeActionState } from '../workspace/guards'
 
 export type CommandGroup = 'Workspace' | 'Navigation' | 'Editing' | 'View'
@@ -24,8 +24,7 @@ interface CommandActions {
   save: () => void
   generate: () => void
   reload: () => void
-  expandAll: () => void
-  collapseAll: () => void
+  toggleAllScopes: () => void
 }
 
 interface WorkspaceCommands {
@@ -170,26 +169,17 @@ export function buildCommands({ tabs, active, actions, workspace }: BuildCommand
     },
   )
 
-  const operations = active?.document.semantic_operations ?? []
-  const hasGroups = operations.some((operation) =>
-    operations.some((child) => child.parent_operation_id === operation.id),
-  )
-  commands.push(
-    {
-      id: 'view.expand-all',
-      group: 'View',
-      label: 'Expand all groups',
-      disabled: !hasGroups,
-      run: actions.expandAll,
-    },
-    {
-      id: 'view.collapse-all',
-      group: 'View',
-      label: 'Collapse all groups',
-      disabled: !hasGroups,
-      run: actions.collapseAll,
-    },
-  )
+  const scopeIds = active ? expandableScopeIds(active.document) : []
+  const allExpanded = active
+    ? allExpandableScopesExpanded(active.document, active.expandedScopeIds)
+    : false
+  commands.push({
+    id: 'view.toggle-all-scopes',
+    group: 'View',
+    label: allExpanded ? 'Collapse all groups' : 'Expand all groups',
+    disabled: !scopeIds.length,
+    run: actions.toggleAllScopes,
+  })
 
   return commands
 }
