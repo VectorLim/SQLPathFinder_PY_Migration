@@ -40,7 +40,13 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         workspace, _ = manager.resolve_or_create(request.cookies.get(manager.cookie_name))
         request.state.workspace = workspace
         request.state.document_store = DocumentStore(
-            workspace.root, expose_relative_paths=True
+            workspace.root,
+            expose_relative_paths=True,
+            inventory_paths=lambda: (
+                item.path
+                for item in manager.list_files(workspace)
+                if item.role != "source" and not item.path.endswith(".py")
+            ),
         )
         response = await call_next(request)
         # Renew the browser session on every workspace API call so cookie expiry

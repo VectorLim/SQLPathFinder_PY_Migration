@@ -148,14 +148,12 @@ export function App() {
   })
 
   const selectedOperation = active?.document.semantic_operations.find((operation) => operation.id === active.selectedId)
-  const knownFiles = [...new Set([...(fileInventory.files.map((file) => file.path)), ...(active?.document.files.flatMap((file) => file.path ? [file.path] : []) ?? [])])]
   const pendingCloseTab = state.tabs.find((tab) => tab.document.id === pendingCloseId) ?? null
   const hasTabs = state.tabs.length > 0
   const editorSession = active ? {
     values: active.edits.values,
     saving: active.status === 'saving',
     resources: {
-      knownFiles,
       symbols: active.document.symbols,
       conditionOperators: active.document.condition_operators,
     },
@@ -167,6 +165,7 @@ export function App() {
       uploadFile: async (file) => {
         const saved = await uploadWorkspaceFile(file)
         await fileInventory.refresh()
+        await workspace.refreshFileChoices(active.document.id)
         return saved.path
       },
       edit: ({ binding, value, clearDraftPaths }) => workspace.edit(active.document.id, binding, value, clearDraftPaths),

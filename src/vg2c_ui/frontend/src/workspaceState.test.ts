@@ -46,6 +46,29 @@ const projection = workspaceProjectionRequest(state)
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'a')?.changes, [{ binding_id: 'p1', value: 'draft', reset: false }])
 assert.deepEqual(projection.documents.find((item) => item.document_id === 'b')?.changes, [])
 
+const fileDoc = doc('files')
+fileDoc.semantic_operations = [{
+  id: 'copy', kind: 'copy', display_name: 'Copy', summary: '', description: '',
+  parent_operation_id: null, branch: null, source_span: { file: null, start_line: 1, end_line: 1 },
+  capabilities: [], comments: [], validation_state: 'valid', visibility: 'normal',
+  bindings: [{
+    id: 'source', owner_operation_id: 'copy', name: 'src', display_label: 'Source',
+    value: '', default: null, required: true, visibility: 'normal', capabilities: ['file-input'],
+    validation_state: 'valid', resettable: true, editable: true, read_only_reason: null,
+    value_schema: null, file_choices: [],
+  }],
+}]
+let fileState = workspaceReducer(initialWorkspaceState, { type: 'merge-documents', documents: [fileDoc] })
+fileState = workspaceReducer(fileState, { type: 'edit', tabId: 'files', bindingId: 'source', value: 'draft.csv' })
+const refreshedFiles = structuredClone(fileDoc)
+refreshedFiles.semantic_operations[0].bindings[0].file_choices = ['inputs/uploaded.csv']
+fileState = workspaceReducer(fileState, {
+  type: 'refresh-file-choices', tabId: 'files', instanceId: fileState.tabs[0].instanceId,
+  document: refreshedFiles,
+})
+assert.deepEqual(fileState.tabs[0].document.semantic_operations[0].bindings[0].file_choices, ['inputs/uploaded.csv'])
+assert.equal(fileState.tabs[0].edits.values.source, 'draft.csv', 'upload refresh must preserve unsaved edits')
+
 const beforeB = state.tabs.find((tab) => tab.document.id === 'b')!
 const navigationDoc = doc('navigation')
 navigationDoc.semantic_operations = [

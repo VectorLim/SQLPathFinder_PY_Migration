@@ -9,8 +9,9 @@ from vg2c_ui.api.models import (
     BatchTranslationRequest,
     ChangeBatch,
     CsvPreviewRequest,
-    HtmlPreviewRequest,
+    DocumentSnapshot,
     DocumentView,
+    HtmlPreviewRequest,
     ParameterChangeRequest,
     SemanticChangeRequest,
     SqlModelRequest,
@@ -171,7 +172,7 @@ def test_parameter_change_uses_core_preview_apply_and_reopens_with_effective_val
         store.preview(batch)
 
 
-def test_apply_persists_only_validated_changes_in_v3_sidecar(tmp_path):
+def test_apply_persists_only_validated_changes_in_v4_sidecar(tmp_path):
     source = _copy_fixture(tmp_path)
     store = DocumentStore(tmp_path)
     document = store.translate(str(source)).view
@@ -180,10 +181,10 @@ def test_apply_persists_only_validated_changes_in_v3_sidecar(tmp_path):
 
     sidecar = read_sidecar(Path(applied.document.output_path))
     assert sidecar is not None
-    assert sidecar.schema_version == SIDECAR_VERSION == 3
+    assert sidecar.schema_version == SIDECAR_VERSION == 4
     assert sidecar.source_hash == applied.document.source_hash
-    assert sidecar.output_hash == applied.document.output_hash
-    assert [(item.binding_id, item.value) for item in sidecar.changes] == [
+    assert sidecar.last_generated_hash == applied.document.output_hash
+    assert [(item.binding_id, item.value) for item in sidecar.value_changes] == [
         (parameter.id, "persisted edit")
     ]
     assert "steps" not in sidecar.model_dump()
@@ -191,7 +192,7 @@ def test_apply_persists_only_validated_changes_in_v3_sidecar(tmp_path):
     assert "output_path" not in sidecar.model_dump()
 
 
-def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
+def test_v2_sidecar_reopens_and_next_save_upgrades_to_v4(tmp_path):
     source = _copy_fixture(tmp_path)
     store = DocumentStore(tmp_path)
     document = store.translate(str(source)).view
@@ -205,7 +206,7 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
             {
                 "schema_version": 2,
                 "source_hash": current["source_hash"],
-                "output_hash": current["output_hash"],
+                "output_hash": current["last_generated_hash"],
                 "changes": [
                     {"parameter_id": parameter.id, "value": "legacy edit"}
                 ],
@@ -218,8 +219,8 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
 
     legacy = read_sidecar(output)
     assert legacy is not None
-    assert legacy.schema_version == 3
-    assert [(item.binding_id, item.value) for item in legacy.changes] == [
+    assert legacy.schema_version == 4 and legacy.legacy_version == 2
+    assert [(item.binding_id, item.value) for item in legacy.value_changes] == [
         (parameter.id, "legacy edit")
     ]
 
@@ -236,12 +237,101 @@ def test_v2_sidecar_reopens_and_next_save_upgrades_to_v3(tmp_path):
     )
     assert reopened_parameter.value == "legacy edit"
 
-    upgraded = store.apply(_batch(reopened, parameter.id, "upgraded edit")).document
+    upgraded = store.save(_batch(reopened, parameter.id, "upgraded edit")).document
     payload = json.loads(sidecar_path(Path(upgraded.output_path)).read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 3
-    assert payload["changes"] == [
-        {"binding_id": parameter.id, "value": "upgraded edit"}
+    assert payload["schema_version"] == 4
+    assert payload["value_changes"] == [
+        {"binding_id": parameter.id, "value": "upgraded edit", "symbol_id": None}
     ]
+
+
+def test_v3_sidecar_migrates_only_on_explicit_save(tmp_path):
+    source = _copy_fixture(tmp_path)
+    store = DocumentStore(tmp_path)
+    original = store.translate(str(source)).view
+    parameter = _editable_string(original)
+    applied = store.apply(_batch(original, parameter.id, "legacy v3")).document
+    output = Path(applied.output_path)
+    path = sidecar_path(output)
+    path.write_text(
+        json.dumps({
+            "schema_version": 3,
+            "source_hash": applied.source_hash,
+            "output_hash": applied.output_hash,
+            "changes": [{"binding_id": parameter.id, "value": "legacy v3"}],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    before = path.read_bytes()
+    reopened = store.open_document(source, output).view
+    assert reopened.synchronized
+    assert path.read_bytes() == before
+    store.save(_batch(reopened, parameter.id, "saved v4"))
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 4
+
+
+def test_save_keeps_output_stale_and_generate_uses_only_saved_state(tmp_path):
+    source = _copy_fixture(tmp_path)
+    store = DocumentStore(tmp_path)
+    original = store.translate(str(source)).view
+    output = Path(original.output_path)
+    before = output.read_bytes()
+    target = next(
+        binding
+        for operation in original.semantic_operations
+        for binding in operation.bindings
+        if binding.name == "output"
+    )
+    saved = store.save(_batch(original, target.id, "saved.csv")).document
+    assert output.read_bytes() == before
+    assert saved.synchronized
+    assert store._generation_state(output, "different", read_sidecar(output)) == "stale"
+    assert saved.effects[0].outputs[0].path == "saved.csv"
+
+    sql = next(
+        binding
+        for operation in saved.semantic_operations
+        for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    model = store.inspect_sql(SqlModelRequest(**saved.model_dump(), parameter_id=sql.id))
+    assert model.selections
+    store.preview(_batch(saved, target.id, "another.csv"))
+    workspace = store.project_workspace(
+        WorkspaceProjectionRequest(documents=[
+            WorkspaceDocumentRequest(document_id=saved.id, **saved.model_dump())
+        ])
+    )
+    assert workspace.documents[0].effects[0].outputs[0].path == "saved.csv"
+
+    persisted = read_sidecar(output)
+    generated = store.generate(DocumentSnapshot.model_validate(saved.model_dump())).document
+    assert output.read_bytes() != before
+    assert generated.synchronized
+    assert read_sidecar(output).value_changes == persisted.value_changes
+    assert read_sidecar(output).last_generated_hash == generated.output_hash
+
+
+def test_missing_generated_output_remains_editable_after_save(tmp_path):
+    source = _copy_fixture(tmp_path)
+    store = DocumentStore(tmp_path)
+    original = store.translate(str(source)).view
+    parameter = _editable_string(original)
+    saved = store.save(_batch(original, parameter.id, "saved while missing")).document
+    Path(saved.output_path).unlink()
+    reopened = store.open_document(source).view
+    assert reopened.synchronized
+    assert reopened.output_hash == ""
+    assert store.preview(_batch(reopened, parameter.id, "new draft")).valid
+    sql = next(
+        binding
+        for operation in reopened.semantic_operations
+        for binding in operation.bindings
+        if "structured-sql" in binding.capabilities
+    )
+    assert store.inspect_sql(SqlModelRequest(**reopened.model_dump(), parameter_id=sql.id))
+    generated = store.generate(DocumentSnapshot.model_validate(reopened.model_dump())).document
+    assert generated.synchronized and Path(generated.output_path).exists()
 
 
 def test_external_python_change_becomes_read_only_without_semantic_reparse(tmp_path):
@@ -368,7 +458,7 @@ def test_reset_removes_saved_override_and_restores_omitted_default(tmp_path):
     assert (
         Path(restored.output_path).read_text(encoding="utf-8").find("node='TEST'") == -1
     )
-    assert read_sidecar(Path(restored.output_path)).changes == []
+    assert read_sidecar(Path(restored.output_path)).value_changes == []
 
 
 def test_invalid_sidecar_is_visible_and_does_not_modify_files(tmp_path):

@@ -105,7 +105,7 @@ def preview_html_report(
         except (OSError, ValueError) as exc:
             return HtmlPreviewResult(
                 state="error",
-                message=f"HTML preview could not resolve a workspace resource: {exc}",
+                message=f"Missing preview input or blocked workspace resource: {exc}",
             )
 
         has_external_resources = bool(

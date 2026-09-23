@@ -266,24 +266,24 @@ def test_utility_catalog_is_derived_from_registered_emittable_methods():
         "reader",
         "inputs",
     ]
-    assert run_query.artifact_role("output").direction == "output"
-    assert run_query.capabilities_for_parameter("sql") == ("structured-sql",)
+    assert run_query.parameter("output").artifact_role.direction == "output"
+    assert run_query.parameter("sql").capabilities == ("structured-sql",)
 
     write_file = definitions["ctx.write_file"]
     assert write_file.capabilities == ()
-    assert write_file.parameter_capabilities == ()
-    assert write_file.artifact_roles == ()
+    assert all(not parameter.capabilities for parameter in write_file.parameters)
+    assert all(parameter.artifact_role is None for parameter in write_file.parameters)
     assert write_file.supported_mutations == ("set-parameter",)
 
 
 def test_new_ordinary_utility_flows_from_registry_to_generic_parameter_metadata():
     definition = UtilitySpec.operation_definition("test_metadata_probe", "transform")
     assert definition is not None
-    assert definition.parameter("mode").choices == ("fast", "safe")
+    assert definition.parameter("mode").schema.choices == ("fast", "safe")
     assert definition.parameter("retries").default == 1
-    assert definition.artifact_role("source") == ArtifactRole("input")
-    assert definition.artifact_role("output") == ArtifactRole("output")
-    assert definition.capabilities_for_parameter("source") == ("browse-path",)
+    assert definition.parameter("source").artifact_role == ArtifactRole("input")
+    assert definition.parameter("output").artifact_role == ArtifactRole("output")
+    assert definition.parameter("source").capabilities == ("browse-path",)
     assert definition.capabilities == ("probe-capability",)
     assert definition.supported_mutations == ("set-parameter", "probe-mutation")
 
@@ -306,5 +306,38 @@ def test_new_ordinary_utility_flows_from_registry_to_generic_parameter_metadata(
     assert parameters["source"].editor_type == "string"
     assert parameters["source"].artifact_role == ArtifactRole("input")
     assert parameters["output"].artifact_role == ArtifactRole("output")
-    assert parameters["mode"].definition.choices == ("fast", "safe")
+    assert parameters["mode"].definition.schema.choices == ("fast", "safe")
     assert parameters["retries"].editor_type == "integer"
+
+
+def test_registered_parameters_are_self_describing():
+    ensure_utility_checks_loaded()
+    for utility in UtilitySpec.registered():
+        for operation in utility.operation_definitions():
+            assert operation.display_name
+            for parameter in operation.parameters:
+                assert parameter.display_label.strip()
+                assert parameter.visibility in {"normal", "advanced", "internal"}
+                assert parameter.schema is not None
+                assert operation.parameter(parameter.name) is parameter
+                assert not hasattr(parameter, "choices")
+            assert not hasattr(operation, "parameter_capabilities")
+            assert not hasattr(operation, "artifact_roles")
+
+
+def test_summary_rejects_internal_or_unknown_placeholders():
+    class Probe:
+        utility_name = "summary_probe"
+
+        @emittable(summary="{hidden}", parameter_visibility={"hidden": "internal"})
+        def internal(self, hidden: str) -> None:
+            pass
+
+        @emittable(summary="{missing}")
+        def missing(self, value: str) -> None:
+            pass
+
+    with pytest.raises(ValueError, match="internal parameter"):
+        Probe.internal.descriptor.definition(Probe)
+    with pytest.raises(ValueError, match="Invalid summary placeholder"):
+        Probe.missing.descriptor.definition(Probe)

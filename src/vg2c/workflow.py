@@ -287,7 +287,7 @@ def project_workflow(
             (item for item in result.resolved.blocks if item.index == operation.block_index),
             None,
         )
-        if block is not None and operation.display_name == "Run Query":
+        if block is not None and operation.kind == "ctx.run_query":
             for index, call in enumerate(scan_sql_get_csv_list_calls(block.resolved_body)):
                 effect_id = f"{operation.id}:effect:sql-get-csv-list:{index}"
                 bound.append(
@@ -341,12 +341,13 @@ def file_resources(effects: Iterable[FileEffect]) -> tuple[FileResource, ...]:
     grouped: dict[str, list[tuple[FileEffect, FileEndpoint]]] = {}
     for effect in effects:
         for endpoint in (*effect.inputs, *effect.outputs):
-            key = endpoint.path if endpoint.path is not None else f"@{endpoint.id}"
+            if endpoint.file_resource_id is None:
+                raise ValueError("File resource identity must be assigned by order_file_effects.")
+            key = endpoint.file_resource_id
             grouped.setdefault(key, []).append((effect, endpoint))
 
     resources: list[FileResource] = []
-    for _, items in sorted(grouped.items()):
-        endpoint_ids = sorted(endpoint.id for _, endpoint in items)
+    for resource_id, items in sorted(grouped.items()):
         known_path = next((endpoint.path for _, endpoint in items if endpoint.path), None)
         producers = tuple(
             dict.fromkeys(
@@ -384,7 +385,7 @@ def file_resources(effects: Iterable[FileEffect]) -> tuple[FileResource, ...]:
             status = "workspace"
         resources.append(
             FileResource(
-                id=f"file:{endpoint_ids[0]}",
+                id=resource_id,
                 path=known_path,
                 status=status,
                 producer_refs=producers,

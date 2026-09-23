@@ -69,6 +69,13 @@ export function useWorkspace() {
     }
   }, [])
 
+  const refreshFileChoices = useCallback(async (tabId: string) => {
+    const tab = tabById(stateRef.current, tabId)
+    if (!tab) return
+    const document = await openDocument(tab.document.source_path, tab.document.output_path)
+    dispatch({ type: 'refresh-file-choices', tabId, instanceId: tab.instanceId, document })
+  }, [])
+
   const edit = useCallback((tabId: string, binding: SemanticBindingView, value: unknown, clearDraftPaths?: FieldPath[]) => {
     dispatch({ type: 'edit', tabId, bindingId: binding.id, value, clearDraftPaths })
   }, [])
@@ -231,6 +238,7 @@ export function useWorkspace() {
     translate,
     open,
     reload,
+    refreshFileChoices,
     edit,
     validateCandidate,
     validate,

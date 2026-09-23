@@ -2,7 +2,6 @@ from vg2c.sql_editor.capability import (
     SqlAction,
     SqlActionName,
     apply_sql_action,
-    parameter_capabilities,
     structured_sql_model,
 )
 from vg2c.sql_editor.models import (
@@ -58,7 +57,6 @@ __all__ = [
     "add_selection",
     "apply_sql_action",
     "move_selection",
-    "parameter_capabilities",
     "parse_sql",
     "remove_filter",
     "remove_join",

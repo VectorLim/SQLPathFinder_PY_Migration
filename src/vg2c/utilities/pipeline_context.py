@@ -21,6 +21,7 @@ class PipelineContext(UtilitySpec):
 
     @emittable(
         display_name="Write File",
+        summary="{path}",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(
@@ -42,6 +43,7 @@ class PipelineContext(UtilitySpec):
 
     @emittable(
         display_name="Run Query",
+        summary="Output: {output}",
         file_effects=(
             FileEffectDefinition(
                 "query",
@@ -57,7 +59,7 @@ class PipelineContext(UtilitySpec):
             "output": ArtifactRole("output"),
             "inputs": ArtifactRole("input", many=True),
         },
-        internal_parameters=("reader",),
+        parameter_visibility={"reader": "internal"},
         parameter_schemas={
             "crosstab": ValueSchema(
                 "object",

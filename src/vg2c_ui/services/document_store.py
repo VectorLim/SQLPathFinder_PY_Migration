@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
@@ -10,6 +10,7 @@ from threading import RLock
 
 from vg2c import CompilationResult, compile_document
 from vg2c.editing import (
+    ChangeProjection,
     SemanticChange,
     ValidationIssue,
     project_changes,
@@ -17,8 +18,8 @@ from vg2c.editing import (
 from vg2c.editing import (
     apply_changes as apply_parameter_changes,
 )
-from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
 from vg2c.semantics import build_semantic_model
+from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
 from vg2c.workflow import (
     WorkflowDocument,
     project_workflow,
@@ -29,15 +30,15 @@ from vg2c_ui.api.models import (
     ChangeBatch,
     ChangePreviewView,
     ChangeResultView,
-    CsvPreviewView,
     CsvPreviewRequest,
-    HtmlPreviewRequest,
-    HtmlPreviewView,
+    CsvPreviewView,
     DependencyIssueView,
     DependencyLinkView,
-    DocumentView,
-    DocumentSnapshot,
     DiagnosticView,
+    DocumentSnapshot,
+    DocumentView,
+    HtmlPreviewRequest,
+    HtmlPreviewView,
     ParameterChangeRequest,
     ProjectedDocumentView,
     SemanticChangeRequest,
@@ -104,9 +105,16 @@ class OpenedDocument:
 class DocumentStore:
     """Workspace-safe persistence boundary around compiler-owned semantics."""
 
-    def __init__(self, workspace: Path, *, expose_relative_paths: bool = False):
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        expose_relative_paths: bool = False,
+        inventory_paths: Callable[[], Iterable[str]] | None = None,
+    ):
         self.workspace = Path(workspace).resolve()
         self.expose_relative_paths = expose_relative_paths
+        self.inventory_paths = inventory_paths or (lambda: ())
 
     @_serialized
     def open_document(
@@ -119,20 +127,18 @@ class DocumentStore:
         result = compile_document(source)
         recovery_reason = None
         try:
-            persisted = self._read_effective_changes(source, output)
+            sidecar = read_sidecar(output)
+            persisted = self._read_effective_changes(source, output, sidecar)
+            projected = project_changes(result, persisted)
+            if not projected.valid:
+                raise InvalidSidecar(
+                    "Saved edits no longer match the compiler manifest. Original files are preserved."
+                )
+            self._generation_state(output, projected.source, sidecar)
         except InvalidSidecar as exc:
             persisted = []
             recovery_reason = str(exc)
-        projected = project_changes(result, persisted)
-        if not projected.valid:
-            persisted = []
-            recovery_reason = "Saved edits no longer match the compiler manifest. Original files are preserved."
-        generated = projected.source if projected.valid else result.emitted.source
-        synchronized = (
-            recovery_reason is None
-            and output.exists()
-            and _hash_text(output.read_text(encoding="utf-8")) == _hash_text(generated)
-        )
+        synchronized = recovery_reason is None
         read_only_reason = None
         if not synchronized:
             read_only_reason = (
@@ -149,6 +155,8 @@ class DocumentStore:
             saved_changes=persisted,
             synchronized=synchronized,
             read_only_reason=read_only_reason,
+            workspace_root=self.workspace,
+            inventory_paths=self.inventory_paths(),
         )
         if recovery_reason:
             view.diagnostics.append(
@@ -226,38 +234,61 @@ class DocumentStore:
         )
 
     @_serialized
+    def save(self, batch: ChangeBatch) -> ChangeResultView:
+        source, output, result, persisted = self._load_for_change(batch)
+        merged = _merge_changes(persisted, _changes(batch.changes))
+        projected = apply_parameter_changes(result, merged)
+        if batch.revision != self._revision(source, output):
+            raise RevisionConflict("Document changed while validating edits.")
+        sidecar = read_sidecar(output)
+        provenance = (
+            sidecar.last_generated_hash
+            if sidecar is not None
+            else _hash_file(output) if output.exists() else None
+        )
+        write_sidecar(output, _saved_sidecar(source, projected.values, provenance))
+        return ChangeResultView(document=self.open_document(str(source), str(output)).view)
+
+    @_serialized
+    def generate(self, snapshot: DocumentSnapshot) -> ChangeResultView:
+        source, output, result, persisted = self._load_for_change(snapshot)
+        projected = apply_parameter_changes(result, persisted)
+        if snapshot.revision != self._revision(source, output):
+            raise RevisionConflict("Document changed while generating output.")
+        self._write_generated_state(source, output, projected)
+        return ChangeResultView(document=self.open_document(str(source), str(output)).view)
+
+    @_serialized
     def apply(self, batch: ChangeBatch) -> ChangeResultView:
         source, output, result, persisted = self._load_for_change(batch)
         merged = _merge_changes(persisted, _changes(batch.changes))
         projected = apply_parameter_changes(result, merged)
 
-        previous = output.read_text(encoding="utf-8")
         if batch.revision != self._revision(source, output):
             raise RevisionConflict("Document changed while validating edits.")
+        self._write_generated_state(source, output, projected)
+        opened = self.open_document(str(source), str(output))
+        return ChangeResultView(document=opened.view)
+
+    def _write_generated_state(
+        self, source: Path, output: Path, projected: ChangeProjection
+    ) -> None:
+        previous = output.read_text(encoding="utf-8") if output.exists() else None
         try:
             atomic_write_text(output, projected.source)
             write_sidecar(
                 output,
-                EditorSidecar(
-                    source_hash=_hash_file(source),
-                    output_hash=_hash_file(output),
-                    changes=[
-                        SavedSemanticChange(
-                            binding_id=item.binding_id,
-                            value=item.value,
-                        )
-                        for item in projected.values
-                    ],
-                ),
+                _saved_sidecar(source, projected.values, _hash_file(output)),
             )
         except OSError:
             if output.exists() and _hash_text(
                 output.read_text(encoding="utf-8")
             ) == _hash_text(projected.source):
-                atomic_write_text(output, previous)
+                if previous is None:
+                    output.unlink()
+                else:
+                    atomic_write_text(output, previous)
             raise
-        opened = self.open_document(str(source), str(output))
-        return ChangeResultView(document=opened.view)
 
     @_serialized
     def project_workspace(
@@ -402,30 +433,31 @@ class DocumentStore:
             raise RevisionConflict(
                 "Compiler manifest changed since the document was opened."
             )
-        persisted = self._read_effective_changes(source, output)
+        sidecar = read_sidecar(output)
+        persisted = self._read_effective_changes(source, output, sidecar)
         projected = project_changes(result, persisted)
-        if (
-            not projected.valid
-            or not output.exists()
-            or _hash_text(output.read_text(encoding="utf-8"))
-            != _hash_text(projected.source)
-        ):
+        if not projected.valid:
             raise RevisionConflict(
-                "Generated output is not synchronized; retranslate before editing."
+                "Saved edits no longer match the compiler manifest."
             )
+        try:
+            self._generation_state(output, projected.source, sidecar)
+        except InvalidSidecar as exc:
+            raise RevisionConflict(str(exc)) from exc
         return source, output, result, persisted
 
     def _read_effective_changes(
-        self, source: Path, output: Path
+        self, source: Path, output: Path, sidecar: EditorSidecar | None
     ) -> list[SemanticChange]:
-        sidecar = read_sidecar(output)
         if sidecar is None:
             return []
         if sidecar.source_hash != _hash_file(source):
             raise InvalidSidecar(
                 "Saved changes belong to a different source revision. Original files are preserved."
             )
-        if not output.exists() or sidecar.output_hash != _hash_file(output):
+        if sidecar.legacy_version is not None and (
+            not output.exists() or sidecar.last_generated_hash != _hash_file(output)
+        ):
             raise InvalidSidecar(
                 "Saved changes and generated output do not match. Original files are preserved."
             )
@@ -434,8 +466,23 @@ class DocumentStore:
                 binding_id=item.binding_id,
                 value=item.value,
             )
-            for item in sidecar.changes
+            for item in sidecar.value_changes
         ]
+
+    @staticmethod
+    def _generation_state(
+        output: Path, projected_source: str, sidecar: EditorSidecar | None
+    ) -> str:
+        if not output.exists():
+            return "missing"
+        actual = _hash_file(output)
+        if actual == _hash_text(projected_source):
+            return "current"
+        if sidecar is not None and actual == sidecar.last_generated_hash:
+            return "stale"
+        raise InvalidSidecar(
+            "Generated output was modified outside the editor. Original files are preserved."
+        )
 
     def _resolve(self, value: str | None) -> Path:
         if value is None:
@@ -537,6 +584,19 @@ def _merge_changes(
     overridden = {item.binding_id for item in requested}
     # Preserve duplicate requests so core validation can reject conflicting shared edits.
     return [item for item in base if item.binding_id not in overridden] + requested
+
+
+def _saved_sidecar(
+    source: Path, changes: Iterable[SemanticChange], provenance: str | None
+) -> EditorSidecar:
+    return EditorSidecar(
+        source_hash=_hash_file(source),
+        last_generated_hash=provenance,
+        value_changes=[
+            SavedSemanticChange(binding_id=item.binding_id, value=item.value)
+            for item in changes
+        ],
+    )
 
 
 def _issue_view(issue: ValidationIssue) -> ValidationIssueView:

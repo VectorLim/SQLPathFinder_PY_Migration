@@ -42,7 +42,7 @@ export function FileSelector({
           onChange(event.target.value)
         }}
       >
-        <option value="__manual__">Manual / external path…</option>
+        <option value="__manual__">Enter server workspace path…</option>
         {known.map((path) => <option key={path} value={path}>{path}</option>)}
       </select>
 
@@ -53,7 +53,7 @@ export function FileSelector({
       type="text"
       value={current}
       disabled={disabled}
-      placeholder="Enter workspace or external path"
+      placeholder="Path in your server workspace"
       onChange={(event) => onChange(event.target.value)}
     />}
   </div>

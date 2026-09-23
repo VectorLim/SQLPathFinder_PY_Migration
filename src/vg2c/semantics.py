@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import re
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -61,6 +62,7 @@ class WorkflowOperation:
     parent_operation_id: str | None
     branch: Literal["true", "false"] | None
     source_span: SourceSpan
+    summary: str = ""
     bindings: tuple[EditableBinding, ...] = ()
     capabilities: tuple[str, ...] = ()
     comments: tuple[str, ...] = ()
@@ -170,7 +172,6 @@ def build_semantic_model(
             continue
         operations.extend(_leaf_operations(result, block, None, None, values))
 
-    operations.sort(key=lambda item: (item.block_index, item.id))
     bindings = tuple(binding for operation in operations for binding in operation.bindings)
     symbols = _build_symbols(result, operations)
     operations = _apply_condition_symbol_validation(operations, symbols)
@@ -239,11 +240,12 @@ def _control_operation(
         return WorkflowOperation(
             id=operation_id,
             kind="condition",
-            display_name="Condition",
+            display_name="IF",
             description="Conditional branch using the compiler's VG2 condition semantics.",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
+            summary=_condition_summary(bindings),
             bindings=tuple(bindings),
             capabilities=("condition-editor",),
             block_index=block.index,
@@ -271,6 +273,7 @@ def _control_operation(
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
+            summary=_summary_value(binding.value),
             bindings=(binding,),
             capabilities=("file-input",),
             block_index=block.index,
@@ -305,6 +308,7 @@ def _control_operation(
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
+            summary=f"{_summary_value(bindings[0].value)} · {bindings[2].value} rows",
             bindings=bindings,
             capabilities=("file-input", "file-output"),
             block_index=block.index,
@@ -377,10 +381,15 @@ def _leaf_operations(
             bindings = []
             for parameter in invocation.parameters:
                 definition_parameter = parameter.definition
-                if definition_parameter is not None and definition_parameter.internal:
+                if (
+                    definition_parameter is not None
+                    and definition_parameter.visibility == "internal"
+                ):
                     continue
                 binding_value = values.get(parameter.id, parameter.value)
-                capabilities = list(definition.capabilities_for_parameter(parameter.name))
+                capabilities = list(
+                    definition_parameter.capabilities if definition_parameter else ()
+                )
                 if parameter.editor_type == "multiline":
                     capabilities.append("multiline")
                 if parameter.artifact_role is not None:
@@ -390,14 +399,23 @@ def _leaf_operations(
                         id=parameter.id,
                         owner_operation_id=invocation.id,
                         name=parameter.name,
-                        display_label=_binding_label(parameter.name),
+                        display_label=(
+                            definition_parameter.display_label
+                            if definition_parameter else parameter.name.replace("_", " ").title()
+                        ),
                         schema=definition_parameter.schema if definition_parameter else None,
                         value=binding_value,
                         default=parameter.value,
                         required=definition_parameter.required if definition_parameter else True,
+                        visibility=(
+                            definition_parameter.visibility if definition_parameter else "normal"
+                        ),
                         capabilities=tuple(dict.fromkeys(capabilities)),
                         validation_state="valid" if parameter.editable else "warning",
-                        resettable=parameter.source_range is None or not parameter.id.startswith("global:"),
+                        resettable=(
+                            parameter.source_range is None
+                            or not parameter.id.startswith("global:")
+                        ),
                         editable=parameter.editable,
                         read_only_reason=parameter.read_only_reason,
                         source_range=parameter.source_range,
@@ -413,6 +431,7 @@ def _leaf_operations(
                     parent_operation_id=parent_operation_id,
                     branch=branch,
                     source_span=block.span,
+                    summary=_utility_summary(definition.summary_template, bindings),
                     bindings=tuple(bindings),
                     capabilities=definition.capabilities,
                     visibility=definition.visibility,
@@ -501,11 +520,54 @@ def _rows_in_file_operation(
         parent_operation_id=parent_operation_id,
         branch=branch,
         source_span=block.span,
+        summary=f"{_summary_value(bindings[0].value)} → {_summary_value(bindings[1].value)}",
         bindings=bindings,
         capabilities=("file-input", "symbol-definition"),
         block_index=block.index,
         source_range=step.source_range if step else None,
     )
+
+
+def _summary_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        text = ", ".join(str(item) for item in value)
+    else:
+        text = str(value)
+    text = " ".join(text.split())
+    return text if len(text) <= 80 else text[:77] + "…"
+
+
+def _utility_summary(template: str | None, bindings: list[EditableBinding]) -> str:
+    by_name = {binding.name: _summary_value(binding.value) for binding in bindings}
+    if template:
+        return template.format_map(defaultdict(str, by_name))
+    file_binding = next(
+        (
+            binding
+            for binding in bindings
+            if any(cap.startswith("file-") for cap in binding.capabilities)
+        ),
+        None,
+    )
+    if file_binding is None:
+        return ""
+    return f"{file_binding.display_label}: {_summary_value(file_binding.value)}"
+
+
+def _condition_summary(bindings: list[EditableBinding]) -> str:
+    by_name = {binding.name: binding.value for binding in bindings}
+
+    def clause(left: str, op: str, right: str) -> str:
+        if not by_name.get(left) or not by_name.get(op):
+            return ""
+        operator = _OPERATOR_TABLE.get(str(by_name[op]), (str(by_name[op]), "string"))[0]
+        return f"{_summary_value(by_name[left])} {operator} {_summary_value(by_name.get(right))}"
+
+    first = clause("lhs", "op", "rhs")
+    second = clause("lhs2", "op2", "rhs2")
+    return f"{first} {by_name['conj']} {second}" if second and by_name.get("conj") else first
 
 
 def _build_symbols(
@@ -745,27 +807,6 @@ def _scope_indexes(root: ScopeNode) -> tuple[dict[int, int | None], dict[int, Sc
         for child in reversed(node.children):
             stack.append((child, node.scope_id))
     return parent, nodes
-
-
-def _binding_label(name: str) -> str:
-    labels = {
-        "src": "Source",
-        "dst": "Destination",
-        "path": "File",
-        "paths": "Files",
-        "output": "Output file",
-        "inputs": "Input files",
-        "source": "Source file",
-        "destination": "Destination file",
-        "argv": "Command",
-        "to": "To",
-        "subject": "Subject",
-        "body": "Body",
-        "attachments": "Attachments",
-        "from_addr": "From",
-        "sql": "SQL",
-    }
-    return labels.get(name, name.replace("_", " ").title())
 
 
 __all__ = [

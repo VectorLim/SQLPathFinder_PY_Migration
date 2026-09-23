@@ -43,6 +43,7 @@ export function SemanticScriptTree({
     for (const operation of operations) {
       const haystack = [
         operation.display_name,
+        operation.summary,
         operation.description,
         ...operation.comments,
         ...operation.bindings.flatMap((binding) => [binding.display_label, String(binding.value ?? '')]),
@@ -101,7 +102,7 @@ export function SemanticScriptTree({
           </span>
           <span className="tree-label">
             <strong>{operation.display_name}</strong>
-            <small>{operationSummary(operation)}</small>
+            {operation.summary && <small>{operation.summary}</small>}
           </span>
           {operation.validation_state !== 'valid' && <span className="operation-warning" aria-label={operation.validation_state}>!</span>}
         </button>
@@ -112,25 +113,6 @@ export function SemanticScriptTree({
 
   if (!operations.length) return <p className="empty-copy">No semantic operations were produced for this script.</p>
   return <ul ref={treeRef} className="script-tree semantic-script-tree" role="tree" aria-label="Script Logic">{render('__root__', 1)}</ul>
-}
-
-function operationSummary(operation: SemanticOperationView): string {
-  const value = (name: string) => operation.bindings.find((binding) => binding.name === name)?.value
-  if (operation.kind === 'condition') {
-    const lhs = value('lhs')
-    const op = value('op')
-    const rhs = value('rhs')
-    const conj = value('conj')
-    const lhs2 = value('lhs2')
-    const op2 = value('op2')
-    const rhs2 = value('rhs2')
-    const first = [lhs, op, rhs].filter((item) => item !== null && item !== undefined && item !== '').join(' ')
-    const second = [lhs2, op2, rhs2].filter((item) => item !== null && item !== undefined && item !== '').join(' ')
-    return [first, conj && second ? conj : null, second].filter(Boolean).join(' ')
-  }
-  const fileBinding = operation.bindings.find((binding) => binding.capabilities.some((capability) => capability.startsWith('file-')))
-  if (fileBinding?.value) return `${fileBinding.display_label}: ${String(fileBinding.value)}`
-  return operation.description
 }
 
 function handleTreeKey(

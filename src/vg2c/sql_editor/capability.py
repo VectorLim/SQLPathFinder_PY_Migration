@@ -35,13 +35,6 @@ class SqlAction:
     arguments: Mapping[str, Any]
 
 
-def parameter_capabilities(
-    invocation: EmittedInvocation, parameter: EmittedParameter
-) -> tuple[str, ...]:
-    """Return editor capabilities declared by the owning utility parameter."""
-    return invocation.operation.capabilities_for_parameter(parameter.name)
-
-
 def structured_sql_model(
     result: CompilationResult,
     parameter_id: str,
@@ -157,8 +150,9 @@ def _structured_parameter(
             for parameter in invocation.parameters:
                 if parameter.id != parameter_id:
                     continue
-                if "structured-sql" not in parameter_capabilities(
-                    invocation, parameter
+                if (
+                    not parameter.definition
+                    or "structured-sql" not in parameter.definition.capabilities
                 ):
                     raise SqlEditError(
                         "This utility parameter does not expose structured SQL editing."
@@ -199,6 +193,5 @@ __all__ = [
     "SqlAction",
     "SqlActionName",
     "apply_sql_action",
-    "parameter_capabilities",
     "structured_sql_model",
 ]

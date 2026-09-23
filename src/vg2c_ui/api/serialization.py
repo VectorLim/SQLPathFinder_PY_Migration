@@ -11,15 +11,14 @@ from vg2c import CompilationResult
 from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import ParameterChange
 from vg2c.kind import Kind
-from vg2c.semantics import CONDITION_OPERATORS
 from vg2c.operands import ScopeNode as CompilerScopeNode
+from vg2c.semantics import CONDITION_OPERATORS
 from vg2c.sql_editor import (
     FILTER_OPERATORS,
     JOIN_TYPES,
     SqlEditableModel,
     SqlLogicalConnector,
 )
-from vg2c.sql_editor.capability import parameter_capabilities
 from vg2c.workflow import project_workflow
 from vg2c_ui.api.models import (
     ArtifactView,
@@ -48,6 +47,7 @@ from vg2c_ui.api.models import (
     UtilityView,
     ValueSchemaView,
 )
+from vg2c_ui.services.file_choices import file_choices_by_operation
 
 MAX_DIAGNOSTICS = 200
 
@@ -73,16 +73,21 @@ def document_view(
     saved_changes: Iterable[ParameterChange] = (),
     synchronized: bool = True,
     read_only_reason: str | None = None,
+    workspace_root: Path | None = None,
+    inventory_paths: Iterable[str] = (),
 ) -> DocumentView:
     """Serialize compiler-owned semantics without re-discovering or re-inferring them."""
     saved_changes = tuple(saved_changes)
     values = {change.parameter_id: change.value for change in saved_changes}
     workflow = project_workflow(result, saved_changes, output_path=output_path)
+    file_choices = file_choices_by_operation(
+        workflow.effects,
+        inventory_paths,
+        output_path=output_path,
+        workspace_root=workspace_root or output_path.parent,
+    )
     artifacts = artifact_views_for_effects(workflow.effects)
     block_by_index = {block.index: block for block in result.resolved.blocks}
-    step_id_by_block = {
-        step.block_index: step.function_name for step in result.emitted.steps
-    }
     parent_by_scope, scope_by_id = _scope_indexes(result.resolved.scope_tree)
     leaf_parent = {
         node.block_index: parent_by_scope.get(node.scope_id)
@@ -110,7 +115,7 @@ def document_view(
         for invocation in emitted_step.invocations:
             invocation_parameters: list[ParameterView] = []
             for parameter in invocation.parameters:
-                capabilities = parameter_capabilities(invocation, parameter)
+                capabilities = parameter.definition.capabilities if parameter.definition else ()
                 effective_value = values.get(parameter.id, parameter.value)
                 editable = parameter.editable and not step_read_only
                 reason = parameter.read_only_reason
@@ -137,8 +142,8 @@ def document_view(
                         editable=editable,
                         read_only_reason=reason,
                         constraints=(
-                            {"choices": list(definition.choices)}
-                            if definition and definition.choices
+                            {"choices": list(definition.schema.choices)}
+                            if definition and definition.schema and definition.schema.choices
                             else {}
                         ),
                         annotation=definition.annotation if definition else None,
@@ -150,7 +155,7 @@ def document_view(
                             if definition
                             else None
                         ),
-                        internal=definition.internal if definition else False,
+                        internal=definition.visibility == "internal" if definition else False,
                         omitted=parameter.source_range is None,
                         overridden=parameter.id in values,
                         generated_value=parameter.value,
@@ -258,7 +263,7 @@ def document_view(
         artifacts=artifacts,
         diagnostics=diagnostics,
         effects=effect_views(workflow.effects),
-        semantic_operations=semantic_operation_views(workflow.operations),
+        semantic_operations=semantic_operation_views(workflow.operations, file_choices),
         files=file_resource_views(workflow.files),
         symbols=symbol_views(workflow.symbols),
         condition_operators=[
@@ -268,12 +273,16 @@ def document_view(
     )
 
 
-def semantic_operation_views(operations) -> list[SemanticOperationView]:
+def semantic_operation_views(
+    operations, file_choices: dict[str, list[str]] | None = None
+) -> list[SemanticOperationView]:
+    file_choices = file_choices or {}
     return [
         SemanticOperationView(
             id=operation.id,
             kind=operation.kind,
             display_name=operation.display_name,
+            summary=operation.summary,
             description=operation.description,
             parent_operation_id=operation.parent_operation_id,
             branch=operation.branch,
@@ -298,6 +307,11 @@ def semantic_operation_views(operations) -> list[SemanticOperationView]:
                     editable=binding.editable,
                     read_only_reason=binding.read_only_reason,
                     value_schema=_value_schema_view(binding.schema),
+                    file_choices=(
+                        file_choices.get(operation.id, [])
+                        if "file-input" in binding.capabilities
+                        else []
+                    ),
                 )
                 for binding in operation.bindings
                 if binding.visibility != "internal"

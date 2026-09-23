@@ -1,5 +1,4 @@
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 from vg2c.dataflow.file_effects import bind_file_effects, order_file_effects
@@ -70,6 +69,14 @@ def test_read_after_unconditional_delete_does_not_reuse_live_producer(tmp_path):
     assert ordered[-1].inputs[0].status == "missing"
     assert written.id not in ordered[-1].dependency_ids
     assert ordered[-1].inputs[0].state_ids[0].endswith(":deleted")
+    assert any(
+        item.path == "b.csv" and item.status == "guaranteed"
+        for item in ordered[1].available_before
+    )
+    assert any(
+        item.path == "b.csv" and item.status == "missing"
+        for item in ordered[2].available_before
+    )
 
 
 def test_conditional_delete_preserves_possible_prior_state(tmp_path):
@@ -89,6 +96,102 @@ def test_conditional_delete_preserves_possible_prior_state(tmp_path):
     assert ordered[-1].inputs[0].status == "possible"
     assert len(ordered[-1].inputs[0].state_ids) == 2
     assert written.id in ordered[-1].dependency_ids
+    assert any(
+        item.path == "b.csv" and item.status == "possible"
+        for item in ordered[2].available_before
+    )
+
+
+def test_resource_identity_uses_the_same_normalized_keys_as_dependency_state(tmp_path):
+    from vg2c.workflow import file_resources
+
+    write = _effects(PipelineContext.write_file.render(r"Data\Out.csv", "body"))[0]
+    copy = replace(
+        _effects(PipelineContext.run_query.render(
+            "select 1", "copy.csv", CodeExpr("reader"), inputs=["data/out.csv"]
+        ))[0],
+        order=1,
+    )
+    root = SimpleNamespace(scope_id=0, kind="root", children=[])
+    ordered = order_file_effects((write, copy), root, tmp_path / "generated.py")
+    produced = ordered[0].outputs[0]
+    consumed = ordered[1].inputs[0]
+    assert produced.file_resource_id == consumed.file_resource_id
+    assert ordered[0].id in ordered[1].dependency_ids
+    resources = file_resources(ordered)
+    assert len(resources) == 2
+    assert next(item for item in resources if item.id == produced.file_resource_id).producer_refs
+
+
+def test_file_choices_combine_inventory_with_historical_availability(tmp_path):
+    from vg2c_ui.services.file_choices import file_choices_by_operation
+
+    write = _effects(PipelineContext.write_file.render("future.csv", "body"))[0]
+    read = _effects(FileSystemOps.copy.render("future.csv", "copy.csv"))[0]
+    delete = _effects(FileSystemOps.delete.render(["future.csv"]))[0]
+    later = _effects(SmartAppend.append.render("merged.csv", "future.csv"))[0]
+    root = SimpleNamespace(scope_id=0, kind="root", children=[])
+    ordered = order_file_effects(
+        (read, write, delete, later), root, tmp_path / "generated.py"
+    )
+    choices = file_choices_by_operation(
+        ordered,
+        ["inputs/uploaded.csv", "future.csv"],
+        output_path=tmp_path / "generated.py",
+        workspace_root=tmp_path,
+    )
+    assert "inputs/uploaded.csv" in choices[read.operation_id]
+    assert "future.csv" not in choices[read.operation_id]
+    assert "future.csv" in choices[delete.operation_id]
+    assert "future.csv" not in choices[later.operation_id]
+
+
+def test_file_choices_keep_branch_outputs_possible_and_reflect_new_uploads(tmp_path):
+    from vg2c_ui.services.file_choices import file_choices_by_operation
+
+    conditional = replace(
+        _effects(PipelineContext.write_file.render("branch.csv", "body"))[0],
+        scope_id=1,
+        conditional=True,
+    )
+    read = _effects(FileSystemOps.copy.render("branch.csv", "copy.csv"))[0]
+    branch = SimpleNamespace(scope_id=1, kind="if-branch", children=[])
+    root = SimpleNamespace(scope_id=0, kind="root", children=[branch])
+    ordered = order_file_effects(
+        (conditional, read), root, tmp_path / "generated.py"
+    )
+
+    def choices(inventory):
+        return file_choices_by_operation(
+            ordered,
+            inventory,
+            output_path=tmp_path / "generated.py",
+            workspace_root=tmp_path,
+        )[read.operation_id]
+
+    assert "branch.csv" not in choices(["branch.csv"])
+    assert "inputs/new.csv" not in choices([])
+    assert "inputs/new.csv" in choices(["inputs/new.csv", "branch.csv"])
+
+
+def test_file_choices_use_server_workspace_paths_only(tmp_path):
+    from vg2c_ui.services.file_choices import file_choices_by_operation
+
+    output = tmp_path / "generated" / "script.py"
+    write = _effects(PipelineContext.write_file.render("result.csv", "body"))[0]
+    outside = _effects(PipelineContext.write_file.render(str(tmp_path.parent / "outside.csv"), "body"))[0]
+    read = _effects(FileSystemOps.copy.render("result.csv", "copy.csv"))[0]
+    root = SimpleNamespace(scope_id=0, kind="root", children=[])
+    ordered = order_file_effects((write, outside, read), root, output)
+    choices = file_choices_by_operation(
+        ordered,
+        ["inputs/uploaded.csv"],
+        output_path=output,
+        workspace_root=tmp_path,
+    )[read.operation_id]
+    assert "generated/result.csv" in choices
+    assert "inputs/uploaded.csv" in choices
+    assert "outside.csv" not in choices
 
 
 def test_effective_workflow_uses_edited_inputs_even_when_baseline_is_empty(tmp_path):

@@ -44,12 +44,14 @@ class SemanticBindingView(BaseModel):
     editable: bool = True
     read_only_reason: str | None = None
     value_schema: ValueSchemaView | None = None
+    file_choices: list[str] = Field(default_factory=list)
 
 
 class SemanticOperationView(BaseModel):
     id: str
     kind: str
     display_name: str
+    summary: str
     description: str
     parent_operation_id: str | None = None
     branch: Literal["true", "false"] | None = None
@@ -187,6 +189,7 @@ class DiagnosticView(BaseModel):
 
 class FileEndpointView(BaseModel):
     id: str
+    file_resource_id: str | None = None
     binding_id: str | None = None
     parameter_id: str | None = None
     path: str | None

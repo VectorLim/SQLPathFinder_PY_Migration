@@ -118,7 +118,7 @@ class FileSystemOps(EmitterUtility):
 
     @emittable(
         display_name="Copy File",
-        internal_parameters=("recurse",),
+        parameter_visibility={"recurse": "internal"},
         file_effects=(
             FileEffectDefinition(
                 "copy",

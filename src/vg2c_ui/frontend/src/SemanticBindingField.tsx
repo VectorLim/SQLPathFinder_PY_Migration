@@ -56,7 +56,6 @@ export function SemanticBindingField({ binding, readOnly, session }: Props) {
     value,
     disabled,
     schema: controlSchema,
-    knownFiles: resources.knownFiles,
     symbols: resources.symbols,
     onUploadFile: actions.uploadFile,
     onEdit: actions.edit,
@@ -87,7 +86,6 @@ function renderBindingControl({
   value,
   disabled,
   schema,
-  knownFiles,
   symbols,
   onUploadFile,
   onEdit,
@@ -98,7 +96,6 @@ function renderBindingControl({
   value: unknown
   disabled: boolean
   schema: ValueSchemaView | null
-  knownFiles: string[]
   symbols: SemanticEditorSession['resources']['symbols']
   onUploadFile: SemanticEditorSession['actions']['uploadFile']
   onEdit: SemanticEditorSession['actions']['edit']
@@ -107,10 +104,10 @@ function renderBindingControl({
 }) {
   const isFileBinding = binding.capabilities.includes('file-input') || binding.capabilities.includes('file-output')
   if (isFileBinding && schema?.kind === 'list') {
-    return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} onUpload={onUploadFile} />
+    return <FileListSelector label={binding.display_label} showLabel={false} value={value} files={binding.file_choices} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} onUpload={onUploadFile} />
   }
   if (isFileBinding) {
-    return <FileSelector label={binding.display_label} showLabel={false} value={value} files={knownFiles} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
+    return <FileSelector label={binding.display_label} showLabel={false} value={value} files={binding.file_choices} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />
   }
   if (binding.capabilities.includes('symbol-or-literal')) {
     return <SymbolSelector label={binding.display_label} showLabel={false} value={value} symbols={symbols} disabled={disabled} onChange={(next) => onEdit({ binding, value: next })} />

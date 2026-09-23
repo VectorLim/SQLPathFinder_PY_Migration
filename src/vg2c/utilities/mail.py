@@ -139,6 +139,7 @@ class MailService(EmitterUtility):
 
     @emittable(
         display_name="Send Email",
+        summary="To: {to} · {subject}",
         capabilities=("email",),
         parameter_capabilities={"attachments": ("file-input",)},
         file_effects=(

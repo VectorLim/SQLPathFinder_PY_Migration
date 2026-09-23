@@ -187,7 +187,7 @@ class CsvIO(UtilitySpec):
     # ------------------------------------------------------------------
 
     @emittable(
-        internal_parameters=("content",),
+        parameter_visibility={"content": "internal"},
         file_effects=(
             FileEffectDefinition(
                 "write",

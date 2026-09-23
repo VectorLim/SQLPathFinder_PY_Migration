@@ -19,7 +19,6 @@ export interface SemanticEditorSession {
   values: Record<string, unknown>
   saving: boolean
   resources: {
-    knownFiles: string[]
     symbols: SymbolView[]
     conditionOperators: ConditionOperatorView[]
   }

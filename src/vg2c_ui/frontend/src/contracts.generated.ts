@@ -36,12 +36,14 @@ export interface SemanticBindingView {
   editable: boolean
   read_only_reason: string | null
   value_schema: ValueSchemaView | null
+  file_choices: Array<string>
 }
 
 export interface SemanticOperationView {
   id: string
   kind: string
   display_name: string
+  summary: string
   description: string
   parent_operation_id: string | null
   branch: 'true' | 'false' | null
@@ -179,6 +181,7 @@ export interface DiagnosticView {
 
 export interface FileEndpointView {
   id: string
+  file_resource_id: string | null
   binding_id: string | null
   parameter_id: string | null
   path: string | null

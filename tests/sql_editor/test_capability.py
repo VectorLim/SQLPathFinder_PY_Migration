@@ -5,7 +5,6 @@ from vg2c.editing import ParameterChange, project_changes
 from vg2c.sql_editor import (
     SqlAction,
     apply_sql_action,
-    parameter_capabilities,
     structured_sql_model,
 )
 
@@ -18,7 +17,7 @@ def _sql_parameter(result):
         for step in result.emitted.steps
         for invocation in step.invocations
         for parameter in invocation.parameters
-        if "structured-sql" in parameter_capabilities(invocation, parameter)
+        if parameter.definition and "structured-sql" in parameter.definition.capabilities
     )
 
 

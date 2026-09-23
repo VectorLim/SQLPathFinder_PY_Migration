@@ -10,7 +10,6 @@ from vg2c.emitter.models import (
     StepEmission,
     UtilityOperationDefinition,
     build_step_emission,
-    emittable,
 )
 from vg2c.kind import Kind
 

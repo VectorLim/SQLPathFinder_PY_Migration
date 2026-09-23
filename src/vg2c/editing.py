@@ -484,7 +484,11 @@ def _validate_parameter(
             binding_id=parameter.id,
         )
 
-    choices = parameter.definition.choices if parameter.definition else ()
+    choices = (
+        parameter.definition.schema.choices
+        if parameter.definition and parameter.definition.schema
+        else ()
+    )
     if choices and value not in choices:
         return ValidationIssue(
             code="invalid-choice",

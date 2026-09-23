@@ -70,6 +70,7 @@ export type WorkspaceAction =
   | { type: 'mutation-started'; tabId: string; instanceId: number; requestId: string; baseVersion: number; status: TabStatus }
   | { type: 'preview-result'; tabId: string; instanceId: number; requestId: string; baseVersion: number; preview: ChangePreviewView }
   | { type: 'replace-document'; tabId: string; instanceId: number; requestId: string; baseVersion: number; document: DocumentView }
+  | { type: 'refresh-file-choices'; tabId: string; instanceId: number; document: DocumentView }
   | { type: 'mutation-error'; tabId: string; instanceId: number; requestId: string; baseVersion: number; conflict: boolean; message: string }
   | { type: 'csv-loading'; tabId: string; instanceId: number; requestId: string; path: string }
   | { type: 'csv-result'; tabId: string; instanceId: number; requestId: string; csv: CsvPreviewView | null; error: string | null }
@@ -204,6 +205,20 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   if (action.type === 'replace-document') {
     if (!ownsMutation(tab, action)) return tab
     return createTab(action.document, tab, tab.instanceId)
+  }
+  if (action.type === 'refresh-file-choices') {
+    if (action.instanceId !== tab.instanceId || action.document.revision !== tab.document.revision) return tab
+    const choices = new Map(action.document.semantic_operations.flatMap((operation) => operation.bindings.map((binding) => [binding.id, binding.file_choices] as const)))
+    return {
+      ...tab,
+      document: {
+        ...tab.document,
+        semantic_operations: tab.document.semantic_operations.map((operation) => ({
+          ...operation,
+          bindings: operation.bindings.map((binding) => ({ ...binding, file_choices: choices.get(binding.id) ?? binding.file_choices })),
+        })),
+      },
+    }
   }
   if (action.type === 'mutation-error') {
     if (!ownsMutation(tab, action)) return tab

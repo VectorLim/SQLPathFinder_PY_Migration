@@ -64,6 +64,52 @@ def test_workspace_file_classification_is_backend_owned(tmp_path: Path):
     assert files["generated/report.csv"].translatable is False
 
 
+def test_document_file_choices_use_each_users_server_workspace(tmp_path: Path):
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    first, _ = manager.resolve_or_create(None)
+    second, _ = manager.resolve_or_create(None)
+    _upload(manager, first)
+    first_data = asyncio.run(
+        manager.save_upload(
+            first,
+            UploadFile(filename="table.csv", file=BytesIO(b"name\nfirst\n")),
+            "table.csv",
+        )
+    )
+    asyncio.run(
+        manager.save_upload(
+            second,
+            UploadFile(filename="private.csv", file=BytesIO(b"name\nsecond\n")),
+            "private.csv",
+        )
+    )
+    stale_output = first.root / "generated" / "inputs" / "owner.csv"
+    stale_output.parent.mkdir(parents=True, exist_ok=True)
+    stale_output.write_text("old output", encoding="utf-8")
+    store = DocumentStore(
+        first.root,
+        expose_relative_paths=True,
+        inventory_paths=lambda: (
+            item.path
+            for item in manager.list_files(first)
+            if item.role != "source" and not item.path.endswith(".py")
+        ),
+    )
+    document = store.translate(
+        "inputs/script_short.txt", "generated/inputs/script_short.py"
+    ).view
+    inputs = next(
+        binding
+        for operation in document.semantic_operations
+        for binding in operation.bindings
+        if binding.name == "inputs"
+    )
+    assert first_data.path in inputs.file_choices
+    assert "inputs/private.csv" not in inputs.file_choices
+    assert "generated/inputs/owner.csv" not in inputs.file_choices
+    assert str(tmp_path) not in document.model_dump_json()
+
+
 def test_upload_rejects_paths_outside_workspace_and_executables(tmp_path: Path):
     manager = WorkspaceManager(tmp_path / "workspaces")
     workspace, _ = manager.resolve_or_create(None)
