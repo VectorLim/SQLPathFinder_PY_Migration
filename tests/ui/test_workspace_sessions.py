@@ -287,13 +287,13 @@ def test_projected_file_choices_follow_draft_execution_order(tmp_path: Path):
     (workspace / "inputs").mkdir(parents=True)
     source = workspace / "inputs" / "flow.txt"
     source.write_text(
-        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.csv\n</OPTIONS>\n"
-        "first\n<---- New Query ---->\n"
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=first.csv\n</OPTIONS>\n"
+        "SELECT 1 AS value\n<---- New Query ---->\n"
         "<OPTIONS>\n/OLEDB=SQLite\n/CSV=query.csv\n"
         "/TABLE=first.csv:input_table\n</OPTIONS>\n"
         "SELECT * FROM input_table\n<---- New Query ---->\n"
-        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=later.csv\n</OPTIONS>\n"
-        "later\n<---- New Query ---->\n",
+        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=later.csv\n</OPTIONS>\n"
+        "SELECT 2 AS value\n<---- New Query ---->\n",
         encoding="utf-8",
     )
     store = DocumentStore(workspace, inventory_paths=lambda: ())
@@ -301,17 +301,13 @@ def test_projected_file_choices_follow_draft_execution_order(tmp_path: Path):
         "inputs/flow.txt", "generated/flow.py"
     ).view
 
-    writes = [
-        operation
-        for operation in document.semantic_operations
-        if operation.kind == "ctx.write_file"
-    ]
-    query = next(
+    queries = [
         operation
         for operation in document.semantic_operations
         if operation.kind == "ctx.run_query"
-    )
-    assert len(writes) == 2
+    ]
+    assert len(queries) == 3
+    first, query, later = queries
     query_input = next(
         binding for binding in query.bindings
         if "file-input" in binding.capabilities
@@ -320,7 +316,7 @@ def test_projected_file_choices_follow_draft_execution_order(tmp_path: Path):
     assert "generated/later.csv" not in query_input.file_choices
 
     first_output = next(
-        binding for binding in writes[0].bindings
+        binding for binding in first.bindings
         if "file-output" in binding.capabilities
     )
     snapshot = DocumentSnapshot.model_validate(document.model_dump())
