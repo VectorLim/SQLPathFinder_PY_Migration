@@ -8,6 +8,27 @@ export function ValidationMessage({ message, id }: { message: string | null | un
   return <p id={id} className="validation-error" role="alert">{message}</p>
 }
 
+export function OutputPathField({
+  label,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  label: string
+  value: unknown
+  disabled?: boolean
+  onChange: (value: string) => void
+}) {
+  return <input
+    aria-label={`${label} path`}
+    type="text"
+    value={typeof value === 'string' ? value : ''}
+    disabled={disabled}
+    placeholder="Output path"
+    onChange={(event) => onChange(event.target.value)}
+  />
+}
+
 export function FileSelector({
   label,
   value,
