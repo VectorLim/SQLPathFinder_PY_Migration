@@ -1,3 +1,5 @@
+import './configuration.css'
+
 import { useState } from 'react'
 
 import type {

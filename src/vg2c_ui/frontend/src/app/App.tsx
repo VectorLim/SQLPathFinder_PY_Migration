@@ -1,3 +1,5 @@
+import './app.css'
+
 import { useEffect, useState } from 'react'
 import { ChevronsDownUp, ChevronsUpDown, Command, GitBranch, ListTree, Settings2 } from 'lucide-react'
 

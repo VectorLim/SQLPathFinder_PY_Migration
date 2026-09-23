@@ -1,3 +1,5 @@
+import './scriptLogic.css'
+
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ChevronRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 

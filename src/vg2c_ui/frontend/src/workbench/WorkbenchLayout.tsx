@@ -1,3 +1,5 @@
+import './workbench.css'
+
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
 import { solvePanes, type SecondaryPane } from './paneSolver'

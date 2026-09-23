@@ -1,3 +1,5 @@
+import './context.css'
+
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FileClock, Globe2, Mail } from 'lucide-react'
 
