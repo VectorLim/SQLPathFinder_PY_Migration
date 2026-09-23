@@ -10,25 +10,25 @@ from pathlib import Path
 from threading import RLock
 
 from vg2c import CompilationResult, compile_document
+from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import (
     ChangeProjection,
+    ChangeValidationError,
     SemanticChange,
     ValidationIssue,
+    apply_changes,
     project_changes,
 )
-from vg2c.editing import (
-    apply_changes,
-)
 from vg2c.reorder import OrderChange, apply_order_changes, swap_adjacent
-from vg2c.semantics import build_semantic_model
 from vg2c.sql_editor import SqlAction, apply_sql_action, structured_sql_model
 from vg2c.workflow import (
     WorkflowDocument,
-    project_workflow,
+    project_document,
     workspace_issues,
     workspace_links,
 )
 from vg2c_ui.api.models import (
+    ArtifactView,
     ChangeBatch,
     ChangePreviewView,
     ChangeResultView,
@@ -51,7 +51,6 @@ from vg2c_ui.api.models import (
     WorkspaceProjectionView,
 )
 from vg2c_ui.api.serialization import (
-    artifact_views_for_effects,
     compiler_manifest_hash,
     document_view,
     effect_views,
@@ -136,16 +135,20 @@ class DocumentStore:
             sidecar = read_sidecar(output)
             persisted = self._read_effective_changes(source, output, sidecar)
             result = apply_order_changes(result, _saved_orders(sidecar), persisted)
-            projected = project_changes(result, persisted)
-            if not projected.valid:
+            try:
+                effective = project_document(result, persisted, output_path=output)
+            except ChangeValidationError as exc:
                 raise InvalidSidecar(
                     "Saved edits no longer match the compiler manifest. Original files are preserved."
-                )
-            generation_state = self._generation_state(output, projected.source, sidecar)
+                ) from exc
+            generation_state = self._generation_state(
+                output, effective.source, sidecar
+            )
         except (InvalidSidecar, ValueError) as exc:
             persisted = []
             recovery_reason = str(exc)
             result = compile_document(source)
+            effective = project_document(result, persisted, output_path=output)
         read_only_reason = None
         if recovery_reason:
             read_only_reason = (
@@ -153,17 +156,22 @@ class DocumentStore:
                 or "Generated output cannot be reconciled with compiler metadata; "
                 "retranslate before editing."
             )
+        file_choices = file_choices_by_operation(
+            effective.effects,
+            self.inventory_paths(),
+            output_path=output,
+            workspace_root=self.workspace,
+        )
         view = document_view(
             result,
+            effective,
             output_path=output,
             revision=self._revision(source, output),
             source_hash=_hash_file(source),
             output_hash=_hash_file(output) if output.exists() else "",
-            saved_changes=persisted,
+            file_choices=file_choices,
             read_only_reason=read_only_reason,
             generation_state=generation_state,
-            workspace_root=self.workspace,
-            inventory_paths=self.inventory_paths(),
             compiler_hash=base_compiler_hash,
         )
         if recovery_reason:
@@ -221,17 +229,17 @@ class DocumentStore:
     def preview_html(self, request: HtmlPreviewRequest) -> HtmlPreviewView:
         source, output, result, persisted = self._load_for_change(request)
         merged = _merge_changes(persisted, _changes(request.changes))
-        projected = project_changes(result, merged)
-        if not projected.valid:
+        try:
+            effective = project_document(result, merged, output_path=output)
+        except ChangeValidationError:
             return HtmlPreviewView(
                 state="error",
                 html="",
                 message="HTML preview is unavailable until configuration errors are resolved.",
             )
 
-        values = {item.binding_id: item.value for item in projected.values}
         preview = preview_html_report(
-            build_semantic_model(result, values),
+            effective,
             target_operation_id=request.operation_id,
             resolve_path=self._resolve,
         )
@@ -330,21 +338,21 @@ class DocumentStore:
                 WorkflowDocument(
                     item.document_id,
                     output,
-                    project_workflow(result, merged, output_path=output),
+                    project_document(result, merged, output_path=output),
                 )
             )
             baseline.append(
                 WorkflowDocument(
                     item.document_id,
                     output,
-                    project_workflow(result, persisted, output_path=output),
+                    project_document(result, persisted, output_path=output),
                 )
             )
 
         projected_documents = tuple(
             ProjectedDocumentView(
                 document_id=item.document_id,
-                artifacts=artifact_views_for_effects(item.workflow.effects),
+                artifacts=_workspace_artifact_views(item.workflow.effects),
                 effects=effect_views(item.workflow.effects),
             )
             for item in workflows
@@ -426,8 +434,16 @@ class DocumentStore:
         self, result: CompilationResult, changes: list[SemanticChange],
         binding_id: str, output: Path,
     ):
-        workflow = project_workflow(result, changes, output_path=output)
-        binding = next((item for item in workflow.bindings if item.id == binding_id), None)
+        workflow = project_document(result, changes, output_path=output)
+        binding = next(
+            (
+                binding
+                for operation in workflow.operations
+                for binding in operation.bindings
+                if binding.id == binding_id
+            ),
+            None,
+        )
         if binding is None:
             return (), lambda path: None
         choices = file_choices_by_operation(
@@ -638,6 +654,40 @@ def _saved_orders(sidecar: EditorSidecar | None) -> tuple[OrderChange, ...]:
         OrderChange(item.parent_scope_id, tuple(item.child_scope_ids))
         for item in sidecar.order_changes
     ) if sidecar is not None else ()
+
+
+def _workspace_artifact_views(effects: Iterable[FileEffect]) -> list[ArtifactView]:
+    """Build workspace-only artifact summaries outside compiler and transport layers."""
+    artifacts: dict[str, ArtifactView] = {}
+    for effect in effects:
+        for endpoint in (*effect.inputs, *effect.outputs):
+            if not endpoint.path:
+                continue
+            artifact = artifacts.setdefault(
+                endpoint.path,
+                ArtifactView(
+                    id=endpoint.path,
+                    path=endpoint.path,
+                    label=Path(endpoint.path).name,
+                ),
+            )
+            references = (
+                artifact.producer_step_ids
+                if endpoint.phase == "next"
+                else artifact.consumer_step_ids
+            )
+            if effect.step_id not in references:
+                references.append(effect.step_id)
+            artifact.conditional |= effect.conditional
+            artifact.in_loop |= effect.in_loop
+            artifact.order_valid &= endpoint.status != "missing"
+
+    for artifact in artifacts.values():
+        artifact.is_output = bool(artifact.producer_step_ids)
+        artifact.is_external_input = (
+            bool(artifact.consumer_step_ids) and not artifact.is_output
+        )
+    return sorted(artifacts.values(), key=lambda item: item.path)
 
 
 def _issue_view(issue: ValidationIssue) -> ValidationIssueView:

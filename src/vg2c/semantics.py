@@ -72,6 +72,8 @@ class WorkflowOperation:
     validation_state: ValidationState = "valid"
     visibility: BindingVisibility = "normal"
     block_index: int = -1
+    scope_id: int | None = None
+    reorder_targets: tuple[int, ...] = ()
     source_range: SourceRange | None = None
 
 
@@ -102,30 +104,21 @@ def condition_symbol_token(symbol: Symbol, operator: str | None) -> str:
     return symbol.display_name if operand_type == "numeric" else f"VAR({symbol.display_name})"
 
 
-@dataclass(frozen=True, slots=True)
-class SemanticModel:
-    operations: tuple[WorkflowOperation, ...]
-    bindings: tuple[EditableBinding, ...]
-    symbols: tuple[Symbol, ...]
-
-    def binding(self, binding_id: str) -> EditableBinding | None:
-        return next((item for item in self.bindings if item.id == binding_id), None)
-
-    def operation(self, operation_id: str) -> WorkflowOperation | None:
-        return next((item for item in self.operations if item.id == operation_id), None)
-
-
 CONDITION_OPERATORS = tuple(
     (code, symbol, operand_type)
     for code, (symbol, operand_type) in _OPERATOR_TABLE.items()
 )
 
 
-def build_semantic_model(
+def _build_semantics(
     result: CompilationResult,
     values: dict[str, Any] | None = None,
-) -> SemanticModel:
-    """Project one authoritative semantic model from resolver controls and emitted metadata."""
+) -> tuple[
+    tuple[WorkflowOperation, ...],
+    tuple[EditableBinding, ...],
+    tuple[Symbol, ...],
+]:
+    """Build semantic primitives used by editing and the effective document projection."""
     values = values or {}
     block_by_index = {block.index: block for block in result.resolved.blocks}
     control_ranges = _control_source_ranges(result)
@@ -147,7 +140,9 @@ def build_semantic_model(
                 control_ranges.get(node.scope_id),
             )
             operation = replace(
-                operation, comments=_source_comments(block_by_index[node.start_index].raw)
+                operation,
+                scope_id=node.scope_id,
+                comments=_source_comments(block_by_index[node.start_index].raw),
             )
             operations.append(operation)
             handled_blocks.add(node.start_index)
@@ -167,6 +162,10 @@ def build_semantic_model(
                     branch,
                     values,
                 )
+                leaf_ops = [
+                    replace(operation, scope_id=node.scope_id)
+                    for operation in leaf_ops
+                ]
                 if leaf_ops:
                     leaf_ops[0] = replace(leaf_ops[0], comments=_source_comments(block.raw))
                 operations.extend(leaf_ops)
@@ -181,7 +180,10 @@ def build_semantic_model(
     for block in result.resolved.blocks:
         if block.index in handled_blocks:
             continue
-        orphan_ops = _leaf_operations(result, block, None, None, values)
+        orphan_ops = [
+            replace(operation, scope_id=block.scope_id)
+            for operation in _leaf_operations(result, block, None, None, values)
+        ]
         if orphan_ops:
             orphan_ops[0] = replace(orphan_ops[0], comments=_source_comments(block.raw))
         operations.extend(orphan_ops)
@@ -190,7 +192,7 @@ def build_semantic_model(
     symbols = _build_symbols(result, operations, values)
     operations = _apply_condition_symbol_validation(operations, symbols)
     bindings = tuple(binding for operation in operations for binding in operation.bindings)
-    return SemanticModel(tuple(operations), bindings, symbols)
+    return tuple(operations), bindings, symbols
 
 
 def _control_operation(
@@ -956,10 +958,8 @@ __all__ = [
     "CONDITION_OPERATORS",
     "EditableBinding",
     "OperationReference",
-    "SemanticModel",
     "Symbol",
     "SymbolReference",
     "ValidationState",
     "WorkflowOperation",
-    "build_semantic_model",
 ]

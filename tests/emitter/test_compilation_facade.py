@@ -19,6 +19,7 @@ def test_compile_document_exposes_metadata_without_writing(tmp_path):
     result = compile_document(source)
 
     assert not source.with_suffix(".py").exists()
+    assert result.resolved is result.dispatched.resolved
     assert result.resolved.blocks
     assert result.resolved.scope_tree.kind == "program"
     assert result.emitted.steps

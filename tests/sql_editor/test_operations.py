@@ -12,7 +12,7 @@ def test_operation_registry_covers_every_sql_text_action_with_one_class_each():
     assert len({type(operation) for operation in _SQL_OPERATIONS.values()}) == len(text_actions)
 
 
-def test_operation_registry_dispatches_to_existing_transform_behavior():
+def test_operation_registry_dispatches_to_concrete_operation():
     result = get_sql_operation("add-selection").apply(
         "SELECT a FROM table1",
         {"expression": "b"},

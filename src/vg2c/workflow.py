@@ -14,7 +14,6 @@ from vg2c.dataflow.file_effects import (
     order_file_effects,
 )
 from vg2c.editing import (
-    ChangeProjection,
     ChangeValidationError,
     SemanticChange,
     project_changes,
@@ -24,7 +23,7 @@ from vg2c.semantics import (
     OperationReference,
     Symbol,
     WorkflowOperation,
-    build_semantic_model,
+    _build_semantics,
 )
 from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 from vg2c.utilities.html_report import HtmlReport
@@ -41,20 +40,31 @@ class FileResource:
 
 
 @dataclass(frozen=True, slots=True)
-class WorkflowProjection:
-    changes: ChangeProjection
+class DocumentDiagnostic:
+    level: str
+    code: str
+    message: str
+    location: str | None = None
+    node_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveDocument:
+    """Authoritative effective semantic document derived from one compilation result."""
+
+    source: str
     effects: tuple[FileEffect, ...]
     operations: tuple[WorkflowOperation, ...] = ()
-    bindings: tuple[EditableBinding, ...] = ()
     symbols: tuple[Symbol, ...] = ()
     files: tuple[FileResource, ...] = ()
+    diagnostics: tuple[DocumentDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowDocument:
     document_id: str
     output_path: Path
-    workflow: WorkflowProjection
+    workflow: EffectiveDocument
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,19 +205,25 @@ def workspace_issues(
     return tuple(dict.fromkeys(issues))
 
 
-def project_workflow(
+def project_document(
     result: CompilationResult,
     changes: Iterable[SemanticChange] = (),
     *,
     output_path: Path | None = None,
-) -> WorkflowProjection:
-    """Project edits, semantic operations, symbols, and file flow from one authority."""
-    projection = project_changes(result, changes)
-    if not projection.valid:
-        raise ChangeValidationError(projection.issues)
+) -> EffectiveDocument:
+    """Build the one effective semantic document for downstream consumers."""
+    requested = tuple(changes)
+    if requested:
+        projection = project_changes(result, requested)
+        if not projection.valid:
+            raise ChangeValidationError(projection.issues)
+        source = projection.source
+        values = projection.effective_values
+    else:
+        source = result.emitted.source
+        values = {}
 
-    values = projection.effective_values
-    semantic = build_semantic_model(result, values)
+    operations, _, symbols = _build_semantics(result, values)
     flags = _scope_flags(result)
     invocations = {
         invocation.id: (step, invocation)
@@ -217,7 +233,7 @@ def project_workflow(
     steps_by_block = {step.block_index: step for step in result.emitted.steps}
     effects: list[FileEffect] = []
 
-    for operation in semantic.operations:
+    for operation in operations:
         conditional, in_loop = flags.get(operation.block_index, (False, False))
         step = steps_by_block.get(operation.block_index)
         step_id = step.function_name if step else operation.id
@@ -331,14 +347,59 @@ def project_workflow(
         result.resolved.scope_tree,
         output_path or result.input_path.with_suffix(".py"),
     )
-    return WorkflowProjection(
-        changes=projection,
-        operations=semantic.operations,
-        bindings=semantic.bindings,
-        symbols=semantic.symbols,
+    output = output_path or result.input_path.with_suffix(".py")
+    safe_outputs = _reorder_safe_outputs(result, operations, ordered, output)
+    reorder_targets = _legal_reorder_targets(result, safe_outputs)
+    operations = tuple(
+        replace(
+            operation,
+            reorder_targets=reorder_targets.get(operation.scope_id, ()),
+        )
+        for operation in operations
+    )
+    return EffectiveDocument(
+        source=source,
+        operations=operations,
+        symbols=symbols,
         effects=ordered,
         files=file_resources(ordered),
+        diagnostics=_document_diagnostics(result, ordered),
     )
+
+
+def _document_diagnostics(
+    result: CompilationResult, effects: tuple[FileEffect, ...]
+) -> tuple[DocumentDiagnostic, ...]:
+    diagnostics = [
+        DocumentDiagnostic(
+            item.level,
+            item.code,
+            item.message,
+            item.location,
+        )
+        for item in result.diagnostics
+    ]
+    for effect in effects:
+        for endpoint in effect.inputs:
+            if endpoint.status not in {"external", "missing"}:
+                continue
+            diagnostics.append(
+                DocumentDiagnostic(
+                    level="warning" if endpoint.status == "missing" else "info",
+                    code=(
+                        "file-state-missing"
+                        if endpoint.status == "missing"
+                        else "external-file-input"
+                    ),
+                    message=(
+                        f"{endpoint.path}: unavailable after deletion/move."
+                        if endpoint.status == "missing"
+                        else f"{endpoint.path}: external input."
+                    ),
+                    node_id=effect.operation_id,
+                )
+            )
+    return tuple(diagnostics)
 
 
 def file_resources(effects: Iterable[FileEffect]) -> tuple[FileResource, ...]:
@@ -619,6 +680,71 @@ def _binding(operation: WorkflowOperation, name: str) -> EditableBinding | None:
     return next((item for item in operation.bindings if item.name == name), None)
 
 
+def _reorder_safe_outputs(
+    result: CompilationResult,
+    operations: tuple[WorkflowOperation, ...],
+    effects: tuple[FileEffect, ...],
+    output_path: Path,
+) -> dict[int, set[str]]:
+    """Return independent leaf outputs that are safe candidates for reordering."""
+    operations_by_block: dict[int, list[WorkflowOperation]] = {}
+    for operation in operations:
+        operations_by_block.setdefault(operation.block_index, []).append(operation)
+    effects_by_operation: dict[str, list[FileEffect]] = {}
+    for effect in effects:
+        effects_by_operation.setdefault(effect.operation_id, []).append(effect)
+
+    safe: dict[int, set[str]] = {}
+    for node in _walk_scopes(result.resolved.scope_tree):
+        if node.kind != "leaf" or node.block_index is None:
+            continue
+        node_operations = operations_by_block.get(node.block_index, [])
+        if len(node_operations) != 1 or node_operations[0].kind != "ctx.write_file":
+            continue
+        node_effects = effects_by_operation.get(node_operations[0].id, [])
+        if len(node_effects) != 1 or node_effects[0].kind != "write":
+            continue
+        effect = node_effects[0]
+        if effect.inputs or not effect.outputs or any(
+            endpoint.path is None or endpoint.status != "known"
+            for endpoint in effect.outputs
+        ):
+            continue
+        keys = {
+            key
+            for endpoint in effect.outputs
+            for key in endpoint_keys(endpoint, output_path)
+        }
+        if keys:
+            safe[node.scope_id] = keys
+    return safe
+
+
+def _legal_reorder_targets(
+    result: CompilationResult,
+    safe: dict[int, set[str]],
+) -> dict[int, tuple[int, ...]]:
+    """Compute adjacent reorder targets from already-projected safe outputs."""
+    targets: dict[int, list[int]] = {}
+    for parent in _walk_scopes(result.resolved.scope_tree):
+        if parent.kind not in {"program", "if-branch", "else-branch"}:
+            continue
+        for left, right in zip(parent.children, parent.children[1:]):
+            if left.scope_id not in safe or right.scope_id not in safe:
+                continue
+            if safe[left.scope_id] & safe[right.scope_id]:
+                continue
+            targets.setdefault(left.scope_id, []).append(right.scope_id)
+            targets.setdefault(right.scope_id, []).append(left.scope_id)
+    return {key: tuple(value) for key, value in targets.items()}
+
+
+def _walk_scopes(node):
+    yield node
+    for child in node.children:
+        yield from _walk_scopes(child)
+
+
 def _scope_flags(result: CompilationResult) -> dict[int, tuple[bool, bool]]:
     flags: dict[int, tuple[bool, bool]] = {}
 
@@ -643,9 +769,10 @@ __all__ = [
     "WorkflowDocument",
     "WorkflowIssue",
     "WorkflowLink",
-    "WorkflowProjection",
+    "DocumentDiagnostic",
+    "EffectiveDocument",
     "file_resources",
-    "project_workflow",
+    "project_document",
     "workspace_issues",
     "workspace_links",
 ]

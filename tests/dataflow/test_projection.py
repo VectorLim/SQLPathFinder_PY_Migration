@@ -4,7 +4,7 @@ from vg2c import compile_document
 from vg2c.editing import SemanticChange
 from vg2c.workflow import (
     WorkflowDocument,
-    project_workflow,
+    project_document,
     workspace_issues,
 )
 
@@ -36,8 +36,8 @@ def test_artifact_output_draft_projects_semantic_file_effects(tmp_path):
     result = compile_document(source)
     output = _artifact_parameter(result, "output")
 
-    baseline = project_workflow(result)
-    projected = project_workflow(
+    baseline = project_document(result)
+    projected = project_document(
         result,
         [SemanticChange(binding_id=output.id, value="renamed.csv")],
     )
@@ -52,7 +52,7 @@ def test_artifact_input_draft_projects_semantic_file_effects(tmp_path):
     result = compile_document(source)
     input_parameter = _artifact_parameter(result, "input")
 
-    projected = project_workflow(
+    projected = project_document(
         result,
         [SemanticChange(binding_id=input_parameter.id, value=["renamed-input.csv"])],
     )
@@ -76,15 +76,15 @@ def test_workspace_projection_includes_inactive_dirty_producer(tmp_path):
     consumer = compile_document(consumer_source)
     producer_output = _artifact_parameter(producer, "output")
     baseline = (
-        WorkflowDocument("producer", producer_source.with_suffix(".py"), project_workflow(producer)),
-        WorkflowDocument("consumer", consumer_source.with_suffix(".py"), project_workflow(consumer)),
+        WorkflowDocument("producer", producer_source.with_suffix(".py"), project_document(producer)),
+        WorkflowDocument("consumer", consumer_source.with_suffix(".py"), project_document(consumer)),
     )
 
     dirty = (
         WorkflowDocument(
             "producer",
             producer_source.with_suffix(".py"),
-            project_workflow(
+            project_document(
                 producer,
                 [SemanticChange(binding_id=producer_output.id, value="renamed.csv")],
             ),
@@ -110,15 +110,15 @@ def test_workspace_projection_detects_duplicate_effective_outputs(tmp_path):
     second = compile_document(second_source)
     second_output = _artifact_parameter(second, "output")
     baseline = (
-        WorkflowDocument("first", first_source.with_suffix(".py"), project_workflow(first)),
-        WorkflowDocument("second", second_source.with_suffix(".py"), project_workflow(second)),
+        WorkflowDocument("first", first_source.with_suffix(".py"), project_document(first)),
+        WorkflowDocument("second", second_source.with_suffix(".py"), project_document(second)),
     )
     projected = (
         baseline[0],
         WorkflowDocument(
             "second",
             second_source.with_suffix(".py"),
-            project_workflow(
+            project_document(
                 second,
                 [SemanticChange(binding_id=second_output.id, value="owner.csv")],
             ),

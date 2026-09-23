@@ -11,7 +11,7 @@ from vg2c.sql_editor.parser import parse_sql
 class AddFilterOperation(SqlOperation):
     name = "add-filter"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -59,7 +59,7 @@ class AddFilterOperation(SqlOperation):
 class UpdateFilterOperation(SqlOperation):
     name = "update-filter"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -112,7 +112,7 @@ class UpdateFilterOperation(SqlOperation):
 class RemoveFilterOperation(SqlOperation):
     name = "remove-filter"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],

@@ -9,24 +9,16 @@ from typing import get_args
 
 from vg2c import CompilationResult
 from vg2c.dataflow.file_effects import FileEffect
-from vg2c.editing import SemanticChange
-from vg2c.reorder import legal_reorder_targets
 from vg2c.semantics import CONDITION_OPERATORS
-from vg2c.sql_editor import (
-    FILTER_OPERATORS,
-    JOIN_TYPES,
-    SqlEditableModel,
-    SqlLogicalConnector,
-)
-from vg2c.workflow import project_workflow
+from vg2c.sql_editor import SqlEditableModel, SqlLogicalConnector
+from vg2c.sql_editor.operations import FILTER_OPERATORS, JOIN_TYPES
+from vg2c.workflow import EffectiveDocument
 from vg2c_ui.api.models import (
-    ArtifactView,
     ConditionOperatorView,
     DiagnosticView,
     DocumentView,
     FileEffectView,
     FileResourceView,
-    OperationReferenceView,
     SemanticBindingView,
     SemanticOperationView,
     SourceSpanView,
@@ -40,16 +32,15 @@ from vg2c_ui.api.models import (
     SqlSourceView,
     SqlSpanView,
     SqlTableChoiceView,
-    SymbolReferenceView,
     SymbolView,
     ValueSchemaView,
 )
-from vg2c_ui.services.file_choices import file_choices_by_operation
 
 MAX_DIAGNOSTICS = 200
 
 
 def compiler_manifest_hash(result: CompilationResult) -> str:
+    """Build the transport/session identity for the compiler manifest."""
     manifest = [
         (invocation.id, asdict(invocation.operation))
         for step in result.emitted.steps
@@ -62,29 +53,20 @@ def compiler_manifest_hash(result: CompilationResult) -> str:
 
 def document_view(
     result: CompilationResult,
+    document: EffectiveDocument,
     *,
     output_path: Path,
     source_hash: str,
     output_hash: str,
     revision: str,
-    saved_changes: Iterable[SemanticChange] = (),
+    file_choices: dict[str, list[str]] | None = None,
     read_only_reason: str | None = None,
     generation_state: str = "current",
-    workspace_root: Path | None = None,
-    inventory_paths: Iterable[str] = (),
     compiler_hash: str | None = None,
 ) -> DocumentView:
-    """Serialize compiler-owned semantics without re-discovering or re-inferring them."""
-    saved_changes = tuple(saved_changes)
-    workflow = project_workflow(result, saved_changes, output_path=output_path)
-    reorder_targets = legal_reorder_targets(result, saved_changes)
-    file_choices = file_choices_by_operation(
-        workflow.effects,
-        inventory_paths,
-        output_path=output_path,
-        workspace_root=workspace_root or output_path.parent,
-    )
-    diagnostics = _diagnostics(result, workflow.effects)
+    """Map an authoritative effective document onto the transport contract."""
+    file_choices = file_choices or {}
+    diagnostics = _diagnostics(document.diagnostics)
     return DocumentView(
         id=str(result.input_path.resolve()),
         source_path=str(result.input_path.resolve()),
@@ -96,13 +78,14 @@ def document_view(
         read_only_reason=read_only_reason,
         generation_state=generation_state,
         diagnostics=diagnostics,
-        effects=effect_views(workflow.effects),
+        effects=effect_views(document.effects),
         semantic_operations=semantic_operation_views(
-            workflow.operations, file_choices, result.resolved.scope_tree, reorder_targets,
+            document.operations,
+            file_choices,
             read_only_reason=read_only_reason,
         ),
-        files=file_resource_views(workflow.files),
-        symbols=symbol_views(workflow.symbols),
+        files=file_resource_views(document.files),
+        symbols=symbol_views(document.symbols),
         condition_operators=[
             ConditionOperatorView(code=code, symbol=symbol, operand_type=operand_type)
             for code, symbol, operand_type in CONDITION_OPERATORS
@@ -113,28 +96,17 @@ def document_view(
 def semantic_operation_views(
     operations,
     file_choices: dict[str, list[str]] | None = None,
-    scope_tree=None,
-    reorder_targets: dict[int, tuple[int, ...]] | None = None,
     read_only_reason: str | None = None,
 ) -> list[SemanticOperationView]:
     file_choices = file_choices or {}
-    scope_by_block = {}
-    def collect(node):
-        if node.kind == "leaf" and node.block_index is not None:
-            scope_by_block[node.block_index] = node.scope_id
-        for child in node.children:
-            collect(child)
-    if scope_tree is not None:
-        collect(scope_tree)
-    reorder_targets = reorder_targets or {}
     return [
         SemanticOperationView(
             id=operation.id,
             kind=operation.kind,
             display_name=operation.display_name,
             summary=operation.summary,
-            scope_id=scope_by_block.get(operation.block_index),
-            reorder_targets=list(reorder_targets.get(scope_by_block.get(operation.block_index), ())),
+            scope_id=operation.scope_id,
+            reorder_targets=list(operation.reorder_targets),
             parent_operation_id=operation.parent_operation_id,
             branch=operation.branch,
             source_span=SourceSpanView(
@@ -180,51 +152,15 @@ def semantic_operation_views(
 
 
 def file_resource_views(files) -> list[FileResourceView]:
-    def ref_view(ref):
-        return OperationReferenceView(
-            operation_id=ref.operation_id,
-            binding_id=ref.binding_id,
-        )
-
     return [
-        FileResourceView(
-            id=item.id,
-            path=item.path,
-            status=item.status,
-            producer_refs=[ref_view(ref) for ref in item.producer_refs],
-            consumer_refs=[ref_view(ref) for ref in item.consumer_refs],
-            lifecycle_refs=[ref_view(ref) for ref in item.lifecycle_refs],
-        )
+        FileResourceView.model_validate(item, from_attributes=True)
         for item in files
     ]
 
 
 def symbol_views(symbols) -> list[SymbolView]:
     return [
-        SymbolView(
-            id=item.id,
-            display_name=item.display_name,
-            kind=item.kind,
-            value_state=item.value_state,
-            value=item.value,
-            value_binding_id=item.value_binding_id,
-            introduction=(
-                OperationReferenceView(
-                    operation_id=item.introduction.operation_id,
-                    binding_id=item.introduction.binding_id,
-                )
-                if item.introduction
-                else None
-            ),
-            references=[
-                SymbolReferenceView(
-                    operation_id=ref.operation_id,
-                    binding_id=ref.binding_id,
-                    context=ref.context,
-                )
-                for ref in item.references
-            ],
-        )
+        SymbolView.model_validate(item, from_attributes=True)
         for item in symbols
     ]
 
@@ -234,38 +170,6 @@ def effect_views(effects: Iterable[FileEffect]) -> list[FileEffectView]:
         FileEffectView.model_validate(effect, from_attributes=True)
         for effect in effects
     ]
-
-
-def artifact_views_for_effects(effects: Iterable[FileEffect]) -> list[ArtifactView]:
-    artifacts: dict[str, ArtifactView] = {}
-    for effect in effects:
-        for endpoint in (*effect.inputs, *effect.outputs):
-            if not endpoint.path:
-                continue
-            artifact = artifacts.setdefault(
-                endpoint.path,
-                ArtifactView(
-                    id=endpoint.path,
-                    path=endpoint.path,
-                    label=Path(endpoint.path).name,
-                ),
-            )
-            references = (
-                artifact.producer_step_ids
-                if endpoint.phase == "next"
-                else artifact.consumer_step_ids
-            )
-            if effect.step_id not in references:
-                references.append(effect.step_id)
-            artifact.conditional |= effect.conditional
-            artifact.in_loop |= effect.in_loop
-            artifact.order_valid &= endpoint.status != "missing"
-    for artifact in artifacts.values():
-        artifact.is_output = bool(artifact.producer_step_ids)
-        artifact.is_external_input = (
-            bool(artifact.consumer_step_ids) and not artifact.is_output
-        )
-    return sorted(artifacts.values(), key=lambda item: item.path)
 
 
 def sql_model_view(model: SqlEditableModel) -> SqlModelView:
@@ -383,41 +287,25 @@ def _value_schema_view(schema) -> ValueSchemaView | None:
     )
 
 
-def _diagnostics(
-    result: CompilationResult, effects: Iterable[FileEffect]
-) -> list[DiagnosticView]:
+def _diagnostics(items) -> list[DiagnosticView]:
     diagnostics = [
         DiagnosticView(
             level=_diagnostic_level(item.level),
             code=item.code,
             message=item.message,
             location=item.location,
+            node_id=item.node_id,
         )
-        for item in result.diagnostics[:MAX_DIAGNOSTICS]
+        for item in items[:MAX_DIAGNOSTICS]
     ]
-    if len(result.diagnostics) > MAX_DIAGNOSTICS:
+    if len(items) > MAX_DIAGNOSTICS:
         diagnostics.append(
             DiagnosticView(
                 level="warning",
                 code="diagnostics-truncated",
-                message=f"Only the first {MAX_DIAGNOSTICS} compiler diagnostics are shown.",
+                message=f"Only the first {MAX_DIAGNOSTICS} diagnostics are shown.",
             )
         )
-    for effect in effects:
-        for endpoint in effect.inputs:
-            if endpoint.status in {"external", "missing"}:
-                diagnostics.append(
-                    DiagnosticView(
-                        level="warning" if endpoint.status == "missing" else "info",
-                        code=(
-                            "file-state-missing"
-                            if endpoint.status == "missing"
-                            else "external-file-input"
-                        ),
-                        message=f"{endpoint.path}: {'unavailable after deletion/move' if endpoint.status == 'missing' else 'external input' }.",
-                        node_id=effect.operation_id,
-                    )
-                )
     return diagnostics
 
 
@@ -427,6 +315,7 @@ def _diagnostic_level(value: str) -> str:
 
 __all__ = [
     "MAX_DIAGNOSTICS",
+    "compiler_manifest_hash",
     "document_view",
     "file_resource_views",
     "semantic_operation_views",

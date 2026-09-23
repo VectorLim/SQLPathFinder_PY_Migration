@@ -11,7 +11,7 @@ from vg2c.sql_editor.parser import parse_sql
 class UpdateSourceOperation(SqlOperation):
     name = "update-source"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],

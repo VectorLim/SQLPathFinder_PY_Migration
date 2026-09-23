@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vg2c import compile_document
-from vg2c.workflow import project_workflow
+from vg2c.workflow import project_document
 
 
 def _block(options: str, body: str = "") -> str:
@@ -11,7 +11,7 @@ def _block(options: str, body: str = "") -> str:
 def _workflow(tmp_path, *blocks: str):
     source = tmp_path / "script.txt"
     source.write_text("\n".join(blocks), encoding="utf-8")
-    return project_workflow(compile_document(source))
+    return project_document(compile_document(source))
 
 
 def _paths(effect, phase: str) -> set[str]:

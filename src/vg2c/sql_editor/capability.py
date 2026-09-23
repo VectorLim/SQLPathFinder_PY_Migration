@@ -10,7 +10,7 @@ from vg2c.compilation import CompilationResult
 from vg2c.editing import SemanticChange, project_changes
 from vg2c.emitter.models import EmittedInvocation, EmittedParameter, EmittedStep
 from vg2c.kind import Kind
-from vg2c.semantics import build_semantic_model
+from vg2c.semantics import _build_semantics
 from vg2c.sql_editor.models import (
     SqlActionName, SqlEditCapabilities, SqlEditableModel, SqlEditError, SqlFileList,
 )
@@ -47,8 +47,8 @@ def structured_sql_model(
         projection = project_changes(result, changes)
         if not projection.valid:
             raise SqlEditError("; ".join(issue.message for issue in projection.issues))
-        semantic = build_semantic_model(result, projection.effective_values)
-        bindings = {item.id: item for item in semantic.bindings}
+        _, semantic_bindings, _ = _build_semantics(result, projection.effective_values)
+        bindings = {item.id: item for item in semantic_bindings}
         original = block.resolved_body
         calls = scan_sql_get_csv_list_calls(original)
         source = original

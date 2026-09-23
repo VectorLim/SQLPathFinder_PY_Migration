@@ -32,10 +32,14 @@ class CompilationResult:
     """Authoritative result of the complete compiler semantic chain."""
 
     input_path: Path
-    resolved: ResolvedProgram
     dispatched: DispatchedProgram
     emitted: EmittedScript
     diagnostics: tuple[CompilationDiagnostic, ...]
+
+    @property
+    def resolved(self) -> ResolvedProgram:
+        """Resolver-stage result retained by dispatch; exposed once through the facade."""
+        return self.dispatched.resolved
 
 
 class _DiagnosticHandler(logging.Handler):
@@ -74,7 +78,6 @@ def compile_document(input_path: Path) -> CompilationResult:
 
     return CompilationResult(
         input_path=input_path.resolve(),
-        resolved=resolved,
         dispatched=dispatched,
         emitted=emitted,
         diagnostics=tuple(handler.items),
