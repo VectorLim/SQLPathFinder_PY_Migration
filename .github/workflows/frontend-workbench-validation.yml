@@ -2,7 +2,7 @@ name: Frontend Workbench Validation
 
 on:
   push:
-    branches: [improv-frontend]
+    branches: [improv-frontend, refactor/frontend-modules]
 
 permissions:
   contents: read
