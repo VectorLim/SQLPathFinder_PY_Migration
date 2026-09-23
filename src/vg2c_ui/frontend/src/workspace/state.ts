@@ -153,7 +153,7 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
     return {
       ...tab,
       expandedScopeIds: action.expanded
-        ? new Set(tab.document.semantic_operations.filter((operation) => tab.document.semantic_operations.some((child) => child.parent_operation_id === operation.id)).map((operation) => operation.id))
+        ? new Set(expandableScopeIds(tab.document))
         : new Set(),
     }
   }
@@ -234,6 +234,17 @@ function reduceTab(tab: TabState, action: Exclude<WorkspaceAction, { type: 'merg
   return tab
 }
 
+export function expandableScopeIds(document: DocumentView): string[] {
+  return [...new Set(document.semantic_operations.flatMap((operation) =>
+    operation.parent_operation_id ? [operation.parent_operation_id] : [],
+  ))]
+}
+
+export function allExpandableScopesExpanded(document: DocumentView, expandedIds: Set<string>): boolean {
+  const scopeIds = expandableScopeIds(document)
+  return scopeIds.length > 0 && scopeIds.every((id) => expandedIds.has(id))
+}
+
 export function ancestorScopeIds(document: DocumentView, itemId: string): string[] {
   const operations = new Map(document.semantic_operations.map((operation) => [operation.id, operation]))
   const ancestors: string[] = []
@@ -266,7 +277,7 @@ function updateTab(state: WorkspaceState, tabId: string, update: (tab: TabState)
 
 function createTab(document: DocumentView, previous: TabState | undefined, instanceId: number): TabState {
   const itemIds = new Set(document.semantic_operations.map((operation) => operation.id))
-  const scopeIds = new Set(document.semantic_operations.filter((operation) => document.semantic_operations.some((child) => child.parent_operation_id === operation.id)).map((operation) => operation.id))
+  const scopeIds = new Set(expandableScopeIds(document))
   return {
     document,
     instanceId,
