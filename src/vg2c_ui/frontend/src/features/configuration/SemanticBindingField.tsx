@@ -40,7 +40,7 @@ export function SemanticBindingField({ binding, readOnly, session }: Props) {
       <StructuredSqlEditor
         binding={binding}
         values={values}
-        readOnly={disabled}
+        readOnly={readOnly || session.readOnly}
         fileListReadOnly={readOnly || session.readOnly}
         inspect={actions.inspectSql}
         runCommand={actions.runSqlCommand}
