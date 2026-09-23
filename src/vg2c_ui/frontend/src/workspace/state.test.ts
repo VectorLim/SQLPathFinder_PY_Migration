@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { getChangeActionState } from './guards.ts'
 import { draftChanges, initialWorkspaceState, RESET_VALUE, workspaceProjectionRequest, workspaceReducer } from './state.ts'
-import { solvePanes } from '../paneSolver.ts'
+import { solvePanes } from '../workbench/paneSolver.ts'
 import { SCHEMA_VERSION, type DocumentView } from '../api/contracts.generated.ts'
 
 function doc(id: string): DocumentView {
