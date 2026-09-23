@@ -474,15 +474,15 @@ test('generated file choices follow execution order and unsaved upstream output 
   await uploadAndTranslate(
     page,
     name,
-    '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.csv\n</OPTIONS>\nfirst\n<---- New Query ---->\n'
+    '<OPTIONS>\n/OLEDB=SQLite\n/CSV=first.csv\n</OPTIONS>\nSELECT 1 AS value\n<---- New Query ---->\n'
       + '<OPTIONS>\n/OLEDB=SQLite\n/CSV=query.csv\n/TABLE=first.csv:input_table\n</OPTIONS>\n'
       + 'SELECT * FROM input_table\n<---- New Query ---->\n'
-      + '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=later.csv\n</OPTIONS>\nlater\n<---- New Query ---->\n',
+      + '<OPTIONS>\n/OLEDB=SQLite\n/CSV=later.csv\n</OPTIONS>\nSELECT 2 AS value\n<---- New Query ---->\n',
   )
   const document = await currentDocument(page, name)
-  const writes = document.semantic_operations.filter((operation) => operation.kind === 'ctx.write_file')
-  const query = document.semantic_operations.find((operation) => operation.kind === 'ctx.run_query')!
-  expect(writes).toHaveLength(2)
+  const queries = document.semantic_operations.filter((operation) => operation.kind === 'ctx.run_query')
+  expect(queries).toHaveLength(3)
+  const [first, query] = queries
 
   await page.locator(`[data-semantic-tree-item="${query.id}"]`).click()
   await pane(page, 'Configuration')
@@ -491,7 +491,7 @@ test('generated file choices follow execution order and unsaved upstream output 
   expect(choices).toContain('generated/first.csv')
   expect(choices).not.toContain('generated/later.csv')
 
-  await page.locator(`[data-semantic-tree-item="${writes[0].id}"]`).click()
+  await page.locator(`[data-semantic-tree-item="${first.id}"]`).click()
   const output = page.getByLabel('Output file path', { exact: true })
   await output.fill('renamed.csv')
 
