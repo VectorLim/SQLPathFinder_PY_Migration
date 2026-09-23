@@ -12,12 +12,8 @@ from vg2c.dataflow.file_effects import FileEffect
 from vg2c.editing import SemanticChange
 from vg2c.reorder import legal_reorder_targets
 from vg2c.semantics import CONDITION_OPERATORS
-from vg2c.sql_editor import (
-    FILTER_OPERATORS,
-    JOIN_TYPES,
-    SqlEditableModel,
-    SqlLogicalConnector,
-)
+from vg2c.sql_editor import SqlEditableModel, SqlLogicalConnector
+from vg2c.sql_editor.operations import FILTER_OPERATORS, JOIN_TYPES
 from vg2c.workflow import project_workflow
 from vg2c_ui.api.models import (
     ArtifactView,

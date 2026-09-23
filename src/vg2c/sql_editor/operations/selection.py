@@ -12,7 +12,7 @@ from vg2c.sql_editor.parser import parse_sql
 class AddSelectionOperation(SqlOperation):
     name = "add-selection"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -41,7 +41,7 @@ class AddSelectionOperation(SqlOperation):
 class UpdateSelectionOperation(SqlOperation):
     name = "update-selection"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -86,7 +86,7 @@ class UpdateSelectionOperation(SqlOperation):
 class RemoveSelectionOperation(SqlOperation):
     name = "remove-selection"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -127,7 +127,7 @@ class RemoveSelectionOperation(SqlOperation):
 class ReorderSelectionOperation(SqlOperation):
     name = "reorder-selection"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],

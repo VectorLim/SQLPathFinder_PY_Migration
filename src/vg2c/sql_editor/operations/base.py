@@ -19,19 +19,13 @@ class SqlOperation(ABC):
 
     name: ClassVar[SqlActionName]
 
+    @abstractmethod
     def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
     ) -> SqlTransformResult:
-        return self._transform(source, arguments)
-
-    @abstractmethod
-    def _transform(
-        self,
-        source: str,
-        arguments: Mapping[str, Any],
-    ) -> SqlTransformResult:
+        """Apply this operation to SQL source and return the validated result."""
         raise NotImplementedError
 
     @staticmethod

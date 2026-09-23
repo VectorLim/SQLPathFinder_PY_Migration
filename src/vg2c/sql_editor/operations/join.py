@@ -11,7 +11,7 @@ from vg2c.sql_editor.parser import parse_sql
 class AddJoinOperation(SqlOperation):
     name = "add-join"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -56,7 +56,7 @@ class AddJoinOperation(SqlOperation):
 class UpdateJoinTypeOperation(SqlOperation):
     name = "update-join-type"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -92,7 +92,7 @@ class UpdateJoinTypeOperation(SqlOperation):
 class UpdateJoinSourceOperation(SqlOperation):
     name = "update-join-source"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -123,7 +123,7 @@ class UpdateJoinSourceOperation(SqlOperation):
 class UpdateJoinPredicateOperation(SqlOperation):
     name = "update-join-predicate"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -172,7 +172,7 @@ class UpdateJoinPredicateOperation(SqlOperation):
 class RemoveJoinPredicateOperation(SqlOperation):
     name = "remove-join-predicate"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
@@ -234,7 +234,7 @@ class RemoveJoinPredicateOperation(SqlOperation):
 class RemoveJoinOperation(SqlOperation):
     name = "remove-join"
 
-    def _transform(
+    def apply(
         self,
         source: str,
         arguments: Mapping[str, Any],
