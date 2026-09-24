@@ -11,11 +11,14 @@ from vg2c.emitter.models import EmittedInvocation, EmittedParameter, EmittedStep
 from vg2c.kind import Kind
 from vg2c.semantics import _build_semantics
 from vg2c.sql_editor.models import (
-    SqlActionName, SqlEditableModel, SqlEditError, SqlFileList,
+    SqlActionName,
+    SqlEditableModel,
+    SqlEditError,
+    SqlFileList,
 )
+from vg2c.sql_editor.operations import get_sql_operation
 from vg2c.sql_editor.parser import parse_sql
 from vg2c.sql_editor.schema import SqlTableSchema, with_input_schemas
-from vg2c.sql_editor.operations import get_sql_operation
 from vg2c.utilities._emit_helpers import (
     replace_sql_get_csv_list_path,
     scan_sql_get_csv_list_calls,
