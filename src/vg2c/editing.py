@@ -15,18 +15,18 @@ from vg2c.emitter.models import (
     build_step_emission,
 )
 from vg2c.operands import IfThen, RunLoop, StartMacro
-from vg2c.utilities._emit_helpers import (
-    replace_sql_get_csv_list_path,
-    scan_sql_get_csv_list_calls,
-)
-from vg2c.utilities._sql_globals import extract_sql_globals
-from vg2c.utilities.sqlite_engine import SqliteEngine
 from vg2c.semantics import (
     EditableBinding,
     WorkflowOperation,
     _build_semantics,
     condition_symbol_token,
 )
+from vg2c.utilities._emit_helpers import (
+    replace_sql_get_csv_list_path,
+    scan_sql_get_csv_list_calls,
+)
+from vg2c.utilities._sql_globals import extract_sql_globals
+from vg2c.utilities.sqlite_engine import SqliteEngine
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,7 +562,10 @@ def _validate_changed_controls(
                 issues.append(
                     ValidationIssue(
                         code="incomplete-condition",
-                        message="A second condition requires connector, left value, operator, and comparison value.",
+                        message=(
+                            "A second condition requires connector, left value, "
+                            "operator, and comparison value."
+                        ),
                         binding_id=next(
                             (
                                 binding.id
@@ -578,7 +581,10 @@ def _validate_changed_controls(
                     issues.append(
                         ValidationIssue(
                             code="unresolved-symbol",
-                            message=f"{binding.value!r} does not resolve to a known macro or symbol.",
+                            message=(
+                                f"{binding.value!r} does not resolve to a known "
+                                "macro or symbol."
+                            ),
                             binding_id=binding.id,
                         )
                     )
