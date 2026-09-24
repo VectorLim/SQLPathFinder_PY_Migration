@@ -90,7 +90,7 @@ def _serialized(method):
     return guarded
 
 
-def get_document_store(request) -> "DocumentStore":
+def get_document_store(request) -> DocumentStore:
     """Return the caller's server workspace store."""
     state = getattr(request, "state", None)
     store = getattr(state, "document_store", None)
@@ -139,7 +139,8 @@ class DocumentStore:
                 effective = project_document(result, persisted, output_path=output)
             except ChangeValidationError as exc:
                 raise InvalidSidecar(
-                    "Saved edits no longer match the compiler manifest. Original files are preserved."
+                    "Saved edits no longer match the compiler manifest. "
+                    "Original files are preserved."
                 ) from exc
             generation_state = self._generation_state(
                 output, effective.source, sidecar
@@ -466,9 +467,14 @@ class DocumentStore:
                 candidate = self._resolve(path)
             except PathOutsideWorkspace:
                 return None
-            if candidate.relative_to(self.workspace).as_posix() not in allowed or not candidate.is_file():
+            if (
+                candidate.relative_to(self.workspace).as_posix() not in allowed
+                or not candidate.is_file()
+            ):
                 return None
-            with candidate.open(newline="", encoding="utf-8-sig", errors="replace") as handle:
+            with candidate.open(
+                newline="", encoding="utf-8-sig", errors="replace"
+            ) as handle:
                 row = next(csv.reader(handle), None)
             return tuple(row) if row else None
 
