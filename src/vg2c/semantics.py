@@ -12,11 +12,13 @@ from vg2c.emitter.models import SourceRange
 from vg2c.kind import Kind
 from vg2c.operands import IfThen, RunLoop, ScopeNode, StartMacro
 from vg2c.operands.base import _OPERATOR_TABLE
-from vg2c.utilities._emit_helpers import split_utility_command
+from vg2c.utilities._emit_helpers import (
+    scan_sql_get_csv_list_calls,
+    split_utility_command,
+)
 from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
 from vg2c.utilities.macro_state import MacroState
 from vg2c.utility_metadata import ValueSchema
-from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 
 if TYPE_CHECKING:
     from vg2c.compilation import CompilationResult
@@ -577,7 +579,9 @@ def _rows_in_file_operation(
         )
     target_id = target_parameter.id if target_parameter is not None else f"{operation_id}:target"
     path_id = f"{operation_id}:path"
-    path_range = _row_count_path_range(result.emitted.source, step.source_range if step else None, path)
+    path_range = _row_count_path_range(
+        result.emitted.source, step.source_range if step else None, path
+    )
     bindings = (
         EditableBinding(
             id=path_id,
@@ -725,7 +729,10 @@ def _build_symbols(
                     introduction=OperationReference(operation.id, target.id),
                 )
         if operation.kind == "macro-loop":
-            path_binding = next((item for item in operation.bindings if item.name == "csv_path"), None)
+            path_binding = next(
+                (item for item in operation.bindings if item.name == "csv_path"),
+                None,
+            )
             if path_binding and isinstance(path_binding.value, str):
                 for header in _csv_headers(result.input_path, path_binding.value):
                     add(
