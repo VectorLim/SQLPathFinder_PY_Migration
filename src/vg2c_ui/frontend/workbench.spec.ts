@@ -726,5 +726,5 @@ test('actual_script fixture exercises the repaired UI on realistic content', asy
   await expect(fileList).toBeEnabled()
   await page.screenshot({ path: testInfo.outputPath('actual-script-file-backed-sql.png') })
 
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
+  expect(await page.evaluate(() => window.document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
 })
