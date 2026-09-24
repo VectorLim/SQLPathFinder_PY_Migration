@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import type { DocumentView } from './src/api/contracts.generated'
 
 async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
@@ -561,4 +562,169 @@ test('nested Script Logic toggles with pointer and keyboard without reserving la
   await page.getByRole('button', { name: 'Open commands', exact: true }).click()
   await expect(page.getByText('Expand all groups', { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
+})
+
+
+test('actual_script fixture exercises the repaired UI on realistic content', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  test.setTimeout(120_000)
+
+  const name = 'actual_script.txt'
+  const source = readFileSync(new URL('../../../tests/fixtures/actual_script.txt', import.meta.url), 'utf8')
+  await uploadAndTranslate(page, name, source)
+
+  let document = await currentDocument(page, name)
+  expect(document.semantic_operations.length).toBeGreaterThan(30)
+
+  const roots = document.semantic_operations.filter((operation) => operation.parent_operation_id === null)
+  const parent = roots.find((operation, index) =>
+    index < roots.length - 1
+    && document.semantic_operations.some((child) => child.parent_operation_id === operation.id),
+  )
+  expect(parent, 'Expected actual_script.txt to contain a root scope with nested operations.').toBeTruthy()
+
+  const parentIndex = roots.findIndex((operation) => operation.id === parent!.id)
+  const following = roots[parentIndex + 1]
+  const parentRow = page.locator(`[data-semantic-tree-item="${parent!.id}"]`)
+  const followingRow = page.locator(`[data-semantic-tree-item="${following.id}"]`)
+  const collapsedBox = await followingRow.boundingBox()
+  expect(collapsedBox).toBeTruthy()
+  await page.screenshot({ path: testInfo.outputPath('actual-script-tree-collapsed.png') })
+
+  const expand = parentRow.locator('..').getByRole('button', { name: `Expand ${parent!.display_name}`, exact: true })
+  await expect(expand).toBeVisible()
+  await expand.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'true')
+  await expect(parentRow).toHaveAttribute('aria-selected', 'false')
+  const expandedBox = await followingRow.boundingBox()
+  expect(expandedBox).toBeTruthy()
+  expect(expandedBox!.y).toBeGreaterThan(collapsedBox!.y + 30)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-tree-pointer-expanded.png') })
+
+  const collapse = parentRow.locator('..').getByRole('button', { name: `Collapse ${parent!.display_name}`, exact: true })
+  await collapse.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'false')
+  const pointerCollapsedBox = await followingRow.boundingBox()
+  expect(pointerCollapsedBox!.y).toBeLessThan(expandedBox!.y - 30)
+
+  const expandAll = page.getByRole('button', { name: 'Expand all scopes', exact: true })
+  await expect(expandAll).toBeVisible()
+  await expandAll.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'true')
+  await page.screenshot({ path: testInfo.outputPath('actual-script-tree-expand-all.png') })
+
+  const collapseAll = page.getByRole('button', { name: 'Collapse all scopes', exact: true })
+  await expect(collapseAll).toBeVisible()
+  await collapseAll.click()
+  await expect(parentRow).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('button', { name: 'Expand all scopes', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Expand all scopes', exact: true }).click()
+
+  await pane(page, 'Configuration')
+  await pane(page, 'Context')
+  const workbench = page.locator('.adaptive-workbench-panes')
+  const logic = page.locator('#pane-logic')
+  const configuration = page.locator('#pane-config')
+  const context = page.locator('#pane-context')
+  const initialConfig = await configuration.boundingBox()
+  const initialContext = await context.boundingBox()
+  expect(initialConfig).toBeTruthy()
+  expect(initialContext).toBeTruthy()
+  await page.screenshot({ path: testInfo.outputPath('actual-script-panes-before-collapse.png') })
+
+  await page.getByRole('button', { name: 'Collapse Configuration', exact: true }).click()
+  await expect(configuration).toBeHidden()
+  await expect.poll(async () => (await context.boundingBox())?.width ?? 0, { timeout: 1500 })
+    .toBeGreaterThan(initialContext!.width + 200)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-panes-config-collapsed.png') })
+
+  await page.getByRole('button', { name: 'Collapse Context', exact: true }).click()
+  await expect(context).toBeHidden()
+  await expectPullTabsStacked(page)
+  const workbenchBox = await workbench.boundingBox()
+  await expect.poll(async () => (await logic.boundingBox())?.width ?? 0, { timeout: 1500 })
+    .toBeGreaterThanOrEqual(workbenchBox!.width - 2)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-panes-both-collapsed.png') })
+
+  await page.getByRole('button', { name: 'Expand Configuration', exact: true }).click()
+  await page.getByRole('button', { name: 'Expand Context', exact: true }).click()
+  await page.getByRole('button', { name: 'Collapse Context', exact: true }).click()
+  await expect(context).toBeHidden()
+  await expect.poll(async () => (await configuration.boundingBox())?.width ?? 0, { timeout: 1500 })
+    .toBeGreaterThan(initialConfig!.width + 200)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-panes-context-collapsed.png') })
+  await page.getByRole('button', { name: 'Expand Context', exact: true }).click()
+
+  const outputOperation = document.semantic_operations.find((operation) =>
+    operation.bindings.some((binding) => binding.capabilities.includes('file-output') && binding.editable),
+  )
+  expect(outputOperation, 'Expected an editable output binding in actual_script.txt.').toBeTruthy()
+  const outputBinding = outputOperation!.bindings.find((binding) =>
+    binding.capabilities.includes('file-output') && binding.editable,
+  )!
+  await page.locator(`[data-semantic-tree-item="${outputOperation!.id}"]`).click()
+  await pane(page, 'Configuration')
+  const outputLabel = `${outputBinding.display_label} path`
+  const outputPath = page.getByLabel(outputLabel, { exact: true })
+  await expect(outputPath).toBeVisible()
+  await expect(outputPath).toHaveAttribute('type', 'text')
+  await expect(page.getByRole('combobox', { name: outputLabel, exact: true })).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-output-path-field.png') })
+
+  await outputPath.fill('actual-ui-test-output.csv')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Generate required', { exact: true })).toBeVisible()
+  document = await currentDocument(page, name)
+  expect(
+    document.semantic_operations
+      .find((operation) => operation.id === outputOperation!.id)
+      ?.bindings.find((binding) => binding.id === outputBinding.id)
+      ?.value,
+  ).toBe('actual-ui-test-output.csv')
+
+  const expandAllAfterSave = page.getByRole('button', { name: 'Expand all scopes', exact: true })
+  if (await expandAllAfterSave.isVisible().catch(() => false)) await expandAllAfterSave.click()
+
+  const simpleSqlOperation = document.semantic_operations.find((operation) =>
+    operation.bindings.some((binding) =>
+      binding.capabilities.includes('structured-sql')
+      && binding.editable
+      && typeof binding.value === 'string'
+      && binding.value.includes('[Product_Lookup]'),
+    ),
+  ) ?? document.semantic_operations.find((operation) =>
+    operation.bindings.some((binding) => binding.capabilities.includes('structured-sql') && binding.editable),
+  )
+  expect(simpleSqlOperation, 'Expected an editable structured SQL operation in actual_script.txt.').toBeTruthy()
+  await page.locator(`[data-semantic-tree-item="${simpleSqlOperation!.id}"]`).click()
+  await pane(page, 'Configuration')
+  await expect(page.getByRole('tablist', { name: 'Query configuration' })).toBeVisible()
+  const alias = page.getByRole('textbox', { name: 'Column alias' }).first()
+  await expect(alias).toBeEnabled()
+  const originalAlias = await alias.inputValue()
+  await alias.fill(`${originalAlias}_ui`)
+  await alias.press('Tab')
+  await expect(alias).toHaveValue(`${originalAlias}_ui`)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(alias).toHaveValue(originalAlias)
+  await page.screenshot({ path: testInfo.outputPath('actual-script-structured-sql.png') })
+
+  const fileBackedSqlOperation = document.semantic_operations.find((operation) =>
+    operation.bindings.some((binding) =>
+      binding.capabilities.includes('structured-sql')
+      && binding.editable
+      && typeof binding.value === 'string'
+      && binding.value.includes('SQL_Get_CSV_List'),
+    ),
+  )
+  expect(fileBackedSqlOperation, 'Expected file-backed SQL in actual_script.txt.').toBeTruthy()
+  await page.locator(`[data-semantic-tree-item="${fileBackedSqlOperation!.id}"]`).click()
+  await pane(page, 'Configuration')
+  await expect(page.getByText('SQL structure is read-only; file-list inputs can be changed.')).toHaveCount(0)
+  const fileList = page.getByRole('combobox', { name: /File list for / }).first()
+  await expect(fileList).toBeVisible()
+  await expect(fileList).toBeEnabled()
+  await page.screenshot({ path: testInfo.outputPath('actual-script-file-backed-sql.png') })
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy()
 })
