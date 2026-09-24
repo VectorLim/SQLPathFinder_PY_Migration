@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import type { DocumentView } from './src/api/contracts.generated'
+import type { DocumentView, SqlModelView } from './src/api/contracts.generated'
 
 async function pane(page: Page, name: 'Script Logic' | 'Configuration' | 'Context') {
   const target = page.locator(name === 'Script Logic' ? '#pane-logic' : name === 'Configuration' ? '#pane-config' : '#pane-context')
@@ -685,43 +685,52 @@ test('actual_script fixture exercises the repaired UI on realistic content', asy
   const expandAllAfterSave = page.getByRole('button', { name: 'Expand all scopes', exact: true })
   if (await expandAllAfterSave.isVisible().catch(() => false)) await expandAllAfterSave.click()
 
-  const simpleSqlOperation = document.semantic_operations.find((operation) =>
-    operation.bindings.some((binding) =>
-      binding.capabilities.includes('structured-sql')
-      && binding.editable
-      && typeof binding.value === 'string'
-      && binding.value.includes('[Product_Lookup]'),
-    ),
-  ) ?? document.semantic_operations.find((operation) =>
-    operation.bindings.some((binding) => binding.capabilities.includes('structured-sql') && binding.editable),
+  const structuredCandidates = document.semantic_operations.flatMap((operation) =>
+    operation.bindings
+      .filter((binding) => binding.capabilities.includes('structured-sql') && binding.editable)
+      .map((binding) => ({ operation, binding })),
   )
-  expect(simpleSqlOperation, 'Expected an editable structured SQL operation in actual_script.txt.').toBeTruthy()
-  await page.locator(`[data-semantic-tree-item="${simpleSqlOperation!.id}"]`).click()
+  expect(structuredCandidates.length).toBeGreaterThan(0)
+
+  let editableSql: { operation: typeof structuredCandidates[number]['operation']; binding: typeof structuredCandidates[number]['binding']; model: SqlModelView } | undefined
+  let fileBackedSql: { operation: typeof structuredCandidates[number]['operation']; binding: typeof structuredCandidates[number]['binding']; model: SqlModelView } | undefined
+  for (const candidate of structuredCandidates) {
+    const response = await page.request.post('/api/sql/inspect', {
+      data: { ...document, binding_id: candidate.binding.id },
+    })
+    if (!response.ok()) continue
+    const model = await response.json() as SqlModelView
+    if (!editableSql && model.selections.some((selection) => selection.editable)) {
+      editableSql = { ...candidate, model }
+    }
+    if (!fileBackedSql && model.file_lists.some((fileList) => fileList.choices.length > 0)) {
+      fileBackedSql = { ...candidate, model }
+    }
+    if (editableSql && fileBackedSql) break
+  }
+
+  expect(editableSql, 'Expected actual_script.txt to contain at least one safely editable SQL selection.').toBeTruthy()
+  await page.locator(`[data-semantic-tree-item="${editableSql!.operation.id}"]`).click()
   await pane(page, 'Configuration')
   await expect(page.getByRole('tablist', { name: 'Query configuration' })).toBeVisible()
-  const alias = page.getByRole('textbox', { name: 'Column alias' }).first()
+  const editableSelectionIndex = editableSql!.model.selections.findIndex((selection) => selection.editable)
+  const alias = page.getByRole('textbox', { name: 'Column alias' }).nth(editableSelectionIndex)
   await expect(alias).toBeEnabled()
   const originalAlias = await alias.inputValue()
-  await alias.fill(`${originalAlias}_ui`)
+  const updatedAlias = originalAlias ? `${originalAlias}_ui` : 'ui_alias'
+  await alias.fill(updatedAlias)
   await alias.press('Tab')
-  await expect(alias).toHaveValue(`${originalAlias}_ui`)
+  await expect(alias).toHaveValue(updatedAlias)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(alias).toHaveValue(originalAlias)
   await page.screenshot({ path: testInfo.outputPath('actual-script-structured-sql.png') })
 
-  const fileBackedSqlOperation = document.semantic_operations.find((operation) =>
-    operation.bindings.some((binding) =>
-      binding.capabilities.includes('structured-sql')
-      && binding.editable
-      && typeof binding.value === 'string'
-      && binding.value.includes('SQL_Get_CSV_List'),
-    ),
-  )
-  expect(fileBackedSqlOperation, 'Expected file-backed SQL in actual_script.txt.').toBeTruthy()
-  await page.locator(`[data-semantic-tree-item="${fileBackedSqlOperation!.id}"]`).click()
+  expect(fileBackedSql, 'Expected actual_script.txt to expose at least one selectable SQL_Get_CSV_List input.').toBeTruthy()
+  await page.locator(`[data-semantic-tree-item="${fileBackedSql!.operation.id}"]`).click()
   await pane(page, 'Configuration')
   await expect(page.getByText('SQL structure is read-only; file-list inputs can be changed.')).toHaveCount(0)
-  const fileList = page.getByRole('combobox', { name: /File list for / }).first()
+  const fileListIndex = fileBackedSql!.model.file_lists.findIndex((item) => item.choices.length > 0)
+  const fileList = page.getByRole('combobox', { name: /File list for / }).nth(fileListIndex)
   await expect(fileList).toBeVisible()
   await expect(fileList).toBeEnabled()
   await page.screenshot({ path: testInfo.outputPath('actual-script-file-backed-sql.png') })
