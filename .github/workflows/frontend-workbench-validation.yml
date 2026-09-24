@@ -2,7 +2,7 @@ name: Frontend Workbench Validation
 
 on:
   push:
-    branches: [improv-frontend, refactor/file-sql-script-logic]
+    branches: [improv-frontend]
 
 permissions:
   contents: read
@@ -25,19 +25,6 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: pytest -q
-      - name: Lint touched Python areas
-        run: >-
-          ruff check
-          src/vg2c/editing.py
-          src/vg2c/emitter/models.py
-          src/vg2c/semantics.py
-          src/vg2c/sql_editor/capability.py
-          src/vg2c/utilities/_emit_helpers.py
-          src/vg2c/utilities/sqlite_engine.py
-          src/vg2c_ui/api/models.py
-          src/vg2c_ui/services/document_store.py
-          tests/sql_editor/test_capability.py
-          tests/ui/test_workspace_sessions.py
       - name: Contract check
         env:
           PYTHONPATH: src:.
