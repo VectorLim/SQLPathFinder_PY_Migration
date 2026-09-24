@@ -26,7 +26,7 @@ from vg2c.utilities._emit_helpers import (
     scan_sql_get_csv_list_calls,
 )
 from vg2c.utilities._sql_globals import extract_sql_globals
-from vg2c.utilities.sqlite_engine import SqliteEngine
+from vg2c.utilities.sqlite_engine import render_sql_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -430,9 +430,7 @@ def _render_structured_sql_argument(
         if isinstance(path, str):
             sql = replace_sql_get_csv_list_path(sql, calls[index], path)
 
-    rendered = SqliteEngine.render_sql_text(
-        sql, _sql_global_refs(invocation, parameter)
-    )
+    rendered = render_sql_text(sql, _sql_global_refs(invocation, parameter))
     return rendered.source
 
 
