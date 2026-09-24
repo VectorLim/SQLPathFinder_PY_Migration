@@ -70,7 +70,7 @@ class SqliteEngine(EmitterUtility):
         return {item.key: item.value for item in extract_sql_globals(cls._sql_source(block))}
 
     @classmethod
-    def _render_sql_text(
+    def render_sql_text(
         cls, sql: str, global_refs: dict[str, CodeExpr] | None = None
     ) -> CodeExpr:
         """Render logical SQL through the same runtime substitutions as compilation."""
@@ -131,7 +131,7 @@ class SqliteEngine(EmitterUtility):
 
     @classmethod
     def _extract_sql_text(cls, block, global_refs=None) -> CodeExpr:
-        return cls._render_sql_text(cls._sql_source(block), global_refs)
+        return cls.render_sql_text(cls._sql_source(block), global_refs)
 
     @staticmethod
     def global_sql(value, numeric: bool = False) -> str:
