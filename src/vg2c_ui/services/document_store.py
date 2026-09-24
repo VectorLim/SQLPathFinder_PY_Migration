@@ -350,6 +350,7 @@ class DocumentStore:
                 )
             )
 
+        inventory_paths = self.inventory_paths()
         projected_documents = tuple(
             ProjectedDocumentView(
                 document_id=item.document_id,
@@ -357,7 +358,7 @@ class DocumentStore:
                 effects=effect_views(item.workflow.effects),
                 file_choices=file_choices_by_operation(
                     item.workflow.effects,
-                    self.inventory_paths(),
+                    inventory_paths,
                     output_path=item.output_path,
                     workspace_root=self.workspace,
                 ),
