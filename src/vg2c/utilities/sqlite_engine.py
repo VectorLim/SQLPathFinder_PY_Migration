@@ -19,6 +19,66 @@ from vg2c.utilities.crosstab import CrosstabUtility
 from vg2c.utilities.csv_io import CsvIO
 
 
+def render_sql_text(
+    sql: str, global_refs: dict[str, CodeExpr] | None = None
+) -> CodeExpr:
+    """Render logical SQL through the same runtime substitutions as compilation."""
+    from vg2c.utilities._sql_globals import extract_sql_globals
+
+    calls = scan_sql_get_csv_list_calls(sql)
+    replacements: list[tuple[int, int, str]] = []
+    references: list[str] = []
+    for item in extract_sql_globals(sql) if global_refs else ():
+        if any(call.start < item.end and call.end > item.start for call in calls):
+            continue
+        reference = global_refs.get(item.key)
+        if reference is None:
+            continue
+        if reference.has_value and repr(reference.value) != repr(item.value):
+            continue
+        replacements.append(
+            (
+                item.start,
+                item.end,
+                f"SqliteEngine.global_sql({reference.source}, {item.numeric!r})",
+            )
+        )
+        references.extend(reference.global_names)
+    for call in calls:
+        csv_path_expr = to_code_expr(call.source_path)
+        expr = CsvIO.sql_get_csv_list.render(
+            csv_path_expr,
+            call.column_ref,
+            call.lead_in,
+            chunk_size=CodeExpr("VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE"),
+        )
+        if call.needs_closing_paren:
+            expr += " + ')'"
+        replacements.append((call.start, call.end, expr))
+    if not replacements:
+        return CodeExpr(SqliteEngine._format_sql_literal(sql), sql)
+
+    parts: list[str] = []
+    cursor = 0
+    for start, end, expression in sorted(replacements):
+        literal = sql[cursor:start]
+        if literal:
+            parts.append(repr(literal))
+        parts.append(expression)
+        cursor = end
+    if sql[cursor:]:
+        parts.append(repr(sql[cursor:]))
+    return CodeExpr(
+        " + ".join(parts),
+        sql,
+        global_names=tuple(dict.fromkeys(references)),
+        source_editable=False,
+        source_read_only_reason=(
+            "Generated SQL expressions are edited through structured SQL."
+        ),
+    )
+
+
 class SqliteEngine(EmitterUtility):
     """Emit query calls for external and SQLite readers."""
 
@@ -69,69 +129,10 @@ class SqliteEngine(EmitterUtility):
 
         return {item.key: item.value for item in extract_sql_globals(cls._sql_source(block))}
 
-    @classmethod
-    def render_sql_text(
-        cls, sql: str, global_refs: dict[str, CodeExpr] | None = None
-    ) -> CodeExpr:
-        """Render logical SQL through the same runtime substitutions as compilation."""
-        from vg2c.utilities._sql_globals import extract_sql_globals
-
-        calls = scan_sql_get_csv_list_calls(sql)
-        replacements: list[tuple[int, int, str]] = []
-        references: list[str] = []
-        for item in extract_sql_globals(sql) if global_refs else ():
-            if any(call.start < item.end and call.end > item.start for call in calls):
-                continue
-            reference = global_refs.get(item.key)
-            if reference is None:
-                continue
-            if reference.has_value and repr(reference.value) != repr(item.value):
-                continue
-            replacements.append(
-                (
-                    item.start,
-                    item.end,
-                    f"SqliteEngine.global_sql({reference.source}, {item.numeric!r})",
-                )
-            )
-            references.extend(reference.global_names)
-        for call in calls:
-            csv_path_expr = to_code_expr(call.source_path)
-            expr = CsvIO.sql_get_csv_list.render(
-                csv_path_expr,
-                call.column_ref,
-                call.lead_in,
-                chunk_size=CodeExpr("VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE"),
-            )
-            if call.needs_closing_paren:
-                expr += " + ')'"
-            replacements.append((call.start, call.end, expr))
-        if not replacements:
-            return CodeExpr(cls._format_sql_literal(sql), sql)
-
-        parts: list[str] = []
-        cursor = 0
-        for start, end, expression in sorted(replacements):
-            literal = sql[cursor:start]
-            if literal:
-                parts.append(repr(literal))
-            parts.append(expression)
-            cursor = end
-        if sql[cursor:]:
-            parts.append(repr(sql[cursor:]))
-        return CodeExpr(
-            " + ".join(parts),
-            sql,
-            global_names=tuple(dict.fromkeys(references)),
-            source_editable=False,
-            source_read_only_reason=(
-                "Generated SQL expressions are edited through structured SQL."
-            ),
-        )
 
     @classmethod
     def _extract_sql_text(cls, block, global_refs=None) -> CodeExpr:
-        return cls.render_sql_text(cls._sql_source(block), global_refs)
+        return render_sql_text(cls._sql_source(block), global_refs)
 
     @staticmethod
     def global_sql(value, numeric: bool = False) -> str:
