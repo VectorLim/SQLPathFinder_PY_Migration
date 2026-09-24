@@ -717,7 +717,7 @@ test('actual_script fixture exercises the repaired UI on realistic content', asy
   const alias = page.getByRole('textbox', { name: 'Column alias' }).nth(editableSelectionIndex)
   await expect(alias).toBeEnabled()
   const originalAlias = await alias.inputValue()
-  const updatedAlias = originalAlias ? `${originalAlias}_ui` : 'ui_alias'
+  const updatedAlias = 'icmpcs_ui'
   await alias.fill(updatedAlias)
   await alias.press('Tab')
   await expect(alias).toHaveValue(updatedAlias)
