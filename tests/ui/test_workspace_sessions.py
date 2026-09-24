@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
 
+from vg2c.sql_editor import SqlEditError
 from vg2c_ui.api.models import (
     ChangeBatch,
     DocumentSnapshot,
@@ -17,9 +18,8 @@ from vg2c_ui.api.models import (
     WorkspaceDocumentRequest,
     WorkspaceProjectionRequest,
 )
-from vg2c.sql_editor import SqlEditError
-from vg2c_ui.services.document_store import DocumentStore
 from vg2c_ui.app import create_app
+from vg2c_ui.services.document_store import DocumentStore
 from vg2c_ui.services.workspaces import WorkspaceManager, WorkspacePathError
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
