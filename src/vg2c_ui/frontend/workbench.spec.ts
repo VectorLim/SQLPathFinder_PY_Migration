@@ -729,6 +729,7 @@ test('actual_script fixture exercises the repaired UI on realistic content', asy
   await page.locator(`[data-semantic-tree-item="${fileBackedSql!.operation.id}"]`).click()
   await pane(page, 'Configuration')
   await expect(page.getByText('SQL structure is read-only; file-list inputs can be changed.')).toHaveCount(0)
+  await page.getByRole('tab', { name: /Filters/ }).click()
   const fileListIndex = fileBackedSql!.model.file_lists.findIndex((item) => item.choices.length > 0)
   const fileList = page.getByRole('combobox', { name: /File list for / }).nth(fileListIndex)
   await expect(fileList).toBeVisible()
