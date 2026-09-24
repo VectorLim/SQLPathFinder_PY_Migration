@@ -19,6 +19,7 @@ class CsvIO(UtilitySpec):
     """Read and write CSV files relative to the runtime script directory."""
 
     utility_name = "csv_io"
+    semantic_visibility = "internal"
     script_settings = (
         (
             "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE",
@@ -186,7 +187,7 @@ class CsvIO(UtilitySpec):
     # ------------------------------------------------------------------
 
     @emittable(
-        internal_parameters=("content",),
+        parameter_visibility={"content": "internal"},
         file_effects=(
             FileEffectDefinition(
                 "write",

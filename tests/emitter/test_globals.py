@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from vg2c import compile_document
-from vg2c.editing import ParameterChange, project_changes
+from vg2c.editing import SemanticChange, project_changes
 from vg2c.emitter.globals import resolve_globals
 from vg2c.utilities._sql_globals import extract_sql_globals
 from vg2c.utilities.sqlite_engine import SqliteEngine
@@ -167,11 +167,11 @@ def test_generated_globals_metadata_and_shared_edits(tmp_path):
         for node in tree.body
         if isinstance(node, (ast.Import, ast.ImportFrom))
     )
-    change = ParameterChange(lots[0].id, "2")
+    change = SemanticChange(lots[0].id, "2")
     projected = project_changes(result, [change, change])
     assert projected.valid and projected.source.count("\nLOT = '2'\n") == 1
     assert (
-        project_changes(result, [change, ParameterChange(lots[1].id, "3")])
+        project_changes(result, [change, SemanticChange(lots[1].id, "3")])
         .issues[0]
         .code
         == "conflicting-global-change"

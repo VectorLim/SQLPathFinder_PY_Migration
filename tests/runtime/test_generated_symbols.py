@@ -94,6 +94,10 @@ def test_repeat_compilation_is_identical_and_metadata_slices_match(tmp_path):
         for invocation in step.invocations:
             for parameter in invocation.parameters:
                 span = parameter.source_range
+                if span is None:
+                    assert parameter.definition is not None
+                    assert not parameter.definition.required
+                    continue
                 assert first.source[span.start_offset : span.end_offset] == parameter.source
 
 

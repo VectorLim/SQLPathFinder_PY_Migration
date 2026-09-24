@@ -66,6 +66,7 @@ class WaitFile(EmitterUtility):
         return "wait_file", [stmt]
 
     @emittable(
+        display_name="Wait for File",
         file_effects=(
             FileEffectDefinition(
                 "observe", "observe", inputs=("path",), input_base="working-directory"

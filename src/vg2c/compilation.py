@@ -5,8 +5,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from vg2c.dataflow import analyze
-from vg2c.dataflow.models import AnalyzedProgram
 from vg2c.dispatch import dispatch
 from vg2c.dispatch.models import DispatchedProgram
 from vg2c.emitter import emit
@@ -34,11 +32,14 @@ class CompilationResult:
     """Authoritative result of the complete compiler semantic chain."""
 
     input_path: Path
-    resolved: ResolvedProgram
-    analyzed: AnalyzedProgram
     dispatched: DispatchedProgram
     emitted: EmittedScript
     diagnostics: tuple[CompilationDiagnostic, ...]
+
+    @property
+    def resolved(self) -> ResolvedProgram:
+        """Resolver-stage result retained by dispatch; exposed once through the facade."""
+        return self.dispatched.resolved
 
 
 class _DiagnosticHandler(logging.Handler):
@@ -70,16 +71,13 @@ def compile_document(input_path: Path) -> CompilationResult:
         parsed = parse(text, source=input_path)
         classified = classify(parsed)
         resolved = resolve(classified)
-        analyzed = analyze(resolved)
-        dispatched = dispatch(analyzed)
+        dispatched = dispatch(resolved)
         emitted = emit(dispatched)
     finally:
         compiler_logger.removeHandler(handler)
 
     return CompilationResult(
         input_path=input_path.resolve(),
-        resolved=resolved,
-        analyzed=analyzed,
         dispatched=dispatched,
         emitted=emitted,
         diagnostics=tuple(handler.items),

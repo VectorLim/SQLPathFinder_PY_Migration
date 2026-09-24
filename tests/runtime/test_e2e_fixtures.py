@@ -1,7 +1,7 @@
 """End-to-end pipeline smoke test over every fixture script.
 
 For each ``tests/fixtures/*.txt`` we run the full pipeline
-(parse → classify → resolve → analyze → dispatch → emit) and assert the
+(parse → classify → resolve → dispatch → emit) and assert the
 emitted source compiles as valid Python.
 """
 
@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
@@ -28,8 +27,7 @@ def test_pipeline_emits_compilable_source(fixture: Path) -> None:
     parsed = parse(text, source=fixture)
     classified = classify(parsed)
     resolved = resolve(classified)
-    analyzed = analyze(resolved)
-    dispatched = dispatch(analyzed)
+    dispatched = dispatch(resolved)
     emitted = emit(dispatched)
 
     source = emitted.source

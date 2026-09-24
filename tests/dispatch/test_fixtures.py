@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.frontend import classify, parse
 from vg2c.kind import Kind
@@ -25,8 +24,7 @@ def _run_pipeline(fixtures: Path, file_name: str):
     parsed = parse(text, source=fixtures / file_name)
     classified = classify(parsed)
     resolved = resolve(classified)
-    analyzed = analyze(resolved)
-    return dispatch(analyzed)
+    return dispatch(resolved)
 
 
 def _reader_names(program) -> set[str]:
@@ -47,7 +45,7 @@ def test_dispatched_count_equals_sql_bearing_blocks(
 ) -> None:
     program = _run_pipeline(FIXTURES, fixture_name)
     sql_block_count = sum(
-        1 for block in program.analyzed.resolved.blocks if block.kind in _SQL_BEARING
+        1 for block in program.resolved.blocks if block.kind in _SQL_BEARING
     )
     assert len(program.dispatched) == sql_block_count
 

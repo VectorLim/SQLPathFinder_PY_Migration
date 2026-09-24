@@ -100,13 +100,8 @@ class RunLoop:
     # Emission
     # ------------------------------------------------------------------
 
-    def emit_scope(
-        self,
-        writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
-        children: tuple[ScopeNode, ...],
-    ) -> None:
-        """Emit a chunked for-loop over the input CSV."""
+    def render_header(self) -> str:
+        """Render the generated Python chunk-loop header."""
         from vg2c.utilities.csv_io import CsvIO
 
         chunks_call = CsvIO.iter_chunks.render(
@@ -114,7 +109,16 @@ class RunLoop:
             self.chunk_csv_path,
             int(self.chunk_size),
         )
-        writer.write(f"for __chunk_path in {chunks_call}:")
+        return f"for __chunk_path in {chunks_call}:"
+
+    def emit_scope(
+        self,
+        writer: IndentWriter,
+        walk: Callable[[ScopeNode], None],
+        children: tuple[ScopeNode, ...],
+    ) -> None:
+        """Emit a chunked for-loop over the input CSV."""
+        writer.write(self.render_header())
         writer.push_indent()
         for child in children:
             walk(child)

@@ -4,7 +4,6 @@ import csv
 import re
 from pathlib import Path
 
-from vg2c.dataflow import analyze
 from vg2c.dispatch import dispatch
 from vg2c.emitter import emit
 from vg2c.frontend import classify, parse
@@ -272,10 +271,29 @@ def test_html_report_fixture_flow_parity_order():
     parsed = parse(text, source=fixture)
     classified = classify(parsed)
     resolved = resolve(classified)
-    analyzed = analyze(resolved)
-    dispatched = dispatch(analyzed)
+    dispatched = dispatch(resolved)
     source = emit(dispatched).source
 
     methods = re.findall(r"ctx\.html_report\.(defer|run|layout|delete)\(", source)
     assert methods == ["defer", "defer", "run", "layout", "delete"]
     assert "ctx.html_report.layout(ctx," in source
+
+
+def test_html_report_render_layout_is_pure_when_writes_disabled(tmp_path):
+    report = HtmlReport()
+    report.styles["Column-Headers"] = ["font-size:12"]
+    report.css_file = "preview.css"
+    ctx = MockCtx()
+
+    filename, html = report.render_layout(
+        ctx,
+        ":FILE:preview.html\n:CSS:preview.css\n:CSSEMBED:N\n<h1>Preview</h1>\n",
+        css_resolver=lambda value: tmp_path / value,
+        write_css=False,
+    )
+
+    assert filename == "preview.html"
+    assert "<h1>Preview</h1>" in html
+    assert ctx.write_calls == []
+    assert not (tmp_path / "preview.css").exists()
+    assert not (tmp_path / "preview.html").exists()

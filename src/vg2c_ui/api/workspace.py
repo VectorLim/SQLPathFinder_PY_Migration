@@ -46,7 +46,7 @@ def project_workspace(
                     "level": issue.level,
                     "code": issue.code,
                     "message": issue.message,
-                    "parameter_id": issue.parameter_id,
+                    "binding_id": issue.binding_id,
                 }
                 for issue in exc.issues
             ],
