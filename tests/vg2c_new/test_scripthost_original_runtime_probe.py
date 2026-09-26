@@ -312,7 +312,6 @@ def test_original_getquery_routes_portable_control_and_report_tasks(tmp_path, mo
         assert type(task).__name__ == expected_type
 
 
-
 def test_original_html_defer_lifecycle_runs_on_linux(tmp_path, monkeypatch) -> None:
     _with_extracted_runtime()
     module = importlib.import_module("SPFLib.SPFSQL3")
