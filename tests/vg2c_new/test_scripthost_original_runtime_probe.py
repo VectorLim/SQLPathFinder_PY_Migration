@@ -289,7 +289,7 @@ def test_original_html_css_report_lifecycle_on_linux(tmp_path, monkeypatch) -> N
     assert manager.Run_SPFSQL() is True
     stylesheet = tmp_path / "sqlpathfinder_style_1.css"
     assert stylesheet.exists()
-    assert "Column-Headers" in stylesheet.read_text(encoding="utf-8", errors="replace")
+    assert "background-color:#dbd9c0" in stylesheet.read_text(encoding="utf-8", errors="replace")
     assert not list(tmp_path.glob("*_tmp_.ini"))
 
 
