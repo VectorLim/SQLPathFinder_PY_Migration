@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from vg2c_new.parser import Vg2ParseError
 from vg2c_new.parser import parse as parse_vg2c_new
 from vg2c_new.runtime import Interpreter as NewInterpreter
 from vg2c_new.runtime import RuntimeState as NewRuntimeState
@@ -522,17 +523,17 @@ def test_actual_script_fixture_parses_through_both_runtime_resolvers(tmp_path) -
         None,
         False,
     )
-    modern_commands = parse_vg2c_new(text, source=fixture)
-
     assert len(original_tasks) > 10
-    assert len(modern_commands) > 10
     assert [type(task).__name__ for task in original_tasks[:3]] == [
         "HTMLRunTask",
         "HTMLLayoutTask",
         "HTMLDeleteTask",
     ]
-    assert [command.utility_type for command in modern_commands[:3]] == [
-        "report.html_run",
-        "report.html_layout",
-        "report.delete",
-    ]
+    assert any(type(task).__name__ == "DOSCmdTask" for task in original_tasks)
+
+    # The current real fixture still contains getcsrsu.bat. ScriptHost's mature
+    # resolver accepts that through its DOS fallback, while vg2c_new deliberately
+    # disables generic shell fallback. Preserve this as explicit migration
+    # evidence instead of changing either parser merely to make the test agree.
+    with pytest.raises(Vg2ParseError, match="getcsrsu\\.bat"):
+        parse_vg2c_new(text, source=fixture)
