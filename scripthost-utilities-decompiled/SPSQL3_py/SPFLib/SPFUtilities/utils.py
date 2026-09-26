@@ -191,7 +191,6 @@ History:
 2.1.3.3a : vanatara : Update code merge issue
 """
 from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-from dask.callbacks import Callback as DaskCallback
 
 from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
 from rich.progress import ProgressColumn as RichProgressColumn
