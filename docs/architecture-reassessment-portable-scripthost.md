@@ -13,8 +13,8 @@ Exact starting point:
 Assessment branch:
 
 - `direct-runtime/architecture-reassessment-portable-scripthost-v4`
-- validated implementation/test head before this report:
-  `3879e2c8062a96a7ad710e4c9b9e2f4be13388ba`
+- validated implementation/test head used by the final report refresh:
+  `c46636df3f010d1705a6c6523ca9a7e6a91f948c`
 
 The branch was created directly from the requested commit. Nothing was merged to
 `main`. `vg2c_new` was not deleted or cut over. The paused Session 2.5B report
@@ -48,6 +48,8 @@ The tested workflow used the real original task hierarchy for:
 - `START-MACRO` / `END-MACRO`;
 - `IF-THEN` / `ELSE` / `END-IF`;
 - `FOR-LOOP` / `END-LOOP`;
+- `SITE-LOOP`;
+- `RUN-LOOP`;
 - macro CSV loading and substitution;
 - loop-token substitution;
 - actual filesystem output.
@@ -354,9 +356,26 @@ is guaranteed to execute exactly one job before exiting. A conventional
 long-lived process pool that reuses workers for unrelated jobs should not be
 treated as isolated unless a complete reset contract is separately proven.
 
+### Process startup/one-job overhead
+
+A small CI feasibility probe launches three **fresh sequential Python
+processes**. Each imports the original ScriptHost runtime and executes one
+original `WRITE-FILE` job.
+
+On the Ubuntu GitHub Actions runner, all three jobs completed in **1.93 s total**
+for the measured test, approximately **0.64 s/job** including interpreter
+startup, ScriptHost imports, runtime construction, parsing, execution, and
+process shutdown.
+
+This is not a production throughput benchmark and no service SLA is inferred
+from it. It is enough to reject the concern that fresh-process containment has
+obviously prohibitive multi-second-to-tens-of-seconds startup cost for this
+runtime. Production-scale scripts still require workload benchmarking.
+
 ## ScriptHost files changed by this prototype
 
-Only three decompiled ScriptHost source files were changed.
+Only four decompiled ScriptHost source files were changed. The changes are
+portability guards/boundaries rather than a replacement runtime.
 
 ### `SPFLib/SPFSQL3.py`
 
@@ -392,13 +411,21 @@ Diff:
 
 - +1 / -1 line.
 
-### Not changed
+### `SPFLib/SPFGlobals.py`
 
-Notably, this reassessment did **not** modify `SPFGlobals.py` to make the
-prototype work.
+Change:
 
-The process-isolation result was obtained with the existing class-level global
-model.
+- add explicit platform guards to the three Win32 identity accessors
+  (`gUserPrincipal`, `gUN`, and `gUDomain`) so Linux import remains valid
+  and the unsupported Windows identity integration fails clearly only if that
+  property is invoked.
+
+Diff:
+
+- +6 / -0 lines.
+
+No `SPFGlobals` state model was redesigned. The process-isolation result still
+uses the original class/process-level global model.
 
 ## Component classification
 
@@ -416,7 +443,8 @@ model.
 | macro tasks | **KEEP** | Linux-proven |
 | IF/ELSE tasks | **KEEP** | Linux-proven |
 | FOR-LOOP | **KEEP** | Linux-proven and preserves semantics not present in `vg2c_new` |
-| SITE/RUN loop | **KEEP CANDIDATE; TEST NEXT** | Same hierarchy; not yet fully exercised in this spike |
+| SITE-LOOP | **KEEP** | Original task executes on Linux and performs site substitution |
+| RUN-LOOP | **KEEP** | Original pandas/chunking path executes on Linux and produces the expected final chunk |
 | local `WriteFileTask` | **KEEP** | Linux-proven |
 | portable `Utilities` helpers | **KEEP SELECTIVELY** | Do not replace merely because class is large |
 | old `dbDrivers` transport | **REPLACE TRANSPORT** | Package is absent from repository; old transports are not a viable authority |
@@ -431,7 +459,33 @@ model.
 | legacy service/HPC remote transport | **REPLACE OR RETIRE BY PRODUCT REQUIREMENT** | Control scope can remain; historical host mechanism is not Linux authority |
 | report parser/task routing | **KEEP** | Mature original semantic surface |
 | portable report algorithms | **KEEP / DIRECT REUSE CANDIDATE** | Consistent with Session 2.5A findings |
-| process cleanup | **KEEP**, with process exit as final containment | Existing cleanup still useful; OS exit guarantees job-global disposal |
+| cleanup semantics | **KEEP / MINIMAL PORTABILITY AMENDMENT** | `Run_SPFSQL` calls `Final_CleanUp`; its old `%COMSPEC%` deletion transport should become portable filesystem deletion when that branch is needed; process exit remains final state containment |
+
+## Parser/runtime comparison across the requested surface
+
+The following comparison separates tested parity from code-grounded differences.
+
+| Surface | Original ScriptHost | `vg2c_new` | Assessment |
+|---|---|---|---|
+| Query splitting | `Run_SPFSQL` splits the original SQL file delimiter and feeds `Process_Query` | `_split_segments` reimplements the delimiter scan while adding source line ranges | Same concept; new parser adds diagnostics, original remains semantic authority |
+| OPTIONS parsing | `SPFTaskBase.parseTaskOptions` populates mutable task option state | `_parse_segment/_parse_options` emits immutable options with `SourceSpan` | New implementation is cleaner; still duplicate semantics |
+| GetQuery precedence/routing | Mature `TaskHandlerMapDict` plus report/query selection in `GetQuery` | Manifest + resolver reproduce utility/control/report routing | New runtime explicitly says it is an amended port; keeping both creates two routing authorities |
+| Utility arguments | Original `MyUtilities` tokenization uses `csv.reader` with space delimiter/quotes | `parse_utility_arguments` is a direct port with immutable tuple/source errors | Strong parity by construction |
+| IF/ELSE | Original mutable controller tasks and `CompareVars` side effects | New interpreter reimplements conditions with runtime frames/pure comparison | Representative branch parity proven |
+| Macro substitution | Original `StartMacroTask` + `MemTable` + deep-copied child task substitution | New interpreter uses scoped `RuntimeState` frames | Representative single-row parity proven; broad macro corpus still needed |
+| FOR-LOOP V2 | Original mutable child copies and loop token substitution | New interpreter recreates V2 with frames | Representative V2 parity proven |
+| Historical FOR-LOOP | Original retains Version-1 branch | New runtime explicitly rejects historical version selection | Proven semantic difference |
+| SITE-LOOP | Original substitutes `spf-site` / filename token and stops after first failing site despite its console text | New amended port intentionally mirrors the actual `break` behavior using a frame | Original task now Linux-proven; cross-runtime full error-path parity remains to test |
+| RUN-LOOP | Original pandas chunk reader, temp copy, global loop/abort bookkeeping | New runtime rewrites with stdlib CSV and drops global bookkeeping | Original task now Linux-proven; the two are intentionally different implementations |
+| HPC | Original `BeginHPCTask` retains historical local/async/remote transport logic | New runtime flattens BEGIN/END-HPC to child execution | Known semantic/transport flattening; product requirement decides what transport survives |
+| Error/continue behavior | `gMyAbort`, `ContinueOnError`, `SPFNothingToProcessException`, loop-specific cleanup/continuation | Exceptions are normalized into source-located runtime errors with per-utility handling | Cleaner new model, but not full behavioral parity yet |
+| Report lifecycle | Original routes and owns HTML run/defer/layout/tab/menu/plot/delete/JS tasks and shared report state | Report entries exist in resolver manifest but are current-platform gaps at this baseline; paused 2.5B is separate checkpoint work | Original report/task lifecycle is a major reuse opportunity |
+| Cleanup | `Run_SPFSQL` calls `Final_CleanUp`; errors set `gMyAbort` and re-raise; no-process case is specially continued | New runtime relies on scoped state/portable utility cleanup | Original cleanup semantics can stay, but the `%COMSPEC%` file-deletion edge is a transport replacement |
+
+This matrix is why the recommendation is not to discard `vg2c_new` as
+"incorrect." It has real advantages in diagnostics and isolation. The concern
+is maintaining two independent implementations of mature VG2 semantics when the
+original runtime itself is now demonstrably portable for core paths.
 
 ## Objective comparison with `vg2c_new`
 
@@ -501,6 +555,21 @@ The architecture decision is therefore not "old code is cleaner." It is:
 > a second implementation of the same language/runtime.
 
 ## Option comparison
+
+### Cross-option criteria
+
+| Criterion | A — `vg2c_new` | B — portable original wholesale | C — original semantic core + selective adapters |
+|---|---|---|---|
+| Duplicated semantics | High: parser/runtime/control semantics are reimplemented | Low | Low: one semantic authority, transport adapters only |
+| New/runtime LOC pressure | Already substantial and grows with every gap | Small for core, but large if obsolete transports are reconstructed | Small-to-moderate and concentrated at real platform edges |
+| Original files changed in this spike | N/A to A | 4 files were enough for tested core import/execution | Same 4-file core feasibility plus bounded adapters |
+| Current Windows dependencies | Avoided by rewrite | Still numerous and blocks literal wholesale use | Kept off portable paths; replaced only when invoked/required |
+| Test/parity confidence | Strong unit tests; incomplete resolver coverage | Core Linux evidence strong; broad production task coverage incomplete | Strongest migration path because both engines can run side-by-side during validation |
+| Concurrency | Safe in-process state model | Unsafe for unrelated jobs in same interpreter | Fresh process per job contains original globals |
+| Report reuse | Requires parallel report implementation/integration | Can directly use mature report task lifecycle | Can directly reuse portable report algorithms and adapt plotting/transport edges |
+| DataSyncX integration | Natural because runtime is new | Awkward if forced into missing legacy `dbDrivers` shape | Narrow adapter behind original query/task contract; do not recreate missing drivers |
+| Future maintenance | Cleaner modules, but semantic duplication persists | Large decompiled monolith and legacy transport burden | Legacy semantic core remains large, but modernization is localized and duplication falls |
+| Migration/cutover risk | Higher semantic reconstruction risk | Higher platform/integration risk if attempted wholesale | Lowest current evidence-based risk: preserve behavior while replacing bounded edges |
 
 ### Option A — continue `vg2c_new` as the replacement runtime
 
@@ -611,27 +680,31 @@ Remaining blockers/unknowns include:
    obsolete paths can remain unreachable.
 
 8. **Full task coverage.**
-   SITE-LOOP, RUN-LOOP, normal query variants, report tasks, and the complete
-   utility map require Linux compatibility/parity cases before a cutover
-   decision.
+   SITE-LOOP and RUN-LOOP are now Linux-proven in this spike. Normal query
+   variants, report tasks, and the rest of the complete utility map still
+   require Linux compatibility/parity cases before a cutover decision.
 
 9. **Operational process model.**
    The production parent/worker protocol, cancellation, timeout, stdout/log
    capture, temp workspace lifecycle, resource limits, and result envelope have
    not yet been implemented.
 
-10. **Performance.**
-    Correctness and isolation were tested. A representative production-scale
-    startup/throughput benchmark has not yet been performed, so no performance
-    claim is made.
+10. **Performance beyond startup.**
+    The three-fresh-process micro-probe measured 1.93 s total on GitHub Actions.
+    A representative production-scale query/report throughput benchmark has not
+    yet been performed, so no end-to-end performance claim is made.
 
 ## Validation evidence
 
-Latest completed Linux validation before this report:
+Latest completed Linux validation used for the expanded runtime matrix before
+the final identity-boundary refresh:
 
-- GitHub Actions run: `36261787639`;
+- GitHub Actions run: `36262083919`;
 - environment: Ubuntu runner, Python 3.12;
-- result: **61 passed, 24 warnings**;
+- result: **65 passed, 28 warnings**;
+- slowest process-startup probe: **1.93 s** for three fresh sequential jobs;
+- original RUN-LOOP test: **0.19 s**;
+- original SITE-LOOP test: **0.13 s**;
 - Ruff: **all checks passed**;
 - existing `vg2c_new` tests remain in the same validation job.
 
@@ -643,12 +716,18 @@ The test set now covers:
 - import of the original runtime on Linux;
 - original WRITE-FILE execution;
 - original macro / IF-ELSE / FOR-LOOP workflow;
+- original SITE-LOOP execution;
+- original RUN-LOOP execution;
 - repeated sequential local runs;
 - explicit incomplete `SPFGlobals` cache reset behavior;
 - deterministic threaded shared-state contamination;
 - concurrent fresh-process isolation;
 - original-vs-`vg2c_new` representative output parity;
-- an explicit historical loop semantic difference.
+- an explicit historical loop semantic difference;
+- missing legacy DB transport failing only when invoked;
+- fresh-process startup/one-job timing;
+- Windows identity integration remaining import-safe and failing clearly only
+  when invoked on Linux.
 
 ## Session 2.5B status
 
