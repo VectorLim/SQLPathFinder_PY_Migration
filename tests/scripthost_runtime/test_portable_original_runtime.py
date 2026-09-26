@@ -184,6 +184,13 @@ def test_spfglobals_command_state_is_shared_across_threads(tmp_path) -> None:
 
 
 def _isolated_process_code(tmp_path: Path, output: Path, value: str, instance: str) -> str:
+    payload = (
+        "<OPTIONS>\n"
+        "/WRITE-FILE=Y\n"
+        f"/CSV={output}\n"
+        "</OPTIONS>\n"
+        f"{value}<EOF>"
+    )
     return f"""
 import sys
 sys.path.insert(0, {str(SCRIPT_HOST)!r})
@@ -196,13 +203,7 @@ manager.gCommandLineArguments = [
     "/EXEDIR={tmp_path}",
     "/SPFINSTANCE={instance}",
 ]
-manager.MySPFSQLFileData = {(
-        "<OPTIONS>\n"
-        "/WRITE-FILE=Y\n"
-        f"/CSV={output}\n"
-        "</OPTIONS>\n"
-        f"{value}<EOF>"
-    )!r}
+manager.MySPFSQLFileData = {payload!r}
 if manager.Run_SPFSQL() is not True:
     raise SystemExit(2)
 """
