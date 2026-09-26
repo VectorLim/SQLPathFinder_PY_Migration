@@ -42,10 +42,8 @@ import os
 import re
 import sys
 import time
-import winreg
 import threading
 import queue
-import pymongo
 import numpy as np
 import pandas as pd
 import configparser
@@ -536,6 +534,10 @@ def input_with_timeout(message, timeout, interactive_run=True, logger=None):
 
 
 def CheckDateIdeal(interactive_run=True, logger=None):
+    if os.name != "nt":
+        raise RuntimeError("IDEAL registry discovery is only supported on Windows")
+    import winreg
+
     logger.debug('Running CheckDateIdeal function')
     myregval1 = myregval2 = ''
     try:
@@ -732,6 +734,8 @@ def Drop_Downstream_Opers(id_column, data_file, response_oper, threshold=0.75, u
                 logger.debug('  -Connection to KitchenSink Successful')
                 conn_success = True
             else:
+                import pymongo
+
                 logger.info('  -Connecting to KitchenSink Trace using pymongo')
                 client = pymongo.MongoClient('ATDSPWMONGOMD4:27019')
                 client2 = pymongo.MongoClient('ATDSPWMONGOMD10:27019')
