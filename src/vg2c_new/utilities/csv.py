@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from SPSQL3_py.SPFLib.SPFUtilities.portable import get_file_delimiter
 from vg2c_new.paths import resolve_path, working_directory_for
 
 if TYPE_CHECKING:
@@ -19,23 +20,13 @@ class CsvUtility:
 
     @staticmethod
     def delimiter(path: str | Path, *, output: bool = False) -> str:
-        """Direct port of ScriptHost Utilities.GetFileDLM for portable file types.
+        """Directly reuse ScriptHost's stateless GetFileDLM implementation.
 
-        Source: SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.GetFileDLM.
-        Reference source/commit: ScriptHost source vendored at 8ddd5e6463b43834d769057be48041ec657f0f9d.
-        Port mode: DIRECT PORT.
-        Preserved: TAB/HIVE-TAB/HIVE-SEQUENCE, ASC, PLUS and CSV/default delimiters.
-        Amendments: output .txt uses comma because csv writers require a delimiter.
-        Intentionally discarded: SDB/JSON/PMPK delimiter errors outside CSV-owned paths.
+        The only adapter is the historical .txt output case: pandas/csv requires a concrete
+        one-character delimiter, so an empty ScriptHost output delimiter remains comma here.
         """
-        suffix = Path(path).suffix.casefold()
-        if suffix in {".tab", ".hive-tab", ".hive-sequence"}:
-            return "\t"
-        if suffix == ".asc":
-            return "|"
-        if suffix == ".plus":
-            return "+"
-        return ","
+        delimiter = get_file_delimiter(path, mode="O" if output else "I")
+        return delimiter or ","
 
     @classmethod
     def read_dataframe(cls, path: Path, *, nrows: int | None = None) -> pd.DataFrame:
