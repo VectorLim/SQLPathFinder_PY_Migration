@@ -101,7 +101,10 @@ def test_wait_files_metadata_compare_and_update_time(tmp_path: Path) -> None:
     )
     runtime.set_global("SPF_SITE_TIME", "2026-09-26 12:00:00")
     UpdateTimeUtility().apply(command("update_time", ("time.csv",)), runtime)
-    assert CsvUtility.read_dataframe(tmp_path / "time.csv").loc[0, "Last_Date-15m"] == "2026-09-26 11:45:00"
+    assert (
+        CsvUtility.read_dataframe(tmp_path / "time.csv").loc[0, "Last_Date-15m"]
+        == "2026-09-26 11:45:00"
+    )
 
 
 def test_smart_append_v4_semantics_and_old_version_rejection(tmp_path: Path) -> None:

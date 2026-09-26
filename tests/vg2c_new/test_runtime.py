@@ -62,7 +62,10 @@ class SnapshotOutput(Utility):
 def test_state_substitution_frames_globals_environment_and_reserved_tokens(tmp_path: Path) -> None:
     state = RuntimeState(tmp_path, globals={"G": "global"}, environment={"HOME_X": "env"})
     with state.frame({"name": "macro", "spf-site": "KM"}):
-        assert state.substitute("<<<G>>>/<<<name>>>/<<<spf-site>>>/<<<%HOME_X%>>>") == "global/macro/KM/env"
+        assert (
+            state.substitute("<<<G>>>/<<<name>>>/<<<spf-site>>>/<<<%HOME_X%>>>")
+            == "global/macro/KM/env"
+        )
         assert state.lookup("NAME") == "macro"
     assert state.lookup("name") is None
     assert state.substitute("<<<spf-unknown>>>") == "<<<spf-unknown>>>"
@@ -85,7 +88,9 @@ def test_state_substitution_frames_globals_environment_and_reserved_tokens(tmp_p
         ("1", "1,5", "NBT", True),
     ],
 )
-def test_compare_vars_current_operators(left: str, right: str, operator: str, expected: bool) -> None:
+def test_compare_vars_current_operators(
+    left: str, right: str, operator: str, expected: bool
+) -> None:
     assert compare_vars(left, right, operator) is expected
 
 
@@ -100,14 +105,14 @@ def test_if_else_two_conditions_and_22844_empty_placeholders(tmp_path: Path) -> 
         script(
             block('/UTILITIES={IF-THEN} "Rows" "GT" "0" "" "" "" ""'),
             block('/UTILITIES=@Echo "one"'),
-            block('/UTILITIES={ELSE}'),
+            block("/UTILITIES={ELSE}"),
             block('/UTILITIES=@Echo "wrong-one"'),
-            block('/UTILITIES={END-IF}'),
+            block("/UTILITIES={END-IF}"),
             block('/UTILITIES={IF-THEN} "VAR(abc)" "EQS" "ABC" "AND" "count" "GE" "2"'),
             block('/UTILITIES=@Echo "two"'),
-            block('/UTILITIES={ELSE}'),
+            block("/UTILITIES={ELSE}"),
             block('/UTILITIES=@Echo "wrong-two"'),
-            block('/UTILITIES={END-IF}'),
+            block("/UTILITIES={END-IF}"),
         )
     )
     Interpreter({"echo": capture}).execute(
@@ -122,7 +127,7 @@ def test_if_rejects_partially_filled_second_condition(tmp_path: Path) -> None:
         script(
             block('/UTILITIES={IF-THEN} "VAR(1)" "EQ" "1" "AND" "" "EQ" "2"'),
             block('/UTILITIES=@Echo "x"'),
-            block('/UTILITIES={END-IF}'),
+            block("/UTILITIES={END-IF}"),
         )
     )
     with pytest.raises(RuntimeError, match="partially specified"):
@@ -136,7 +141,7 @@ def test_macro_uses_only_first_data_row_and_does_not_leak_state(tmp_path: Path) 
         script(
             block('/UTILITIES={START-MACRO} "m.csv" "Y"'),
             block('/UTILITIES=@Echo "<<<name>>>" "<<<value>>>"'),
-            block('/UTILITIES={END-MACRO}'),
+            block("/UTILITIES={END-MACRO}"),
         )
     )
     state = RuntimeState(tmp_path)
@@ -151,7 +156,7 @@ def test_macro_missing_file_default_continues_and_strict_mode_fails(tmp_path: Pa
         script(
             block('/UTILITIES={START-MACRO} "missing.csv"'),
             block('/UTILITIES=@Echo "never"'),
-            block('/UTILITIES={END-MACRO}'),
+            block("/UTILITIES={END-MACRO}"),
         )
     )
     capture = Capture()
@@ -162,7 +167,7 @@ def test_macro_missing_file_default_continues_and_strict_mode_fails(tmp_path: Pa
         script(
             block('/UTILITIES={START-MACRO} "missing.csv" "N"'),
             block('/UTILITIES=@Echo "never"'),
-            block('/UTILITIES={END-MACRO}'),
+            block("/UTILITIES={END-MACRO}"),
         )
     )
     with pytest.raises(RuntimeError, match="Macro file not found"):
@@ -178,7 +183,7 @@ def test_for_loop_forward_version_2_tokens(tmp_path: Path) -> None:
                 '/UTILITIES=@Echo "<<<spf-start-x>>>" "<<<spf-end-x>>>" '
                 '"<<<spf-step-x>>>" "<<<spf-loop-ctr-x>>>" "<<<spf-loop-ctr-x-int>>>"'
             ),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     state = RuntimeState(tmp_path)
@@ -191,13 +196,17 @@ def test_for_loop_forward_version_2_tokens(tmp_path: Path) -> None:
     assert state.lookup("spf-loop-ctr-x") is None
 
 
-def test_for_loop_defaults_to_reverse_and_rejects_historical_version_selector(tmp_path: Path) -> None:
+def test_for_loop_defaults_to_reverse_and_rejects_historical_version_selector(
+    tmp_path: Path,
+) -> None:
     capture = Capture()
     reverse_commands = parse(
         script(
             block('/UTILITIES={FOR-LOOP} "0" "2" "1" "x"'),
-            block('/UTILITIES=@Echo "<<<spf-start-x>>>" "<<<spf-end-x>>>" "<<<spf-step-x>>>" "<<<spf-loop-ctr-x>>>"'),
-            block('/UTILITIES={END-LOOP}'),
+            block(
+                '/UTILITIES=@Echo "<<<spf-start-x>>>" "<<<spf-end-x>>>" "<<<spf-step-x>>>" "<<<spf-loop-ctr-x>>>"'
+            ),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     Interpreter({"echo": capture}).execute(reverse_commands, RuntimeState(tmp_path))
@@ -207,7 +216,7 @@ def test_for_loop_defaults_to_reverse_and_rejects_historical_version_selector(tm
         script(
             block('/UTILITIES={FOR-LOOP} "0" "1" "1" "x" "N" "Y"'),
             block('/UTILITIES=@Echo "x"'),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     with pytest.raises(RuntimeError, match="Historical .* version selection"):
@@ -220,7 +229,7 @@ def test_site_loop_preserves_actual_break_after_first_failing_site(tmp_path: Pat
         script(
             block('/UTILITIES={SITE-LOOP} "A,B,C"'),
             block('/UTILITIES=@Echo "<<<spf-site>>>"'),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     Interpreter({"echo": fail}).execute(commands, RuntimeState(tmp_path))
@@ -234,7 +243,7 @@ def test_run_loop_chunks_data_and_rewrites_output_for_each_chunk(tmp_path: Path)
         script(
             block('/UTILITIES={RUN-LOOP} "input.csv" "output.csv" "2" "N"'),
             block('/UTILITIES=@Echo "snapshot"'),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     Interpreter({"echo": snapshots}).execute(commands, RuntimeState(tmp_path))
@@ -252,7 +261,7 @@ def test_run_loop_error_trapping_matches_continue_flag(tmp_path: Path) -> None:
         script(
             block('/UTILITIES={RUN-LOOP} "input.csv" "out.csv" "2" "N"'),
             block('/UTILITIES=@Echo "x"'),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     with pytest.raises(RuntimeError, match="intentional child failure"):
@@ -264,7 +273,7 @@ def test_run_loop_error_trapping_matches_continue_flag(tmp_path: Path) -> None:
         script(
             block('/UTILITIES={RUN-LOOP} "input.csv" "out.csv" "2" "Y"'),
             block('/UTILITIES=@Echo "x"'),
-            block('/UTILITIES={END-LOOP}'),
+            block("/UTILITIES={END-LOOP}"),
         )
     )
     Interpreter({"echo": continue_fail}).execute(continue_commands, RuntimeState(tmp_path))
@@ -275,9 +284,9 @@ def test_hpc_scope_is_flattened_to_local_execution(tmp_path: Path) -> None:
     capture = Capture()
     commands = parse(
         script(
-            block('/UTILITIES={BEGIN-HPC}'),
+            block("/UTILITIES={BEGIN-HPC}"),
             block('/UTILITIES=@Echo "inside"'),
-            block('/UTILITIES={END-HPC}'),
+            block("/UTILITIES={END-HPC}"),
         )
     )
     Interpreter({"echo": capture}).execute(commands, RuntimeState(tmp_path))
@@ -294,20 +303,20 @@ def test_direct_execution_vertical_slice_and_repeatability(tmp_path: Path) -> No
     (tmp_path / "macro.csv").write_text("name,flag\nalpha,1\nbeta,0\n", encoding="utf-8")
     commands = parse(
         script(
-            block('/WRITE-FILE=Y', '/CSV=seed.txt', body="seed<EOF>ignored"),
+            block("/WRITE-FILE=Y", "/CSV=seed.txt", body="seed<EOF>ignored"),
             block('/UTILITIES={START-MACRO} "macro.csv" "N"'),
             block('/UTILITIES={IF-THEN} "flag" "GT" "0"'),
             block('/UTILITIES={FOR-LOOP} "0" "2" "1" "x" "N"'),
             block(
-                '/WRITE-FILE=Y',
-                '/CSV=out_<<<name>>>_<<<spf-loop-ctr-x-int>>>.txt',
+                "/WRITE-FILE=Y",
+                "/CSV=out_<<<name>>>_<<<spf-loop-ctr-x-int>>>.txt",
                 body="<<<name>>>:<<<spf-loop-ctr-x-int>>>",
             ),
-            block('/UTILITIES={END-LOOP}'),
-            block('/UTILITIES={ELSE}'),
-            block('/WRITE-FILE=Y', '/CSV=bad.txt', body="wrong branch"),
-            block('/UTILITIES={END-IF}'),
-            block('/UTILITIES={END-MACRO}'),
+            block("/UTILITIES={END-LOOP}"),
+            block("/UTILITIES={ELSE}"),
+            block("/WRITE-FILE=Y", "/CSV=bad.txt", body="wrong branch"),
+            block("/UTILITIES={END-IF}"),
+            block("/UTILITIES={END-MACRO}"),
             block(r'/UTILITIES=@EXEDIR@\SPFDelete.bat "seed.txt" "Y"'),
         )
     )
@@ -338,11 +347,11 @@ def test_write_file_supports_blank_body_and_case_insensitive_eof(tmp_path: Path)
     interpreter = Interpreter({"write_file": WriteFileUtility()})
     state = RuntimeState(tmp_path)
 
-    blank = parse(block('/WRITE-FILE=Y', '/CSV=blank.txt', body=""))[0]
+    blank = parse(block("/WRITE-FILE=Y", "/CSV=blank.txt", body=""))[0]
     interpreter.execute((blank,), state)
     assert (tmp_path / "blank.txt").read_text(encoding="utf-8") == ""
 
-    eof = parse(block('/WRITE-FILE=Y', '/CSV=eof.txt', body="before<eOf>after"))[0]
+    eof = parse(block("/WRITE-FILE=Y", "/CSV=eof.txt", body="before<eOf>after"))[0]
     interpreter.execute((eof,), state)
     assert (tmp_path / "eof.txt").read_text(encoding="utf-8") == "before"
 
@@ -350,10 +359,10 @@ def test_write_file_supports_blank_body_and_case_insensitive_eof(tmp_path: Path)
 def test_delete_supports_comma_lists_wildcards_and_missing_targets(tmp_path: Path) -> None:
     for name in ("a.tmp", "b.tmp", "keep.txt"):
         (tmp_path / name).write_text(name, encoding="utf-8")
-    command = parse(r'''<OPTIONS>
+    command = parse(r"""<OPTIONS>
 /UTILITIES=@EXEDIR@\SPFDelete.bat "*.tmp,missing.file" "Y"
 </OPTIONS>
-''')[0]
+""")[0]
     Interpreter({"delete_file": DeleteFileUtility()}).execute((command,), RuntimeState(tmp_path))
     assert not (tmp_path / "a.tmp").exists()
     assert not (tmp_path / "b.tmp").exists()

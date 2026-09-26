@@ -29,8 +29,19 @@ from vg2c_new.utilities.files import (
     WriteFileUtility,
     ZipUtility,
 )
-from vg2c_new.utilities.misc import CsvToHtmlUtility, CsvToXmlUtility, EchoUtility, StackDataUtility, XmlToCsvUtility
-from vg2c_new.utilities.process import InlineRUtility, PyScriptUtility, RunPythonUtility, RunRUtility
+from vg2c_new.utilities.misc import (
+    CsvToHtmlUtility,
+    CsvToXmlUtility,
+    EchoUtility,
+    StackDataUtility,
+    XmlToCsvUtility,
+)
+from vg2c_new.utilities.process import (
+    InlineRUtility,
+    PyScriptUtility,
+    RunPythonUtility,
+    RunRUtility,
+)
 from vg2c_new.utilities.query import GetSiteTimeUtility, OracleQueryUtility, PlatformGapUtility
 from vg2c_new.utilities.smart_append import SmartAppendUtility
 from vg2c_new.utilities.sqlite import SqliteDeleteUtility, SqliteLoadUtility, SqliteQueryUtility
@@ -40,7 +51,9 @@ from vg2c_new.utilities.web import GetWebTextUtility
 def build_runtime_utilities() -> dict[str, Utility]:
     """Compose direct-runtime dependencies into the existing plain target->Utility dictionary."""
     mars = _construct(("datasyncx.readers.mars_reader", "MarsReader"), ("datasyncx", "MarsReader"))
-    aries = _construct(("datasyncx.readers.aries_reader", "AriesReader"), ("datasyncx", "AriesReader"))
+    aries = _construct(
+        ("datasyncx.readers.aries_reader", "AriesReader"), ("datasyncx", "AriesReader")
+    )
     oracle_cls = _find_attribute(
         ("datasyncx.readers.oracle_reader", "OracleReader"),
         ("datasyncx", "OracleReader"),
@@ -133,10 +146,20 @@ def build_runtime_utilities() -> dict[str, Utility]:
         "va": "historical VA wrapper execution is intentionally retired",
     }
     for target in (
-        "report.html_run", "report.html_defer", "report.html_layout", "report.html_tab_layout",
-        "report.html_menu_layout", "report.gnuplot", "report.gnuplot_show", "report.rplot",
-        "report.rplot_show", "report.delete", "report.js_show", "report.js_defer",
-        "report.pyplot", "report.pyplot_show",
+        "report.html_run",
+        "report.html_defer",
+        "report.html_layout",
+        "report.html_tab_layout",
+        "report.html_menu_layout",
+        "report.gnuplot",
+        "report.gnuplot_show",
+        "report.rplot",
+        "report.rplot_show",
+        "report.delete",
+        "report.js_show",
+        "report.js_defer",
+        "report.pyplot",
+        "report.pyplot_show",
     ):
         gaps[target] = (
             "report commands require the Session-3 portable report document/runtime model; "

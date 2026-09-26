@@ -10,5 +10,4 @@ if TYPE_CHECKING:
 
 class Utility(ABC):
     @abstractmethod
-    def apply(self, command: Command, state: RuntimeState) -> None:
-        ...
+    def apply(self, command: Command, state: RuntimeState) -> None: ...

@@ -33,13 +33,17 @@ def test_script_host_utility_argument_grammar() -> None:
 
 
 def test_report_precedence_over_other_routing_options() -> None:
-    command = parse(block('/REPORT=HTML-RUN', '/UTILITIES=@Echo "ignored"'))[0]
+    command = parse(block("/REPORT=HTML-RUN", '/UTILITIES=@Echo "ignored"'))[0]
     assert command.utility_type == "report.html_run"
 
 
 def test_normal_query_resolution_matches_getquery() -> None:
-    sqlite = parse(block('/NODE=.\\', '/UN=', '/OLEDB=SQLite', '/ENGINE=SQLite', body='select 1'))[0]
-    oracle = parse(block('/NODE=KM.MARS', '/UN=user', '/OLEDB=SQLPlus', '/ENGINE=VA', body='select 1'))[0]
+    sqlite = parse(block("/NODE=.\\", "/UN=", "/OLEDB=SQLite", "/ENGINE=SQLite", body="select 1"))[
+        0
+    ]
+    oracle = parse(
+        block("/NODE=KM.MARS", "/UN=user", "/OLEDB=SQLPlus", "/ENGINE=VA", body="select 1")
+    )[0]
     assert sqlite.kind is CommandKind.QUERY
     assert sqlite.utility_type == "query.sqlite"
     assert oracle.utility_type == "query.oracle"
@@ -63,11 +67,11 @@ def test_nested_if_else_macro_and_loop_tree() -> None:
             block('/UTILITIES={IF-THEN} "VAR(1)" "EQ" "1"'),
             block('/UTILITIES={FOR-LOOP} "0" "2" "1" "x" "N"'),
             block('/UTILITIES=@Echo "yes"'),
-            block('/UTILITIES={END-LOOP}'),
-            block('/UTILITIES={ELSE}'),
+            block("/UTILITIES={END-LOOP}"),
+            block("/UTILITIES={ELSE}"),
             block('/UTILITIES=@Echo "no"'),
-            block('/UTILITIES={END-IF}'),
-            block('/UTILITIES={END-MACRO}'),
+            block("/UTILITIES={END-IF}"),
+            block("/UTILITIES={END-MACRO}"),
         )
     )
     assert len(commands) == 1
@@ -81,11 +85,19 @@ def test_nested_if_else_macro_and_loop_tree() -> None:
 
 def test_mismatched_controller_is_source_located() -> None:
     with pytest.raises(Vg2ParseError, match=r"<input>:1:1: Unclosed \{IF-THEN\}"):
-        parse(script(block('/UTILITIES={IF-THEN} "VAR(1)" "EQ" "1"'), block('/UTILITIES=@Echo "x"')))
+        parse(
+            script(block('/UTILITIES={IF-THEN} "VAR(1)" "EQ" "1"'), block('/UTILITIES=@Echo "x"'))
+        )
 
 
 def test_hpc_scope_is_accepted_as_flattenable_syntax() -> None:
-    commands = parse(script(block('/UTILITIES={BEGIN-HPC}'), block('/UTILITIES=@Echo "x"'), block('/UTILITIES={END-HPC}')))
+    commands = parse(
+        script(
+            block("/UTILITIES={BEGIN-HPC}"),
+            block('/UTILITIES=@Echo "x"'),
+            block("/UTILITIES={END-HPC}"),
+        )
+    )
     assert commands[0].kind is CommandKind.SCOPE
     assert commands[0].children[0].utility_type == "echo"
 
@@ -95,22 +107,46 @@ def test_22844_control_topology_and_empty_if_placeholders() -> None:
     text = script(
         block(r'/UTILITIES={ROWS-IN-FILE} "products.json" "RowsInFile" "N" ""'),
         block(r'/UTILITIES={IF-THEN} "RowsInFile" "LT" "0" "" "" "" ""'),
-        block(r'/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "Missing config" "" "" "" "" "N" "N"'),
-        block('/UTILITIES={ELSE}'),
+        block(
+            r'/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "Missing config" "" "" "" "" "N" "N"'
+        ),
+        block("/UTILITIES={ELSE}"),
         block(r'/UTILITIES=@EXEDIR@\RoboCopy.va "products.json" "dest" "." "10" "10" "N" "" "N"'),
-        block('/UTILITIES={END-IF}'),
-        block('/NODE=KM.[A15_PROD_21.].MARS', '/UN=//', '/OLEDB=SQLPlus', '/ENGINE=VA', body='select 1'),
-        block('/NODE=KM.ARIES', '/UN=//', '/OLEDB=SQLPlus', '/ENGINE=VA', body='select 1'),
-        block('/NODE=.\\', '/UN=', '/OLEDB=SQLite', '/ENGINE=SQLite', '/TABLE=a.tab,b.tab', body='select 1'),
+        block("/UTILITIES={END-IF}"),
+        block(
+            "/NODE=KM.[A15_PROD_21.].MARS",
+            "/UN=//",
+            "/OLEDB=SQLPlus",
+            "/ENGINE=VA",
+            body="select 1",
+        ),
+        block("/NODE=KM.ARIES", "/UN=//", "/OLEDB=SQLPlus", "/ENGINE=VA", body="select 1"),
+        block(
+            "/NODE=.\\",
+            "/UN=",
+            "/OLEDB=SQLite",
+            "/ENGINE=SQLite",
+            "/TABLE=a.tab,b.tab",
+            body="select 1",
+        ),
         block(r'/UTILITIES=@EXEDIR@\WaitFile.va "XRAY_results.csv" "30"'),
-        block('/WRITE-FILE=Y', '/CSV=payload.txt', body='payload'),
-        block(r'/UTILITIES=@EXEDIR@\Run_Python_Script.va "xray.py" "--csv XRAY_results.csv" "N" "host" "Python-v3"'),
+        block("/WRITE-FILE=Y", "/CSV=payload.txt", body="payload"),
+        block(
+            r'/UTILITIES=@EXEDIR@\Run_Python_Script.va "xray.py" "--csv XRAY_results.csv" "N" "host" "Python-v3"'
+        ),
         block('/UTILITIES={START-MACRO} "configsets.csv" "Y"'),
         block('/UTILITIES={ROWS-IN-FILE} "XRAY_results.csv" "vid" "N" ""'),
         block('/UTILITIES={IF-THEN} "vid" "GT" "0" "" "" "" ""'),
-        block('/NODE=.\\', '/UN=', '/OLEDB=SQLite', '/ENGINE=SQLite', '/TABLE=XRAY_results.csv', body='select 1'),
-        block('/UTILITIES={END-IF}'),
-        block('/UTILITIES={END-MACRO}'),
+        block(
+            "/NODE=.\\",
+            "/UN=",
+            "/OLEDB=SQLite",
+            "/ENGINE=SQLite",
+            "/TABLE=XRAY_results.csv",
+            body="select 1",
+        ),
+        block("/UTILITIES={END-IF}"),
+        block("/UTILITIES={END-MACRO}"),
     )
     commands = parse(text)
     assert len(commands) == 9

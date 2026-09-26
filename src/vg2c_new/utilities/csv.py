@@ -50,7 +50,9 @@ class CsvUtility:
         )
 
     @classmethod
-    def write_dataframe(cls, frame: pd.DataFrame, path: Path, *, append: bool = False, header: bool = True) -> None:
+    def write_dataframe(
+        cls, frame: pd.DataFrame, path: Path, *, append: bool = False, header: bool = True
+    ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         frame.to_csv(
             path,
@@ -63,7 +65,9 @@ class CsvUtility:
         )
 
     @classmethod
-    def row_count(cls, path: Path, *, limit_to_one: bool = False, archive_name: str | None = None) -> int:
+    def row_count(
+        cls, path: Path, *, limit_to_one: bool = False, archive_name: str | None = None
+    ) -> int:
         """Amended port of ScriptHost Utilities.getRowCountFromFile.
 
         Source: SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.getRowCountFromFile.
@@ -84,7 +88,9 @@ class CsvUtility:
                 elif len(members) == 1:
                     name = members[0]
                 else:
-                    raise ValueError("ZIP row count requires archive member name when archive has multiple files.")
+                    raise ValueError(
+                        "ZIP row count requires archive member name when archive has multiple files."
+                    )
                 with archive.open(name) as handle:
                     lines = sum(1 for _ in handle)
             return max(0, min(lines - 1, 1) if limit_to_one else lines - 1)
@@ -109,7 +115,9 @@ class CsvUtility:
             return "EMPTY" if row is None else str(row.get(actual, ""))
 
     @classmethod
-    def sql_get_csv_list(cls, path: Path, column_ref: int | str, lead_in: str, *, chunk_size: int = 1000) -> str:
+    def sql_get_csv_list(
+        cls, path: Path, column_ref: int | str, lead_in: str, *, chunk_size: int = 1000
+    ) -> str:
         """Amended reuse of the current-project SQL_Get_CSV_List implementation.
 
         Source: src/vg2c/utilities/csv_io.py :: CsvIO.sql_get_csv_list/_read_column.
@@ -144,7 +152,10 @@ class CsvUtility:
             return "('__NO_VALUES__')"
         chunks: list[str] = []
         for offset in range(0, len(values), chunk_size):
-            quoted = ", ".join("'" + value.replace("'", "''") + "'" for value in values[offset : offset + chunk_size])
+            quoted = ", ".join(
+                "'" + value.replace("'", "''") + "'"
+                for value in values[offset : offset + chunk_size]
+            )
             chunks.append(f"({quoted})")
         return (f"\nOR {lead_in} ").join(chunks)
 

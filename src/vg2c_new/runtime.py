@@ -101,7 +101,12 @@ class RuntimeState:
             if resolved is not None:
                 return resolved
             upper = token.upper()
-            if upper.startswith("SPF-") or upper.startswith("SPF$") or upper.startswith("%") or upper.startswith("!"):
+            if (
+                upper.startswith("SPF-")
+                or upper.startswith("SPF$")
+                or upper.startswith("%")
+                or upper.startswith("!")
+            ):
                 return full
             raise RuntimeError(f"Macro variable {full} not found")
 
@@ -183,7 +188,9 @@ class Interpreter:
         second_fields = (logic, lhs2, op2, rhs2)
         if any(field.strip() for field in second_fields):
             if not all(field.strip() for field in second_fields):
-                raise _runtime_error(command, "The second IF condition is only partially specified.")
+                raise _runtime_error(
+                    command, "The second IF condition is only partially specified."
+                )
             logic_key = logic.strip().lower()
             if logic_key not in {"and", "or"}:
                 raise _runtime_error(command, f"Invalid IF logical operator {logic!r}.")
@@ -192,7 +199,9 @@ class Interpreter:
 
         self.execute(command.children if result else command.else_children, state)
 
-    def _condition(self, lhs: str, operator: str, rhs: str, state: RuntimeState, command: Command) -> bool:
+    def _condition(
+        self, lhs: str, operator: str, rhs: str, state: RuntimeState, command: Command
+    ) -> bool:
         lhs_match = _VAR_RE.fullmatch(lhs.strip())
         left = lhs_match.group(1) if lhs_match else (state.lookup(lhs.strip(), "") or "")
         rhs_match = _ENV_VALUE_RE.fullmatch(rhs.strip())
@@ -286,7 +295,10 @@ class Interpreter:
             except ValueError:
                 pass
         if len(args) >= 6 and args[5].strip():
-            raise _runtime_error(command, "Historical {FOR-LOOP} version selection is not supported; only current Version 2 semantics remain.")
+            raise _runtime_error(
+                command,
+                "Historical {FOR-LOOP} version selection is not supported; only current Version 2 semantics remain.",
+            )
         if step == 0:
             return
 
@@ -358,7 +370,9 @@ class Interpreter:
         """
         args = tuple(state.substitute(arg) for arg in command.arguments)
         if len(args) < 3:
-            raise _runtime_error(command, "{RUN-LOOP} requires input file, output file, and row size.")
+            raise _runtime_error(
+                command, "{RUN-LOOP} requires input file, output file, and row size."
+            )
         input_name, output_name, rows_text = args[:3]
         if not rows_text.isdigit() or int(rows_text) <= 0:
             raise _runtime_error(command, f"Invalid {RUN_LOOP_LABEL} row size {rows_text!r}.")
@@ -387,10 +401,26 @@ class Interpreter:
             for row in reader:
                 chunk.append(row)
                 if len(chunk) == chunk_size:
-                    self._run_chunk(command, state, output_path, target_delimiter, header, chunk, bool(continue_on_error))
+                    self._run_chunk(
+                        command,
+                        state,
+                        output_path,
+                        target_delimiter,
+                        header,
+                        chunk,
+                        bool(continue_on_error),
+                    )
                     chunk = []
             if chunk:
-                self._run_chunk(command, state, output_path, target_delimiter, header, chunk, bool(continue_on_error))
+                self._run_chunk(
+                    command,
+                    state,
+                    output_path,
+                    target_delimiter,
+                    header,
+                    chunk,
+                    bool(continue_on_error),
+                )
 
     def _run_chunk(
         self,
@@ -443,7 +473,9 @@ def compare_vars(var1: object, var2: object, operator: str = "EQS") -> bool:
         try:
             left_value = float(left)
         except ValueError as exc:
-            raise ValueError(f"Invalid column for numeric conditional test (datatype mismatch). Exiting job: {left}") from exc
+            raise ValueError(
+                f"Invalid column for numeric conditional test (datatype mismatch). Exiting job: {left}"
+            ) from exc
 
     if op in {"BT", "BTS", "NBT", "NBTS"}:
         try:
@@ -469,7 +501,9 @@ def compare_vars(var1: object, var2: object, operator: str = "EQS") -> bool:
         try:
             right_value = float(right)
         except ValueError as exc:
-            raise ValueError(f"Invalid column for numeric conditional test (datatype mismatch). Exiting job: {right}") from exc
+            raise ValueError(
+                f"Invalid column for numeric conditional test (datatype mismatch). Exiting job: {right}"
+            ) from exc
 
     if op in {"EQ", "EQS"}:
         return left_value == right_value

@@ -9,7 +9,9 @@ from vg2c_new.utilities.composition import build_runtime_utilities
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Execute a VG2 script directly without generated Python.")
+    parser = argparse.ArgumentParser(
+        description="Execute a VG2 script directly without generated Python."
+    )
     parser.add_argument("script", type=Path)
     args = parser.parse_args()
     script = args.script.resolve()
