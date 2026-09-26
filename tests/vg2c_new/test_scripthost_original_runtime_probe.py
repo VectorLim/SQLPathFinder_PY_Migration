@@ -331,6 +331,6 @@ def test_original_html_defer_lifecycle_runs_on_linux(tmp_path, monkeypatch) -> N
     )
 
     assert manager.Run_SPFSQL() is True
-    deferred = list(tmp_path.glob("*_probe_tmp_.ini"))
+    deferred = list(tmp_path.glob("*_PROBE_tmp_.ini"))
     assert len(deferred) == 1
     assert "HTML" in deferred[0].read_text(encoding="utf-8")
