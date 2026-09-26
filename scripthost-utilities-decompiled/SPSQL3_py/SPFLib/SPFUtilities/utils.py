@@ -190,27 +190,13 @@ History:
 2.1.3.3 : vanatara : Update 'SPFSharePointDeleteCLR' to handle SSEPROD file delete issue.
 2.1.3.3a : vanatara : Update code merge issue
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-from dask.callbacks import Callback as DaskCallback
-
-from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
-from rich.progress import ProgressColumn as RichProgressColumn
-from rich.progress import SpinnerColumn as RichSpinnerColumn, TaskID as RichTaskID
-from rich.progress import TimeElapsedColumn as RichTimeElapsedColumn, TextColumn as RichTextColumn
-from rich.progress import BarColumn as RichBarColumn, MofNCompleteColumn as RichMofNCompleteColumn
-from rich.console import Console as RichConsole
+from .. import * # portable common ScriptHost symbols
 from typing import Any, Optional, Union
 
 #sys._enablelegacywindowsfsencoding()    
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
-from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
-
+from ..SPFGlobals import SPFGlobals
 #region packages used for SMTP email -- SPFEmail
 import email
 import mimetypes
@@ -807,6 +793,10 @@ class Utilities(SPFGlobals):
             self.logger.debug("Done logSvc")
         #END : def SPFLogSvc_Invoke
         #endregion nested methods
+        # Legacy email transport is deliberately loaded only when this Windows/service-oriented
+        # method is invoked; portable direct-runtime email uses DataSyncX instead.
+        from ..dbDrivers import SPFSMTPAuthEmail
+
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         MyExe = "record_spf.bat"
@@ -18584,28 +18574,38 @@ class BulkloadDataHandler(Utilities):
                 raise
 #END : class BulkloadDataHandler:    
 
-class SPFRichProgressBar(RichProgressBar):
-    """
-    custom implementation of ProgressBar provided by rich.progress.Progress
-    """
-    def __init__(self, *columns: Union[str, RichProgressColumn], console: Union[RichConsole, None] = None, auto_refresh: bool = True, 
-                 refresh_per_second: float = 10, speed_estimate_period: float = 30, transient: bool = False, 
-                 redirect_stdout: bool = True, redirect_stderr: bool = True, get_time: Union[RichGetTimeCallable, None] = None, 
-                 disable: bool = False, expand: bool = False, displayMofN=True) -> None:
-        if columns == ():
-            # RichTextColumn(""),
-            if displayMofN is True:
-                columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichMofNCompleteColumn(), RichTextColumn("•") ,RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
-            else:
-                columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
-        super().__init__(*columns, console=console, auto_refresh=auto_refresh, refresh_per_second=refresh_per_second, speed_estimate_period=speed_estimate_period, transient=transient, redirect_stdout=redirect_stdout, redirect_stderr=redirect_stderr, get_time=get_time, disable=disable, expand=expand)
-        return
-    
-    def add_task(self, description: str, start: bool = True, total: Union[float, None] = 100, completed: int = 0, visible: bool = True, **fields: Any) -> RichTaskID:
-        # description = f"[purple]  {description}..."
-        description = f"  {description}..."
-        return super().add_task(description, start, total, completed, visible, **fields)
-#END : class SPFRichProgressBar
+try:
+    from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
+    from rich.progress import ProgressColumn as RichProgressColumn
+    from rich.progress import SpinnerColumn as RichSpinnerColumn, TaskID as RichTaskID
+    from rich.progress import TimeElapsedColumn as RichTimeElapsedColumn, TextColumn as RichTextColumn
+    from rich.progress import BarColumn as RichBarColumn, MofNCompleteColumn as RichMofNCompleteColumn
+    from rich.console import Console as RichConsole
+except ImportError:
+    pass
+else:
+    class SPFRichProgressBar(RichProgressBar):
+        """
+        custom implementation of ProgressBar provided by rich.progress.Progress
+        """
+        def __init__(self, *columns: Union[str, RichProgressColumn], console: Union[RichConsole, None] = None, auto_refresh: bool = True, 
+                     refresh_per_second: float = 10, speed_estimate_period: float = 30, transient: bool = False, 
+                     redirect_stdout: bool = True, redirect_stderr: bool = True, get_time: Union[RichGetTimeCallable, None] = None, 
+                     disable: bool = False, expand: bool = False, displayMofN=True) -> None:
+            if columns == ():
+                # RichTextColumn(""),
+                if displayMofN is True:
+                    columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichMofNCompleteColumn(), RichTextColumn("•") ,RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
+                else:
+                    columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
+            super().__init__(*columns, console=console, auto_refresh=auto_refresh, refresh_per_second=refresh_per_second, speed_estimate_period=speed_estimate_period, transient=transient, redirect_stdout=redirect_stdout, redirect_stderr=redirect_stderr, get_time=get_time, disable=disable, expand=expand)
+            return
+        
+        def add_task(self, description: str, start: bool = True, total: Union[float, None] = 100, completed: int = 0, visible: bool = True, **fields: Any) -> RichTaskID:
+            # description = f"[purple]  {description}..."
+            description = f"  {description}..."
+            return super().add_task(description, start, total, completed, visible, **fields)
+    #END : class SPFRichProgressBar
 #endregion -- helper classes
 
 if __name__ == '__main__':
