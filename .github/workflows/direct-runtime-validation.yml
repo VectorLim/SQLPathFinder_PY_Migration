@@ -21,6 +21,20 @@ jobs:
           python-version: "3.12"
       - name: Install validation dependencies
         run: python -m pip install pytest ruff pandas requests openpyxl xlrd
+      - name: Archive runtime inventory
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          archive = Path("scripthost-utilities-decompiled/SPSQL3_py.zip")
+          with zipfile.ZipFile(archive) as zf:
+              names = zf.namelist()
+          print("archive_python_files", sum(name.lower().endswith(".py") for name in names))
+          for name in names:
+              lower = name.lower()
+              if "dbdriver" in lower or lower.endswith("spflib/spfsql3.py") or lower.endswith("spflib/spfglobals.py"):
+                  print("archive_runtime_entry", name)
+          PY
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
       - name: Compile direct runtime
