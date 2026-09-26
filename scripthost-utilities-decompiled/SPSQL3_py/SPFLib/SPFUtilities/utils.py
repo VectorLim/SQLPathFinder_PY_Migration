@@ -2497,10 +2497,31 @@ class Utilities(SPFGlobals):
                              skipinitialspace=True)
 
             #MySrc = ",".join(['"{0}"'.format(re.sub("<c>", ",", item1.strip('"'), re.IGNORECASE)) for item1 in (rdr.next() if isPYTHON2 else next(rdr)) if item1.strip('\'" ') != ""])
-            MySrc = ",".join(['"{0}"'.format(re.sub("<c>", ",", item1.strip('"'), re.IGNORECASE)) for item1 in next(rdr) if item1.strip('\'" ') != ""])
+            parsedSources = [re.sub("<c>", ",", item1.strip('"'), flags=re.IGNORECASE) for item1 in next(rdr) if item1.strip('\'" ') != ""]
+            MySrc = ",".join(['"{0}"'.format(item1) for item1 in parsedSources])
             self.logger.debug("{0} - parsed MySrc: {1}".format(calling_func, MySrc))
             if self.IsEmptyOrNone(MySrc) is True : 
                 self.Console("No delete files specified ...")
+                return
+
+            if os.name != "nt":
+                for sourcePattern in parsedSources:
+                    matchingPaths = glob.glob(sourcePattern)
+                    if len(matchingPaths) == 0 and os.path.exists(sourcePattern):
+                        matchingPaths = [sourcePattern]
+                    for matchingPath in matchingPaths:
+                        if os.path.isdir(matchingPath):
+                            for childPath in glob.glob(os.path.join(matchingPath, "*")):
+                                if os.path.isfile(childPath):
+                                    if forceDelete:
+                                        os.chmod(childPath, 0o666)
+                                    os.remove(childPath)
+                        elif os.path.isfile(matchingPath):
+                            if forceDelete:
+                                os.chmod(matchingPath, 0o666)
+                            os.remove(matchingPath)
+                if displayPrompt is True:
+                    self.ConsoleDoneWithoutTimeStamp()
                 return
 
             #start building args to run in DOS
