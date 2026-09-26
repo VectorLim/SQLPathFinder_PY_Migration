@@ -209,13 +209,17 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         if SPFGlobals.__gIsSvc is None:
-            curHttpContext = System.Web.HttpContext.Current
-            curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
-            if [curHttpContext, curSvcSecContext] == [None, None]:
-                SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
+            if os.name != "nt" or "System" not in globals():
+                SPFGlobals.__gIsSvc = False
+                self.logger.debug("{0} - non-Windows host; service mode disabled".format(calling_func))
             else:
-                SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
-            self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
+                curHttpContext = System.Web.HttpContext.Current
+                curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
+                if [curHttpContext, curSvcSecContext] == [None, None]:
+                    SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
+                else:
+                    SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
+                self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
         return SPFGlobals.__gIsSvc
 
     __gSvcSessionUser = None
