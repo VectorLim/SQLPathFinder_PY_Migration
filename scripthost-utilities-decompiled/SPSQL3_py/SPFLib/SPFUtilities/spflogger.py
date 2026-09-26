@@ -11,17 +11,15 @@ History:
 2.0.0.2 : vantara  : Updated to support delayed log file creation - on first log write, thus avoiding creation of empty .log files when run in non-debug mode
 2.0.0.3 : vantara  : set handler encoding to 'utf-8' and added handleError() method to over-ride(monkey-patch) logging.handler.handleError method to handle error within logger in a custom fashion
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-#import sys, os, 
+import os
+import sys
 import logging, logging.config
+from .. import isPYTHON2
 #import json
 from logging.handlers import RotatingFileHandler
 #import locale
 
-if isPYTHON2:
-    import sh
-else:
-    from . import sh
+from . import sh
 
 class SPFLogger(object):
     """This class provides a static method to obtain an instance of logger object for SPF application"""
@@ -32,7 +30,9 @@ class SPFLogger(object):
     #def SPFInstallPath(self):
     #    return os.getenv("USERPROFILE") + "\\My Programs\\SQLPathFinder3"
 
-    SPFInstallPath = os.getenv("USERPROFILE") + "\\My Programs\\SQLPathFinder3"
+    SPFInstallPath = os.path.join(
+        os.getenv("USERPROFILE") or os.path.expanduser("~"), "My Programs", "SQLPathFinder3"
+    )
 
     #@staticmethod
     def __init__(self):
