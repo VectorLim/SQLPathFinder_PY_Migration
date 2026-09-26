@@ -343,6 +343,7 @@ def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
     assert original_outputs["out_alpha_0.txt"] == "alpha:0\n"
     assert vg2c_outputs["out_alpha_0.txt"] == "alpha:0"
 
+
 def test_mutable_task_instances_keep_child_lists_per_instance() -> None:
     _with_extracted_runtime()
     module = importlib.import_module("SPFLib.SPFSQL3")
