@@ -49,7 +49,7 @@ History:
 2.0.2.8  : vanatara : Updated to support Py3.13
 2.0.2.9  : vanatara : Added IGNORE_LOCAL_PROXIES to be used in requests calls to ignore local proxy settings that are causing issues in some environments
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
+from . import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
 
 if isPYTHON2:
     from SPFUtilities.spflogger import SPFLogger
