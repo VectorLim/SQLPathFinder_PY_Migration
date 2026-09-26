@@ -229,7 +229,14 @@ _RESOLVER_MANIFEST_BASE: tuple[tuple[str, str, str, str, str, str], ...] = (
     ),
     (r"@Echo", "EchoTask", "echo", "DIRECT_PORT", "none", "text parity"),
     (r"@EXEDIR@\XMLToCSV.va", "XMLToCSVTask", "xml_to_csv", "DIRECT_PORT", "xml/csv", "conversion"),
-    (r"@EXEDIR@\SPFZIP.va", "SPFZipTask", "zip", "DIRECT_REUSE", "ScriptHost portable", "archive parity"),
+    (
+        r"@EXEDIR@\SPFZIP.va",
+        "SPFZipTask",
+        "zip",
+        "DIRECT_REUSE",
+        "ScriptHost portable",
+        "archive parity",
+    ),
     (
         r"@EXEDIR@\GetHelpCSV.va",
         "GetHelpCSVTask",
