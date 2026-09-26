@@ -2254,7 +2254,7 @@ class Utilities(SPFGlobals):
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).replace("\r\n", "\n")
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).decode(encoding=self.gOSDefaultEncoding).replace("\r\n", "\n")
                 __t = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32)
-                decompressedOutputString =  __t.decode(encoding=self.detectCharacterEncoding(__t)).replace("\r\n", "\n")
+                decompressedOutputString = __t.decode("utf-8").replace("\r\n", "\n")
             
             del inputStringToDeCompress
 
