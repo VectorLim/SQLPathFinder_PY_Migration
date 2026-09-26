@@ -30,7 +30,7 @@ jobs:
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.
-        run: pytest tests/vg2c_new tests/scripthost_runtime -q
+        run: pytest tests/vg2c_new tests/scripthost_runtime -q --durations=10
       - name: Manifest status summary
         env:
           PYTHONPATH: src:.
