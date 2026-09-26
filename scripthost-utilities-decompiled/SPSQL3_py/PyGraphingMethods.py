@@ -47,12 +47,23 @@ import sys
 import logging
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import cm
-from matplotlib.patches import Patch
-from matplotlib.lines import Line2D
+try:
+    import seaborn as sns
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    _PLOT_IMPORT_ERROR = None
+except ImportError as _plot_import_error:
+    sns = mpl = plt = cm = Patch = Line2D = None
+    _PLOT_IMPORT_ERROR = _plot_import_error
+
+def _require_plot_dependencies():
+    if _PLOT_IMPORT_ERROR is not None:
+        raise RuntimeError(
+            "ScriptHost plotting requires matplotlib and seaborn"
+        ) from _PLOT_IMPORT_ERROR
 from .PyUtils import BuildArgs
 from datetime import timedelta as td
 mpl.use('Agg')
@@ -60,6 +71,7 @@ mpl.use('Agg')
 
 class Correlation_Plot(object):
     def __init__(self, inputs, interactive_run=True, logger=None):
+        _require_plot_dependencies()
         '''
         Description:
             Init method for the class
@@ -414,6 +426,7 @@ class Correlation_Plot(object):
 
 class Basic_Charts(object):
     def __init__(self, inputs, interactive_run=True, logger=None):
+        _require_plot_dependencies()
         '''
         Description:
             Init method for the class
@@ -724,6 +737,7 @@ class Basic_Charts(object):
 
 class Carrier_Map(object):
     def __init__(self, inputs, interactive_run=True, logger=None):
+        _require_plot_dependencies()
         '''
         Description:
             Init method for the class
@@ -1063,6 +1077,7 @@ class Carrier_Map(object):
 
 class Wafer_Map(object):
     def __init__(self, inputs, interactive_run=True, logger=None):
+        _require_plot_dependencies()
         '''
         Description:
             Init method for the class
