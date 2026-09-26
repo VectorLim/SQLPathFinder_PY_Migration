@@ -310,3 +310,28 @@ def test_original_getquery_routes_portable_control_and_report_tasks(tmp_path, mo
     for index, (block, expected_type) in enumerate(cases):
         task = manager.GetQuery(manager.gMyLocal, block, index, False)
         assert type(task).__name__ == expected_type
+
+
+
+def test_original_html_defer_lifecycle_runs_on_linux(tmp_path, monkeypatch) -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    monkeypatch.chdir(tmp_path)
+
+    manager = module.SPFManager()
+    manager.gCommandLineArguments = [
+        "report-probe",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+        "/SPFINSTANCE=REPORTPROBE",
+    ]
+    manager.MySPFSQLFileData = _block(
+        "/REPORT=HTML-DEFER",
+        "/ID=probe",
+        body=r"Type<\\>HTML<\\>Title",
+    )
+
+    assert manager.Run_SPFSQL() is True
+    deferred = list(tmp_path.glob("*_probe_tmp_.ini"))
+    assert len(deferred) == 1
+    assert "HTML" in deferred[0].read_text(encoding="utf-8")
