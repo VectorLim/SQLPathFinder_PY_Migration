@@ -191,7 +191,6 @@ History:
 2.1.3.3a : vanatara : Update code merge issue
 """
 from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-from dask.callbacks import Callback as DaskCallback
 
 from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
 from rich.progress import ProgressColumn as RichProgressColumn
@@ -205,11 +204,12 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
+try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+except ImportError:
+    # ScriptHost ships dbDrivers only as Windows extension modules. Local/file
+    # utilities remain portable; SMTP auth reports the missing transport when used.
+    SPFSMTPAuthEmail = None
 
 #region packages used for SMTP email -- SPFEmail
 import email
@@ -1835,19 +1835,20 @@ class Utilities(SPFGlobals):
         
         try :
             self.logger.debug("{0} - MyTmpFName : {1}".format(calling_func, MyTmpFName)) 
-            FilesToDelete.append(os.path.join(".\\", MyTmpFName + ".txt"))
-            FilesToDelete.append(os.path.join(".\\", MyTmpFName + ".bat"))
+            cleanup_root = ".\\" if os.name == "nt" else "."
+            FilesToDelete.append(os.path.join(cleanup_root, MyTmpFName + ".txt"))
+            FilesToDelete.append(os.path.join(cleanup_root, MyTmpFName + ".bat"))
             
             if self.gMyLocal == "N" :
                 if self.SHisSHEntry is False :
-                    FilesToDelete.append(os.path.join(".\\", "record_spf.bat"))
-                    FilesToDelete.append(os.path.join(".\\", "run_sqlplus.bat"))
-                FilesToDelete.append(os.path.join(".\\", "unzip.exe"))
-                FilesToDelete.append(os.path.join(".\\", "schema.ini"))
+                    FilesToDelete.append(os.path.join(cleanup_root, "record_spf.bat"))
+                    FilesToDelete.append(os.path.join(cleanup_root, "run_sqlplus.bat"))
+                FilesToDelete.append(os.path.join(cleanup_root, "unzip.exe"))
+                FilesToDelete.append(os.path.join(cleanup_root, "schema.ini"))
 
             #VA30_47 : changes add *_*.cols for deletion
             if self.gMyLocal == "N" or self.gRunMode == "IB" :
-                FilesToDelete  = FilesToDelete + [os.path.join(".\\", fileItem) for fileItem in glob.glob("*_*.cols")]
+                FilesToDelete  = FilesToDelete + [os.path.join(cleanup_root, fileItem) for fileItem in glob.glob("*_*.cols")]
 
             self.logger.debug("{0} - FilesToDelete : {1}".format(calling_func, FilesToDelete))
 
@@ -1861,11 +1862,16 @@ class Utilities(SPFGlobals):
                     FileToDeleteFound.append(FileToDelete)
             
             if len(FileToDeleteFound) > 0 :
-                cmdRunPassCodes = [0]
-                cmdToRun = "%COMSPEC%" 
-                cmdArgsList = ["/c", 'CD', '/d', self.gLocalDir] 
-                cmdArgsList = cmdArgsList + FileToDeleteFound
-                Final_CleanUpStatus, runExitCode = self.Run(cmdToRun, cmdArgsList, cmdRunPassCodes)
+                if os.name != "nt":
+                    for FileToDelete in FilesToDelete:
+                        if os.path.exists(FileToDelete):
+                            os.remove(FileToDelete)
+                else:
+                    cmdRunPassCodes = [0]
+                    cmdToRun = "%COMSPEC%" 
+                    cmdArgsList = ["/c", 'CD', '/d', self.gLocalDir] 
+                    cmdArgsList = cmdArgsList + FileToDeleteFound
+                    Final_CleanUpStatus, runExitCode = self.Run(cmdToRun, cmdArgsList, cmdRunPassCodes)
             else : 
                 self.logger.debug("{0} - no files found to delete".format(calling_func))
 
@@ -2253,7 +2259,7 @@ class Utilities(SPFGlobals):
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).replace("\r\n", "\n")
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).decode(encoding=self.gOSDefaultEncoding).replace("\r\n", "\n")
                 __t = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32)
-                decompressedOutputString =  __t.decode(encoding=self.detectCharacterEncoding(__t)).replace("\r\n", "\n")
+                decompressedOutputString = __t.decode("utf-8").replace("\r\n", "\n")
             
             del inputStringToDeCompress
 
@@ -2491,10 +2497,31 @@ class Utilities(SPFGlobals):
                              skipinitialspace=True)
 
             #MySrc = ",".join(['"{0}"'.format(re.sub("<c>", ",", item1.strip('"'), re.IGNORECASE)) for item1 in (rdr.next() if isPYTHON2 else next(rdr)) if item1.strip('\'" ') != ""])
-            MySrc = ",".join(['"{0}"'.format(re.sub("<c>", ",", item1.strip('"'), re.IGNORECASE)) for item1 in next(rdr) if item1.strip('\'" ') != ""])
+            parsedSources = [re.sub("<c>", ",", item1.strip('"'), flags=re.IGNORECASE) for item1 in next(rdr) if item1.strip('\'" ') != ""]
+            MySrc = ",".join(['"{0}"'.format(item1) for item1 in parsedSources])
             self.logger.debug("{0} - parsed MySrc: {1}".format(calling_func, MySrc))
             if self.IsEmptyOrNone(MySrc) is True : 
                 self.Console("No delete files specified ...")
+                return
+
+            if os.name != "nt":
+                for sourcePattern in parsedSources:
+                    matchingPaths = glob.glob(sourcePattern)
+                    if len(matchingPaths) == 0 and os.path.exists(sourcePattern):
+                        matchingPaths = [sourcePattern]
+                    for matchingPath in matchingPaths:
+                        if os.path.isdir(matchingPath):
+                            for childPath in glob.glob(os.path.join(matchingPath, "*")):
+                                if os.path.isfile(childPath):
+                                    if forceDelete:
+                                        os.chmod(childPath, 0o666)
+                                    os.remove(childPath)
+                        elif os.path.isfile(matchingPath):
+                            if forceDelete:
+                                os.chmod(matchingPath, 0o666)
+                            os.remove(matchingPath)
+                if displayPrompt is True:
+                    self.ConsoleDoneWithoutTimeStamp()
                 return
 
             #start building args to run in DOS

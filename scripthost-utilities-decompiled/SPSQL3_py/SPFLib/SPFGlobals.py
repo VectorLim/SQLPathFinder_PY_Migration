@@ -209,13 +209,17 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         if SPFGlobals.__gIsSvc is None:
-            curHttpContext = System.Web.HttpContext.Current
-            curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
-            if [curHttpContext, curSvcSecContext] == [None, None]:
-                SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
+            if os.name != "nt" or "System" not in globals():
+                SPFGlobals.__gIsSvc = False
+                self.logger.debug("{0} - non-Windows host; service mode disabled".format(calling_func))
             else:
-                SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
-            self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
+                curHttpContext = System.Web.HttpContext.Current
+                curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
+                if [curHttpContext, curSvcSecContext] == [None, None]:
+                    SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
+                else:
+                    SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
+                self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
         return SPFGlobals.__gIsSvc
 
     __gSvcSessionUser = None
@@ -822,7 +826,7 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__gLocalDir is None :
-            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + "\\"
+            SPFGlobals.__gLocalDir = os.path.join(os.path.abspath(os.path.curdir), "")
         
         self.__logger.info("{0} - {1}".format(calling_func, SPFGlobals.__gLocalDir))
         return SPFGlobals.__gLocalDir
@@ -1521,7 +1525,7 @@ class SPFGlobals(ScriptHost) :
                 MyEXEDir, MyExeFile = osPathFileInfo[0], osPathFileInfo[1]
 
             if MyEXEDir != '' : 
-                MyEXEDir = MyEXEDir + "\\" #'Include \
+                MyEXEDir = os.path.join(MyEXEDir, "") # Include the host-native separator
 
                 self.__logger.debug("{0} - MyEXEDir : {1}".format(calling_func, MyEXEDir))
                 self.__logger.debug("{0} - MyExeFile : {1}".format(calling_func, MyExeFile))
