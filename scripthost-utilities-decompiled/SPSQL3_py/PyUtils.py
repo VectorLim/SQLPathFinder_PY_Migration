@@ -42,10 +42,8 @@ import os
 import re
 import sys
 import time
-import winreg
 import threading
 import queue
-import pymongo
 import numpy as np
 import pandas as pd
 import configparser
@@ -53,15 +51,6 @@ from subprocess import Popen
 from datetime import datetime as dt
 
 isSH = os.path.expandvars('%SHServer%')
-if isSH == '%SHServer%':  # Note that Env Var SHServer is set on ScriptHost
-    myspf = os.path.dirname(os.path.realpath(__file__)).strip() + r'\SPFLib\SPFUtilities'
-else:
-    myspf = os.path.expandvars('%temp%')
-sys.path.insert(0, myspf)
-try:
-    from ATTDMongoDB.ATTDMongoDBDriver import ATTDMongoDBHandler
-except:
-    pass
 
 
 class BuildArgsClass(object):
@@ -537,6 +526,12 @@ def input_with_timeout(message, timeout, interactive_run=True, logger=None):
 
 def CheckDateIdeal(interactive_run=True, logger=None):
     logger.debug('Running CheckDateIdeal function')
+    try:
+        import winreg
+    except ImportError:
+        if logger is not None:
+            logger.warning('IDEAL registry inspection is Windows-only; skipping on this platform.')
+        return
     myregval1 = myregval2 = ''
     try:
         myreg = winreg.ConnectRegistry(None, winreg.HKEY_CLASSES_ROOT)
@@ -721,6 +716,10 @@ def Drop_Downstream_Opers(id_column, data_file, response_oper, threshold=0.75, u
         try:
             if un == '':
                 logger.debug('  -Connecting to KitchenSink Trace using default SQLPathFinder Connector')
+                if __package__:
+                    from .ATTDMongoDB.ATTDMongoDBDriver import ATTDMongoDBHandler
+                else:
+                    from ATTDMongoDB.ATTDMongoDBDriver import ATTDMongoDBHandler
                 api_args = {'DBTYPE': 'KITCHENSINK2', 'ERROR': ''}
                 api_args2 = {'DBTYPE': 'KITCHENSINK3', 'ERROR': ''}
                 server = ATTDMongoDBHandler().ConnectMongoDB(api_args)  # Get MongoDB Connection
@@ -733,6 +732,7 @@ def Drop_Downstream_Opers(id_column, data_file, response_oper, threshold=0.75, u
                 conn_success = True
             else:
                 logger.info('  -Connecting to KitchenSink Trace using pymongo')
+                import pymongo
                 client = pymongo.MongoClient('ATDSPWMONGOMD4:27019')
                 client2 = pymongo.MongoClient('ATDSPWMONGOMD10:27019')
                 db = client['ATM_KS']
