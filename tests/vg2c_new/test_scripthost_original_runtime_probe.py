@@ -269,7 +269,6 @@ def test_original_parser_builds_repository_actual_script_task_tree(tmp_path) -> 
     assert len(names) >= 40
 
 
-
 def test_original_html_css_report_lifecycle_on_linux(tmp_path, monkeypatch) -> None:
     _with_extracted_runtime()
     module = importlib.import_module("SPFLib.SPFSQL3")
