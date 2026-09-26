@@ -493,3 +493,46 @@ def test_windows_identity_path_fails_only_when_invoked_on_linux() -> None:
     assert runtime_module.SPFManager is not None
     with pytest.raises(RuntimeError, match="Windows identity integration is unavailable"):
         _ = manager.gUN
+
+
+
+def test_actual_script_fixture_parses_through_both_runtime_resolvers(tmp_path) -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "actual_script.txt"
+    text = fixture.read_text(encoding="utf-8-sig")
+
+    runtime_module = _runtime_module()
+    manager = runtime_module.SPFManager()
+    manager.gCommandLineArguments = [
+        "SPFSQL3.py",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+        "/SPFINSTANCE=actual-script-parse",
+    ]
+    segments = text.split(manager.SQLFILE_DELIM)
+    original_tasks = manager.Process_Query(
+        0,
+        len(segments),
+        segments,
+        manager.gMyLocal,
+        manager.gMyEXEDir,
+        None,
+        len(segments),
+        manager.gRNStr,
+        manager.TMP_F_NAME,
+        None,
+        False,
+    )
+    modern_commands = parse_vg2c_new(text, source=fixture)
+
+    assert len(original_tasks) > 10
+    assert len(modern_commands) > 10
+    assert [type(task).__name__ for task in original_tasks[:3]] == [
+        "HTMLRunTask",
+        "HTMLLayoutTask",
+        "HTMLDeleteTask",
+    ]
+    assert [command.utility_type for command in modern_commands[:3]] == [
+        "report.html_run",
+        "report.html_layout",
+        "report.delete",
+    ]
