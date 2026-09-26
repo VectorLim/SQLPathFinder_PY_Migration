@@ -35,12 +35,12 @@ import os
 import re
 import pickle
 import logging
-from PyGraphingMethods import Basic_Charts
-from PyGraphingMethods import Correlation_Plot
-from PyGraphingMethods import Carrier_Map
-from PyGraphingMethods import Wafer_Map
-from PyUtils import FindPattern
-from PyUtils import IsRectangle
+if __package__:
+    from .PyGraphingMethods import Basic_Charts, Correlation_Plot, Carrier_Map, Wafer_Map
+    from .PyUtils import FindPattern, IsRectangle
+else:
+    from PyGraphingMethods import Basic_Charts, Correlation_Plot, Carrier_Map, Wafer_Map
+    from PyUtils import FindPattern, IsRectangle
 
 
 class AC_Chart_Data(object):
