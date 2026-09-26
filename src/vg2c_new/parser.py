@@ -165,7 +165,7 @@ _RESOLVER_MANIFEST_BASE: tuple[tuple[str, str, str, str, str, str], ...] = (
         r"@EXEDIR@\SmartAppend.va",
         "SmartAppendTask",
         "smart_append",
-        "DIRECT_PORT",
+        "AMENDED_PORT",
         "csv",
         "append parity",
     ),
@@ -229,7 +229,7 @@ _RESOLVER_MANIFEST_BASE: tuple[tuple[str, str, str, str, str, str], ...] = (
     ),
     (r"@Echo", "EchoTask", "echo", "DIRECT_PORT", "none", "text parity"),
     (r"@EXEDIR@\XMLToCSV.va", "XMLToCSVTask", "xml_to_csv", "DIRECT_PORT", "xml/csv", "conversion"),
-    (r"@EXEDIR@\SPFZIP.va", "SPFZipTask", "zip", "DIRECT_PORT", "zipfile", "archive parity"),
+    (r"@EXEDIR@\SPFZIP.va", "SPFZipTask", "zip", "DIRECT_REUSE", "ScriptHost portable", "archive parity"),
     (
         r"@EXEDIR@\GetHelpCSV.va",
         "GetHelpCSVTask",
@@ -566,7 +566,7 @@ _RESOLVER_MANIFEST_BASE += (
         "routing/query parity",
     ),
     ("DOSCmdTask", "DOSCmdTask", "shell", "DROP_LEGACY", "shell", "must remain unsupported"),
-    ("StackDataTask", "StackDataTask", "stack_data", "DIRECT_PORT", "csv", "stack parity"),
+    ("StackDataTask", "StackDataTask", "stack_data", "AMENDED_PORT", "csv", "stack parity"),
     ("va", "vaTask", "va", "DROP_LEGACY", "Windows", "historical wrapper"),
     ("DUMMY", "DummyPassThroughTask", "noop", "DROP_LEGACY", "none", "compatibility decision"),
 )
