@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -24,6 +25,7 @@ from vg2c_new.utilities.files import (
     AppendFileUtility,
     CopyFileUtility,
     RenameFileUtility,
+    RoboCopyUtility,
     UnzipUtility,
     WaitFileUtility,
     ZipUtility,
@@ -73,6 +75,58 @@ def test_copy_rename_append_zip_and_unzip(tmp_path: Path) -> None:
     ZipUtility().apply(command("zip", ("renamed.csv", "archive.zip")), runtime)
     UnzipUtility().apply(command("unzip", ("archive.zip", "out")), runtime)
     assert (tmp_path / "out" / "renamed.csv").exists()
+
+
+def test_copy_distribution_tokens_and_robocopy_semantics(tmp_path: Path) -> None:
+    runtime = state(tmp_path)
+    (tmp_path / "one.txt").write_text("one", encoding="utf-8")
+    (tmp_path / "two.txt").write_text("two", encoding="utf-8")
+    copies = tmp_path / "copies"
+    copies.mkdir()
+    CopyFileUtility().apply(
+        command("copy_file", ("one.txt,two.txt", "copies", "N")),
+        runtime,
+    )
+    assert (copies / "one.txt").read_text(encoding="utf-8") == "one"
+    assert (copies / "two.txt").read_text(encoding="utf-8") == "two"
+
+    history = tmp_path / "history"
+    older = history / "older"
+    newer = history / "newer"
+    older.mkdir(parents=True)
+    newer.mkdir()
+    (older / "old.txt").write_text("old", encoding="utf-8")
+    (newer / "first.txt").write_text("first", encoding="utf-8")
+    chosen = newer / "chosen.txt"
+    chosen.write_text("chosen", encoding="utf-8")
+    os.utime(older, (10, 10))
+    os.utime(newer / "first.txt", (20, 20))
+    os.utime(chosen, (30, 30))
+    os.utime(newer, (40, 40))
+    CopyFileUtility().apply(
+        command(
+            "copy_file",
+            (
+                "history/<folder-datelastmodified>/<file-datelastmodified>",
+                "selected.txt",
+            ),
+        ),
+        runtime,
+    )
+    assert (tmp_path / "selected.txt").read_text(encoding="utf-8") == "chosen"
+
+    robo_src = tmp_path / "robo-src"
+    robo_src.mkdir()
+    (robo_src / "move.csv").write_text("x", encoding="utf-8")
+    RoboCopyUtility().apply(
+        command(
+            "robocopy",
+            ("*.csv", "robo-src", "robo-dst", "2", "0", "N", "/MOV /NP", "Y"),
+        ),
+        runtime,
+    )
+    assert (tmp_path / "robo-dst" / "move.csv").read_text(encoding="utf-8") == "x"
+    assert not (robo_src / "move.csv").exists()
 
 
 def test_unzip_blocks_zip_slip(tmp_path: Path) -> None:

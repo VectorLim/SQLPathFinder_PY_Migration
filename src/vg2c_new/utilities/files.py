@@ -68,11 +68,16 @@ class DeleteFileUtility(Utility):
 
 class CopyFileUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Amended portable port of ScriptHost SPFCopyTask/distribution copy path.
-        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SPFCopyTask and SPFUtilities/utils.py copy helpers.
+        """Amended portable port of ScriptHost SPFCopyTask/SPFDistribute.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SPFCopyTask and
+        SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.SPFDistribute/GetFilePattern.
         Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
-        Port mode: AMENDED PORT. Preserved: one/many source copy and continue-on-error.
-        Amendments: shutil.copy2. Discarded: BAT/service/date-token transports.
+        Port mode: AMENDED PORT.
+        Preserved: comma-separated sources, <c> escaping, wildcard copies,
+        newest-modified folder/file tokens, destination-folder rules, and continue-on-error.
+        Amendments: pathlib/glob/shutil replace COPY/BAT execution.
+        Intentionally discarded: COMSPEC/service transport and console/global-abort state.
         """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
@@ -86,27 +91,48 @@ class CopyFileUtility(Utility):
     def _copy(
         self, command: Command, state: RuntimeState, source_value: str, dest_value: str
     ) -> None:
-        if re.search(r"<\s*(folder|file)-datelastmodified\s*>", dest_value, re.I):
-            raise RuntimeError(
-                "Date-last-modified distribution tokens are not portable and are not supported."
-            )
-        raw = str(_path(command, state, source_value))
-        sources = (
-            [Path(p) for p in glob.glob(raw)] if any(ch in raw for ch in "*?[") else [Path(raw)]
-        )
-        sources = [p for p in sources if p.exists() and p.is_file()]
-        if not sources:
-            raise FileNotFoundError(source_value)
+        source_items = [
+            item.strip().replace("<c>", ",")
+            for item in source_value.split(",")
+            if item.strip()
+        ]
+        if not source_items:
+            return
         dest = _path(command, state, dest_value)
-        if len(sources) > 1 and not dest.is_dir():
+        if len(source_items) > 1 and not dest.is_dir():
             raise ValueError("Multiple copy sources require an existing destination directory.")
-        if dest.is_dir() or len(sources) > 1:
+
+        resolved: list[Path] = []
+        for item in source_items:
+            has_date_token = bool(
+                re.search(r"<\s*(folder|file)-datelastmodified\s*>", item, re.I)
+            )
+            if has_date_token and "*" in item:
+                raise ValueError(
+                    "Date-last-modified distribution tokens cannot be combined with '*'."
+                )
+            source = _path(command, state, item)
+            if has_date_token:
+                source = _resolve_modified_pattern(source)
+            raw = str(source)
+            matches = (
+                [Path(p) for p in glob.glob(raw)]
+                if any(ch in raw for ch in "*?[")
+                else [source]
+            )
+            resolved.extend(path for path in matches if path.exists() and path.is_file())
+
+        if not resolved:
+            raise FileNotFoundError(source_value)
+        if len(resolved) > 1 and not dest.is_dir():
+            raise ValueError("Multiple copy sources require an existing destination directory.")
+        if dest.is_dir() or len(resolved) > 1:
             dest.mkdir(parents=True, exist_ok=True)
-            for src in sources:
-                shutil.copy2(src, dest / src.name)
+            for source in resolved:
+                shutil.copy2(source, dest / source.name)
         else:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(sources[0], dest)
+            shutil.copy2(resolved[0], dest)
 
 
 class DistributeUtility(CopyFileUtility):
@@ -171,40 +197,84 @@ class AppendFileUtility(Utility):
 class RoboCopyUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
         """Rewrite of ScriptHost RoboCopy semantic contract using shutil.
-        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: RoboCopyTask / SPFUtilities.utils.SPFRoboCopy.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: RoboCopyTask and
+        SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.SPFRoboCopy.
         Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
-        Port mode: REWRITE. Preserved: pattern, source/dest, retry/wait and /S-/E recursion.
-        Amendments: native Python copy. Discarded: robocopy.exe-only switches.
+        Port mode: REWRITE.
+        Preserved: one/many patterns, retry/wait, optional lock probe, missing-source
+        abort, recursive /S-/E, /MOV, and destination verification.
+        Amendments: pathlib/shutil replace robocopy.exe and its exit-code table.
+        Intentionally discarded: robocopy display switches and custom pass-exit-code transport.
         """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 3:
             raise ValueError(
                 "RoboCopy requires pattern, source directory and destination directory."
             )
-        pattern, src_value, dst_value = args[:3]
-        retries = _int(args[3], 1) if len(args) > 3 else 1
-        wait = _int(args[4], 0) if len(args) > 4 else 0
-        switches = " ".join(args[6:]).upper() if len(args) > 6 else ""
-        src = _path(command, state, src_value)
-        dst = _path(command, state, dst_value)
-        recursive = "/S" in switches or "/E" in switches
-        for item in src.rglob(pattern) if recursive else src.glob(pattern):
-            if not item.is_file():
-                continue
+        patterns = [
+            value.strip().strip('"')
+            for value in args[0].split(",")
+            if value.strip().strip('"')
+        ]
+        src = _path(command, state, args[1])
+        dst = _path(command, state, args[2])
+        retries = max(1, _int(args[3], 100) if len(args) > 3 else 100)
+        wait = max(0, _int(args[4], 30) if len(args) > 4 else 30)
+        open_check = _yn(args[5]) if len(args) > 5 else False
+        switch_text = args[6].strip().upper() if len(args) > 6 else ""
+        abort_if_missing = _yn(args[7]) if len(args) > 7 else False
+
+        if not patterns:
+            return
+        if not src.is_dir():
+            raise FileNotFoundError(f"RoboCopy source directory not found: {src}")
+        if src.resolve(strict=False) == dst.resolve(strict=False):
+            return
+
+        switches = {value for value in switch_text.split() if value}
+        supported = {"/S", "/E", "/MOV", "/NP", "/IS"}
+        unsupported = sorted(value for value in switches if value not in supported)
+        if unsupported:
+            raise RuntimeError(
+                "Unsupported portable RoboCopy switch(es): " + ", ".join(unsupported)
+            )
+        recursive = bool(switches & {"/S", "/E"})
+        move = "/MOV" in switches
+        if len(patterns) > 1 or any(any(ch in pattern for ch in "*?[") for pattern in patterns):
+            open_check = False
+
+        matches: list[Path] = []
+        for pattern in patterns:
+            found = list(src.rglob(pattern) if recursive else src.glob(pattern))
+            files = [item for item in found if item.is_file()]
+            if not files and abort_if_missing:
+                raise FileNotFoundError(src / pattern)
+            matches.extend(files)
+        if not matches:
+            return
+
+        for item in dict.fromkeys(matches):
+            if open_check:
+                _assert_unlocked(item)
             target = dst / (item.relative_to(src) if recursive else Path(item.name))
             target.parent.mkdir(parents=True, exist_ok=True)
-            last = None
-            for attempt in range(max(1, retries)):
+            last_error: OSError | None = None
+            for attempt in range(retries):
                 try:
                     shutil.copy2(item, target)
-                    last = None
+                    last_error = None
                     break
                 except OSError as exc:
-                    last = exc
-                    if attempt + 1 < max(1, retries) and wait:
+                    last_error = exc
+                    if attempt + 1 < retries and wait:
                         time.sleep(wait)
-            if last:
-                raise last
+            if last_error is not None:
+                raise last_error
+            if abort_if_missing and not target.exists():
+                raise RuntimeError(f"RoboCopy destination was not created: {target}")
+            if move:
+                item.unlink()
 
 
 class SetFileReadOnlyUtility(Utility):
@@ -344,6 +414,59 @@ class UnzipUtility(Utility):
             zf.extractall(destination)
         if delete:
             archive.unlink(missing_ok=True)
+
+
+def _resolve_modified_pattern(path: Path) -> Path:
+    """Amended port of Utilities.GetFilePattern newest-modified path tokens.
+
+    Source: SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.GetFilePattern.
+    Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+    Port mode: AMENDED PORT.
+    Preserved: newest modified folder/file selection and deterministic filename tie-break.
+    Amendments: pathlib traversal replaces Windows path string construction.
+    Intentionally discarded: console/global error side effects.
+    """
+    folder_token = "<folder-datelastmodified>"
+    file_token = "<file-datelastmodified>"
+    parts = list(path.parts)
+    current = Path(path.anchor) if path.anchor else Path()
+    start = 1 if path.anchor else 0
+    for part in parts[start:]:
+        lower = part.casefold()
+        has_folder = folder_token in lower
+        has_file = file_token in lower
+        literal = re.sub(
+            r"<\s*(?:folder|file)-datelastmodified\s*>", "", part, flags=re.I
+        )
+        if literal:
+            current /= literal
+        if has_folder:
+            current = _latest_modified_child(current, directory=True)
+        if has_file:
+            current = _latest_modified_child(current, directory=False)
+    return current
+
+
+def _latest_modified_child(parent: Path, *, directory: bool) -> Path:
+    if not parent.is_dir():
+        raise FileNotFoundError(parent)
+    candidates = [
+        child
+        for child in parent.iterdir()
+        if (child.is_dir() if directory else child.is_file())
+    ]
+    if not candidates:
+        kind = "folder" if directory else "file"
+        raise FileNotFoundError(f"No {kind} candidates under {parent}")
+    return max(candidates, key=lambda child: (child.stat().st_mtime, child.name))
+
+
+def _assert_unlocked(path: Path) -> None:
+    try:
+        with path.open("ab"):
+            pass
+    except OSError as exc:
+        raise RuntimeError(f"Source file appears locked: {path}") from exc
 
 
 def _path(command: Command, state: RuntimeState, value: str) -> Path:
