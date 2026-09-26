@@ -265,8 +265,20 @@ def test_original_parser_builds_repository_actual_script_task_tree(tmp_path) -> 
     assert "HTMLRunTask" in names
     assert "HTMLLayoutTask" in names
     assert "StartMacroTask" in names
+    assert "IfThenTask" in names
     assert "RowsInFileTask" in names
+    assert "WriteFileTask" in names
+    assert "nqSQLiteTask" in names
+    assert "nqOracleTask" in names
     assert len(names) >= 40
+
+
+def test_vg2c_new_parser_accepts_repository_actual_script() -> None:
+    source = (Path(__file__).resolve().parents[1] / "fixtures" / "actual_script.txt").read_text(
+        encoding="utf-8"
+    )
+    commands = parse(source)
+    assert len(commands) >= 20
 
 
 def test_original_html_css_report_lifecycle_on_linux(tmp_path, monkeypatch) -> None:
