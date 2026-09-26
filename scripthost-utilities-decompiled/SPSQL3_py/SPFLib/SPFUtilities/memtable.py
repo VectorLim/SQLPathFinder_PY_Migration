@@ -45,11 +45,11 @@ History:
 2.0.3.0 : vanatara : Add MemTable.Update_DBNode_in_Multi_Node_List() ro handle node value update in memtable data
 2.0.3.1 : vanatara : Update to support Python 3.13
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
+from .. import * # portable common ScriptHost symbols
 
 import sqlite3
-from SPFLib.SPFUtilities.spflogger import SPFLogger 
-from SPFLib.SPFUtilities.utils import Utilities, SPFNothingToProcessException
+from .spflogger import SPFLogger 
+from .utils import Utilities, SPFNothingToProcessException
 
 #if isPYTHON2 is False:
 #    sys._enablelegacywindowsfsencoding()
