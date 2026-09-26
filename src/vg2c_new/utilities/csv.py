@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 from SPSQL3_py.SPFLib.SPFUtilities.portable import get_file_delimiter
+
 from vg2c_new.paths import resolve_path, working_directory_for
 
 if TYPE_CHECKING:
