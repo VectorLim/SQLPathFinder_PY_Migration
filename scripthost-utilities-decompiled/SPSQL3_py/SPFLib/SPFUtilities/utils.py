@@ -191,7 +191,6 @@ History:
 2.1.3.3a : vanatara : Update code merge issue
 """
 from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-from dask.callbacks import Callback as DaskCallback
 
 from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
 from rich.progress import ProgressColumn as RichProgressColumn
@@ -205,11 +204,12 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
+try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+except ImportError:
+    # ScriptHost ships dbDrivers only as Windows extension modules. Local/file
+    # utilities remain portable; SMTP auth reports the missing transport when used.
+    SPFSMTPAuthEmail = None
 
 #region packages used for SMTP email -- SPFEmail
 import email
@@ -2253,7 +2253,7 @@ class Utilities(SPFGlobals):
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).replace("\r\n", "\n")
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).decode(encoding=self.gOSDefaultEncoding).replace("\r\n", "\n")
                 __t = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32)
-                decompressedOutputString =  __t.decode(encoding=self.detectCharacterEncoding(__t)).replace("\r\n", "\n")
+                decompressedOutputString = __t.decode("utf-8").replace("\r\n", "\n")
             
             del inputStringToDeCompress
 

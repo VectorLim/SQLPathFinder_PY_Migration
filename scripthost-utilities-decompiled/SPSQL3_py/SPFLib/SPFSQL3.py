@@ -269,8 +269,21 @@ from . import SPFUtilities
 from .SPFUtilities.utils import Utilities, SPFNothingToProcessException, SPFMutedException, SPFCMDRunExitWithErrorCodeException, SPFMacroNotFoundException
 from .SPFUtilities.memtable import MemTable
 from .SPFUtilities.utils import SPFRichProgressBar
-from . import dbDrivers
-from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+try:
+    from . import dbDrivers
+    from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+except ImportError:
+    # The packaged dbDrivers are Windows-only .pyd files. Keep the original
+    # parser/task hierarchy importable on Linux; DB-backed tasks remain an
+    # explicit unavailable integration boundary until their transport is replaced.
+    dbDrivers = None
+
+    class _UnavailableDBDriver:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("ScriptHost dbDrivers are unavailable on this host")
+
+    dbDriverBase = _UnavailableDBDriver
+    dbDriverODBCBase = _UnavailableDBDriver
 
 class SPFManager(Utilities) :
     #class level variables

@@ -5,6 +5,7 @@ on:
     branches:
       - direct-runtime/session-2-utilities-integrations
       - direct-runtime/session-2.5a-portability-reuse-audit
+      - direct-runtime/architecture-reassessment-portable-scripthost
       - direct-runtime/session-3-**
 
 permissions:
@@ -19,9 +20,56 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validation dependencies
-        run: python -m pip install pytest ruff pandas requests openpyxl xlrd
+        run: python -m pip install pytest ruff pandas requests openpyxl xlrd chardet rich
+      - name: Archive runtime inventory
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          archive = Path("scripthost-utilities-decompiled/SPSQL3_py.zip")
+          with zipfile.ZipFile(archive) as zf:
+              names = zf.namelist()
+          print("archive_python_files", sum(name.lower().endswith(".py") for name in names))
+          for name in names:
+              lower = name.lower()
+              if "dbdriver" in lower or lower.endswith("spflib/spfsql3.py") or lower.endswith("spflib/spfglobals.py"):
+                  print("archive_runtime_entry", name)
+          PY
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
+      - name: Process-isolated ScriptHost startup benchmark
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          import tempfile
+          import time
+          from pathlib import Path
+
+          repo = Path.cwd()
+          runner = repo / "tools" / "scripthost_portable_runner.py"
+          script_text = "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=probe.txt\n</OPTIONS>\nprobe"
+          timings = []
+          with tempfile.TemporaryDirectory() as raw:
+              root = Path(raw)
+              script = root / "probe.spfsql"
+              script.write_text(script_text, encoding="utf-8")
+              for index in range(3):
+                  workdir = root / f"run-{index}"
+                  workdir.mkdir()
+                  start = time.perf_counter()
+                  subprocess.run(
+                      [sys.executable, str(runner), str(script), "--workdir", str(workdir)],
+                      cwd=repo,
+                      check=True,
+                      stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL,
+                  )
+                  timings.append(time.perf_counter() - start)
+          print("process_isolation_seconds", ",".join(f"{value:.3f}" for value in timings))
+          print("process_isolation_mean_seconds", f"{sum(timings) / len(timings):.3f}")
+          PY
+
       - name: Compile direct runtime
         run: python -m compileall -q src/vg2c_new
       - name: Compile portable ScriptHost targets
