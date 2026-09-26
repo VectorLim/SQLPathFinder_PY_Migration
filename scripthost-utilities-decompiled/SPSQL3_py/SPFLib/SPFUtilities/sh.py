@@ -9,7 +9,8 @@ History:
 2.0.0.0 : vanatara : Updated to support both Python 2.7.15 & Python 3.6
 2.0.0.1 : vanatara : removed redundant import statements
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
+import configparser as ConfigParser
+import os
 #if isPYTHON2:
 #    import _winreg
 #    from _winreg import *
@@ -159,17 +160,20 @@ class ScriptHost(object):
         cbVersionsIni = ""
 
         try :
+            if os.name != "nt":
+                raise RuntimeError("ScriptHost registry lookup is only supported on Windows")
+            import winreg
             try :
                 try : 
-                    aReg = ConnectRegistry(None, HKEY_LOCAL_MACHINE)
-                    aKey = OpenKey(aReg, r"Software\ACTools\ScriptHost\CrystalBall")
+                    aReg = winreg.ConnectRegistry(None, winreg.HKEY_LOCAL_MACHINE)
+                    aKey = winreg.OpenKey(aReg, r"Software\ACTools\ScriptHost\CrystalBall")
                 except Exception as err:
                     errMsg = "Error '{0}' occurred while looking for Crystal Ball in registry.".format(err.strerror)
                     raise Exception(errMsg)
 
                 try :
                     pathKey = "BaseInstallPath"
-                    cbVersionsIni = ExpandEnvironmentStrings(QueryValueEx(aKey, pathKey))
+                    cbVersionsIni = winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(aKey, pathKey)[0])
                 except Exception as err:
                     errMsg = "Error '{0}' occurred while looking for Key '{1}' in registry.".format(err.strerror, pathKey)
                     raise Exception(errMsg)
