@@ -1,1 +1,1 @@
-"""Portable package boundary for the decompiled ScriptHost Python runtime."""\n
+"""Portable package boundary for the decompiled ScriptHost Python runtime."""
