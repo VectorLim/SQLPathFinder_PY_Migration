@@ -66,7 +66,8 @@ def _require_plot_dependencies():
         ) from _PLOT_IMPORT_ERROR
 from .PyUtils import BuildArgs
 from datetime import timedelta as td
-mpl.use('Agg')
+if mpl is not None:
+    mpl.use('Agg')
 
 
 class Correlation_Plot(object):
