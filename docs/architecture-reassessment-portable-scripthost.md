@@ -14,7 +14,7 @@ Assessment branch:
 
 - `direct-runtime/architecture-reassessment-portable-scripthost-v4`
 - validated implementation/test head used by the final report refresh:
-  `c46636df3f010d1705a6c6523ca9a7e6a91f948c`
+  `9a243d53c3ec3d7aa8c1a455d28088d259543f40`
 
 The branch was created directly from the requested commit. Nothing was merged to
 `main`. `vg2c_new` was not deleted or cut over. The paused Session 2.5B report
@@ -178,6 +178,38 @@ This is evidence that continuing to reconstruct the full runtime in
 `vg2c_new` can intentionally or accidentally narrow mature ScriptHost
 semantics.
 
+## Existing real-script fixture result
+
+The repository's existing `tests/fixtures/actual_script.txt` (about 38 KB) was
+also used as migration evidence rather than relying only on synthetic scripts.
+
+The original ScriptHost `Process_Query/GetQuery` path parses the fixture on
+Linux and resolves its opening report lifecycle as:
+
+```text
+HTMLRunTask
+HTMLLayoutTask
+HTMLDeleteTask
+```
+
+Later in that same current fixture, `/UTILITIES=getcsrsu.bat` is not in the
+explicit utility map. The original mature resolver falls back to
+`DOSCmdTask`, so it still accepts the script structurally.
+
+`vg2c_new` intentionally disables generic shell fallback and raises a
+source-located `Vg2ParseError` for `getcsrsu.bat`.
+
+This is a useful **real migration gap**, not a reason to restore arbitrary shell
+execution. Before cutover, that currently used helper must be classified as one
+of:
+
+- a behavior still required, with a specific portable adapter;
+- an obsolete step that can be removed from the current script; or
+- an explicitly unsupported product behavior with an agreed migration path.
+
+The test records this difference directly instead of weakening either resolver
+to manufacture parity.
+
 ## Runtime trace and ownership
 
 ### Top-level executable
@@ -288,13 +320,14 @@ rather than as a parallel replacement runtime.
 The reassessment did not reject `SPFGlobals` because it contains mutable or
 class-level state. It traced how that state behaves.
 
-| State category | Examples | Assessment |
+| Authority category | Examples | Assessment |
 |---|---|---|
-| Static/read-mostly constants and path definitions | format constants, names, fixed defaults | Keep where portable; move environment-specific values to config only when needed |
-| Per-job mutable state that the existing command reset handles | `g_gVars`, loop counters, abort flag, macro file, local/exe-dir caches, SQL file fields, chart counter | Usable inside a single-job process |
-| Process caches not fully reset when command arguments change | `gSPFInstance`, execution/service/session-related caches, random/process identifiers and other class caches | Unsafe as the isolation mechanism for a reusable multi-job worker |
-| Windows-bound accessors | `gUN`/`gUDomain` via `win32api`, service detection through `.NET/System.*`, Windows-path assumptions | Replace/lazify only if the Linux execution path needs them |
-| Legacy environment/service constants | old shared paths, service locations, historical infrastructure defaults | Inject/configure when still required; otherwise leave outside supported path |
+| **CONSTANT / CONFIG** | format constants, delimiter/name constants, fixed defaults, current environment paths | Keep constants; inject/configure values that legitimately vary by Linux deployment |
+| **PER-RUN MUTABLE** | `gCommandLineArguments`, `g_gVars`, loop counters, `gMyAbort`, macro/SQL-file state, `gMyLocal`, `gMyEXEDir`, report/chart counters | Valid legacy job state when the entire job owns one process; process exit is the reset boundary |
+| **PER-TASK STATE THAT SHOULD NOT BE GLOBAL** | helper/report/query scratch state that is class-scoped only for historical convenience | Do not rewrite speculatively; refactor only where representative intra-job tests show concrete cross-task interference, because process isolation does not fix interference inside one job |
+| **PROCESS-GLOBAL INTEGRATION STATE** | `gDBGlobCon`, `gSPFInstance`, service/session identity caches, process/random identifiers and other integration caches | Do not rely on command-argument reset; contain with one fresh process per job and let modern adapters own external connection lifetimes |
+| **WINDOWS-SPECIFIC STATE** | `gUN`, `gUDomain`, `gUserPrincipal`, `gIsSvc`, CLR/Win32/COM access, Windows-only paths | Keep lazy/unreached when irrelevant; provide a narrow portable replacement only for a required feature |
+| **OBSOLETE STATE** | old SQLPFaaS/service infrastructure, historical shared locations, retired wrappers and host-only flags no longer required by the Linux product | Leave unreachable or retire only after current-script/product evidence confirms the behavior is not needed |
 
 A direct source finding is important here:
 `__reInitStaticPropsDueToCmdUpdate()` resets many fields, but it does **not**
@@ -362,10 +395,11 @@ A small CI feasibility probe launches three **fresh sequential Python
 processes**. Each imports the original ScriptHost runtime and executes one
 original `WRITE-FILE` job.
 
-On the Ubuntu GitHub Actions runner, all three jobs completed in **1.93 s total**
-for the measured test, approximately **0.64 s/job** including interpreter
+Across the final Ubuntu GitHub Actions runs, the three-job probe took
+**1.54-2.44 s total**, or roughly **0.51-0.81 s/job**, including interpreter
 startup, ScriptHost imports, runtime construction, parsing, execution, and
-process shutdown.
+process shutdown. The final resolver-gap validation run measured **2.02 s total**
+for the three jobs.
 
 This is not a production throughput benchmark and no service SLA is inferred
 from it. It is enough to reject the concern that fresh-process containment has
@@ -670,6 +704,9 @@ Remaining blockers/unknowns include:
 5. **DOS/helper executables.**
    `COMSPEC`, BAT files, `robocopy.exe`, and old helper executables need
    portable transport replacements where the feature remains required.
+   The existing `actual_script.txt` still contains `getcsrsu.bat`, so generic
+   DOS fallback cannot be treated as universally obsolete until that real step
+   is mapped to a specific Linux behavior or intentionally removed.
 
 6. **COM/Outlook/Excel-specific paths.**
    These should use already available portable libraries/integrations behind
@@ -690,20 +727,22 @@ Remaining blockers/unknowns include:
    not yet been implemented.
 
 10. **Performance beyond startup.**
-    The three-fresh-process micro-probe measured 1.93 s total on GitHub Actions.
-    A representative production-scale query/report throughput benchmark has not
+    The three-fresh-process micro-probe measured 1.54-2.44 s total across the
+    final GitHub Actions runs (2.02 s in the final resolver-gap run). A
+    representative production-scale query/report throughput benchmark has not
     yet been performed, so no end-to-end performance claim is made.
 
 ## Validation evidence
 
-Latest completed Linux validation used for the expanded runtime matrix before
-the final identity-boundary refresh:
+Latest completed Linux validation for the assessed implementation/test head:
 
-- GitHub Actions run: `36262083919`;
+- GitHub Actions run: `36262476605`;
+- implementation/test commit: `9a243d53c3ec3d7aa8c1a455d28088d259543f40`;
 - environment: Ubuntu runner, Python 3.12;
-- result: **65 passed, 28 warnings**;
-- slowest process-startup probe: **1.93 s** for three fresh sequential jobs;
-- original RUN-LOOP test: **0.19 s**;
+- result: **67 passed, 50 warnings**;
+- fresh-process probe: **2.02 s** for three sequential one-job processes;
+- real `actual_script.txt` resolver-gap test: **0.37 s**;
+- original RUN-LOOP test: **0.17 s**;
 - original SITE-LOOP test: **0.13 s**;
 - Ruff: **all checks passed**;
 - existing `vg2c_new` tests remain in the same validation job.
@@ -727,7 +766,10 @@ The test set now covers:
 - missing legacy DB transport failing only when invoked;
 - fresh-process startup/one-job timing;
 - Windows identity integration remaining import-safe and failing clearly only
-  when invoked on Linux.
+  when invoked on Linux;
+- the existing `actual_script.txt` parsing through original `Process_Query`
+  while `vg2c_new` intentionally rejects its `getcsrsu.bat` DOS-fallback
+  step.
 
 ## Session 2.5B status
 
@@ -819,15 +861,16 @@ Record differences explicitly as:
 
 Prioritize:
 
-1. SITE-LOOP;
-2. RUN-LOOP;
-3. SQLite/local query path;
-4. current production database query path through a modern transport adapter;
-5. file copy/append/smart-append;
-6. report runtime;
-7. Python/process utilities;
-8. Excel;
-9. email;
+1. the real `getcsrsu.bat` step from `actual_script.txt`: portable adapter
+   or explicit removal decision;
+2. SQLite/local query path;
+3. current production database query path through a modern transport adapter;
+4. file copy/append/smart-append;
+5. report runtime;
+6. Python/process utilities;
+7. Excel;
+8. email;
+9. additional production SITE/RUN-loop scripts and error paths;
 10. remaining used resolver entries.
 
 The goal is not to make every historical function portable. The goal is to
