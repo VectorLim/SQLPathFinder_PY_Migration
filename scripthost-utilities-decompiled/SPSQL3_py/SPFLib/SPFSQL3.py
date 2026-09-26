@@ -269,8 +269,27 @@ from . import SPFUtilities
 from .SPFUtilities.utils import Utilities, SPFNothingToProcessException, SPFMutedException, SPFCMDRunExitWithErrorCodeException, SPFMacroNotFoundException
 from .SPFUtilities.memtable import MemTable
 from .SPFUtilities.utils import SPFRichProgressBar
-from . import dbDrivers
-from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+try:
+    from . import dbDrivers
+    from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+except ImportError as _dbdrivers_import_error:
+    dbDrivers = None
+
+    class _UnavailableDbDriver:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "ScriptHost database-driver integration is unavailable in this portable runtime"
+            ) from _dbdrivers_import_error
+
+    dbDriverBase = dbDriverODBCBase = _UnavailableDbDriver
+    dbDriverDotNetSQLServer = dbDriverDotNetTextJET = _UnavailableDbDriver
+    dbDriverDotNetTeradata = dbDriverDotNetOracle = _UnavailableDbDriver
+    dbDriverCxOracle = dbDriverODBCSQLServer = dbDriverODBCImpala = _UnavailableDbDriver
+    dbDriverODBCMYSQL = dbDriverODBCSAPHana = dbDriverMSOLAPWin32Com = _UnavailableDbDriver
+    dbDriverUBERWin32Com = dbDriverCB = dbDriverCBSQL = _UnavailableDbDriver
+    NodesInfo = spfsqlxParser = _UnavailableDbDriver
+    encryptSPFSQL = encryptConfigFile = encryptText = _UnavailableDbDriver
+    dbDriverODBCDenodo = dbDriverPGSQLPsycopg2 = dbDriverDotNetLibSQLServer = _UnavailableDbDriver
 
 class SPFManager(Utilities) :
     #class level variables
