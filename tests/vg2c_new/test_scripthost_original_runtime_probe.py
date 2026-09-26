@@ -69,9 +69,9 @@ def _script(*blocks: str) -> str:
 
 def _representative_script() -> str:
     return _script(
-        _block("/WRITE-FILE=Y", "/CSV=seed.csv", body="name,value\\nx,1<EOF>ignored"),
-        _block('/UTILITIES={ROWS-IN-FILE} "seed.csv" "SEED_ROWS" "N"'),
-        _block('/UTILITIES={IF-THEN} "SEED_ROWS" "EQ" "1"'),
+        _block("/WRITE-FILE=Y", "/CSV=seed.txt", body="seed<EOF>ignored"),
+        _block('/UTILITIES={ROWS-IN-FILE} "macro.csv" "MACRO_ROWS" "N"'),
+        _block('/UTILITIES={IF-THEN} "MACRO_ROWS" "EQ" "2"'),
         _block("/WRITE-FILE=Y", "/CSV=count_ok.txt", body="count ok"),
         _block("/UTILITIES={ELSE}"),
         _block("/WRITE-FILE=Y", "/CSV=count_bad.txt", body="wrong count"),
