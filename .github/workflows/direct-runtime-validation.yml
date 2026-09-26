@@ -5,6 +5,7 @@ on:
     branches:
       - direct-runtime/session-2-utilities-integrations
       - direct-runtime/session-2.5a-portability-reuse-audit
+      - direct-runtime/architecture-reassessment-portable-scripthost
       - direct-runtime/session-3-**
 
 permissions:
