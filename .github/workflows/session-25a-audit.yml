@@ -6,7 +6,7 @@ on:
       - direct-runtime/session-2-utilities-integrations
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -16,49 +16,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Inspect archived ScriptHost source
+      - name: Restore authoritative decompiled module
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/spsql3
-          mkdir -p /tmp/spsql3
-          unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
+          if [ ! -s scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py ]; then
+            rm -rf /tmp/spsql3
+            mkdir -p /tmp/spsql3
+            unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
+            cp /tmp/spsql3/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
+            git commit -m "chore: restore authoritative decompiled SPFSQL3 source"
+            git push
+          fi
+      - name: Verify restored source
+        run: |
+          test -s scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
           python - <<'PY'
-          import ast
           from pathlib import Path
-          root = Path("/tmp/spsql3")
-          targets = {
-              "AppendFileTask","CopyFileTask","CSVToHTMLTask","CSVToXMLTask","EmailTask",
-              "ImportExcelTask","LoadExcelTask","XLSToCSVTask","SetFileROTask",
-              "RunPythonScriptTask","RunRFileTask","RoboCopyTask","SmartAppendTask",
-              "SQLiteDeleteTask","SQLiteLoadTask","SPFUNZipTask","WaitIntervalTask",
-              "WaitFileTask","GetWebTextTask","EchoTask","XMLToCSVTask","SPFZipTask",
-              "StackDataTask","nqSQLiteTask","nqOracleTask"
-          }
-          p = root / "SPFLib" / "SPFSQL3.py"
-          src = p.read_text(encoding="utf-8-sig", errors="replace")
-          mod = ast.parse(src)
-          for node in mod.body:
-              if isinstance(node, ast.ClassDef) and node.name in targets:
-                  bases = [ast.unparse(x) for x in node.bases]
-                  print(f"CLASS {node.name} lines={node.lineno}-{node.end_lineno} bases={bases}")
-                  for item in node.body:
-                      if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                          args = ast.unparse(item.args)
-                          print(f"  METHOD {item.name} lines={item.lineno}-{item.end_lineno} args=({args})")
-          up = root / "SPFLib" / "SPFUtilities" / "utils.py"
-          usrc = up.read_text(encoding="utf-8-sig", errors="replace")
-          umod = ast.parse(usrc)
-          wanted_helpers = {
-              "SPFRoboCopy","File_Exists_Retry","GetFileDate","FileIsLocked","Run",
-              "PrepFile","DoCreateFileA","DoAppendFileA","SPFDelete","DelAFile",
-              "GetHeadersFromFile","GetFileLine1","Chk_AppendMode","getLineCountFromFile",
-              "getRowCountFromFile","StackTable","writeDFtoFile","CompareVars",
-              "SPFWebCopyPyReqs","ZipFiles2","UnZipFiles2","CopyFile2","GetFileDLM"
-          }
-          for node in umod.body:
-              if isinstance(node, ast.ClassDef) and node.name == "Utilities":
-                  for item in node.body:
-                      if isinstance(item, ast.FunctionDef) and item.name in wanted_helpers:
-                          print(f"UTIL_METHOD {item.name} lines={item.lineno}-{item.end_lineno} args=({ast.unparse(item.args)})")
+          p=Path("scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py")
+          print("restored_lines", len(p.read_text(encoding="utf-8-sig", errors="replace").splitlines()))
           PY
