@@ -57,3 +57,7 @@ def test_report_modules_import_from_package_on_linux() -> None:
     assert hasattr(chart_data, "AC_Chart_Data")
     assert hasattr(graphing, "Basic_Charts")
     assert hasattr(plotly_module, "SPFPlotly")
+
+    if sys.platform != "win32":
+        for module_name in ("clr", "win32api", "win32com", "win32security", "winreg"):
+            assert module_name not in sys.modules
