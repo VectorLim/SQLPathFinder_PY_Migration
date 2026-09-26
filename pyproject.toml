@@ -52,11 +52,11 @@ include-package-data = true
 vg2c_ui = ["static/*", "static/assets/*"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "scripthost-utilities-decompiled"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "."]
+pythonpath = ["src", ".", "scripthost-utilities-decompiled"]
 
 [tool.ruff]
 target-version = "py311"
