@@ -7,6 +7,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from vg2c_new.parser import parse
 from vg2c_new.runtime import Interpreter, RuntimeState
 from vg2c_new.utilities.files import WriteFileUtility
@@ -42,6 +44,15 @@ def test_original_spfmanager_imports_on_linux() -> None:
     _with_extracted_runtime()
     module = importlib.import_module("SPFLib.SPFSQL3")
     assert module.SPFManager is not None
+
+
+def test_windows_db_transport_fails_only_when_invoked_on_linux() -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    if sys.platform == "win32" or module.dbDrivers is not None:
+        pytest.skip("Windows ScriptHost dbDrivers are available on this host.")
+    with pytest.raises(RuntimeError, match="dbDrivers are unavailable"):
+        module.dbDriverBase()
 
 
 DELIM = "<---- New Query ---->"
