@@ -483,3 +483,13 @@ def test_fresh_process_job_overhead_is_bounded_on_linux(tmp_path) -> None:
     # production SLA. The GitHub Actions --durations output records the actual
     # observed cost for the architecture assessment.
     assert sum(durations) < 15.0
+
+
+
+def test_windows_identity_path_fails_only_when_invoked_on_linux() -> None:
+    runtime_module = _runtime_module()
+    manager = runtime_module.SPFManager()
+
+    assert runtime_module.SPFManager is not None
+    with pytest.raises(RuntimeError, match="Windows identity integration is unavailable"):
+        _ = manager.gUN
