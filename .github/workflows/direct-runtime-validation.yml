@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validation dependencies
-        run: python -m pip install pytest ruff pandas requests openpyxl xlrd dask rich
+        run: python -m pip install pytest ruff pandas requests openpyxl xlrd dask rich chardet
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
       - name: Compile direct runtime
