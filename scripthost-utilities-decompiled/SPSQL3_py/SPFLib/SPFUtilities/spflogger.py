@@ -32,7 +32,7 @@ class SPFLogger(object):
     #def SPFInstallPath(self):
     #    return os.getenv("USERPROFILE") + "\\My Programs\\SQLPathFinder3"
 
-    SPFInstallPath = os.getenv("USERPROFILE") + "\\My Programs\\SQLPathFinder3"
+    SPFInstallPath = (os.getenv("USERPROFILE") or os.path.expanduser("~")) + "\\My Programs\\SQLPathFinder3"
 
     #@staticmethod
     def __init__(self):
