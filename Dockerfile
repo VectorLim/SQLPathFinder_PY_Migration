@@ -16,6 +16,7 @@ RUN apt-get update \
 COPY --from=ghcr.io/astral-sh/uv:0.10.7 /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY scripthost-utilities-decompiled ./scripthost-utilities-decompiled
 # git-credentials is a BuildKit secret in git credential-store format. It is never copied
 # into an image layer. Corporate proxy and CA configuration are supplied by the host.
 RUN --mount=type=secret,id=git_credentials,required=false \
@@ -33,6 +34,7 @@ RUN groupadd --gid 10001 vg2c \
     && chown -R vg2c:vg2c /app /data
 COPY --from=builder --chown=vg2c:vg2c /app/.venv /app/.venv
 COPY --chown=vg2c:vg2c src ./src
+COPY --chown=vg2c:vg2c scripthost-utilities-decompiled ./scripthost-utilities-decompiled
 COPY --from=frontend --chown=vg2c:vg2c /static ./src/vg2c_ui/static
 USER vg2c
 EXPOSE 8765
