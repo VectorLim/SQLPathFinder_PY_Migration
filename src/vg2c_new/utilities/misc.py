@@ -25,7 +25,15 @@ class EchoUtility(Utility):
 
 class CsvToHtmlUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct portable port of ScriptHost CSVToHTMLTask current table rendering."""
+        """Direct portable port of ScriptHost CSVToHTMLTask.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: CSVToHTMLTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: table/header/caption rendering semantics.
+        Amendments: stdlib HTML escaping and pandas.
+        Intentionally discarded: task console state.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if not args:
             return
@@ -58,7 +66,15 @@ class CsvToHtmlUtility(Utility):
 
 class CsvToXmlUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct portable port of ScriptHost CSVToXMLTask current DOM shape."""
+        """Direct portable port of ScriptHost CSVToXMLTask.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: CSVToXMLTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: Main/Item DOM shape, column sanitization and dot empties.
+        Amendments: ElementTree replaces minidom task plumbing.
+        Intentionally discarded: task-global state.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if not args:
             return

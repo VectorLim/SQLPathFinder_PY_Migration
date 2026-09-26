@@ -93,7 +93,15 @@ class SmartAppendUtility(Utility):
             UpdateTimeUtility().apply(synthetic, state)
 
     def _read(self, path: Path, upper: bool) -> pd.DataFrame:
-        """Amended port of SmartAppendTask.process_csv input normalization."""
+        """Amended port of SmartAppendTask.process_csv input normalization.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SmartAppendTask.process_csv.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: string CSV loading, dot/empty handling and header uppercase.
+        Amendments: whole-frame pandas load.
+        Intentionally discarded: ScriptHost chunk/global counters.
+        """
         frame = pd.read_csv(
             path,
             sep=CsvUtility.delimiter(path),
@@ -112,7 +120,15 @@ class SmartAppendUtility(Utility):
         return frame[frame[self._column(frame, column, "Delete")].astype(str) > cutoff]
 
     def _delete_cutoff(self, value: str, state: RuntimeState) -> str:
-        """Amended port of SmartAppendTask.parseDelCriteria for Today/Today_GMT days/hours."""
+        """Amended port of SmartAppendTask.parseDelCriteria.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SmartAppendTask.parseDelCriteria.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: Today/Today_GMT day/hour cutoffs.
+        Amendments: RuntimeState time values.
+        Intentionally discarded: ScriptHost global clock variables.
+        """
         text = value.strip()
         m = re.fullmatch(r"(?i)(Today(?:_gmt)?)\s*(?:-\s*)?(\d*(?:\.\d+)?)\s*(days?|hours?)", text)
         if not m:
@@ -137,6 +153,15 @@ class SmartAppendUtility(Utility):
 
     @staticmethod
     def _column(frame: pd.DataFrame, requested: str, kind: str) -> str:
+        """Amended port of SmartAppendTask.validateHDRS column matching.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SmartAppendTask.validateHDRS.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: case-insensitive delete/update column resolution and missing-column error.
+        Amendments: DataFrame columns replace MemTable lists.
+        Intentionally discarded: MemTable population.
+        """
         actual = {str(c).casefold(): str(c) for c in frame.columns}.get(requested.casefold())
         if actual is None:
             raise ValueError(f"{kind} Column does not exist: {requested}")
@@ -144,6 +169,15 @@ class SmartAppendUtility(Utility):
 
     @staticmethod
     def _union_columns(old: pd.DataFrame, new: pd.DataFrame, sort_headers: str) -> list[str]:
+        """Amended port of SmartAppendTask.GetUnionOfCols.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SmartAppendTask.GetUnionOfCols.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: old-first case-insensitive union and optional alphabetical sort.
+        Amendments: Python list union replaces temporary SQLite tables.
+        Intentionally discarded: SmartAppend-3/Hive select-string generation.
+        """
         columns = []
         seen = set()
         for source in (list(old.columns), list(new.columns)):

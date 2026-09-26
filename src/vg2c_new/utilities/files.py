@@ -209,7 +209,15 @@ class RoboCopyUtility(Utility):
 
 class SetFileReadOnlyUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Amended portable port of SetFileROTask READONLY/READWRITE intent."""
+        """Amended portable port of ScriptHost SetFileROTask.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SetFileROTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: READONLY/READWRITE intent.
+        Amendments: chmod replaces Windows attributes.
+        Intentionally discarded: HIDDEN/SYSTEM.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("SetFileRO requires file and access mode.")
@@ -233,6 +241,15 @@ class WaitIntervalUtility(Utility):
         self._sleep = sleeper
 
     def apply(self, command: Command, state: RuntimeState) -> None:
+        """Direct port of ScriptHost WaitIntervalTask.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: WaitIntervalTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: interval wait semantics.
+        Amendments: injected sleeper.
+        Intentionally discarded: console/global state.
+        """
         args = [state.substitute(v) for v in command.arguments]
         self._sleep(max(0, _int(args[0], 10) if args else 10))
 
@@ -243,7 +260,15 @@ class WaitFileUtility(Utility):
         self._poll_seconds = poll_seconds
 
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Amended port of ScriptHost WaitFileTask bounded polling; Windows session probing discarded."""
+        """Amended port of ScriptHost WaitFileTask bounded polling.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: WaitFileTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: bounded polling and missing-file completion.
+        Amendments: pathlib and injected sleeper.
+        Intentionally discarded: Windows session probing.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if not args:
             raise ValueError("WaitFile requires a file path.")
@@ -258,7 +283,15 @@ class WaitFileUtility(Utility):
 
 class ZipUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct portable port of current ScriptHost SPFZIP archive semantics."""
+        """Direct portable port of current ScriptHost SPFZIP semantics.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SPFZipTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: archive creation and optional source deletion.
+        Amendments: stdlib zipfile.
+        Intentionally discarded: helper executable transport.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("SPFZIP requires source and archive.")
@@ -286,7 +319,15 @@ class ZipUtility(Utility):
 
 class UnzipUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct portable port of current ScriptHost SPFUNZIP semantics with zip-slip protection."""
+        """Direct portable port of current ScriptHost SPFUNZIP semantics.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SPFUNZipTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: extraction and optional archive deletion.
+        Amendments: stdlib zipfile plus zip-slip protection.
+        Intentionally discarded: helper executable transport.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("SPFUNZIP requires archive and destination.")
@@ -330,6 +371,15 @@ def _rename_tokens(value: str, now: datetime) -> str:
 
 
 def _intel_ww(date: datetime) -> str:
+    """Direct port of ScriptHost Utilities.IntelWW work-week calculation.
+
+    Source: SPSQL3_py/SPFLib/SPFUtilities/utils.py :: Utilities.IntelWW.
+    Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+    Port mode: DIRECT PORT.
+    Preserved: Intel year/week boundary arithmetic.
+    Amendments: locale-independent datetime arithmetic.
+    Intentionally discarded: Windows locale mutation and logging globals.
+    """
     d = date.date()
     year = d.year
     ww = None

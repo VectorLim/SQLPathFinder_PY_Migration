@@ -80,6 +80,15 @@ class RunRUtility(Utility):
 
 class InlineRUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
+        """Amended port of current ScriptHost RunRScriptTask inline mode.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: RunRScriptTask and Utilities.Run_R.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: inline script execution and optional raw arguments.
+        Amendments: direct Rscript -e invocation.
+        Intentionally discarded: app-server and Windows transport.
+        """
         script = state.substitute(command.body)
         if not script.strip():
             raise ValueError("RSCRIPT contains no R code.")

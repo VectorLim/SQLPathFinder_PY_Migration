@@ -60,7 +60,15 @@ class SqliteQueryUtility(Utility):
         return specs
 
     def _load_file(self, con: sqlite3.Connection, path: Path, table: str) -> int:
-        """Amended port of MemTable.LoadFromFile without singleton/class state."""
+        """Amended port of MemTable.LoadFromFile.
+
+        Source: SPSQL3_py/SPFLib/SPFUtilities/memtable.py :: MemTable.LoadFromFile.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: AMENDED PORT.
+        Preserved: delimiter/header/text/null/reserved-column handling.
+        Amendments: explicit sqlite connection replaces shared MemTable state.
+        Intentionally discarded: MemTable singleton and class dictionaries.
+        """
         if not path.exists():
             raise FileNotFoundError(path)
         with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
@@ -185,6 +193,15 @@ class SqliteLoadUtility(SqliteQueryUtility):
 
 class SqliteDeleteUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
+        """Direct port of ScriptHost SQLiteDeleteTask.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SQLiteDeleteTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: database-file deletion and missing-file no-op.
+        Amendments: pathlib.unlink replaces SPFDelete wrapper execution.
+        Intentionally discarded: BAT transport.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if not args:
             raise ValueError("SQLiteDelete requires a database file.")

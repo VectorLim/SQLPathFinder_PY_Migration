@@ -59,7 +59,7 @@ def build_runtime_utilities() -> dict[str, Utility]:
         ("datasyncx", "OracleReader"),
     )
     oasys = _construct_type(oracle_cls, database="OASYS")
-    generic_oracle = _construct_type(oracle_cls)
+    generic_oracle = None
     send_msg = _find_attribute(
         ("datasyncx", "send_msg"),
         ("datasyncx.email", "send_msg"),
@@ -129,6 +129,7 @@ def build_runtime_utilities() -> dict[str, Utility]:
         "publish_sharepoint": "no approved portable SharePoint write integration is present",
         "tdx_to_csv": "TDX conversion has no approved portable backend",
         "get_help_csv": "the current help-query metadata source has not been exposed as a portable API",
+        "join_by_name": "current VA_Join_By_Name semantics have no characterized portable contract yet",
         "mongo_export": "DataSyncX Mongo export API is not evidenced by the pinned integration contract",
         "mongo_import": "DataSyncX Mongo import API is not evidenced by the pinned integration contract",
         "mongo_extract": "DataSyncX Mongo extract API is not evidenced by the pinned integration contract",

@@ -179,3 +179,24 @@ def test_manifest_has_terminal_session_2_status_for_all_108_entries() -> None:
     assert all(len(row) == 7 for row in RESOLVER_MANIFEST)
     assert {row[6] for row in RESOLVER_MANIFEST} <= statuses
     assert all(row[6] for row in RESOLVER_MANIFEST)
+
+
+def test_every_manifest_target_is_runtime_owned_or_explicitly_bound() -> None:
+    from vg2c_new.utilities.composition import build_runtime_utilities
+
+    runtime_owned = {
+        "if",
+        "else",
+        "end_if",
+        "macro",
+        "end_macro",
+        "for_loop",
+        "site_loop",
+        "run_loop",
+        "end_loop",
+        "hpc_scope",
+        "end_hpc",
+    }
+    bound = set(build_runtime_utilities())
+    targets = {row[2] for row in RESOLVER_MANIFEST}
+    assert targets <= bound | runtime_owned

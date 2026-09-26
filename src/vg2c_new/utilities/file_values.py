@@ -67,7 +67,15 @@ class ValueInFileUtility(Utility):
 
 class AgeOfFileUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct port of ScriptHost AgeOfFileTask portable behavior."""
+        """Direct port of ScriptHost AgeOfFileTask portable behavior.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: AgeOfFileTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: age units and missing-file sentinel.
+        Amendments: pathlib and RuntimeState.
+        Intentionally discarded: Windows file APIs.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("{AGE-OF-FILE} requires file and destination variable.")
@@ -95,7 +103,15 @@ class AgeOfFileUtility(Utility):
 
 class DateOfFileUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct port of ScriptHost DateOfFileTask mtime behavior."""
+        """Direct port of ScriptHost DateOfFileTask mtime behavior.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: DateOfFileTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: timestamp format and missing-file sentinel.
+        Amendments: pathlib and RuntimeState.
+        Intentionally discarded: Windows attribute APIs.
+        """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("{DATE-OF-FILE} requires file and destination variable.")

@@ -103,7 +103,15 @@ class CsvUtility:
 
     @classmethod
     def first_value(cls, path: Path, column: str) -> str:
-        """Direct port of ValueInFile first-row, case-insensitive column lookup."""
+        """Direct port of ScriptHost ValueInFile first-row lookup.
+
+        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: ValueInFileTask.
+        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
+        Port mode: DIRECT PORT.
+        Preserved: case-insensitive named-column lookup and first data-row value.
+        Amendments: stdlib csv replaces MemTable.
+        Intentionally discarded: global task state.
+        """
         with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
             reader = csv.DictReader(handle, delimiter=cls.delimiter(path))
             fieldnames = reader.fieldnames or []
