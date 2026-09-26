@@ -83,6 +83,18 @@ The following report-side source is now structured for normal package import:
 
 Full report command/state semantics remain Session 2.5B work.
 
+## Full task-module boundary
+
+After the package-relative import fix, the Linux audit can import `SPFLib`, `SPFGlobals`,
+`SPFUtilities.utils`, and `SPFUtilities.memtable` successfully. Importing the full
+`SPFSQL3` monolith then stops at its eager `dbDrivers` import. That package is not present in
+the vendored decompiled source tree, and its historical role is the legacy database/service
+transport that this migration explicitly does not reconstruct.
+
+This is therefore a deliberate boundary rather than a portability TODO for Session 2.5A:
+portable reusable modules are importable; the monolithic legacy task engine remains dependent on
+unvendored/obsolete transport infrastructure.
+
 ## State-isolation conclusion
 
 Fresh-instance reuse does not make `Utilities`, `SmartAppendTask`, or `MemTable` invocation-local:
@@ -99,3 +111,7 @@ Session 2.5A adds Linux checks for:
 - fresh-state behavior of portable report helpers;
 - package imports of the prepared report modules;
 - all existing Session 1/2 runtime characterization unchanged.
+
+Validated on Ubuntu 24.04 / Python 3.12 with 52 tests passing. The only warning is an existing
+`datetime.utcnow()` deprecation inside historical `SPFGlobals`; it does not affect runtime
+behavior or the direct-runtime state model.
