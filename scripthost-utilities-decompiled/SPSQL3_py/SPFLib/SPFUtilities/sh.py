@@ -9,7 +9,7 @@ History:
 2.0.0.0 : vanatara : Updated to support both Python 2.7.15 & Python 3.6
 2.0.0.1 : vanatara : removed redundant import statements
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
+from .. import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
 #if isPYTHON2:
 #    import _winreg
 #    from _winreg import *
