@@ -92,9 +92,7 @@ class CopyFileUtility(Utility):
         self, command: Command, state: RuntimeState, source_value: str, dest_value: str
     ) -> None:
         source_items = [
-            item.strip().replace("<c>", ",")
-            for item in source_value.split(",")
-            if item.strip()
+            item.strip().replace("<c>", ",") for item in source_value.split(",") if item.strip()
         ]
         if not source_items:
             return
@@ -104,9 +102,7 @@ class CopyFileUtility(Utility):
 
         resolved: list[Path] = []
         for item in source_items:
-            has_date_token = bool(
-                re.search(r"<\s*(folder|file)-datelastmodified\s*>", item, re.I)
-            )
+            has_date_token = bool(re.search(r"<\s*(folder|file)-datelastmodified\s*>", item, re.I))
             if has_date_token and "*" in item:
                 raise ValueError(
                     "Date-last-modified distribution tokens cannot be combined with '*'."
@@ -116,9 +112,7 @@ class CopyFileUtility(Utility):
                 source = _resolve_modified_pattern(source)
             raw = str(source)
             matches = (
-                [Path(p) for p in glob.glob(raw)]
-                if any(ch in raw for ch in "*?[")
-                else [source]
+                [Path(p) for p in glob.glob(raw)] if any(ch in raw for ch in "*?[") else [source]
             )
             resolved.extend(path for path in matches if path.exists() and path.is_file())
 
@@ -213,9 +207,7 @@ class RoboCopyUtility(Utility):
                 "RoboCopy requires pattern, source directory and destination directory."
             )
         patterns = [
-            value.strip().strip('"')
-            for value in args[0].split(",")
-            if value.strip().strip('"')
+            value.strip().strip('"') for value in args[0].split(",") if value.strip().strip('"')
         ]
         src = _path(command, state, args[1])
         dst = _path(command, state, args[2])
@@ -435,9 +427,7 @@ def _resolve_modified_pattern(path: Path) -> Path:
         lower = part.casefold()
         has_folder = folder_token in lower
         has_file = file_token in lower
-        literal = re.sub(
-            r"<\s*(?:folder|file)-datelastmodified\s*>", "", part, flags=re.I
-        )
+        literal = re.sub(r"<\s*(?:folder|file)-datelastmodified\s*>", "", part, flags=re.I)
         if literal:
             current /= literal
         if has_folder:
@@ -451,9 +441,7 @@ def _latest_modified_child(parent: Path, *, directory: bool) -> Path:
     if not parent.is_dir():
         raise FileNotFoundError(parent)
     candidates = [
-        child
-        for child in parent.iterdir()
-        if (child.is_dir() if directory else child.is_file())
+        child for child in parent.iterdir() if (child.is_dir() if directory else child.is_file())
     ]
     if not candidates:
         kind = "folder" if directory else "file"
