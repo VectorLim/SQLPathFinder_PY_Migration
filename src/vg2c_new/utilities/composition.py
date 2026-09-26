@@ -43,6 +43,17 @@ from vg2c_new.utilities.process import (
     RunRUtility,
 )
 from vg2c_new.utilities.query import GetSiteTimeUtility, OracleQueryUtility, PlatformGapUtility
+from vg2c_new.utilities.report import (
+    HtmlDeferUtility,
+    HtmlDeleteUtility,
+    HtmlGnuPlotUtility,
+    HtmlJsUtility,
+    HtmlLayoutUtility,
+    HtmlPyPlotUtility,
+    HtmlRPlotUtility,
+    HtmlRunUtility,
+    HtmlTabMenuLayoutUtility,
+)
 from vg2c_new.utilities.smart_append import SmartAppendUtility
 from vg2c_new.utilities.sqlite import SqliteDeleteUtility, SqliteLoadUtility, SqliteQueryUtility
 from vg2c_new.utilities.web import GetWebTextUtility
@@ -77,6 +88,11 @@ def build_runtime_utilities() -> dict[str, Utility]:
         oasys_reader=oasys,
         oracle_reader=generic_oracle,
     )
+    html_tab_menu = HtmlTabMenuLayoutUtility()
+    html_js = HtmlJsUtility()
+    html_pyplot = HtmlPyPlotUtility()
+    html_gnuplot = HtmlGnuPlotUtility()
+    html_rplot = HtmlRPlotUtility()
     utilities: dict[str, Utility] = {
         "append_file": AppendFileUtility(),
         "copy_file": CopyFileUtility(),
@@ -115,6 +131,20 @@ def build_runtime_utilities() -> dict[str, Utility]:
         "file_compare": FileCompareUtility(),
         "pyscript": PyScriptUtility(),
         "write_file": WriteFileUtility(),
+        "report.html_run": HtmlRunUtility(),
+        "report.html_defer": HtmlDeferUtility(),
+        "report.html_layout": HtmlLayoutUtility(),
+        "report.html_tab_layout": html_tab_menu,
+        "report.html_menu_layout": html_tab_menu,
+        "report.delete": HtmlDeleteUtility(),
+        "report.js_show": html_js,
+        "report.js_defer": html_js,
+        "report.pyplot": html_pyplot,
+        "report.pyplot_show": html_pyplot,
+        "report.gnuplot": html_gnuplot,
+        "report.gnuplot_show": html_gnuplot,
+        "report.rplot": html_rplot,
+        "report.rplot_show": html_rplot,
         "query.sqlite": SqliteQueryUtility(),
         "query.oracle": query_oracle,
         "stack_data": StackDataUtility(),
@@ -146,26 +176,6 @@ def build_runtime_utilities() -> dict[str, Utility]:
         "shell": "generic DOS/shell fallback is intentionally retired",
         "va": "historical VA wrapper execution is intentionally retired",
     }
-    for target in (
-        "report.html_run",
-        "report.html_defer",
-        "report.html_layout",
-        "report.html_tab_layout",
-        "report.html_menu_layout",
-        "report.gnuplot",
-        "report.gnuplot_show",
-        "report.rplot",
-        "report.rplot_show",
-        "report.delete",
-        "report.js_show",
-        "report.js_defer",
-        "report.pyplot",
-        "report.pyplot_show",
-    ):
-        gaps[target] = (
-            "report commands require the Session-3 portable report document/runtime model; "
-            "ScriptHost report state is task-global"
-        )
     query_gaps = {
         "query.cbsql_oracle": "CBSQL",
         "query.uber": "Uber",

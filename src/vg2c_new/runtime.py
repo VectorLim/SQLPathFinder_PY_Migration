@@ -10,6 +10,7 @@ from pathlib import Path
 
 from vg2c_new.model import Command, CommandKind
 from vg2c_new.paths import resolve_path, working_directory_for
+from vg2c_new.report_state import ReportSession
 from vg2c_new.utilities.base import Utility
 
 _ENV_TOKEN_RE = re.compile(r"<<<%([^%]+)%>>>", re.IGNORECASE)
@@ -25,6 +26,7 @@ class RuntimeState:
     working_directory: Path
     globals: dict[str, str] = field(default_factory=dict)
     environment: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
+    report: ReportSession = field(default_factory=ReportSession)
     _frames: list[dict[str, str]] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
