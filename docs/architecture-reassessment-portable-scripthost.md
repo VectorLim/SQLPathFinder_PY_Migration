@@ -241,7 +241,8 @@ Tests cover:
 
 GitHub Actions on Ubuntu measured process start + representative ScriptHost work in the sub-second-to-low-single-second range. Representative observed runs include:
 - 1.415 / 0.723 / 0.712 s, mean 0.950 s;
-- 1.050 / 0.437 / 0.462 s, mean 0.650 s.
+- 1.050 / 0.437 / 0.462 s, mean 0.650 s;
+- v3 clean-branch validation: 1.260 / 0.710 / 0.703 s, mean 0.891 s.
 
 The first iteration is consistently colder than later runs. These numbers are not a production throughput benchmark, but they establish that per-job process isolation is operationally plausible.
 
@@ -457,7 +458,7 @@ The assessment branch has Ubuntu CI coverage for:
 - explicit vg2c_new rejection of the real script's legacy BAT shell fallback;
 - original HTML CSS report generation and cleanup.
 
-The prior independent implementation/test checkpoint was 66 tests passing on Ubuntu with compile and Ruff checks green. This v3 branch adds controller/task-instance characterization and is revalidated independently before the final handoff. The explicit parser-difference assertion passes and documents vg2c_new's deliberate rejection of the legacy BAT shell fallback rather than masking it. The latest process-isolation sample was 2.138 / 0.554 / 0.553 s (mean 1.082 s), while earlier green runs measured means of 0.650 s and 0.950 s; this variance reinforces that the measurement is a feasibility probe, not a production throughput benchmark.
+The clean v3 architecture probe is validated on Ubuntu/Python 3.12 with 70 tests passing, compile checks green, and Ruff format/lint green. The added controller-routing and task-instance-isolation checks pass in that same run. The explicit parser-difference assertion documents vg2c_new's deliberate rejection of the legacy BAT shell fallback rather than masking it. The v3 process-isolation sample was 1.260 / 0.710 / 0.703 s (mean 0.891 s); earlier green runs ranged from mean 0.650 s to 1.082 s, reinforcing that this is a feasibility probe rather than a production throughput benchmark.
 
 ## Next implementation session
 
