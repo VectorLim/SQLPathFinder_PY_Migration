@@ -24,30 +24,41 @@ jobs:
           mkdir -p /tmp/spsql3
           unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
           python - <<'PY'
+          import ast
           from pathlib import Path
           root = Path("/tmp/spsql3")
-          targets = [
+          targets = {
               "AppendFileTask","CopyFileTask","CSVToHTMLTask","CSVToXMLTask","EmailTask",
               "ImportExcelTask","LoadExcelTask","XLSToCSVTask","SetFileROTask",
               "RunPythonScriptTask","RunRFileTask","RoboCopyTask","SmartAppendTask",
               "SQLiteDeleteTask","SQLiteLoadTask","SPFUNZipTask","WaitIntervalTask",
               "WaitFileTask","GetWebTextTask","EchoTask","XMLToCSVTask","SPFZipTask",
               "StackDataTask","nqSQLiteTask","nqOracleTask"
-          ]
-          files = sorted(root.rglob("*.py"))
-          print("PY_FILES", len(files))
-          for p in files:
-              try:
-                  lines = p.read_text(encoding="utf-8-sig", errors="replace").splitlines()
-              except OSError:
-                  continue
-              hits = []
-              for i, line in enumerate(lines, 1):
-                  for target in targets:
-                      if target in line:
-                          hits.append((i, target, line.strip()))
-              if hits:
-                  print(f"FILE {p.relative_to(root)} lines={len(lines)}")
-                  for i, target, line in hits[:120]:
-                      print(f"  {i}: {target}: {line}")
+          }
+          p = root / "SPFLib" / "SPFSQL3.py"
+          src = p.read_text(encoding="utf-8-sig", errors="replace")
+          mod = ast.parse(src)
+          for node in mod.body:
+              if isinstance(node, ast.ClassDef) and node.name in targets:
+                  bases = [ast.unparse(x) for x in node.bases]
+                  print(f"CLASS {node.name} lines={node.lineno}-{node.end_lineno} bases={bases}")
+                  for item in node.body:
+                      if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                          args = ast.unparse(item.args)
+                          print(f"  METHOD {item.name} lines={item.lineno}-{item.end_lineno} args=({args})")
+          up = root / "SPFLib" / "SPFUtilities" / "utils.py"
+          usrc = up.read_text(encoding="utf-8-sig", errors="replace")
+          umod = ast.parse(usrc)
+          wanted_helpers = {
+              "SPFRoboCopy","File_Exists_Retry","GetFileDate","FileIsLocked","Run",
+              "PrepFile","DoCreateFileA","DoAppendFileA","SPFDelete","DelAFile",
+              "GetHeadersFromFile","GetFileLine1","Chk_AppendMode","getLineCountFromFile",
+              "getRowCountFromFile","StackTable","writeDFtoFile","CompareVars",
+              "SPFWebCopyPyReqs","ZipFiles2","UnZipFiles2","CopyFile2","GetFileDLM"
+          }
+          for node in umod.body:
+              if isinstance(node, ast.ClassDef) and node.name == "Utilities":
+                  for item in node.body:
+                      if isinstance(item, ast.FunctionDef) and item.name in wanted_helpers:
+                          print(f"UTIL_METHOD {item.name} lines={item.lineno}-{item.end_lineno} args=({ast.unparse(item.args)})")
           PY
