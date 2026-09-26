@@ -262,7 +262,7 @@ History:
 #2.0.9.4a:   vanatara : update NormalQueryTaskBase.Embed_SPFViewTracker_Token_In_SQL() as an abstract base method and implemented in nqUberTask().
 #2.0.9.5:   vanatara : bug fix CSVToHTMLTask() to write raw HTML from DF instead of using pandas.to_csv() 
 
-from SPFLib import *
+from . import *
 
 #sys._enablelegacywindowsfsencoding()
 from . import SPFUtilities
