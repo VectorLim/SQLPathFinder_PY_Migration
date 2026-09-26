@@ -5,10 +5,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-SCRIPT_HOST_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "scripthost-utilities-decompiled"
-)
+SCRIPT_HOST_ROOT = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled"
 EXTRACTED = SCRIPT_HOST_ROOT / "SPSQL3_py"
 ARCHIVE = SCRIPT_HOST_ROOT / "SPSQL3_py.zip"
 
