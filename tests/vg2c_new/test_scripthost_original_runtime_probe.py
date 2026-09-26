@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from vg2c_new.parser import parse
+from vg2c_new.parser import Vg2ParseError, parse
 from vg2c_new.runtime import Interpreter, RuntimeState
 from vg2c_new.utilities.file_values import RowsInFileUtility
 from vg2c_new.utilities.files import WriteFileUtility
@@ -273,12 +273,12 @@ def test_original_parser_builds_repository_actual_script_task_tree(tmp_path) -> 
     assert len(names) >= 40
 
 
-def test_vg2c_new_parser_accepts_repository_actual_script() -> None:
+def test_vg2c_new_parser_explicitly_rejects_actual_script_shell_fallback() -> None:
     source = (Path(__file__).resolve().parents[1] / "fixtures" / "actual_script.txt").read_text(
         encoding="utf-8"
     )
-    commands = parse(source)
-    assert len(commands) >= 20
+    with pytest.raises(Vg2ParseError, match="getcsrsu\\.bat.*shell fallback is disabled"):
+        parse(source)
 
 
 def test_original_html_css_report_lifecycle_on_linux(tmp_path, monkeypatch) -> None:
