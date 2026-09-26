@@ -190,26 +190,24 @@ History:
 2.1.3.3 : vanatara : Update 'SPFSharePointDeleteCLR' to handle SSEPROD file delete issue.
 2.1.3.3a : vanatara : Update code merge issue
 """
-from SPFLib import * #isPYTHON2 #defined in SPFLib\__init__.py. IF True then 'Pyhton 2' IF False 'Python 3'
-from dask.callbacks import Callback as DaskCallback
-
-from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
-from rich.progress import ProgressColumn as RichProgressColumn
-from rich.progress import SpinnerColumn as RichSpinnerColumn, TaskID as RichTaskID
-from rich.progress import TimeElapsedColumn as RichTimeElapsedColumn, TextColumn as RichTextColumn
-from rich.progress import BarColumn as RichBarColumn, MofNCompleteColumn as RichMofNCompleteColumn
-from rich.console import Console as RichConsole
+from .. import *
+try:
+    from rich.progress import GetTimeCallable as RichGetTimeCallable, Progress as RichProgressBar
+    from rich.progress import ProgressColumn as RichProgressColumn
+    from rich.progress import SpinnerColumn as RichSpinnerColumn, TaskID as RichTaskID
+    from rich.progress import TimeElapsedColumn as RichTimeElapsedColumn, TextColumn as RichTextColumn
+    from rich.progress import BarColumn as RichBarColumn, MofNCompleteColumn as RichMofNCompleteColumn
+    from rich.console import Console as RichConsole
+    _RICH_AVAILABLE = True
+except ImportError:
+    _RICH_AVAILABLE = False
 from typing import Any, Optional, Union
 
 #sys._enablelegacywindowsfsencoding()    
 #from SPFLib.SPFUtilities.sh import ScriptHost
-from .spflogger import SPFLogger 
-from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+from .spflogger import SPFLogger
+from .portable import get_file_delimiter, zip_files, zip_folder
+from ..SPFGlobals import SPFGlobals
 
 #region packages used for SMTP email -- SPFEmail
 import email
@@ -476,46 +474,13 @@ class Utilities(SPFGlobals):
         
     #Opens: None, Testing is completed
     def GetFileDLM(self, myFile, mode="I"):
-        """
-        '============================================
-        'Return the delimiter to use based on the
-        'file extension. Use \t for .tab, "|" for .asc
-        'and "," for .csv or otherwise
-        '
-        '(input) :
-        '----
-        '1.) myFile: File to check
-        'Note: the va script method has myMode, which has been deprecated
-        '2.) mode : indicator if file in input (I) or output (O)
-        '(output):
-        '-------
-        '1.) Delimiter. E.g., \t, "," or "|" or ""
-        '============================================
-        """
-        if myFile is None:
-            raise Exception("FileName: '{0}' is invalid".format(myFile))
-        # add future delimiters to below dictionary
-        fileDLMS = {('.tab', '.hive-tab','.hive-sequence') :   '\t'
-                    ,('.asc')       :   '|'
-                    ,('.txt')       :   ',' if mode=="I" else "" #can be removed
-                    ,('.plus')      :   '+' 
-                    }
-        fileExtWithoutDelimeter = ['.sdb', '.json', '.pmpk']
-        fileDLM = ','
-        fileName, fileExt = os.path.splitext(myFile)
-        self.logger.info("FileName = {0}, FileExt = {1}, mode = {2}".format(fileName, fileExt, mode))
-        if self.IsEmptyOrNone(fileExt) is False and fileExt.lower() in fileExtWithoutDelimeter:
-            errMsg = "File extension not supported to have a Delimiter: {0}".format(myFile)
-            raise Exception(errMsg)
-
-        #file extension is supported -- continue
-        if self.IsEmptyOrNone(fileExt) is False:
-            for key1, val1 in fileDLMS.items():
-                if (fileExt.lower() in key1): 
-                    fileDLM =  val1
-                    break
-
-        self.logger.info("For file: {0} Delimiter: {1}".format(myFile, fileDLM.encode("unicode-escape").decode()))
+        """Return the delimiter using the shared Linux-safe ScriptHost implementation."""
+        fileDLM = get_file_delimiter(myFile, mode=mode)
+        self.logger.info(
+            "For file: {0} Delimiter: {1}".format(
+                myFile, fileDLM.encode("unicode-escape").decode()
+            )
+        )
         return fileDLM
 
     #status: Done
@@ -7095,7 +7060,8 @@ class Utilities(SPFGlobals):
                     self.logger.debug("{0} - useSMTPAuth : '{1}'".format(calling_func, useSMTPAuth))
                     #useSMTPAuth = True if self.SHisSHEntry is False else False # Default use SMTPAuth
                     try:
-                        SPFSMTPAuthEmail_ = SPFSMTPAuthEmail().SendEmail(userEmailAddress, MailToIn + MailCC + MailBCC, emailMessage.as_string(), useSMTPAuth=useSMTPAuth)
+                        from ..dbDrivers import SPFSMTPAuthEmail
+                SPFSMTPAuthEmail_ = SPFSMTPAuthEmail().SendEmail(userEmailAddress, MailToIn + MailCC + MailBCC, emailMessage.as_string(), useSMTPAuth=useSMTPAuth)
                     except Exception as err:
                         self.logger.error("{0} - {1}".format(calling_func, err.args[0]))
                         if self.SHisSHEntry is False: #if not on SH...auto try using SMTP, outlook
@@ -7497,54 +7463,20 @@ class Utilities(SPFGlobals):
             raise
     #END : def ZipFiles
 
-    def ZipFiles2(self, FilesToZip: list, ArchiveName: str = None, RetainRelativePathInArchive: bool = True
-                 , DeleteSourceFilesAfterArchiving: bool=False, SourceFileExistsCheckDone: bool = True) -> Path:
-        """
-        create zip file of 'FilesToZip' using the 'ArchiveName'
-        Input:
-        1. FileToZip: Path : list of source file(s) to zip
-        2. ArchiveName : target archive file name. If None...then use 'FilesToZip.zip' 
-        3. RetainRelativePathInArchive : True/False - default: True. If True file path structure is maintained in archive and will be recreatd during unzip
-        4. DeleteSourceFilesAfterArchiving : True/False - default: False. If True delete the source files after creating archive
-        5. SourceFileExistsCheckDone : True/False - default: True. If True calling function has validated file's existance. If False check if file exists.
-        """
-        #region locals
-        calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        #endregion locals
-        self.logger.debug(f"FilesToZip : {FilesToZip}")
-        self.logger.debug(f"ArchiveName : {ArchiveName}")
-        self.logger.debug(f"RetainRelativePathInArchive : {RetainRelativePathInArchive}")
-        self.logger.debug(f"DeleteSourceFilesAfterArchiving : {DeleteSourceFilesAfterArchiving}")
-        self.logger.debug(f"SourceFileExistsCheckDone : {SourceFileExistsCheckDone}")
-        
-        if SourceFileExistsCheckDone is False:
-            for idx, fileItem in enumerate(list(FilesToZip)): #iterate over a copy of the list
-                if os.path.exists(fileItem) is False:
-                    self.Console("Could not locate one of the zip files. File will be skipped {0}".format(fileItem))
-                    del FilesToZip[idx] #delete the fileitem based on its index in the list
-            self.logger.debug(f"After validation FilesToZip : {FilesToZip}")
-
+    def ZipFiles2(self, FilesToZip: list, ArchiveName: str = None, RetainRelativePathInArchive: bool = True,
+                  DeleteSourceFilesAfterArchiving: bool = False, SourceFileExistsCheckDone: bool = True) -> Path:
+        """Delegate to the shared stateless Python ZIP implementation."""
         if ArchiveName in ["", None]:
-            ArchiveName = f"{FilesToZip.name}.zip"
-            self.logger.debug(f"updated ArchiveName : {ArchiveName}")
-
-        with zipfile.ZipFile(ArchiveName, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True, compresslevel=9) as zWrtr:   
-            for fileItem in list(FilesToZip): 
-                fileItem = Path(fileItem)
-                if RetainRelativePathInArchive is True and fileItem.is_absolute() is False:
-                    # below args : (FileName_used_inside_archive, Path_of_file_add_to_archive) -- this is required to maintain the folder structure
-                    zWrtr.write(fileItem, fileItem.relative_to(Path(".")))
-                else:
-                    # folder structure is not maintained
-                    zWrtr.write(fileItem, fileItem.name)
-        # if self.SPFLogLevel == "DEBUG":
-        #     with zipfile.ZipFile(ArchiveName, "r") as zRdr:
-        #         zRdr.printdir()
-
-        if DeleteSourceFilesAfterArchiving is True:
-            self.logger.debug(f"{calling_func} - Deleting source files : {FilesToZip}")
-            self.DelAListOfFiles(FilesToZip, displayPrompt=False)
-        return ArchiveName
+            if not FilesToZip:
+                raise ValueError("No files were supplied for ZIP creation")
+            ArchiveName = f"{Path(FilesToZip[0]).name}.zip"
+        return zip_files(
+            FilesToZip,
+            ArchiveName,
+            retain_relative_path=RetainRelativePathInArchive,
+            delete_sources=DeleteSourceFilesAfterArchiving,
+            source_exists_check_done=SourceFileExistsCheckDone,
+        )
     #END : def ZipFiles2
 
     def ZipFolder(self, sPath, sFile, bDelete) :
@@ -7591,51 +7523,13 @@ class Utilities(SPFGlobals):
                 self.logger.exception("{0} - Error in Finally block {1}".format(calling_func, err))
     #END : def ZipFolder
 
-    def ZipFolder2(self, sourceFolderPath, archiveFileName, deleteSourceFolder) :
-        """
-        '===============================
-        'Zip folder using shutil.make_archive
-        '
-        'ARGUMENTS:
-        '---------
-        ' sourceFolderPath   : Path of Folder to Zip
-        ' archiveFileName    : Zip file name
-        ' deleteSourceFolder : Delete source Folder
-        '===============================
-        """
-        #locals
-        calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        self.logger.debug("{0} - sourceFolderPath: '{1}'".format(calling_func, sourceFolderPath))
-        self.logger.debug("{0} - archiveFileName: '{1}'".format(calling_func, archiveFileName))
-        self.logger.debug("{0} - deleteSourceFolder: '{1}'".format(calling_func, deleteSourceFolder))
-        curDirOrig = None
-        try : 
-            if os.path.exists(archiveFileName) is True : 
-                self.DelAFile(archiveFileName)
-            curDirOrig = os.getcwd()
-            self.logger.debug("{0} - curDirOrig: '{1}'".format(calling_func, curDirOrig))
-            os.chdir(sourceFolderPath)
-            self.logger.debug("{0} - os.chdir(sPath): '{1}'".format(calling_func, os.getcwd()))
-
-            _sFile_tmp = Path(archiveFileName)
-            shutil.make_archive(base_name=str(_sFile_tmp.with_name(_sFile_tmp.stem)), format="zip")
-
-        except Exception as err:
-            self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
-            raise
-        finally :
-            try : 
-                os.chdir(curDirOrig)
-                self.logger.debug("{0} - curDirOrig: '{1}'".format(calling_func, os.getcwd()))
-                try:
-                    if deleteSourceFolder is True:
-                        self.logger.debug(f"{calling_func} - Deleting source folder : {sourceFolderPath}")
-                        shutil.rmtree(sourceFolderPath)
-                except Excpetion as err1:
-                    self.logger.exception("{0} - Error while deletting source folder {1}".format(calling_func, err))
-                    raise
-            except Exception as err:
-                self.logger.exception("{0} - Error in Finally block {1}".format(calling_func, err))
+    def ZipFolder2(self, sourceFolderPath, archiveFileName, deleteSourceFolder):
+        """Delegate to the shared stateless Python folder ZIP implementation."""
+        return zip_folder(
+            sourceFolderPath,
+            archiveFileName,
+            delete_source_folder=deleteSourceFolder,
+        )
     #END : def ZipFolder2
 
     def UnzipFile(self, sFile, sTarget, bDelDirs) :
@@ -13626,7 +13520,7 @@ class Utilities(SPFGlobals):
                         MyFile = HTMFileItem[len("HTMI:"):]
                     MyFile, MySuffix = self.Get_HTM_File_Path(MyFile, DLM0)
                     MySuffix = "-{0}".format(MySuffix) #'Suffix for row/column rules 
-                    from SPFLib.SPFUtilities.memtable import MemTable
+                    from .memtable import MemTable
                     Table2Design = MemTable()
                     l_RptType = Table2Design.Load_Table_Design(MyFile)
                     self.Update_Row_Col_Rule_Name(Table2Design, MySuffix, MyFile)
@@ -14056,7 +13950,7 @@ class Utilities(SPFGlobals):
 
                     MyFile, MySuffix = self.Get_HTM_File_Path(MyFile, DLM0)
                     MySuffix = "-{0}".format(MySuffix) #'Suffix for row/column rules 
-                    from SPFLib.SPFUtilities.memtable import MemTable
+                    from .memtable import MemTable
                     Table2Design = MemTable()
                     l_RptType = Table2Design.Load_Table_Design(MyFile)
                     self.Update_Row_Col_Rule_Name(Table2Design, MySuffix, MyFile)
@@ -15434,7 +15328,7 @@ class Utilities(SPFGlobals):
                 Tmp1 = "{0}{1}".format(Tmp1, CSVFile_FileExt)
             else :
                 Tmp1 = "{0}.csv".format(Tmp1)
-            from SPFLib.SPFUtilities.memtable import MemTable
+            from .memtable import MemTable
             mymemTable1 = MemTable()
 
             FinalRow = mymemTable1.Run_SQLite(Site1="", Command1=MySQL, MyTables= "{0} : t1".format(CSVFile), WorkDir=".\\", OutTT="N", OutFile=None, OutExcel=Tmp1, FinalRow=FinalRow, ExPlans=None,
@@ -17299,7 +17193,7 @@ class Utilities(SPFGlobals):
             'Run SQLite & Pivot Logic
             '========================
             """
-            from SPFLib.SPFUtilities.memtable import MemTable
+            from .memtable import MemTable
             Table2Design = MemTable()
             FinalRow = 0
             if MySQLMode == "S" :
@@ -17825,7 +17719,7 @@ class Utilities(SPFGlobals):
                 '========================
                 """
                 FinalRow = 0
-                from SPFLib.SPFUtilities.memtable import MemTable
+                from .memtable import MemTable
                 mymemTable1 = MemTable()
                 if MySQLMode == "S" :
                     FinalRow = mymemTable1.Run_SQLite(Site1="", Command1=MySQL, MyTables="{0} : T1".format(MyCSVFile), WorkDir=WorkDir, OutTT="N", 
@@ -18584,28 +18478,35 @@ class BulkloadDataHandler(Utilities):
                 raise
 #END : class BulkloadDataHandler:    
 
-class SPFRichProgressBar(RichProgressBar):
-    """
-    custom implementation of ProgressBar provided by rich.progress.Progress
-    """
-    def __init__(self, *columns: Union[str, RichProgressColumn], console: Union[RichConsole, None] = None, auto_refresh: bool = True, 
-                 refresh_per_second: float = 10, speed_estimate_period: float = 30, transient: bool = False, 
-                 redirect_stdout: bool = True, redirect_stderr: bool = True, get_time: Union[RichGetTimeCallable, None] = None, 
-                 disable: bool = False, expand: bool = False, displayMofN=True) -> None:
-        if columns == ():
-            # RichTextColumn(""),
-            if displayMofN is True:
-                columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichMofNCompleteColumn(), RichTextColumn("•") ,RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
-            else:
-                columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
-        super().__init__(*columns, console=console, auto_refresh=auto_refresh, refresh_per_second=refresh_per_second, speed_estimate_period=speed_estimate_period, transient=transient, redirect_stdout=redirect_stdout, redirect_stderr=redirect_stderr, get_time=get_time, disable=disable, expand=expand)
-        return
-    
-    def add_task(self, description: str, start: bool = True, total: Union[float, None] = 100, completed: int = 0, visible: bool = True, **fields: Any) -> RichTaskID:
-        # description = f"[purple]  {description}..."
-        description = f"  {description}..."
-        return super().add_task(description, start, total, completed, visible, **fields)
-#END : class SPFRichProgressBar
+if _RICH_AVAILABLE:
+    class SPFRichProgressBar(RichProgressBar):
+        """
+        custom implementation of ProgressBar provided by rich.progress.Progress
+        """
+        def __init__(self, *columns: Union[str, RichProgressColumn], console: Union[RichConsole, None] = None, auto_refresh: bool = True, 
+                     refresh_per_second: float = 10, speed_estimate_period: float = 30, transient: bool = False, 
+                     redirect_stdout: bool = True, redirect_stderr: bool = True, get_time: Union[RichGetTimeCallable, None] = None, 
+                     disable: bool = False, expand: bool = False, displayMofN=True) -> None:
+            if columns == ():
+                # RichTextColumn(""),
+                if displayMofN is True:
+                    columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichMofNCompleteColumn(), RichTextColumn("•") ,RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
+                else:
+                    columns = [*RichProgressBar.get_default_columns()[:-1], RichTextColumn("•"), RichTimeElapsedColumn(), RichSpinnerColumn(spinner_name = "earth", finished_text= "", style="skyblue")]
+            super().__init__(*columns, console=console, auto_refresh=auto_refresh, refresh_per_second=refresh_per_second, speed_estimate_period=speed_estimate_period, transient=transient, redirect_stdout=redirect_stdout, redirect_stderr=redirect_stderr, get_time=get_time, disable=disable, expand=expand)
+            return
+        
+        def add_task(self, description: str, start: bool = True, total: Union[float, None] = 100, completed: int = 0, visible: bool = True, **fields: Any) -> RichTaskID:
+            # description = f"[purple]  {description}..."
+            description = f"  {description}..."
+            return super().add_task(description, start, total, completed, visible, **fields)
+    #END : class SPFRichProgressBar
+
+else:
+    class SPFRichProgressBar:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("rich is required for SPFRichProgressBar")
+
 #endregion -- helper classes
 
 if __name__ == '__main__':
