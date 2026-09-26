@@ -7,6 +7,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from vg2c_new.parser import parse as parse_vg2c_new
+from vg2c_new.runtime import Interpreter as NewInterpreter
+from vg2c_new.runtime import RuntimeState as NewRuntimeState
+from vg2c_new.utilities.files import WriteFileUtility as NewWriteFileUtility
+
 SCRIPT_HOST = (
     Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled" / "SPSQL3_py"
 )
@@ -244,3 +249,95 @@ def test_original_runtime_concurrent_subprocesses_are_isolated(tmp_path) -> None
     assert second.returncode == 0, second_stdout + second_stderr
     assert first_output.read_text(encoding="utf-8-sig") == "process-a"
     assert second_output.read_text(encoding="utf-8-sig") == "process-b"
+
+
+
+def _representative_script(root: Path) -> str:
+    return DELIMITER.join(
+        [
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={root / 'initial.txt'}",
+                command="initial<EOF>",
+            ),
+            _task(f'/UTILITIES={{START-MACRO}} "{root / "macro.csv"}"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={root / 'macro.txt'}",
+                command="<<<value>>><EOF>",
+            ),
+            _task("/UTILITIES={END-MACRO}"),
+            _task('/UTILITIES={IF-THEN} "VAR(1)" "EQ" "1"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={root / 'if-true.txt'}",
+                command="if-branch<EOF>",
+            ),
+            _task("/UTILITIES={ELSE}"),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={root / 'if-false.txt'}",
+                command="else-branch<EOF>",
+            ),
+            _task("/UTILITIES={END-IF}"),
+            _task('/UTILITIES={FOR-LOOP} "0" "2" "1" "T" "N"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={root}/loop-<<<spf-loop-ctr-T-int>>>.txt",
+                command="loop-<<<spf-loop-ctr-T-int>>><EOF>",
+            ),
+            _task("/UTILITIES={END-LOOP}"),
+        ]
+    )
+
+
+def _representative_outputs(root: Path) -> dict[str, str | None]:
+    names = [
+        "initial.txt",
+        "macro.txt",
+        "if-true.txt",
+        "if-false.txt",
+        "loop-0.txt",
+        "loop-1.txt",
+        "loop-2.txt",
+    ]
+    return {
+        name: (
+            (root / name).read_text(encoding="utf-8-sig")
+            if (root / name).exists()
+            else None
+        )
+        for name in names
+    }
+
+
+def test_original_runtime_matches_vg2c_new_on_representative_portable_slice(tmp_path) -> None:
+    original_root = tmp_path / "original"
+    new_root = tmp_path / "vg2c-new"
+    original_root.mkdir()
+    new_root.mkdir()
+    for root in (original_root, new_root):
+        (root / "macro.csv").write_text("value\nmacro-expanded\n", encoding="utf-8")
+
+    _run_original_runtime(
+        original_root,
+        _representative_script(original_root),
+        "portable-original-parity",
+    )
+
+    commands = parse_vg2c_new(_representative_script(new_root))
+    NewInterpreter({"write_file": NewWriteFileUtility()}).execute(
+        commands,
+        NewRuntimeState(new_root),
+    )
+
+    assert _representative_outputs(original_root) == _representative_outputs(new_root)
+    assert _representative_outputs(original_root) == {
+        "initial.txt": "initial",
+        "macro.txt": "macro-expanded",
+        "if-true.txt": "if-branch",
+        "if-false.txt": None,
+        "loop-0.txt": "loop-0",
+        "loop-1.txt": "loop-1",
+        "loop-2.txt": "loop-2",
+    }
