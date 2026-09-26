@@ -341,3 +341,64 @@ def test_original_runtime_matches_vg2c_new_on_representative_portable_slice(tmp_
         "loop-1.txt": "loop-1",
         "loop-2.txt": "loop-2",
     }
+
+
+
+def test_spfglobals_instance_cache_survives_command_argument_reset(tmp_path) -> None:
+    runtime_module = _runtime_module()
+    first = runtime_module.SPFManager()
+    first.gSPFInstance = "first-job-instance"
+
+    second = runtime_module.SPFManager()
+    second.gCommandLineArguments = [
+        "SPFSQL3.py",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+        "/SPFINSTANCE=second-job-instance",
+    ]
+
+    # __reInitStaticPropsDueToCmdUpdate resets many fields, but not __gSPFInstance.
+    # A long-lived worker therefore does not provide complete job isolation merely
+    # by replacing gCommandLineArguments between jobs.
+    assert second.gSPFInstance == "first-job-instance"
+
+
+def test_original_runtime_retains_historical_for_loop_branch_that_vg2c_new_rejects(
+    tmp_path,
+) -> None:
+    original_output = tmp_path / "historical-loop-0.txt"
+    original_script = DELIMITER.join(
+        [
+            _task('/UTILITIES={FOR-LOOP} "0" "2" "1" "H" "N" "Y"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={tmp_path}/historical-loop-<<<spf-loop-ctr-H-int>>>.txt",
+                command="historical-<<<spf-loop-ctr-H-int>>><EOF>",
+            ),
+            _task("/UTILITIES={END-LOOP}"),
+        ]
+    )
+
+    _run_original_runtime(tmp_path, original_script, "historical-loop-original")
+    assert original_output.read_text(encoding="utf-8-sig") == "historical-0"
+    assert not (tmp_path / "historical-loop-1.txt").exists()
+
+    new_script = DELIMITER.join(
+        [
+            _task('/UTILITIES={FOR-LOOP} "0" "2" "1" "H" "N" "Y"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={tmp_path}/new-historical-<<<spf-loop-ctr-H-int>>>.txt",
+                command="historical-<<<spf-loop-ctr-H-int>>><EOF>",
+            ),
+            _task("/UTILITIES={END-LOOP}"),
+        ]
+    )
+    commands = parse_vg2c_new(new_script)
+    import pytest
+
+    with pytest.raises(RuntimeError, match="Historical .* version selection"):
+        NewInterpreter({"write_file": NewWriteFileUtility()}).execute(
+            commands,
+            NewRuntimeState(tmp_path),
+        )
