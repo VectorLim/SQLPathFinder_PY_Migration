@@ -70,6 +70,12 @@ No Session 2 utility was switched merely to increase a "direct reuse" count. For
 the reusable ScriptHost object either owns broader global/task state or embeds an obsolete transport.
 Keeping the existing port is less code and has clearer ownership.
 
+**Duplicate Session 2 algorithm LOC deleted: 0.** This is intentional: no duplicate passed the
+direct-reuse acceptance test. Deleting a port would have required adding a larger compatibility
+adapter or restoring legacy runtime/transport infrastructure. The code reduction in this phase is
+instead at the import boundary: unused/global platform imports and eager legacy dependencies were
+removed or localized at their point of use.
+
 ## Directly reusable source prepared for Session 2.5B
 
 The following report-side source is now structured for normal package import:
