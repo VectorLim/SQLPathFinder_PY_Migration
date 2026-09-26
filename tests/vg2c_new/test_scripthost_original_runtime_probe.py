@@ -7,6 +7,10 @@ import sys
 import zipfile
 from pathlib import Path
 
+from vg2c_new.parser import parse
+from vg2c_new.runtime import Interpreter, RuntimeState
+from vg2c_new.utilities.files import WriteFileUtility
+
 SCRIPT_HOST_ROOT = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled"
 EXTRACTED = SCRIPT_HOST_ROOT / "SPSQL3_py"
 ARCHIVE = SCRIPT_HOST_ROOT / "SPSQL3_py.zip"
@@ -140,3 +144,46 @@ def test_original_runtime_runs_concurrently_in_separate_processes(tmp_path) -> N
         assert process.returncode == 0, f"stdout={stdout}\nstderr={stderr}"
         assert (workdir / "out_alpha_1.txt").read_text(encoding="utf-8") == "alpha:1"
         assert not (workdir / "bad.txt").exists()
+
+
+def test_original_globals_retain_some_state_between_in_process_runs() -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    manager = module.SPFManager()
+
+    manager.gCommandLineArguments = ["probe", "/SPFINSTANCE=FIRST"]
+    assert manager.gSPFInstance == "FIRST"
+
+    manager.gCommandLineArguments = ["probe", "/SPFINSTANCE=SECOND"]
+    assert manager.gSPFInstance == "FIRST"
+
+
+def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
+    original_dir = tmp_path / "original"
+    vg2c_dir = tmp_path / "vg2c-new"
+    original_script, _ = _write_process_fixture(original_dir, "representative")
+    vg2c_dir.mkdir()
+    (vg2c_dir / "macro.csv").write_text("name,flag\nalpha,1\nbeta,0\n", encoding="utf-8")
+
+    original = subprocess.run(
+        [sys.executable, str(RUNNER), str(original_script), "--workdir", str(original_dir)],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert original.returncode == 0, original.stderr
+
+    commands = parse(_representative_script())
+    Interpreter({"write_file": WriteFileUtility()}).execute(commands, RuntimeState(vg2c_dir))
+
+    def outputs(root: Path) -> dict[str, str]:
+        return {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted(root.glob("*.txt"))
+            if path.name != "bad.txt"
+        }
+
+    assert not (original_dir / "bad.txt").exists()
+    assert not (vg2c_dir / "bad.txt").exists()
+    assert outputs(original_dir) == outputs(vg2c_dir)
