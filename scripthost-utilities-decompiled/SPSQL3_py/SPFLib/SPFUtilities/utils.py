@@ -205,11 +205,10 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
+try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+except ImportError:
+    SPFSMTPAuthEmail = None
 
 #region packages used for SMTP email -- SPFEmail
 import email
