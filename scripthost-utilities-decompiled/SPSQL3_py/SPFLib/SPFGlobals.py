@@ -826,7 +826,7 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__gLocalDir is None :
-            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + "\\"
+            SPFGlobals.__gLocalDir = os.path.join(os.path.abspath(os.path.curdir), "")
         
         self.__logger.info("{0} - {1}".format(calling_func, SPFGlobals.__gLocalDir))
         return SPFGlobals.__gLocalDir
@@ -1525,7 +1525,7 @@ class SPFGlobals(ScriptHost) :
                 MyEXEDir, MyExeFile = osPathFileInfo[0], osPathFileInfo[1]
 
             if MyEXEDir != '' : 
-                MyEXEDir = MyEXEDir + "\\" #'Include \
+                MyEXEDir = os.path.join(MyEXEDir, "") # Include the host-native separator
 
                 self.__logger.debug("{0} - MyEXEDir : {1}".format(calling_func, MyEXEDir))
                 self.__logger.debug("{0} - MyExeFile : {1}".format(calling_func, MyExeFile))
