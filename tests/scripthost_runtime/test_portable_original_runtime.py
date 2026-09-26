@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SCRIPT_HOST = (
@@ -113,3 +116,130 @@ def test_original_runtime_executes_representative_control_flow_on_linux(tmp_path
         (tmp_path / f"loop-{index}.txt").read_text(encoding="utf-8-sig")
         for index in range(3)
     ] == ["loop-0", "loop-1", "loop-2"]
+
+
+
+def test_original_runtime_repeats_local_work_same_process(tmp_path) -> None:
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+
+    _run_original_runtime(
+        tmp_path,
+        _task("/WRITE-FILE=Y", f"/CSV={first}", command="first<EOF>"),
+        "same-process-first",
+    )
+    _run_original_runtime(
+        tmp_path,
+        _task("/WRITE-FILE=Y", f"/CSV={second}", command="second<EOF>"),
+        "same-process-second",
+    )
+
+    assert first.read_text(encoding="utf-8-sig") == "first"
+    assert second.read_text(encoding="utf-8-sig") == "second"
+
+
+def test_spfglobals_command_state_is_shared_across_threads(tmp_path) -> None:
+    runtime_module = _runtime_module()
+    first_dir = tmp_path / "thread-a"
+    second_dir = tmp_path / "thread-b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_configured = threading.Event()
+    second_configured = threading.Event()
+
+    def first_thread() -> str:
+        manager = runtime_module.SPFManager()
+        manager.gCommandLineArguments = [
+            "SPFSQL3.py",
+            f"/MYLOCAL={first_dir}",
+            f"/EXEDIR={first_dir}",
+        ]
+        first_configured.set()
+        assert second_configured.wait(timeout=5)
+        return manager.gMyLocal
+
+    def second_thread() -> str:
+        assert first_configured.wait(timeout=5)
+        manager = runtime_module.SPFManager()
+        manager.gCommandLineArguments = [
+            "SPFSQL3.py",
+            f"/MYLOCAL={second_dir}",
+            f"/EXEDIR={second_dir}",
+        ]
+        second_configured.set()
+        return manager.gMyLocal
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(first_thread)
+        second_future = pool.submit(second_thread)
+        first_seen = first_future.result(timeout=10)
+        second_seen = second_future.result(timeout=10)
+
+    # SPFGlobals stores command-line/runtime state at class/process scope. Once the
+    # second job overwrites that state, the first manager observes the second job's
+    # local directory too. This is evidence for process isolation, not a desired
+    # same-process concurrency guarantee.
+    assert first_seen == str(second_dir)
+    assert second_seen == str(second_dir)
+
+
+def _isolated_process_code(tmp_path: Path, output: Path, value: str, instance: str) -> str:
+    return f"""
+import sys
+sys.path.insert(0, {str(SCRIPT_HOST)!r})
+from SPFLib.SPFSQL3 import SPFManager
+
+manager = SPFManager()
+manager.gCommandLineArguments = [
+    "SPFSQL3.py",
+    "/MYLOCAL={tmp_path}",
+    "/EXEDIR={tmp_path}",
+    "/SPFINSTANCE={instance}",
+]
+manager.MySPFSQLFileData = {(
+        "<OPTIONS>\n"
+        "/WRITE-FILE=Y\n"
+        f"/CSV={output}\n"
+        "</OPTIONS>\n"
+        f"{value}<EOF>"
+    )!r}
+if manager.Run_SPFSQL() is not True:
+    raise SystemExit(2)
+"""
+
+
+def test_original_runtime_concurrent_subprocesses_are_isolated(tmp_path) -> None:
+    first_dir = tmp_path / "process-a"
+    second_dir = tmp_path / "process-b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_output = first_dir / "result.txt"
+    second_output = second_dir / "result.txt"
+
+    first = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            _isolated_process_code(first_dir, first_output, "process-a", "process-a"),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    second = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            _isolated_process_code(second_dir, second_output, "process-b", "process-b"),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    first_stdout, first_stderr = first.communicate(timeout=30)
+    second_stdout, second_stderr = second.communicate(timeout=30)
+
+    assert first.returncode == 0, first_stdout + first_stderr
+    assert second.returncode == 0, second_stdout + second_stderr
+    assert first_output.read_text(encoding="utf-8-sig") == "process-a"
+    assert second_output.read_text(encoding="utf-8-sig") == "process-b"
