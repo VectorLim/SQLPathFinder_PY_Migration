@@ -100,6 +100,7 @@ def test_original_run_spfsql_vertical_slice_on_linux(tmp_path, monkeypatch) -> N
     manager.MySPFSQLFileData = _representative_script()
 
     assert manager.Run_SPFSQL() is True
+    assert manager.Run_SPFSQL() is True
     assert not (tmp_path / "bad.txt").exists()
     assert [
         (tmp_path / f"out_alpha_{index}.txt").read_text(encoding="utf-8") for index in range(3)
