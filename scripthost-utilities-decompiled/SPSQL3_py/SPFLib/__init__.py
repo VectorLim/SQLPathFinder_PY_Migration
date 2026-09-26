@@ -27,7 +27,9 @@ isPYTHON2 = False #default is Python 3. Python 2 is EOL'ed
 isPYTHON313 = False
 # print(sys.version_info)
 if sys.version_info.major == 3:
-    sys._enablelegacywindowsfsencoding() # this is required to overcome encoding issues across the module. See Python help page for more info
+    _enable_legacy_windows_fs = getattr(sys, "_enablelegacywindowsfsencoding", None)
+    if _enable_legacy_windows_fs is not None:
+        _enable_legacy_windows_fs()
     if sys.version_info.minor >= 13:
         isPYTHON313 = True
 
@@ -44,23 +46,39 @@ from datetime import datetime, timedelta
 import datetime as dt #this alias is used in nqMongoTask flow #V1.0.3.8_VA30_100
 
 from io import BytesIO
-from bson.son import SON
+try:
+    from bson.son import SON
+except ImportError:
+    SON = None
 import json   #used in ijs_Gen_Grid
 
 import math, random, numbers, types
 from decimal import Decimal
 from types import *
 import pandas as pd, numpy as np
-import pymongo
-import win32security, win32net, win32com, win32com.client, pythoncom, pywintypes
-#from winreg import *
-from win32com.client import Dispatch #used in JMP/JSL task handlers
-import win32api, win32con # used in SetFileROTask, FileIsLocked, etc
-import chardet
-from chardet.universaldetector import UniversalDetector
+try:
+    import pymongo
+except ImportError:
+    pymongo = None
+if os.name == "nt":
+    try:
+        import win32security, win32net, win32com, win32com.client, pythoncom, pywintypes
+        from win32com.client import Dispatch
+        import win32api, win32con
+    except ImportError:
+        pass
+try:
+    import chardet
+    from chardet.universaldetector import UniversalDetector
+except ImportError:
+    chardet = None
+    UniversalDetector = None
 from xml.sax.saxutils import escape
-import tabulate as tblate
-tblate.PRESERVE_WHITESPACE = True
+try:
+    import tabulate as tblate
+    tblate.PRESERVE_WHITESPACE = True
+except ImportError:
+    tblate = None
 from operator import itemgetter
 from xml.dom.minidom import Document as xmlMiniDomDocument
 from urllib.parse import urlparse, urlsplit
@@ -77,7 +95,10 @@ from urllib3.exceptions import InsecureRequestWarning
 
 urllib3.disable_warnings(category=InsecureRequestWarning)
 from requests.exceptions import HTTPError
-from requests_kerberos import HTTPKerberosAuth
+try:
+    from requests_kerberos import HTTPKerberosAuth
+except ImportError:
+    HTTPKerberosAuth = None
 
 #import duckdb
 try:
@@ -87,26 +108,39 @@ try:
 except ImportError:
     pass
 
-import clr
-clr.AddReference('System')
-clr.AddReference('System.Web')
-clr.AddReference('System.Security')
-clr.AddReference('System.Security.Principal')
-clr.AddReference('System.DirectoryServices')
-clr.AddReference('System.DirectoryServices.AccountManagement')
-clr.AddReference('System.ServiceModel')
-clr.AddReference('System.Collections')
-import System.Security.Principal, System.DirectoryServices, System.DirectoryServices.ActiveDirectory, System.Security.Cryptography
-from System.Security.Principal import WindowsIdentity 
-from System.Collections.Generic import List
+if os.name == "nt":
+    try:
+        import clr
+        clr.AddReference('System')
+        clr.AddReference('System.Web')
+        clr.AddReference('System.Security')
+        clr.AddReference('System.Security.Principal')
+        clr.AddReference('System.DirectoryServices')
+        clr.AddReference('System.DirectoryServices.AccountManagement')
+        clr.AddReference('System.ServiceModel')
+        clr.AddReference('System.Collections')
+        import System.Security.Principal, System.DirectoryServices, System.DirectoryServices.ActiveDirectory, System.Security.Cryptography
+        from System.Security.Principal import WindowsIdentity
+        from System.Collections.Generic import List
+    except (ImportError, RuntimeError):
+        pass
 
 #python 3
 import configparser as ConfigParser
 import io as StringIO
 from io import StringIO
-import winreg
-from winreg import *
+if os.name == "nt":
+    try:
+        import winreg
+        from winreg import *
+    except ImportError:
+        pass
 import urllib as urllib2
 from . import SPFUtilities
-from .SPFUtilities.utils import Utilities, SPFCMDRunExitWithErrorCodeException, SPFMutedException 
+
+def __getattr__(name):
+    if name in {"Utilities", "SPFCMDRunExitWithErrorCodeException", "SPFMutedException"}:
+        from .SPFUtilities import utils as _utils
+        return getattr(_utils, name)
+    raise AttributeError(name)
 #EOF
