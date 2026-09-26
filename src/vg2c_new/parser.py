@@ -21,7 +21,7 @@ class Vg2ParseError(ValueError):
 # alias, ScriptHost task, semantic runtime target, port mode, dependency, parity focus
 # Seeded directly from SPFManager.GetQuery. Session 1 implements only the control
 # targets plus WRITE-FILE and SPFDelete; the remaining rows are the Session-2 queue.
-RESOLVER_MANIFEST: tuple[tuple[str, str, str, str, str, str], ...] = (
+_RESOLVER_MANIFEST_BASE: tuple[tuple[str, str, str, str, str, str], ...] = (
     (r"@EXEDIR@\AppendFile.va", "AppendFileTask", "append_file", "DIRECT_PORT", "filesystem", "append semantics"),
     (r"@EXEDIR@\SPFCopy.bat", "SPFCopyTask", "copy_file", "AMENDED_PORT", "filesystem", "copy/continue"),
     (r"@EXEDIR@\CSVToHTML.va", "CSVToHTMLTask", "csv_to_html", "DIRECT_PORT", "csv/html", "format parity"),
@@ -80,7 +80,7 @@ RESOLVER_MANIFEST: tuple[tuple[str, str, str, str, str, str], ...] = (
 
 # Non-atomic GetQuery entries are kept in the same manifest so Session 2 can
 # account for the complete resolver surface without introducing another registry.
-RESOLVER_MANIFEST += (
+_RESOLVER_MANIFEST_BASE += (
     ("{IF-THEN}", "IfThenTask", "if", "DIRECT_PORT", "runtime", "operators/else"),
     ("{ELSE}", "ElseTask", "else", "DIRECT_PORT", "runtime", "nesting"),
     ("{END-IF}", "EndIfTask", "end_if", "DROP_LEGACY", "runtime", "nesting"),
@@ -135,6 +135,38 @@ RESOLVER_MANIFEST += (
     ("StackDataTask", "StackDataTask", "stack_data", "DIRECT_PORT", "csv", "stack parity"),
     ("va", "vaTask", "va", "DROP_LEGACY", "Windows", "historical wrapper"),
     ("DUMMY", "DummyPassThroughTask", "noop", "DROP_LEGACY", "none", "compatibility decision"),
+)
+
+
+_IMPLEMENTED_TARGETS = frozenset({
+    "append_file", "copy_file", "csv_to_html", "csv_to_xml", "delete_file", "email",
+    "import_excel", "load_excel", "xls_to_csv", "set_file_read_only", "run_python", "run_r",
+    "robocopy", "smart_append", "rename_file", "sqlite_delete", "sqlite_load", "unzip",
+    "distribute", "wait_interval", "wait_file", "get_web_text", "echo", "xml_to_csv", "zip",
+    "age_of_file", "date_of_file", "get_site_time", "rows_in_file", "update_time",
+    "update_time_file", "value_in_file", "get_files", "file_compare", "pyscript",
+    "if", "else", "end_if", "macro", "end_macro", "for_loop", "site_loop", "run_loop",
+    "end_loop", "write_file", "rscript", "query.sqlite", "query.oracle", "stack_data",
+})
+_FLATTENED_TARGETS = frozenset({"hpc_scope", "end_hpc"})
+_RETIRED_TARGETS = frozenset({
+    "prompt_input", "load_jmp", "verify_role", "encrypt_text", "encrypt_spfsql",
+    "encrypt_config", "jsl", "prompt_jobid", "shell", "va", "noop",
+})
+
+
+def _manifest_status(target: str) -> str:
+    if target in _IMPLEMENTED_TARGETS:
+        return "implemented"
+    if target in _FLATTENED_TARGETS:
+        return "flattened obsolete transport"
+    if target in _RETIRED_TARGETS:
+        return "explicitly retired capability"
+    return "documented current-platform gap"
+
+
+RESOLVER_MANIFEST: tuple[tuple[str, str, str, str, str, str, str], ...] = tuple(
+    (*row, _manifest_status(row[2])) for row in _RESOLVER_MANIFEST_BASE
 )
 
 _MANIFEST_BY_ALIAS = {row[0].upper(): row for row in RESOLVER_MANIFEST}

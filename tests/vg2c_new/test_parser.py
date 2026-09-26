@@ -129,3 +129,17 @@ def test_manifest_is_seeded_for_session_2_and_contains_current_sample_aliases() 
     assert r"@EXEDIR@\SQLPATHFINDER_EMAIL.VA" in aliases
     assert "{ROWS-IN-FILE}" in aliases
     assert len(RESOLVER_MANIFEST) == 108
+
+
+def test_manifest_has_terminal_session_2_status_for_all_108_entries() -> None:
+    statuses = {
+        "implemented",
+        "flattened obsolete transport",
+        "historical version dropped",
+        "explicitly retired capability",
+        "documented current-platform gap",
+    }
+    assert len(RESOLVER_MANIFEST) == 108
+    assert all(len(row) == 7 for row in RESOLVER_MANIFEST)
+    assert {row[6] for row in RESOLVER_MANIFEST} <= statuses
+    assert all(row[6] for row in RESOLVER_MANIFEST)

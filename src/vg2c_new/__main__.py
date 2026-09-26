@@ -5,7 +5,7 @@ from pathlib import Path
 
 from vg2c_new.parser import parse_file
 from vg2c_new.runtime import Interpreter, RuntimeState
-from vg2c_new.utilities.files import DeleteFileUtility, WriteFileUtility
+from vg2c_new.utilities.composition import build_runtime_utilities
 
 
 def main() -> int:
@@ -14,12 +14,7 @@ def main() -> int:
     args = parser.parse_args()
     script = args.script.resolve()
     commands = parse_file(script)
-    interpreter = Interpreter(
-        {
-            "write_file": WriteFileUtility(),
-            "delete_file": DeleteFileUtility(),
-        }
-    )
+    interpreter = Interpreter(build_runtime_utilities())
     interpreter.execute(commands, RuntimeState(working_directory=script.parent))
     return 0
 

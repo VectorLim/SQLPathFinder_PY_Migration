@@ -12,6 +12,9 @@ dependencies = [
     "datasyncx",
     "keyring==25.7.0",
     "pandas==3.0.3",
+    "openpyxl>=3.1,<4",
+    "requests>=2.32,<3",
+    "xlrd>=2,<3",
     "uv",
 ]
 
