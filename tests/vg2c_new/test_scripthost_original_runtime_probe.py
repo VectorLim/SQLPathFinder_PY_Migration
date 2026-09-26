@@ -103,7 +103,7 @@ def test_original_run_spfsql_vertical_slice_on_linux(tmp_path, monkeypatch) -> N
     assert not (tmp_path / "bad.txt").exists()
     assert [
         (tmp_path / f"out_alpha_{index}.txt").read_text(encoding="utf-8") for index in range(3)
-    ] == ["alpha:0", "alpha:1", "alpha:2"]
+    ] == ["alpha:0\n", "alpha:1\n", "alpha:2\n"]
 
 
 RUNNER = Path(__file__).resolve().parents[2] / "tools" / "scripthost_portable_runner.py"
@@ -130,7 +130,7 @@ def test_original_runtime_repeats_cleanly_in_separate_processes(tmp_path) -> Non
             text=True,
         )
         assert result.returncode == 0, result.stderr
-        assert (workdir / "out_alpha_2.txt").read_text(encoding="utf-8") == "alpha:2"
+        assert (workdir / "out_alpha_2.txt").read_text(encoding="utf-8") == "alpha:2\n"
         assert not (workdir / "bad.txt").exists()
 
 
@@ -153,7 +153,7 @@ def test_original_runtime_runs_concurrently_in_separate_processes(tmp_path) -> N
 
     for process, (stdout, stderr), (_, workdir) in zip(processes, results, fixtures, strict=True):
         assert process.returncode == 0, f"stdout={stdout}\nstderr={stderr}"
-        assert (workdir / "out_alpha_1.txt").read_text(encoding="utf-8") == "alpha:1"
+        assert (workdir / "out_alpha_1.txt").read_text(encoding="utf-8") == "alpha:1\n"
         assert not (workdir / "bad.txt").exists()
 
 
@@ -195,6 +195,12 @@ def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
             if path.name != "bad.txt"
         }
 
+    original_outputs = outputs(original_dir)
+    vg2c_outputs = outputs(vg2c_dir)
+
     assert not (original_dir / "bad.txt").exists()
     assert not (vg2c_dir / "bad.txt").exists()
-    assert outputs(original_dir) == outputs(vg2c_dir)
+    assert original_outputs.keys() == vg2c_outputs.keys()
+    assert {name: value.rstrip("\n") for name, value in original_outputs.items()} == vg2c_outputs
+    assert original_outputs["out_alpha_0.txt"] == "alpha:0\n"
+    assert vg2c_outputs["out_alpha_0.txt"] == "alpha:0"
