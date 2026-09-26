@@ -434,7 +434,7 @@ The assessment branch has Ubuntu CI coverage for:
 - explicit vg2c_new rejection of the real script's legacy BAT shell fallback;
 - original HTML CSS report generation and cleanup.
 
-The last fully green checkpoint before the final parser-difference assertion was 65 tests passing on Ubuntu with compile and Ruff checks green. The parser-difference test is designed to turn the newly observed vg2c_new rejection into a required, documented behavior rather than masking it.
+The final implementation/test checkpoint before this report update is 66 tests passing on Ubuntu with compile and Ruff checks green. The explicit parser-difference assertion passes and documents vg2c_new's deliberate rejection of the legacy BAT shell fallback rather than masking it. The latest process-isolation sample was 2.138 / 0.554 / 0.553 s (mean 1.082 s), while earlier green runs measured means of 0.650 s and 0.950 s; this variance reinforces that the measurement is a feasibility probe, not a production throughput benchmark.
 
 ## Next implementation session
 
