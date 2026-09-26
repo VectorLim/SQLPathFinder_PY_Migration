@@ -1835,19 +1835,20 @@ class Utilities(SPFGlobals):
         
         try :
             self.logger.debug("{0} - MyTmpFName : {1}".format(calling_func, MyTmpFName)) 
-            FilesToDelete.append(os.path.join(".\\", MyTmpFName + ".txt"))
-            FilesToDelete.append(os.path.join(".\\", MyTmpFName + ".bat"))
+            cleanup_root = ".\\" if os.name == "nt" else "."
+            FilesToDelete.append(os.path.join(cleanup_root, MyTmpFName + ".txt"))
+            FilesToDelete.append(os.path.join(cleanup_root, MyTmpFName + ".bat"))
             
             if self.gMyLocal == "N" :
                 if self.SHisSHEntry is False :
-                    FilesToDelete.append(os.path.join(".\\", "record_spf.bat"))
-                    FilesToDelete.append(os.path.join(".\\", "run_sqlplus.bat"))
-                FilesToDelete.append(os.path.join(".\\", "unzip.exe"))
-                FilesToDelete.append(os.path.join(".\\", "schema.ini"))
+                    FilesToDelete.append(os.path.join(cleanup_root, "record_spf.bat"))
+                    FilesToDelete.append(os.path.join(cleanup_root, "run_sqlplus.bat"))
+                FilesToDelete.append(os.path.join(cleanup_root, "unzip.exe"))
+                FilesToDelete.append(os.path.join(cleanup_root, "schema.ini"))
 
             #VA30_47 : changes add *_*.cols for deletion
             if self.gMyLocal == "N" or self.gRunMode == "IB" :
-                FilesToDelete  = FilesToDelete + [os.path.join(".\\", fileItem) for fileItem in glob.glob("*_*.cols")]
+                FilesToDelete  = FilesToDelete + [os.path.join(cleanup_root, fileItem) for fileItem in glob.glob("*_*.cols")]
 
             self.logger.debug("{0} - FilesToDelete : {1}".format(calling_func, FilesToDelete))
 
@@ -1861,11 +1862,16 @@ class Utilities(SPFGlobals):
                     FileToDeleteFound.append(FileToDelete)
             
             if len(FileToDeleteFound) > 0 :
-                cmdRunPassCodes = [0]
-                cmdToRun = "%COMSPEC%" 
-                cmdArgsList = ["/c", 'CD', '/d', self.gLocalDir] 
-                cmdArgsList = cmdArgsList + FileToDeleteFound
-                Final_CleanUpStatus, runExitCode = self.Run(cmdToRun, cmdArgsList, cmdRunPassCodes)
+                if os.name != "nt":
+                    for FileToDelete in FilesToDelete:
+                        if os.path.exists(FileToDelete):
+                            os.remove(FileToDelete)
+                else:
+                    cmdRunPassCodes = [0]
+                    cmdToRun = "%COMSPEC%" 
+                    cmdArgsList = ["/c", 'CD', '/d', self.gLocalDir] 
+                    cmdArgsList = cmdArgsList + FileToDeleteFound
+                    Final_CleanUpStatus, runExitCode = self.Run(cmdToRun, cmdArgsList, cmdRunPassCodes)
             else : 
                 self.logger.debug("{0} - no files found to delete".format(calling_func))
 
