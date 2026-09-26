@@ -53,7 +53,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
-from PyUtils import BuildArgs
+from .PyUtils import BuildArgs
 from datetime import timedelta as td
 mpl.use('Agg')
 
