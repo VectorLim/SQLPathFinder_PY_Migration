@@ -4,8 +4,11 @@ import importlib
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import pytest
 
 from vg2c_new.parser import parse as parse_vg2c_new
 from vg2c_new.runtime import Interpreter as NewInterpreter
@@ -395,10 +398,88 @@ def test_original_runtime_retains_historical_for_loop_branch_that_vg2c_new_rejec
         ]
     )
     commands = parse_vg2c_new(new_script)
-    import pytest
-
     with pytest.raises(RuntimeError, match="Historical .* version selection"):
         NewInterpreter({"write_file": NewWriteFileUtility()}).execute(
             commands,
             NewRuntimeState(tmp_path),
         )
+
+
+
+def test_missing_legacy_database_transport_fails_only_when_invoked() -> None:
+    runtime_module = _runtime_module()
+
+    assert runtime_module.SPFManager is not None
+    assert runtime_module.dbDrivers is None
+    with pytest.raises(RuntimeError, match="database-driver integration is unavailable"):
+        runtime_module.dbDriverBase()
+
+
+def test_original_runtime_executes_site_loop_on_linux(tmp_path) -> None:
+    script = DELIMITER.join(
+        [
+            _task('/UTILITIES={SITE-LOOP} "KM.MARS,PG.MARS"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={tmp_path}/site-<<<spf-site>>>.txt",
+                command="<<<spf-site>>><EOF>",
+            ),
+            _task("/UTILITIES={END-LOOP}"),
+        ]
+    )
+
+    _run_original_runtime(tmp_path, script, "portable-original-site-loop")
+
+    assert (tmp_path / "site-KM.MARS.txt").read_text(encoding="utf-8-sig") == "KM.MARS"
+    assert (tmp_path / "site-PG.MARS.txt").read_text(encoding="utf-8-sig") == "PG.MARS"
+
+
+def test_original_runtime_executes_run_loop_on_linux(tmp_path) -> None:
+    input_path = tmp_path / "run-loop-input.csv"
+    output_path = tmp_path / "run-loop-chunk.csv"
+    marker_path = tmp_path / "run-loop-marker.txt"
+    input_path.write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
+    script = DELIMITER.join(
+        [
+            _task(f'/UTILITIES={{RUN-LOOP}} "{input_path}" "{output_path}" "2" "N"'),
+            _task(
+                "/WRITE-FILE=Y",
+                f"/CSV={marker_path}",
+                command="child-ran<EOF>",
+            ),
+            _task("/UTILITIES={END-LOOP}"),
+        ]
+    )
+
+    _run_original_runtime(tmp_path, script, "portable-original-run-loop")
+
+    assert marker_path.read_text(encoding="utf-8-sig") == "child-ran"
+    assert output_path.read_text(encoding="utf-8-sig").replace("\r\n", "\n") == "id,value\n3,c\n"
+
+
+def test_fresh_process_job_overhead_is_bounded_on_linux(tmp_path) -> None:
+    durations: list[float] = []
+    for index in range(3):
+        job_dir = tmp_path / f"startup-{index}"
+        job_dir.mkdir()
+        output = job_dir / "result.txt"
+        started = time.perf_counter()
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _isolated_process_code(job_dir, output, f"job-{index}", f"startup-{index}"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        durations.append(time.perf_counter() - started)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert output.read_text(encoding="utf-8-sig") == f"job-{index}"
+
+    # This is deliberately a generous feasibility ceiling rather than a
+    # production SLA. The GitHub Actions --durations output records the actual
+    # observed cost for the architecture assessment.
+    assert sum(durations) < 15.0
