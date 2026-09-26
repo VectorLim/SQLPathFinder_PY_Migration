@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - direct-runtime/session-2-utilities-integrations
+      - direct-runtime/session-2.5a-**
       - direct-runtime/session-3-**
 
 permissions:
@@ -19,6 +20,8 @@ jobs:
           python-version: "3.12"
       - name: Install validation dependencies
         run: python -m pip install pytest ruff pandas requests openpyxl xlrd
+      - name: ScriptHost portability audit scan
+        run: python scripts/session25a_scan.py
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
       - name: Compile direct runtime
