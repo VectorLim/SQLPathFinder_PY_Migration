@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - direct-runtime/session-2-utilities-integrations
+      - direct-runtime/session-2.5a-portability-reuse-audit
       - direct-runtime/session-3-**
 
 permissions:
@@ -23,6 +24,8 @@ jobs:
         run: ruff format --check src/vg2c_new tests/vg2c_new
       - name: Compile direct runtime
         run: python -m compileall -q src/vg2c_new
+      - name: Compile portable ScriptHost targets
+        run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.

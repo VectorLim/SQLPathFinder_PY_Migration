@@ -34,9 +34,18 @@ import shutil
 import logging
 import pandas as pd
 from datetime import datetime as dt
-from PyUtils import BuildArgs
-from PyUtils import FixString
-from AutoComm_ChartData import AC_Chart_Data
+try:
+    from .PyUtils import BuildArgs
+except ImportError:  # standalone legacy execution
+    from PyUtils import BuildArgs
+try:
+    from .PyUtils import FixString
+except ImportError:  # standalone legacy execution
+    from PyUtils import FixString
+try:
+    from .AutoComm_ChartData import AC_Chart_Data
+except ImportError:  # standalone legacy execution
+    from AutoComm_ChartData import AC_Chart_Data
 
 
 class AC_HTML_Report(object):

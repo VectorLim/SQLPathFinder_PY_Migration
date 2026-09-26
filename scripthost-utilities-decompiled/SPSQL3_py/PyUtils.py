@@ -42,26 +42,27 @@ import os
 import re
 import sys
 import time
-import winreg
+try:
+    import winreg
+except ImportError:
+    winreg = None
 import threading
 import queue
-import pymongo
+try:
+    import pymongo
+except ImportError:
+    pymongo = None
 import numpy as np
 import pandas as pd
 import configparser
 from subprocess import Popen
 from datetime import datetime as dt
 
-isSH = os.path.expandvars('%SHServer%')
-if isSH == '%SHServer%':  # Note that Env Var SHServer is set on ScriptHost
-    myspf = os.path.dirname(os.path.realpath(__file__)).strip() + r'\SPFLib\SPFUtilities'
-else:
-    myspf = os.path.expandvars('%temp%')
-sys.path.insert(0, myspf)
+# Portable helpers must not mutate sys.path merely to locate optional legacy integrations.
 try:
     from ATTDMongoDB.ATTDMongoDBDriver import ATTDMongoDBHandler
-except:
-    pass
+except ImportError:
+    ATTDMongoDBHandler = None
 
 
 class BuildArgsClass(object):
