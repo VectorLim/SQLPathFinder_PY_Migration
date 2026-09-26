@@ -34,9 +34,12 @@ import shutil
 import logging
 import pandas as pd
 from datetime import datetime as dt
-from PyUtils import BuildArgs
-from PyUtils import FixString
-from AutoComm_ChartData import AC_Chart_Data
+if __package__:
+    from .PyUtils import BuildArgs, FixString
+    from .AutoComm_ChartData import AC_Chart_Data
+else:
+    from PyUtils import BuildArgs, FixString
+    from AutoComm_ChartData import AC_Chart_Data
 
 
 class AC_HTML_Report(object):
