@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import subprocess
 import sys
+import threading
 import zipfile
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 
 from vg2c_new.parser import parse
 from vg2c_new.runtime import Interpreter, RuntimeState
+from vg2c_new.utilities.file_values import RowsInFileUtility
 from vg2c_new.utilities.files import WriteFileUtility
 
 SCRIPT_HOST_ROOT = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled"
@@ -67,7 +69,13 @@ def _script(*blocks: str) -> str:
 
 def _representative_script() -> str:
     return _script(
-        _block("/WRITE-FILE=Y", "/CSV=seed.txt", body="seed<EOF>ignored"),
+        _block("/WRITE-FILE=Y", "/CSV=seed.csv", body="name,value\\nx,1<EOF>ignored"),
+        _block('/UTILITIES={ROWS-IN-FILE} "seed.csv" "SEED_ROWS" "N"'),
+        _block('/UTILITIES={IF-THEN} "SEED_ROWS" "EQ" "1"'),
+        _block("/WRITE-FILE=Y", "/CSV=count_ok.txt", body="count ok"),
+        _block("/UTILITIES={ELSE}"),
+        _block("/WRITE-FILE=Y", "/CSV=count_bad.txt", body="wrong count"),
+        _block("/UTILITIES={END-IF}"),
         _block('/UTILITIES={START-MACRO} "macro.csv" "N"'),
         _block('/UTILITIES={IF-THEN} "VAR(<<<flag>>>)" "GT" "0"'),
         _block('/UTILITIES={FOR-LOOP} "0" "2" "1" "x" "N"'),
@@ -100,6 +108,8 @@ def test_original_run_spfsql_vertical_slice_on_linux(tmp_path, monkeypatch) -> N
 
     assert manager.Run_SPFSQL() is True
     assert manager.Run_SPFSQL() is True
+    assert (tmp_path / "count_ok.txt").exists()
+    assert not (tmp_path / "count_bad.txt").exists()
     assert not (tmp_path / "bad.txt").exists()
     assert [
         (tmp_path / f"out_alpha_{index}.txt").read_text(encoding="utf-8") for index in range(3)
@@ -169,6 +179,96 @@ def test_original_globals_retain_some_state_between_in_process_runs() -> None:
     assert manager.gSPFInstance == "FIRST"
 
 
+def test_spfglobals_are_shared_between_manager_instances() -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    first = module.SPFManager()
+    second = module.SPFManager()
+    original = first.gAnyLoop
+    try:
+        first.gAnyLoop = "YS"
+        assert second.gAnyLoop == "YS"
+    finally:
+        first.gAnyLoop = original
+
+
+def test_spfglobals_overlap_across_threads_in_one_process() -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    first = module.SPFManager()
+    second = module.SPFManager()
+    original = first.gAnyLoop
+    first_written = threading.Event()
+    second_written = threading.Event()
+    observed: list[str] = []
+
+    def run_first() -> None:
+        first.gAnyLoop = "YS"
+        first_written.set()
+        assert second_written.wait(timeout=5)
+        observed.append(first.gAnyLoop)
+
+    def run_second() -> None:
+        assert first_written.wait(timeout=5)
+        second.gAnyLoop = "YR"
+        second_written.set()
+
+    try:
+        a = threading.Thread(target=run_first)
+        b = threading.Thread(target=run_second)
+        a.start()
+        b.start()
+        a.join(timeout=5)
+        b.join(timeout=5)
+        assert not a.is_alive()
+        assert not b.is_alive()
+        assert observed == ["YR"]
+    finally:
+        first.gAnyLoop = original
+
+
+def test_original_parser_builds_repository_actual_script_task_tree(tmp_path) -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    manager = module.SPFManager()
+    manager.gCommandLineArguments = [
+        "scripthost-parser-probe",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+    ]
+    script = (Path(__file__).resolve().parents[1] / "fixtures" / "actual_script.txt").read_text(
+        encoding="utf-8"
+    )
+    blocks = script.split(manager.SQLFILE_DELIM)
+    tasks = manager.Process_Query(
+        0,
+        len(blocks),
+        list(blocks),
+        str(tmp_path),
+        str(tmp_path),
+        None,
+        len(blocks),
+        "1",
+        "tmp",
+        None,
+        False,
+    )
+
+    def task_names(items: list[object]) -> list[str]:
+        names: list[str] = []
+        for item in items:
+            names.append(type(item).__name__)
+            names.extend(task_names(getattr(item, "childTasksList", [])))
+        return names
+
+    names = task_names(tasks)
+    assert "HTMLRunTask" in names
+    assert "HTMLLayoutTask" in names
+    assert "StartMacroTask" in names
+    assert "RowsInFileTask" in names
+    assert len(names) >= 40
+
+
 def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
     original_dir = tmp_path / "original"
     vg2c_dir = tmp_path / "vg2c-new"
@@ -186,7 +286,9 @@ def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
     assert original.returncode == 0, original.stderr
 
     commands = parse(_representative_script())
-    Interpreter({"write_file": WriteFileUtility()}).execute(commands, RuntimeState(vg2c_dir))
+    Interpreter({"write_file": WriteFileUtility(), "rows_in_file": RowsInFileUtility()}).execute(
+        commands, RuntimeState(vg2c_dir)
+    )
 
     def outputs(root: Path) -> dict[str, str]:
         return {
