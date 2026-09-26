@@ -20,6 +20,11 @@ def _import(name: str):
 def test_scripthost_core_imports_without_windows_runtime() -> None:
     spflib = _import("SPSQL3_py.SPFLib")
     _import("SPSQL3_py.SPFLib.SPFGlobals")
+    utilities = _import("SPSQL3_py.SPFLib.SPFUtilities.utils")
+    memtable = _import("SPSQL3_py.SPFLib.SPFUtilities.memtable")
+
+    assert utilities.Utilities.__mro__[1].__name__ == "SPFGlobals"
+    assert memtable.MemTable.myMemTable is None
 
     if sys.platform != "win32":
         assert spflib.WINDOWS_RUNTIME_AVAILABLE is False
