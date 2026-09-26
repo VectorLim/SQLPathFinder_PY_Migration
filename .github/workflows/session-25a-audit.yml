@@ -1,0 +1,53 @@
+name: Session 2.5A ScriptHost Audit
+
+on:
+  push:
+    branches:
+      - direct-runtime/session-2-utilities-integrations
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect archived ScriptHost source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/spsql3
+          mkdir -p /tmp/spsql3
+          unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("/tmp/spsql3")
+          targets = [
+              "AppendFileTask","CopyFileTask","CSVToHTMLTask","CSVToXMLTask","EmailTask",
+              "ImportExcelTask","LoadExcelTask","XLSToCSVTask","SetFileROTask",
+              "RunPythonScriptTask","RunRFileTask","RoboCopyTask","SmartAppendTask",
+              "SQLiteDeleteTask","SQLiteLoadTask","SPFUNZipTask","WaitIntervalTask",
+              "WaitFileTask","GetWebTextTask","EchoTask","XMLToCSVTask","SPFZipTask",
+              "StackDataTask","nqSQLiteTask","nqOracleTask"
+          ]
+          files = sorted(root.rglob("*.py"))
+          print("PY_FILES", len(files))
+          for p in files:
+              try:
+                  lines = p.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+              except OSError:
+                  continue
+              hits = []
+              for i, line in enumerate(lines, 1):
+                  for target in targets:
+                      if target in line:
+                          hits.append((i, target, line.strip()))
+              if hits:
+                  print(f"FILE {p.relative_to(root)} lines={len(lines)}")
+                  for i, target, line in hits[:120]:
+                      print(f"  {i}: {target}: {line}")
+          PY
