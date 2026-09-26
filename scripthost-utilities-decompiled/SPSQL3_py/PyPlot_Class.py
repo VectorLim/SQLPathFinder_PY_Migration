@@ -3,12 +3,20 @@ import datetime as dt
 import pandas as pd
 import sys
 import re
-from plotly import __version__
-import plotly.express as px
+try:
+    from plotly import __version__
+    import plotly.express as px
+    _PLOTLY_IMPORT_ERROR = None
+except ImportError as _plotly_import_error:
+    __version__ = "unavailable"
+    px = None
+    _PLOTLY_IMPORT_ERROR = _plotly_import_error
 
 class SPFPlotly:
 
     def __init__(self, my_dataframe):
+        if _PLOTLY_IMPORT_ERROR is not None:
+            raise RuntimeError("ScriptHost interactive plotting requires plotly") from _PLOTLY_IMPORT_ERROR
         self.df = my_dataframe
         print ('  using Plotly version: ' + str(__version__) + '\n');
         pver=str(__version__).split(".")
