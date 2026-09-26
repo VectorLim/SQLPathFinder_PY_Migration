@@ -205,11 +205,12 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
+try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+except ImportError:
+    # ScriptHost ships dbDrivers only as Windows extension modules. Local/file
+    # utilities remain portable; SMTP auth reports the missing transport when used.
+    SPFSMTPAuthEmail = None
 
 #region packages used for SMTP email -- SPFEmail
 import email
