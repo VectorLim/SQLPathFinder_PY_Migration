@@ -269,6 +269,31 @@ def test_original_parser_builds_repository_actual_script_task_tree(tmp_path) -> 
     assert len(names) >= 40
 
 
+
+def test_original_html_css_report_lifecycle_on_linux(tmp_path, monkeypatch) -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    monkeypatch.chdir(tmp_path)
+    source = (Path(__file__).resolve().parents[1] / "fixtures" / "actual_script.txt").read_text(
+        encoding="utf-8"
+    )
+    report_block = next(block for block in source.split(DELIM) if "/REPORT=HTML-RUN" in block)
+
+    manager = module.SPFManager()
+    manager.gCommandLineArguments = [
+        "scripthost-report-probe",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+    ]
+    manager.MySPFSQLFileData = report_block
+
+    assert manager.Run_SPFSQL() is True
+    stylesheet = tmp_path / "sqlpathfinder_style_1.css"
+    assert stylesheet.exists()
+    assert "Column-Headers" in stylesheet.read_text(encoding="utf-8", errors="replace")
+    assert not list(tmp_path.glob("*_tmp_.ini"))
+
+
 def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
     original_dir = tmp_path / "original"
     vg2c_dir = tmp_path / "vg2c-new"
