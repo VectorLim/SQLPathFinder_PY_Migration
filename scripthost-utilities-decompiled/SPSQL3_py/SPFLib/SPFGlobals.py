@@ -342,6 +342,8 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__gUserPrincipal is None:
+            if win32api is None or win32con is None:
+                raise RuntimeError("Windows identity integration is unavailable on this platform")
             SPFGlobals.__gUserPrincipal = win32api.GetUserNameEx(win32con.NameUserPrincipal) 
         self.__logger.info("{0} get - {1}".format(calling_func, SPFGlobals.__gUserPrincipal))
         return SPFGlobals.__gUserPrincipal
@@ -1623,6 +1625,8 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__un is None : 
+            if win32api is None or win32con is None:
+                raise RuntimeError("Windows identity integration is unavailable on this platform")
             SPFGlobals.__un = win32api.GetUserNameEx(win32con.NameSamCompatible).split("\\")[1] #os.environ['USERNAME']
         self.__logger.debug("{0} - get: {1}".format(calling_func, SPFGlobals.__un))
 
@@ -1637,6 +1641,8 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__uDomain is None : 
+            if win32api is None or win32con is None:
+                raise RuntimeError("Windows identity integration is unavailable on this platform")
             SPFGlobals.__uDomain = win32api.GetUserNameEx(win32con.NameSamCompatible).split("\\")[0] #os.environ['USERDOMAIN']
         self.__logger.debug("{0} - get: {1}".format(calling_func, SPFGlobals.__uDomain))
 
