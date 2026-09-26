@@ -793,10 +793,6 @@ class Utilities(SPFGlobals):
             self.logger.debug("Done logSvc")
         #END : def SPFLogSvc_Invoke
         #endregion nested methods
-        # Legacy email transport is deliberately loaded only when this Windows/service-oriented
-        # method is invoked; portable direct-runtime email uses DataSyncX instead.
-        from ..dbDrivers import SPFSMTPAuthEmail
-
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         MyExe = "record_spf.bat"
@@ -6880,6 +6876,10 @@ class Utilities(SPFGlobals):
         'EmailUtility : 'O' or 'S' or 'SA'. Default 'SA' : SMTPAuth
         '===============================================================================
         """
+        # Legacy email transport is loaded only for this legacy method. The direct
+        # Linux runtime uses DataSyncX and never imports the old mail driver.
+        from ..dbDrivers import SPFSMTPAuthEmail
+
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         self.logger.debug("{0} - MyLocal: '{1}'".format(calling_func, MyLocal))
