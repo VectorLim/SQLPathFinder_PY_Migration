@@ -240,7 +240,7 @@ def test_excel_and_python_portable_execution(tmp_path: Path) -> None:
     (tmp_path / "in.csv").write_text("id,x\n1,a\n", encoding="utf-8")
     runtime = state(tmp_path)
     LoadExcelUtility().apply(
-        command("load_excel", ("in.csv", "out.xlsx", "Version 1", "N")),
+        command("load_excel", ("in.csv", "out.xlsx", "Version 2", "N")),
         runtime,
     )
     ImportExcelUtility().apply(
@@ -252,6 +252,11 @@ def test_excel_and_python_portable_execution(tmp_path: Path) -> None:
     )
     frame = pd.read_excel(tmp_path / "out2.xlsx", sheet_name="Data", dtype=str)
     assert frame.loc[0, "x"] == "a"
+    with pytest.raises(RuntimeError, match="Historical LoadExcel Version 1"):
+        LoadExcelUtility().apply(
+            command("load_excel", ("in.csv", "old.xlsx", "Version 1", "N")),
+            runtime,
+        )
     script = tmp_path / "script.py"
     script.write_text(
         "import pathlib,sys; pathlib.Path('args.txt').write_text('|'.join(sys.argv[1:]))",

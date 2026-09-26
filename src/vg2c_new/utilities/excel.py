@@ -43,14 +43,16 @@ class LoadExcelUtility(Utility):
         """Rewrite of ScriptHost LoadExcel current Version-2 behavior using openpyxl.
         Source: SPSQL3_py/SPFLib/SPFSQL3.py :: LoadExcelTask -> Utilities.LoadExcel2.
         Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
-        Port mode: REWRITE. Preserved: CSV-to-workbook and continue; VERSION 1 syntax flattens to V2 as ScriptHost already does.
+        Port mode: REWRITE. Preserved: current V2 CSV-to-workbook and continue behavior.
         Amendments: pandas/openpyxl replace spfExcelUtility.exe. Intentionally discarded: COM transport/history.
         """
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("LoadExcel requires CSV input and Excel output.")
         version = args[2].strip().upper() if len(args) > 2 else "VERSION 2"
-        if version not in {"", "VERSION 1", "VERSION 2"}:
+        if version == "VERSION 1":
+            raise RuntimeError("Historical LoadExcel Version 1 is intentionally removed.")
+        if version not in {"", "VERSION 2"}:
             raise ValueError(f"Unsupported LoadExcel version selector {version!r}.")
         cont = _yn(args[3]) if len(args) > 3 else False
         try:
@@ -78,7 +80,9 @@ class ImportExcelUtility(Utility):
         vb_proc = args[5].strip() if len(args) > 5 else ""
         version = args[6].strip().upper() if len(args) > 6 else "VERSION 2"
         cont = _yn(args[7]) if len(args) > 7 else False
-        if version not in {"", "VERSION 1", "VERSION 2"}:
+        if version == "VERSION 1":
+            raise RuntimeError("Historical ImportExcel Version 1 is intentionally removed.")
+        if version not in {"", "VERSION 2"}:
             raise ValueError(f"Unsupported ImportExcel version selector {version!r}.")
         if vb_proc:
             raise RuntimeError(
