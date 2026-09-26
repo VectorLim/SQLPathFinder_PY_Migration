@@ -274,12 +274,13 @@ try:
     from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
 except ImportError as _dbdrivers_import_error:
     dbDrivers = None
+    _missing_dbdrivers_error = _dbdrivers_import_error
 
     class _UnavailableDbDriver:
         def __init__(self, *args, **kwargs):
             raise RuntimeError(
                 "ScriptHost database-driver integration is unavailable in this portable runtime"
-            ) from _dbdrivers_import_error
+            ) from _missing_dbdrivers_error
 
     dbDriverBase = dbDriverODBCBase = _UnavailableDbDriver
     dbDriverDotNetSQLServer = dbDriverDotNetTextJET = _UnavailableDbDriver
