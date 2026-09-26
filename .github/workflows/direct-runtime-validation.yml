@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validation dependencies
-        run: python -m pip install pytest ruff pandas requests openpyxl xlrd
+        run: python -m pip install pytest ruff pandas requests openpyxl xlrd matplotlib seaborn plotly
       - name: ScriptHost portability audit scan
         run: python scripts/session25a_scan.py
       - name: Format check
