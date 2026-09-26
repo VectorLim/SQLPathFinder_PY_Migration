@@ -535,7 +535,7 @@ def CheckDateIdeal(interactive_run=True, logger=None):
     myregval1 = myregval2 = ''
     try:
         myreg = winreg.ConnectRegistry(None, winreg.HKEY_CLASSES_ROOT)
-        myregval1 = winreg.QueryValue(myreg, "Ideal.ProjectFile\shell\open\command")
+        myregval1 = winreg.QueryValue(myreg, r"Ideal.ProjectFile\shell\open\command")
         myregval1 = myregval1.replace('"', '')
         myregval1 = myregval1[:myregval1.find('.exe') + 4]
         myregval1 = os.path.split(myregval1)[0]
@@ -544,7 +544,7 @@ def CheckDateIdeal(interactive_run=True, logger=None):
 
     try:
         myreg = winreg.ConnectRegistry(None, winreg.HKEY_CLASSES_ROOT)
-        myregval2 = winreg.QueryValue(myreg, "Ideal.ProjectFile\DefaultIcon")
+        myregval2 = winreg.QueryValue(myreg, r"Ideal.ProjectFile\DefaultIcon")
         myregval1 = myregval1.replace('"', '')
         myregval2 = myregval2[:myregval2.find('.exe') + 4]
         myregval2 = os.path.split(myregval2)[0]
