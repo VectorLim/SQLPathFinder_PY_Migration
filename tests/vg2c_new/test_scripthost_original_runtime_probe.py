@@ -204,3 +204,109 @@ def test_representative_slice_matches_vg2c_new_outputs(tmp_path) -> None:
     assert {name: value.rstrip("\n") for name, value in original_outputs.items()} == vg2c_outputs
     assert original_outputs["out_alpha_0.txt"] == "alpha:0\n"
     assert vg2c_outputs["out_alpha_0.txt"] == "alpha:0"
+
+
+def _site_loop_script() -> str:
+    return _script(
+        _block('/UTILITIES={SITE-LOOP} "A/B,C.D"'),
+        _block(
+            "/WRITE-FILE=Y",
+            "/CSV=site_<<<spf-site-for-file-name>>>.txt",
+            body="<<<spf-site>>>",
+        ),
+        _block("/UTILITIES={END-LOOP}"),
+    )
+
+
+def test_site_loop_matches_original_runtime_outputs(tmp_path) -> None:
+    original_dir = tmp_path / "site-original"
+    vg2c_dir = tmp_path / "site-vg2c"
+    original_dir.mkdir()
+    vg2c_dir.mkdir()
+
+    script = original_dir / "site.spfsql"
+    script.write_text(_site_loop_script(), encoding="utf-8")
+    original = subprocess.run(
+        [sys.executable, str(RUNNER), str(script), "--workdir", str(original_dir)],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert original.returncode == 0, original.stderr
+
+    commands = parse(_site_loop_script())
+    Interpreter({"write_file": WriteFileUtility()}).execute(commands, RuntimeState(vg2c_dir))
+
+    def site_outputs(root: Path) -> dict[str, str]:
+        return {
+            path.name: path.read_text(encoding="utf-8").rstrip("\n")
+            for path in sorted(root.glob("site_*.txt"))
+        }
+
+    assert site_outputs(original_dir) == site_outputs(vg2c_dir)
+    assert site_outputs(original_dir) == {"site_A_B.txt": "A/B", "site_C_D.txt": "C.D"}
+
+
+def _run_loop_script() -> str:
+    return _script(
+        _block('/UTILITIES={RUN-LOOP} "input.csv" "chunk.csv" "2" "Y"'),
+        _block("/WRITE-FILE=Y", "/CSV=child-ran.txt", body="child"),
+        _block("/UTILITIES={END-LOOP}"),
+    )
+
+
+def test_run_loop_matches_original_runtime_final_chunk(tmp_path) -> None:
+    original_dir = tmp_path / "run-original"
+    vg2c_dir = tmp_path / "run-vg2c"
+    original_dir.mkdir()
+    vg2c_dir.mkdir()
+    input_text = "name,value\na,1\nb,2\nc,3\n"
+    (original_dir / "input.csv").write_text(input_text, encoding="utf-8")
+    (vg2c_dir / "input.csv").write_text(input_text, encoding="utf-8")
+
+    script = original_dir / "run.spfsql"
+    script.write_text(_run_loop_script(), encoding="utf-8")
+    original = subprocess.run(
+        [sys.executable, str(RUNNER), str(script), "--workdir", str(original_dir)],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert original.returncode == 0, original.stderr
+
+    commands = parse(_run_loop_script())
+    Interpreter({"write_file": WriteFileUtility()}).execute(commands, RuntimeState(vg2c_dir))
+
+    assert (original_dir / "chunk.csv").read_text(encoding="utf-8").splitlines() == [
+        "name,value",
+        "c,3",
+    ]
+    assert (vg2c_dir / "chunk.csv").read_text(encoding="utf-8").splitlines() == [
+        "name,value",
+        "c,3",
+    ]
+    assert (original_dir / "child-ran.txt").exists()
+    assert (vg2c_dir / "child-ran.txt").exists()
+
+
+def test_original_getquery_routes_portable_control_and_report_tasks(tmp_path, monkeypatch) -> None:
+    _with_extracted_runtime()
+    module = importlib.import_module("SPFLib.SPFSQL3")
+    monkeypatch.chdir(tmp_path)
+    manager = module.SPFManager()
+    manager.gCommandLineArguments = [
+        "routing-probe",
+        f"/MYLOCAL={tmp_path}",
+        f"/EXEDIR={tmp_path}",
+    ]
+
+    cases = (
+        (_block("/WRITE-FILE=Y", "/CSV=probe.txt", body="probe"), "WriteFileTask"),
+        (_block('/UTILITIES={BEGIN-HPC} "legacy-service"'), "BeginHPCTask"),
+        (_block("/REPORT=HTML-DEFER", "/ID=probe", body="TYPE<\\>HTML"), "HTMLDeferTask"),
+    )
+    for index, (block, expected_type) in enumerate(cases):
+        task = manager.GetQuery(manager.gMyLocal, block, index, False)
+        assert type(task).__name__ == expected_type
