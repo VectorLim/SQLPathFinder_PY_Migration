@@ -26,7 +26,7 @@ def get_file_delimiter(file_name: str | os.PathLike[str], mode: str = "I") -> st
     if suffix in {".sdb", ".json", ".pmpk"}:
         raise ValueError(f"File extension not supported to have a delimiter: {file_name}")
     if suffix in {".tab", ".hive-tab", ".hive-sequence"}:
-        return "\\t"
+        return "\t"
     if suffix == ".asc":
         return "|"
     if suffix == ".txt":
