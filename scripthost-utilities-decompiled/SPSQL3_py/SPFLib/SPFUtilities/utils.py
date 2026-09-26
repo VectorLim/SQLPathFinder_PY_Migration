@@ -18582,7 +18582,11 @@ try:
     from rich.progress import BarColumn as RichBarColumn, MofNCompleteColumn as RichMofNCompleteColumn
     from rich.console import Console as RichConsole
 except ImportError:
-    pass
+    class SPFRichProgressBar:
+        """Dependency guard for the optional Rich progress implementation."""
+
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("SPFRichProgressBar requires the optional 'rich' package.")
 else:
     class SPFRichProgressBar(RichProgressBar):
         """
