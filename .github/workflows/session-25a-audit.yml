@@ -6,7 +6,7 @@ on:
       - direct-runtime/session-2-utilities-integrations
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   audit:
@@ -16,26 +16,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Restore authoritative decompiled module
+      - name: Export authoritative decompiled module
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -s scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py ]; then
-            rm -rf /tmp/spsql3
-            mkdir -p /tmp/spsql3
-            unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
-            cp /tmp/spsql3/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
-            git commit -m "chore: restore authoritative decompiled SPFSQL3 source"
-            git push
-          fi
-      - name: Verify restored source
-        run: |
-          test -s scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py
+          rm -rf /tmp/spsql3
+          mkdir -p /tmp/spsql3
+          unzip -q scripthost-utilities-decompiled/SPSQL3_py.zip -d /tmp/spsql3
           python - <<'PY'
+          import base64
           from pathlib import Path
-          p=Path("scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py")
-          print("restored_lines", len(p.read_text(encoding="utf-8-sig", errors="replace").splitlines()))
+          p = Path("/tmp/spsql3/SPFLib/SPFSQL3.py")
+          raw = p.read_bytes()
+          data = base64.b64encode(raw).decode("ascii")
+          width = 48000
+          print(f"SPFSQL3_EXPORT bytes={len(raw)} chunks={(len(data)+width-1)//width}")
+          for idx in range(0, len(data), width):
+              print(f"SPFSQL3_CHUNK {idx//width:04d} {data[idx:idx+width]}")
+          print("SPFSQL3_EXPORT_END")
           PY
