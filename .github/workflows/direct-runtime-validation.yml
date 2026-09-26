@@ -5,6 +5,7 @@ on:
     branches:
       - direct-runtime/session-2-utilities-integrations
       - direct-runtime/session-2.5a-portability-reuse-audit
+      - direct-runtime/architecture-reassessment-portable-scripthost-v4
       - direct-runtime/session-3-**
 
 permissions:
@@ -19,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validation dependencies
-        run: python -m pip install pytest ruff pandas requests openpyxl xlrd
+        run: python -m pip install pytest ruff pandas requests openpyxl xlrd dask rich
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
       - name: Compile direct runtime
@@ -29,10 +30,10 @@ jobs:
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.
-        run: pytest tests/vg2c_new -q
+        run: pytest tests/vg2c_new tests/scripthost_runtime -q
       - name: Manifest status summary
         env:
           PYTHONPATH: src:.
         run: python -c "from collections import Counter; from vg2c_new.parser import RESOLVER_MANIFEST; print(Counter(row[6] for row in RESOLVER_MANIFEST))"
       - name: Ruff
-        run: ruff check src/vg2c_new tests/vg2c_new --ignore E501
+        run: ruff check src/vg2c_new tests/vg2c_new tests/scripthost_runtime --ignore E501
