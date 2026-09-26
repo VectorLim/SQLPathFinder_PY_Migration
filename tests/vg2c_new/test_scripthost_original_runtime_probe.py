@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -88,3 +89,54 @@ def test_original_run_spfsql_vertical_slice_on_linux(tmp_path, monkeypatch) -> N
     assert [
         (tmp_path / f"out_alpha_{index}.txt").read_text(encoding="utf-8") for index in range(3)
     ] == ["alpha:0", "alpha:1", "alpha:2"]
+
+
+RUNNER = Path(__file__).resolve().parents[2] / "tools" / "scripthost_portable_runner.py"
+
+
+def _write_process_fixture(root: Path, label: str) -> tuple[Path, Path]:
+    root.mkdir(parents=True, exist_ok=True)
+    script = root / f"{label}.spfsql"
+    script.write_text(_representative_script(), encoding="utf-8")
+    (root / "macro.csv").write_text("name,flag\nalpha,1\nbeta,0\n", encoding="utf-8")
+    return script, root
+
+
+def test_original_runtime_repeats_cleanly_in_separate_processes(tmp_path) -> None:
+    first_script, first_workdir = _write_process_fixture(tmp_path / "first", "first")
+    second_script, second_workdir = _write_process_fixture(tmp_path / "second", "second")
+
+    for script, workdir in ((first_script, first_workdir), (second_script, second_workdir)):
+        result = subprocess.run(
+            [sys.executable, str(RUNNER), str(script), "--workdir", str(workdir)],
+            cwd=Path(__file__).resolve().parents[2],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert (workdir / "out_alpha_2.txt").read_text(encoding="utf-8") == "alpha:2"
+        assert not (workdir / "bad.txt").exists()
+
+
+def test_original_runtime_runs_concurrently_in_separate_processes(tmp_path) -> None:
+    fixtures = [
+        _write_process_fixture(tmp_path / "parallel-a", "parallel-a"),
+        _write_process_fixture(tmp_path / "parallel-b", "parallel-b"),
+    ]
+    processes = [
+        subprocess.Popen(
+            [sys.executable, str(RUNNER), str(script), "--workdir", str(workdir)],
+            cwd=Path(__file__).resolve().parents[2],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for script, workdir in fixtures
+    ]
+    results = [process.communicate(timeout=30) for process in processes]
+
+    for process, (stdout, stderr), (_, workdir) in zip(processes, results, fixtures, strict=True):
+        assert process.returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+        assert (workdir / "out_alpha_1.txt").read_text(encoding="utf-8") == "alpha:1"
+        assert not (workdir / "bad.txt").exists()
