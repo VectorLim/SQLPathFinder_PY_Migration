@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from SPSQL3_py.SPFLib.SPFUtilities.portable import zip_files, zip_folder
 from vg2c_new.paths import resolve_path, working_directory_for
 from vg2c_new.utilities.base import Utility
 from vg2c_new.utilities.csv import CsvUtility
@@ -345,15 +346,7 @@ class WaitFileUtility(Utility):
 
 class ZipUtility(Utility):
     def apply(self, command: Command, state: RuntimeState) -> None:
-        """Direct portable port of current ScriptHost SPFZIP semantics.
-
-        Source: SPSQL3_py/SPFLib/SPFSQL3.py :: SPFZipTask.
-        Reference source/commit: vendored ScriptHost at 8ddd5e6463b43834d769057be48041ec657f0f9d.
-        Port mode: DIRECT PORT.
-        Preserved: archive creation and optional source deletion.
-        Amendments: stdlib zipfile.
-        Intentionally discarded: helper executable transport.
-        """
+        """Thin adapter over current ScriptHost ZipFiles2/ZipFolder2 Python semantics."""
         args = [state.substitute(v) for v in command.arguments]
         if len(args) < 2:
             raise ValueError("SPFZIP requires source and archive.")
@@ -362,21 +355,21 @@ class ZipUtility(Utility):
         delete = _yn(args[2]) if len(args) > 2 else False
         if archive.suffix.lower() != ".zip":
             archive = archive.with_suffix(".zip")
-        files = (
-            list(source.rglob("*"))
-            if source.is_dir()
-            else [Path(p) for p in glob.glob(str(source))]
+
+        if source.is_dir():
+            zip_folder(source, archive, delete_source_folder=delete)
+            return
+
+        files = [Path(p) for p in glob.glob(str(source))]
+        if source.exists() and source.is_file() and source not in files:
+            files.append(source)
+        zip_files(
+            files,
+            archive,
+            retain_relative_path=False,
+            delete_sources=delete,
+            source_exists_check_done=False,
         )
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-            for item in files:
-                if item.is_file():
-                    zf.write(item, item.relative_to(source) if source.is_dir() else item.name)
-        if delete:
-            if source.is_dir():
-                shutil.rmtree(source)
-            elif source.exists():
-                source.unlink()
 
 
 class UnzipUtility(Utility):
