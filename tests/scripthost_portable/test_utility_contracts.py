@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import subprocess
 import sys
@@ -151,3 +152,67 @@ def test_retired_entrypoint_cannot_execute(tmp_path: Path):
     assert result.returncode == 2
     assert "scripthost_portable.worker.run_job" in result.stderr
     assert not (tmp_path / "unwanted.txt").exists()
+
+
+def test_smart_append_v4(tmp_path: Path):
+    old, new = tmp_path / "old.csv", tmp_path / "new.csv"
+    old.write_text("ID,DATE,OLD\n1,2026-01-01 00:00:00,a\n2,2026-09-01 00:00:00,b\n")
+    new.write_text("ID,DATE,NEW\n2,2026-09-02 00:00:00,x\n3,2026-09-03 00:00:00,y\n")
+    execute(
+        tmp_path,
+        utility(
+            r"@EXEDIR@\SmartAppend.va",
+            old,
+            new,
+            "DATE",
+            "2026-02-01 00:00:00",
+            "ID",
+            "",
+            "Y",
+            "",
+            "VERSION4",
+            "",
+            "missing",
+            "",
+            "Y",
+        ),
+    )
+    result = rows(old)
+    assert result[0] == ["ID", "DATE", "NEW", "OLD"]
+    assert [r[0] for r in result[1:]] == ["2", "3"]
+    assert [r[3] for r in result[1:]] == ["MISSING", "MISSING"]
+
+
+@pytest.mark.parametrize("pyscript", [False, True])
+def test_python_original_launch(tmp_path: Path, pyscript: bool):
+    script = tmp_path / "script with spaces.py"
+    script.write_text(
+        "import json,sys\nfrom pathlib import Path\n"
+        "Path('argv.json').write_text(json.dumps(sys.argv[1:]))\n"
+    )
+    # Existing ScriptHost interpreter configuration; no replacement task needed.
+    (tmp_path / "SQLPathFinder.ini").write_text(f"[SQLPATHFINDER]\nPYTHON3={sys.executable}\n")
+    command = (
+        utility("{PYSCRIPT}", script, "two words", "tail")
+        if pyscript
+        else utility(r"@EXEDIR@\Run_Python_Script.va", script, "one two", "N", "", "Python-v3")
+    )
+    execute(tmp_path, command)
+    args = json.loads((tmp_path / "argv.json").read_text())
+    assert args == (["two words", "tail", "/SPFLOGLEVEL=ERROR"] if pyscript else ["one", "two"])
+
+
+def test_append_rename_delete(tmp_path: Path):
+    dest, source = tmp_path / "dest.csv", tmp_path / "source.csv"
+    dest.write_text("ID\n1\n")
+    source.write_text("ID\n2\n")
+    renamed = tmp_path / "renamed.csv"
+    execute(
+        tmp_path,
+        utility(r"@EXEDIR@\AppendFile.va", dest, source, "Y"),
+        utility(r"@EXEDIR@\SPFRename.va", dest, renamed),
+    )
+    assert rows(renamed) == [["ID"], ["1"], ["2"]]
+    assert not dest.exists()
+    execute(tmp_path, utility(r"@EXEDIR@\SPFDelete.bat", renamed, "N"))
+    assert not renamed.exists()
