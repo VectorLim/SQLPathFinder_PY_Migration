@@ -410,7 +410,7 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     root.mkdir()
     (root / "schema").mkdir()
     data = root / "report.csv"
-    data.write_text("id,value\n1,alpha\n2,beta\n", encoding="utf-8")
+    data.write_text("total_pcg,total_flag,ce%\n10,2,80%\n20,1,95%\n", encoding="utf-8")
     css = root / "portable_report.css"
     final = root / "portable_report.htm"
 
@@ -466,8 +466,8 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     assert PortableScriptHostRuntime().run_text(text, root)
     generated = final.read_text(encoding="utf-8-sig")
     assert "Portable ScriptHost Report" in generated
-    assert "alpha" in generated
-    assert "beta" in generated
+    assert "10" in generated
+    assert "80%" in generated
     assert "<table" in generated.lower()
     assert not list(root.glob("*_MYREPORT5_tmp_.ini"))
 
