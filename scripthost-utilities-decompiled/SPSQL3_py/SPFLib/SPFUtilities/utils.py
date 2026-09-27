@@ -1184,7 +1184,16 @@ class Utilities(SPFGlobals):
                     self.logger.debug(myCMDArgs)
                     runVal, runExitCode = False, -1
                     try :
-                      runVal, runExitCode =  self.Run(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, CMDErrorExitCodes=SPFRoboCopy_err_ExitCode,usePopen=True)
+                      if os.name != "nt":
+                          from scripthost_portable.file_operations import robocopy_files
+                          try:
+                              runExitCode = robocopy_files(MySrc, MyDest, lMyArrRC, MyRetry, MyWait, MyArg or [])
+                              runVal = runExitCode in SPFRoboCopy_pass_ExitCode
+                          except (OSError, ValueError) as err:
+                              self.Console(str(err))
+                              raise SPFCMDRunExitWithErrorCodeException(str(err), 16, False) from err
+                      else:
+                          runVal, runExitCode = self.Run(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, CMDErrorExitCodes=SPFRoboCopy_err_ExitCode,usePopen=True)
                     except Exception as err:
                         self.logger.exception("Error : {0}".format(err))
                         runVal = err.args[2]
@@ -5642,7 +5651,7 @@ class Utilities(SPFGlobals):
                     Command1 = re.sub(r"\$spf\$dir\$(?P<source>.*\.r)", 
                                       lambda m : os.path.join(self.gSPFVaryLib, m.group("source")).replace("\\", "/"), 
                                       Command1, 0, re.IGNORECASE)
-                    q2 = os.path.join(WorkDir, "sqlpathfinder.R")
+                    q2 = os.path.join("." if os.name != "nt" and WorkDir == ".\\" else WorkDir, "sqlpathfinder.R")
                     q2 = os.path.abspath(q2)
                     self.logger.debug("{0} - q2: '{1}'".format(calling_func, q2))
 
@@ -8816,6 +8825,34 @@ class Utilities(SPFGlobals):
         
         MyExe0 = "spfExcelUtility.exe"
         try : 
+            if os.name != "nt":
+                from openpyxl import Workbook, load_workbook
+                if MyVBProc:
+                    raise RuntimeError("Excel VBA execution requires the original Windows Excel integration")
+                output = Path(ExcelResultFile or "SQLPathFinder.xlsx")
+                if output.suffix.lower() != ".xlsx" or (MyXLSFile and Path(MyXLSFile).suffix.lower() != ".xlsx"):
+                    raise RuntimeError("Portable Excel LOAD/IMPORT supports .xlsx workbooks only")
+                files = next(csv.reader(StringIO(MyCSVFile), skipinitialspace=True))
+                sheets = next(csv.reader(StringIO(MyWorkSheet), skipinitialspace=True)) if MyWorkSheet else []
+                if MyMode.upper() == "LOAD":
+                    files, sheets = [MyCSVFile], ["Sheet1"]
+                elif len(files) != len(sheets):
+                    raise ValueError("Excel IMPORT requires one worksheet name per CSV file")
+                frames = [pd.read_csv(name, sep=self.GetFileDLM(name), dtype=str,
+                                     keep_default_na=False, encoding=self.detectFileEncoding(name, readall=True))
+                          for name in files]
+                workbook = load_workbook(MyXLSFile) if MyXLSFile else Workbook()
+                if not MyXLSFile:
+                    workbook.remove(workbook.active)
+                for frame, name in zip(frames, sheets):
+                    sheet = workbook[name] if name in workbook.sheetnames else workbook.create_sheet(name)
+                    sheet.delete_rows(1, sheet.max_row)
+                    sheet.append(list(frame.columns))
+                    for row in frame.itertuples(index=False, name=None):
+                        sheet.append(list(row))
+                workbook.save(output)
+                workbook.close()
+                return
             MyExe0 = os.path.join(self.gSPFExe, MyExe0)
             self.logger.debug("{0} - MyExe0: '{1}'".format(calling_func, MyExe0))
             

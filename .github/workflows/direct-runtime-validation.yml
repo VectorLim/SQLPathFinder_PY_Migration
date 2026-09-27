@@ -25,6 +25,8 @@ jobs:
           python-version: "3.12"
       - name: Install validation dependencies
         run: python -m pip install pytest ruff pandas requests openpyxl xlrd dask rich chardet
+      - name: Install R for original interpreter validation
+        run: command -v R || (sudo apt-get update && sudo apt-get install -y r-base-core)
       - name: Probe original ScriptHost package
         env:
           PYTHONPATH: scripthost-utilities-decompiled/SPSQL3_py:.
@@ -63,7 +65,7 @@ jobs:
       - name: Compile direct runtime
         run: python -m compileall -q src/vg2c_new src/scripthost_portable
       - name: Compile portable ScriptHost targets
-        run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFGlobals.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/memtable.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
+        run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFGlobals.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/memtable.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/utils.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.

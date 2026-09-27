@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -348,3 +349,60 @@ def test_xlsx_to_csv_original(tmp_path: Path):
         ),
     )
     assert rows(tmp_path / "output.csv") == [["ID", "Value"], ["001", "hello"]]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for RoboCopy")
+def test_robocopy_original_task(tmp_path: Path):
+    source = tmp_path / "source"
+    (source / "nested" / "empty").mkdir(parents=True)
+    (source / "nested" / "data.csv").write_text("ID\n1\n")
+    dest = tmp_path / "destination"
+    execute(
+        tmp_path,
+        utility(r"@EXEDIR@\RoboCopy.va", "*.csv", source, dest, "0", "0", "N", "/E /MOV /NP", "N"),
+    )
+    assert (dest / "nested" / "data.csv").read_text() == "ID\n1\n"
+    assert (dest / "nested" / "empty").is_dir()
+    assert not (source / "nested" / "data.csv").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for spfExcelUtility.exe")
+def test_excel_load_import_original_tasks(tmp_path: Path):
+    from openpyxl import load_workbook
+
+    data = tmp_path / "input.csv"
+    data.write_text("ID,Value\n001,hello\n002,\n")
+    template = tmp_path / "template.xlsx"
+    execute(tmp_path, utility(r"@EXEDIR@\LoadExcel.va", data, template, "Version 2", "N"))
+    book = load_workbook(template)
+    assert list(book.active.values) == [("ID", "Value"), ("001", "hello"), ("002", None)]
+    book.close()
+    result = tmp_path / "result.xlsx"
+    execute(
+        tmp_path,
+        utility(
+            r"@EXEDIR@\ImportExcel.va", template, result, data, "Imported", "", "", "Version 2", "N"
+        ),
+    )
+    book = load_workbook(result)
+    assert book.sheetnames == ["Sheet1", "Imported"]
+    assert list(book["Imported"].values) == [("ID", "Value"), ("001", "hello"), ("002", None)]
+    book.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux R interpreter validation")
+@pytest.mark.parametrize("inline", [False, True])
+def test_r_original_local_interpreter(tmp_path: Path, inline):
+    r = shutil.which("R")
+    assert r, "Install R for the supported Linux validation suite"
+    (tmp_path / "SQLPathFinder.ini").write_text(f"[SQLPATHFINDER]\nRTERM={r}\n")
+    body = 'writeLines("original R", "r-output.txt")'
+    script = tmp_path / "input.R"
+    script.write_text(body)
+    command = (
+        block("/RSCRIPT=Y", body=body)
+        if inline
+        else utility(r"@EXEDIR@\Run_R_Script.va", script, "", "N", "")
+    )
+    execute(tmp_path, command)
+    assert (tmp_path / "r-output.txt").read_text().strip() == "original R"
