@@ -4,13 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - direct-runtime/session-2-utilities-integrations
-      - direct-runtime/session-2.5a-portability-reuse-audit
-      - direct-runtime/architecture-reassessment-portable-scripthost-v5
-      - direct-runtime/session-2.6a-query-transport-worker
-      - direct-runtime/session-3-**
-      - direct-runtime/session-2.6a-live-validation
-      - direct-runtime/utility-convergence-**
+      - direct-runtime/utility-convergence-audit
 
 permissions:
   contents: read
@@ -24,55 +18,22 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validation dependencies
-        run: python -m pip install pytest ruff pandas requests openpyxl xlrd dask rich chardet
+        run: python -m pip install -e ".[dev]"
       - name: Install R for original interpreter validation
         run: command -v R || (sudo apt-get update && sudo apt-get install -y r-base-core)
-      - name: Probe original ScriptHost package
-        env:
-          PYTHONPATH: scripthost-utilities-decompiled/SPSQL3_py:.
-        run: |
-          python - <<'PY'
-          import zipfile
-          from pathlib import Path
-
-          archive = Path("scripthost-utilities-decompiled/SPSQL3_py.zip")
-          with zipfile.ZipFile(archive) as zf:
-              matches = [name for name in zf.namelist() if "dbdriver" in name.lower()]
-          print("dbDrivers entries in archived source:")
-          for name in matches:
-              print(name)
-
-          try:
-              import SPFLib.SPFSQL3  # noqa: F401
-          except Exception as exc:
-              print(f"SPFLib.SPFSQL3 import failed: {type(exc).__name__}: {exc}")
-          else:
-              print("SPFLib.SPFSQL3 import succeeded")
-              from SPFLib.SPFSQL3 import SPFManager
-              manager = SPFManager()
-              packed = manager.zipString("<OPTIONS>\\n/WRITE-FILE=Y\\n</OPTIONS>\\nhello")
-              print("zipString type:", type(packed).__name__)
-              try:
-                  unpacked = manager.unzipString(packed)
-                  print("unzipString type:", type(unpacked).__name__)
-                  print("unzipString value:", repr(unpacked))
-              except Exception:
-                  import traceback
-                  traceback.print_exc()
-          PY
       - name: Format check
-        run: ruff format --check src/vg2c_new src/scripthost_portable tests/vg2c_new tests/scripthost_portable
+        run: ruff format --check src/scripthost_portable tests/scripthost_portable
       - name: Compile direct runtime
-        run: python -m compileall -q src/vg2c_new src/scripthost_portable
+        run: python -m compileall -q src/scripthost_portable
       - name: Compile portable ScriptHost targets
         run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFGlobals.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/memtable.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/utils.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.
-        run: pytest tests/vg2c_new tests/scripthost_portable -q
+        run: pytest tests/scripthost_portable -q
       - name: Process isolation benchmark
         env:
           PYTHONPATH: src:.
         run: python scripts/architecture/benchmark_scripthost_isolation.py
       - name: Ruff
-        run: ruff check src/vg2c_new src/scripthost_portable tests/vg2c_new tests/scripthost_portable --ignore E501
+        run: ruff check src/scripthost_portable tests/scripthost_portable --ignore E501

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -55,29 +54,25 @@ def use_reader_factory(factory: ReaderFactory) -> Iterator[None]:
 class DataSyncXReaderFactory:
     """DataSyncX boundary, validated against installed DataSyncX 1.1.6."""
 
-    _CLASS_CANDIDATES = {
-        "mars": (
-            ("datasyncx", "MarsReader"),
-            ("datasyncx.readers.mars_reader", "MarsReader"),
-        ),
-        "aries": (
-            ("datasyncx", "AriesReader"),
-            ("datasyncx.readers.aries_reader", "AriesReader"),
-        ),
-        "oasys": (
-            ("datasyncx", "OracleReader"),
-            ("datasyncx.readers.oracle_reader", "OracleReader"),
-        ),
-    }
-
     def reader_for(self, backend: str, node: str) -> Any:
-        candidates = self._CLASS_CANDIDATES.get(backend)
-        if candidates is None:
-            raise UnsupportedQueryBackend(
-                f"Portable ScriptHost query transport does not support node {node!r}."
-            )
+        # Public exports verified in installed DataSyncX 1.1.6. Lazy imports keep
+        # SQLite/file/report jobs independent of corporate transport dependencies.
+        try:
+            if backend == "mars":
+                from datasyncx import MarsReader as reader_type
+            elif backend == "aries":
+                from datasyncx import AriesReader as reader_type
+            elif backend == "oasys":
+                from datasyncx import OracleReader as reader_type
+            else:
+                raise UnsupportedQueryBackend(
+                    f"Portable ScriptHost query transport does not support node {node!r}."
+                )
+        except (ImportError, AttributeError) as exc:
+            raise QueryTransportUnavailable(
+                f"DataSyncX 1.1.6 public reader API unavailable for {backend!r}."
+            ) from exc
 
-        reader_type = _import_first(candidates, backend)
         try:
             if backend == "oasys":
                 return reader_type(database="OASYS")
@@ -234,22 +229,4 @@ def _write_frame(
         header=not no_headers if create_new else False,
         na_rep="",
         encoding="utf-8",
-    )
-
-
-def _import_first(candidates: tuple[tuple[str, str], ...], backend: str) -> type[Any]:
-    failures: list[str] = []
-    for module_name, attribute in candidates:
-        try:
-            module = importlib.import_module(module_name)
-            reader_type = getattr(module, attribute)
-        except (ImportError, AttributeError) as exc:
-            failures.append(f"{module_name}:{attribute} ({type(exc).__name__})")
-            continue
-        if isinstance(reader_type, type):
-            return reader_type
-        failures.append(f"{module_name}:{attribute} (not a class)")
-    raise QueryTransportUnavailable(
-        "DataSyncX is unavailable or its reader API differs from the Session 2.6A "
-        f"provisional mapping for {backend!r}. Tried: {', '.join(failures)}"
     )

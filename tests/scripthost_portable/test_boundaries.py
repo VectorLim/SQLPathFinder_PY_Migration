@@ -19,9 +19,14 @@ def test_supported_runtime_has_no_reference_runtime_imports():
         tree = ast.parse(path.read_text(encoding="utf-8-sig"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                assert all(name.name.split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"} for name in node.names), path
+                assert all(
+                    name.name.split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"}
+                    for name in node.names
+                ), path
             elif isinstance(node, ast.ImportFrom):
-                assert (node.module or "").split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"}, path
+                assert (node.module or "").split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"}, (
+                    path
+                )
 
 
 def test_robocopy_retries_io_and_rejects_unknown_switches(tmp_path, monkeypatch):
@@ -76,9 +81,12 @@ def test_worker_runs_with_all_retired_imports_blocked(tmp_path, monkeypatch):
         "sys.meta_path.insert(0, RetiredImportGuard())\n"
     )
     monkeypatch.setenv("PYTHONPATH", str(guard) + os.pathsep + os.environ.get("PYTHONPATH", ""))
-    result = run_job(ScriptHostJob(
-        working_directory=str(tmp_path),
-        script_text="<OPTIONS>\n/WRITE-FILE=Y\n/CSV=independent.txt\n</OPTIONS>\noriginal ScriptHost",
-    ), timeout=30)
+    result = run_job(
+        ScriptHostJob(
+            working_directory=str(tmp_path),
+            script_text="<OPTIONS>\n/WRITE-FILE=Y\n/CSV=independent.txt\n</OPTIONS>\noriginal ScriptHost",
+        ),
+        timeout=30,
+    )
     assert result.success, result
     assert (tmp_path / "independent.txt").read_text() == "original ScriptHost"

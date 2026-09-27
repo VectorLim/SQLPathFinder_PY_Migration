@@ -8,7 +8,6 @@ import os
 import shutil
 import sqlite3
 import stat
-import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile

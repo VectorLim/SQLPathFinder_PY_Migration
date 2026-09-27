@@ -8,7 +8,7 @@ query-worker ancestor `2063649`; clean working tree. Windows baseline: 89 passed
 
 Original SPFManager -> GetQuery -> task -> SPFGlobals/Utilities remains authoritative.
 Production jobs use `scripthost_portable.worker.run_job`: one fresh child per job.
-No production import of `vg2c_new` is needed. Its command-line entrypoint refuses execution.
+No production import of the RETIRED compiler/editor/reference packages is needed.
 
 **Pre-deletion Linux gate:** commit `5ccab6f`, [Ubuntu CI run 36315746227](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36315746227):
 119 tests passed, format, compile, lint and process-isolation benchmark passed.
@@ -52,7 +52,7 @@ capability proofs, not blanket equivalence for every historical option.
 | Append / rename | AppendFileTask / SPFRenameTask | Pass unchanged | None | Delete AppendFileUtility/RenameFileUtility | append_rename_delete |
 | Delete | SPFDeleteTask -> SPFDelete | Windows DEL silently did nothing | Native file-only deletion after original argument parsing; directory contents are nonrecursive | Delete DeleteFileUtility | append_rename_delete; report cleanup also now removes temp INI |
 | Set read-only | SetFileROTask | Linux read-only/read-write fixture passes | POSIX chmod replaces only win32 attributes | Delete files.py | readonly_original_task; Ubuntu 87d151e |
-| Email | EmailTask -> SPFEmail/GetEmailAdss | SMTP helper unavailable; Outlook/identity/role lookups platform-bound. No send_msg implementation found in installed DataSyncX source | No guessed provider or recipient-policy rewrite | Retain reference; transport unresolved | email_original_task_keeps_role_and_recipient_policy captures task/helper boundary only; no email sent |
+| Email | EmailTask -> SPFEmail/GetEmailAdss | SMTP helper unavailable; Outlook/identity/role lookups platform-bound. No send_msg implementation found in installed DataSyncX source | No guessed provider or recipient-policy rewrite | UNRESOLVED; reference deleted | email_original_task_keeps_role_and_recipient_policy captures task/helper boundary only; no email sent |
 | GET-SITE-TIME | GetSiteTimeTask -> nqOracleTask.Do_Get_Time | GMT and database time pass; transport previously wrote only files | Send memory-bound query results into original MemTable.LoadDF | Delete GetSiteTimeUtility | gmt_update_time_original; test_scripthost_query_transport original_get_site_time_then_update |
 | UPDATE-TIME / UPDATE-TIME-FILE | UpdateTimeTask/UpdateTimeFileTask -> Do_Update_Time/Do_Update_Time_File | Original offsets and persisted .spf$data pass across fresh workers with explicit INSTANCE | Native current-directory path for .spf$data | Delete file_values.py | time_file_persistence_original; gmt_update_time_original |
 | SQLite query/load/delete | nqSQLiteTask / SQLiteLoadTask / SQLiteDeleteTask -> MemTable | Query pipeline and load/delete pass; uppercasing source paths prevented Linux imports | Preserve case when deduplicating POSIX input paths | Delete sqlite.py; original edge fixtures pass | sqlite_load_delete_original; sqlite_original_udfs; sqlite_original_reference_edges; real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle |
@@ -80,20 +80,12 @@ capability proofs, not blanket equivalence for every historical option.
   old Linux report cleanup limitation without altering report algorithms. Preserving
   input path case also restores report table data.
 
-## Remaining work before deleting vg2c_new entirely
+## Final convergence status
 
-Resolve an actual email transport plus the original identity/role boundary; preserve
-recipient restrictions. EmailUtility's injected send_msg is not an installed provider
-and intentionally drops those restrictions, so it must remain reference-only.
-After the SQLite/CSV cleanup gate, the sole utility reference is email.py with
-base.py/model.py/runtime.py (RuntimeState only)/paths.py and one reference test.
-Remove those together once the original email path is proven. The refused CLI stub
-can then be deleted with the package. There is no remaining need for its parser or
-interpreter; their original replacements are already exercised.
-
-Broaden evidence only when production needs additional XML, Excel, RoboCopy,
-authenticated web, generic Windows shell/VA or remote interpreter variants.
-Report modernization remains separate and is not a reason to retain a second runtime.
+The migration/reference package and compiler/editor are RETIRED and removed.
+Linux email delivery is UNRESOLVED at original EmailTask/SPFEmail; recipient and
+role restrictions remain authoritative. No alternate email implementation is retained.
+Original report rendering is certified separately through isolated worker jobs.
 
 ## Verified cleanup
 
@@ -109,8 +101,8 @@ parser/manifest, Interpreter and compare_vars implementation, plus port-only par
 and interpreter tests. Original tests live in tests/scripthost_portable and do not
 import reference runtime semantics. An import guard enforces that separation.
 
-The sole remaining utility reference is email.py with its model/state/path/protocol
-dependencies and one reference fixture. The CLI refuses execution. Production remains
+All remaining email reference code and its model/state/path/protocol dependencies
+are removed. Production remains
 VG2 -> fresh child -> original SPFManager/GetQuery/task/SPFGlobals.
 
 Original SQLite regex search returns matched text (or NULL), not a boolean. Regex

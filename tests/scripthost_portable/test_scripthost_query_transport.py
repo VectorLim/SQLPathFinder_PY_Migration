@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import scripthost_portable.query_transport as query_transport
 from scripthost_portable import (
     DataSyncXReaderFactory,
     PortableOracleConnection,
@@ -183,21 +182,38 @@ def test_datasyncx_factory_distinguishes_transport_from_configuration_failure(
 ) -> None:
     factory = DataSyncXReaderFactory()
 
-    def missing_reader(*args, **kwargs):
-        del args, kwargs
-        raise QueryTransportUnavailable("datasyncx missing")
-
-    monkeypatch.setattr(query_transport, "_import_first", missing_reader)
-    with pytest.raises(QueryTransportUnavailable, match="datasyncx missing"):
+    monkeypatch.setitem(sys.modules, "datasyncx", None)
+    with pytest.raises(QueryTransportUnavailable, match="public reader API unavailable"):
         factory.reader_for("mars", "KM.MARS")
 
     class BrokenReader:
         def __init__(self) -> None:
             raise RuntimeError("bad config")
 
-    monkeypatch.setattr(query_transport, "_import_first", lambda *args, **kwargs: BrokenReader)
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=BrokenReader))
     with pytest.raises(QueryConfigurationError, match="construction/configuration failed"):
         factory.reader_for("mars", "KM.MARS")
+
+
+@pytest.mark.parametrize(
+    "backend,symbol,kwargs",
+    [
+        ("mars", "MarsReader", {}),
+        ("aries", "AriesReader", {}),
+        ("oasys", "OracleReader", {"database": "OASYS"}),
+    ],
+)
+def test_datasyncx_public_constructor_contract(monkeypatch, backend, symbol, kwargs):
+    calls = []
+    sentinel = object()
+
+    def reader(**arguments):
+        calls.append(arguments)
+        return sentinel
+
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(**{symbol: reader}))
+    assert DataSyncXReaderFactory().reader_for(backend, "KM." + backend) is sentinel
+    assert calls == [kwargs]
 
 
 def test_portable_connection_routes_mars_aries_and_oasys(tmp_path: Path) -> None:

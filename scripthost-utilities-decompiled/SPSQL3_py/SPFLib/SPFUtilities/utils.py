@@ -6908,6 +6908,12 @@ class Utilities(SPFGlobals):
         'EmailUtility : 'O' or 'S' or 'SA'. Default 'SA' : SMTPAuth
         '===============================================================================
         """
+        if os.name != "nt":
+            raise RuntimeError(
+                "UNRESOLVED: Linux EmailTask delivery/identity transport is unavailable; "
+                "original recipient and role restrictions must be retained."
+            )
+
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         self.logger.debug("{0} - MyLocal: '{1}'".format(calling_func, MyLocal))
