@@ -1,0 +1,104 @@
+{
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.14.6",
+  "datasyncx": "1.1.6",
+  "entrypoint": "scripthost_portable.worker.run_job",
+  "contract": {
+    "MarsReader": {
+      "constructor": "(*, username=None, password=None, db_account=False)",
+      "read": "(self, site, query, **kwargs) -> pandas.DataFrame"
+    },
+    "AriesReader": {
+      "constructor": "(*, username=None, password=None, db_account=False)",
+      "read": "(self, site, query, **kwargs) -> pandas.DataFrame"
+    },
+    "OracleReader": {
+      "constructor": "(*, sites=None, username=None, password=None, database=None, node=None)",
+      "read": "(self, site, query, **kwargs) -> pandas.DataFrame"
+    }
+  },
+  "jobs": [
+    {
+      "name": "22844-query-slice",
+      "success": true,
+      "error_category": null,
+      "child_pid": 69064,
+      "script_sha256": "1b745242353d4595f639b962c9cccf5cb8fd977e07971999dc0c76d6743ba69f"
+    },
+    {
+      "name": "empty",
+      "success": true,
+      "error_category": null,
+      "child_pid": 36916,
+      "script_sha256": "963fae5b8ced300067517821e0c2d9fe4258ae1c63b3535acabf5909f3c82ca6"
+    },
+    {
+      "name": "null-unicode",
+      "success": true,
+      "error_category": null,
+      "child_pid": 72916,
+      "script_sha256": "d307702062bae7e74459ac29db64b3f97c41094cf4442053599969311b23d21e"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "yeuchuan_a0_22844.tab",
+      "rows": 4,
+      "columns": [
+        "FACILITY",
+        "SITE_WORK_WEEK_",
+        "OPERATION",
+        "PRODGROUP3_",
+        "LOT_",
+        "OWNER",
+        "OUT_DATE"
+      ],
+      "sha256": "6a4c824aa3f5c0ed2afed4c2a50aa1fbd22447ce161226478dd8c7aaad8b7adf"
+    },
+    {
+      "file": "yeuchuan_a1_22844.tab",
+      "rows": 12750,
+      "columns": [
+        "SITE_WORK_WEEK",
+        "PRODGROUP3",
+        "LOT",
+        "VISUAL_ID",
+        "IMAGE_NAME",
+        "IMAGE_FULL_PATH_RAW",
+        "RANK",
+        "RANK_",
+        "MAXRANK_",
+        "FILTER_",
+        "IMAGE_FULL_PATH",
+        "NUMERIC_VALUE",
+        "NUMERIC_VALUE_MAX"
+      ],
+      "sha256": "89c4b4d29a7642c9934d09b1f60d58a93f03b923115313d5aaac1dd178af2e23"
+    },
+    {
+      "file": "XRAY_results.csv",
+      "rows": 1454,
+      "columns": [
+        "FACILITY",
+        "SITE_WORK_WEEK",
+        "PRODGROUP3",
+        "LOT",
+        "OWNER",
+        "OUT_DATE",
+        "VISUAL_ID",
+        "IMAGE_NAME",
+        "IMAGE_FULL_PATH_RAW",
+        "RANK_",
+        "MAXRANK_",
+        "FILTER_",
+        "IMAGE_FULL_PATH",
+        "NUMERIC_VALUE_MAX"
+      ],
+      "sha256": "e38ebf6e10a8409e7c21a89804ff4d7b057a5884ddbfab3bb8cc50e6f77883aa"
+    }
+  ],
+  "query_chain_relationships": true,
+  "empty_header_fallback": true,
+  "null_dot_unicode": true,
+  "success": true
+}

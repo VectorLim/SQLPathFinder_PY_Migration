@@ -22,7 +22,7 @@ jobs:
       - name: Install R for original interpreter validation
         run: command -v R || (sudo apt-get update && sudo apt-get install -y r-base-core)
       - name: Format check
-        run: ruff format --check src/scripthost_portable tests/scripthost_portable
+        run: ruff format --check src/scripthost_portable tests/scripthost_portable scripts/architecture
       - name: Compile direct runtime
         run: python -m compileall -q src/scripthost_portable
       - name: Compile portable ScriptHost targets
@@ -36,4 +36,29 @@ jobs:
           PYTHONPATH: src:.
         run: python scripts/architecture/benchmark_scripthost_isolation.py
       - name: Ruff
-        run: ruff check src/scripthost_portable tests/scripthost_portable --ignore E501
+        run: ruff check src/scripthost_portable tests/scripthost_portable scripts/architecture --ignore E501
+
+  container:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime and validation images
+        run: |
+          docker build --target final -t scripthost-runtime .
+          docker build --target validation -t scripthost-validation .
+      - name: Validate original runtime as non-root
+        run: docker run --rm scripthost-validation
+      - name: Check production launcher
+        run: |
+          docker run --rm scripthost-runtime --help
+          docker run --rm --entrypoint python scripthost-runtime -c '
+          import json, pathlib, subprocess, tempfile
+          root = pathlib.Path(tempfile.mkdtemp())
+          script = root / "smoke.spfsql"
+          script.write_text("<OPTIONS>\n/WRITE-FILE=Y\n/CSV=result.txt\n</OPTIONS>\ncontainer")
+          run = subprocess.run(["python", "-m", "scripthost_portable.launcher", str(script), "--workdir", str(root)], capture_output=True, text=True)
+          assert run.returncode == 0, run.stderr + run.stdout
+          assert json.loads(run.stdout)["success"]
+          assert (root / "result.txt").read_text() == "container"
+          '

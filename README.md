@@ -45,3 +45,5 @@ in ScriptHost. Portable helpers cover only external transport and OS operations.
 See [the utility matrix](docs/scripthost-utility-portability-matrix.md) for bounded
 capabilities and [historical live evidence](docs/session-2.6a-live-datasyncx-validation.md).
 Linux email recipient/role policy is preserved; no replacement sender is provided.
+
+See [runtime container instructions](docs/runtime-container.md) for the prototype image.

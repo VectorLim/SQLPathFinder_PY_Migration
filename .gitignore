@@ -187,3 +187,7 @@ secrets.yml
 
 
 !/docs/scripthost-utility-portability-matrix.md
+
+!/docs/runtime-container.md
+!/docs/final-runtime-convergence.md
+!/docs/final-runtime-live-evidence.json
