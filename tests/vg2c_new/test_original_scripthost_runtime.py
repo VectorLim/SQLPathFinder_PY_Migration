@@ -355,3 +355,49 @@ def test_windows_db_transport_fails_only_when_invoked() -> None:
     assert SPFManager is not None
     with pytest.raises(RuntimeError, match="database transport is unavailable"):
         dbDriverBase()
+
+
+def test_spfglobals_builtin_reset_leaves_concrete_per_run_state_shared(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    code = r"""
+from SPFLib.SPFSQL3 import SPFManager
+
+first = SPFManager()
+first.gCommandLineArguments = ["SPFSQL3.py", "/EXECMODE=UT"]
+first_run_id = first.gRNStr
+first.g_CWCtr = 7
+first.g_ChartCtr = 9
+
+second = SPFManager()
+second.gCommandLineArguments = ["SPFSQL3.py"]
+
+print("execution_mode=" + second.gExecutionMode)
+print("same_run_id=" + str(second.gRNStr == first_run_id))
+print("cw_counter=" + str(second.g_CWCtr))
+print("chart_counter=" + str(second.g_ChartCtr))
+"""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(repo_root / "scripthost-utilities-decompiled" / "SPSQL3_py"),
+            str(repo_root),
+            env.get("PYTHONPATH", ""),
+        ]
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    lines = set(result.stdout.splitlines())
+    assert "execution_mode=UT" in lines
+    assert "same_run_id=True" in lines
+    assert "cw_counter=7" in lines
+    assert "chart_counter=9" in lines
