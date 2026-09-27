@@ -42,6 +42,17 @@ jobs:
               print(f"SPFLib.SPFSQL3 import failed: {type(exc).__name__}: {exc}")
           else:
               print("SPFLib.SPFSQL3 import succeeded")
+              from SPFLib.SPFSQL3 import SPFManager
+              manager = SPFManager()
+              packed = manager.zipString("<OPTIONS>\\n/WRITE-FILE=Y\\n</OPTIONS>\\nhello")
+              print("zipString type:", type(packed).__name__)
+              try:
+                  unpacked = manager.unzipString(packed)
+                  print("unzipString type:", type(unpacked).__name__)
+                  print("unzipString value:", repr(unpacked))
+              except Exception:
+                  import traceback
+                  traceback.print_exc()
           PY
       - name: Format check
         run: ruff format --check src/vg2c_new tests/vg2c_new
