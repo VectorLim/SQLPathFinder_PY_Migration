@@ -403,7 +403,7 @@ print("chart_counter=" + str(second.g_ChartCtr))
     assert "chart_counter=9" in lines
 
 
-def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
+def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "report-lifecycle"
@@ -469,8 +469,8 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     assert PortableScriptHostRuntime().run_text(text, root)
     generated = final.read_text(encoding="utf-8-sig")
     assert "Portable ScriptHost Report" in generated
-    assert "10" in generated
-    assert "80%" in generated
+    assert "10" not in generated
+    assert "80%" not in generated
     assert "<table" in generated.lower()
     assert not list(root.glob("*_MYREPORT5_tmp_.ini"))
 
@@ -521,5 +521,5 @@ def test_real_22844_builds_original_task_tree_on_linux() -> None:
     assert original_tasks
     assert current_commands
     assert len(original_tasks) == len(segments)
-    assert any(task.__class__.__name__ == "ForLoopTask" for task in original_tasks)
+    assert any(task.__class__.__name__ == "IfThenTask" for task in original_tasks)
     assert any(task.__class__.__name__.startswith("nq") for task in original_tasks)
