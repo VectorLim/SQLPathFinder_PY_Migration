@@ -285,7 +285,14 @@ except (ImportError, OSError):
     dbDriverCxOracle = dbDriverODBCSQLServer = dbDriverODBCImpala = None
     dbDriverODBCMYSQL = dbDriverODBCSAPHana = dbDriverMSOLAPWin32Com = None
     dbDriverUBERWin32Com = dbDriverCB = dbDriverCBSQL = None
-    NodesInfo = spfsqlxParser = encryptSPFSQL = encryptConfigFile = encryptText = None
+    class NodesInfo:
+        """Portable fallback for the node metadata bundled with compiled dbDrivers."""
+        def __init__(self, node):
+            self.node = node.strip()
+            self.un = ""
+            self.pw = ""
+
+    spfsqlxParser = encryptSPFSQL = encryptConfigFile = encryptText = None
     dbDriverODBCDenodo = dbDriverPGSQLPsycopg2 = dbDriverDotNetLibSQLServer = None
 
 class SPFManager(Utilities) :
@@ -3428,6 +3435,10 @@ class NormalQueryTaskBase(SPFTaskBase) :
         """
         calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
         try : 
+            # SPFSQL files commonly spell relative paths as ".\\file". Preserve
+            # that Windows meaning on portable hosts without changing CSV-list logic.
+            if os.sep == "/" and TmpFile.startswith(".\\"):
+                TmpFile = "./" + TmpFile[2:].replace("\\", "/")
             TmpInc= -1
             if TmpFile.find("->") > 0 :
                 TmpFile, TmpInc = TmpFile.split("->",1)
@@ -6015,7 +6026,12 @@ class nqOracleTask(NormalQueryTaskBase) :
             dbDriverMapped = dbDriverMap[self.SQLEngine]
             self.logger.debug(f"{calling_func} - dbDriverMapped : {dbDriverMapped}")
             #get from modules attribute -- expects the class to be in current module
-            dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped)
+            dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped, None)
+            if dbDriverClsObject is None:
+                # The original parser/query-task lifecycle remains authoritative.
+                # Only replace the unavailable compiled Windows transport.
+                from scripthost_portable.query_transport import PortableOracleConnection
+                dbDriverClsObject = PortableOracleConnection
             #create the instance
             dbDriver = dbDriverClsObject(queryOptions=self.queryOptions)
 

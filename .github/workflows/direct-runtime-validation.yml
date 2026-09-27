@@ -6,6 +6,7 @@ on:
       - direct-runtime/session-2-utilities-integrations
       - direct-runtime/session-2.5a-portability-reuse-audit
       - direct-runtime/architecture-reassessment-portable-scripthost-v5
+      - direct-runtime/session-2.6a-query-transport-worker
       - direct-runtime/session-3-**
 
 permissions:
@@ -55,11 +56,11 @@ jobs:
                   traceback.print_exc()
           PY
       - name: Format check
-        run: ruff format --check src/vg2c_new tests/vg2c_new
+        run: ruff format --check src/vg2c_new src/scripthost_portable tests/vg2c_new
       - name: Compile direct runtime
-        run: python -m compileall -q src/vg2c_new
+        run: python -m compileall -q src/vg2c_new src/scripthost_portable
       - name: Compile portable ScriptHost targets
-        run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
+        run: python -m compileall -q scripthost-utilities-decompiled/SPSQL3_py/SPFLib/__init__.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFGlobals.py scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFUtilities/memtable.py scripthost-utilities-decompiled/SPSQL3_py/PyUtils.py scripthost-utilities-decompiled/SPSQL3_py/PyGraphingMethods.py scripthost-utilities-decompiled/SPSQL3_py/PyPlot_Class.py scripthost-utilities-decompiled/SPSQL3_py/AutoComm_HTML_Report.py
       - name: Direct runtime tests
         env:
           PYTHONPATH: src:.
@@ -73,4 +74,4 @@ jobs:
           PYTHONPATH: src:.
         run: python -c "from collections import Counter; from vg2c_new.parser import RESOLVER_MANIFEST; print(Counter(row[6] for row in RESOLVER_MANIFEST))"
       - name: Ruff
-        run: ruff check src/vg2c_new tests/vg2c_new --ignore E501
+        run: ruff check src/vg2c_new src/scripthost_portable tests/vg2c_new --ignore E501

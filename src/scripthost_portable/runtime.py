@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 _SCRIPT_HOST_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "scripthost-utilities-decompiled"
-    / "SPSQL3_py"
+    Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled" / "SPSQL3_py"
 )
 
 
@@ -31,7 +30,13 @@ class PortableScriptHostRuntime:
     the original ScriptHost implementations.
     """
 
-    def run_text(self, text: str, working_directory: Path) -> bool:
+    def run_text(
+        self,
+        text: str,
+        working_directory: Path,
+        *,
+        execution_options: Sequence[str] = (),
+    ) -> bool:
         workdir = Path(working_directory).resolve(strict=False)
         workdir.mkdir(parents=True, exist_ok=True)
 
@@ -40,6 +45,7 @@ class PortableScriptHostRuntime:
             str(_SCRIPT_HOST_ROOT / "SPFSQL3.py"),
             f'/MYLOCAL="{workdir}"',
             "/EXECMODE=UT",
+            *execution_options,
         ]
         manager.MySPFSQLFileData = text
 
@@ -55,7 +61,17 @@ class PortableScriptHostRuntime:
         finally:
             os.chdir(previous)
 
-    def run_file(self, script: Path, working_directory: Path | None = None) -> bool:
+    def run_file(
+        self,
+        script: Path,
+        working_directory: Path | None = None,
+        *,
+        execution_options: Sequence[str] = (),
+    ) -> bool:
         path = Path(script).resolve(strict=True)
         workdir = path.parent if working_directory is None else Path(working_directory)
-        return self.run_text(path.read_text(encoding="utf-8-sig"), workdir)
+        return self.run_text(
+            path.read_text(encoding="utf-8-sig"),
+            workdir,
+            execution_options=execution_options,
+        )

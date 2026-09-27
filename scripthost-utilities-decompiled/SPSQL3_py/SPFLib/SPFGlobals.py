@@ -825,7 +825,7 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__gLocalDir is None :
-            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + "\\"
+            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + os.sep
         
         self.__logger.info("{0} - {1}".format(calling_func, SPFGlobals.__gLocalDir))
         return SPFGlobals.__gLocalDir

@@ -3035,6 +3035,7 @@ class MemTable(object):
         conTemp.create_function("SPFRegexSearch", 3, self.sqliteRegexSearch)
         conTemp.create_function("SPFWriteLOBToFile", 2, self.sqliteSaveLOBToFile)
         conTemp.create_function("SPFPrepLikeValue", 1, self.sqlitePrepLikeValue)
+        conTemp.create_function("CharIndex_v2", 4, self.sqliteCharIndex_v2)
         if AttachSQL is not None:
             conTemp.execute(AttachSQL)
         return conTemp
@@ -3054,6 +3055,28 @@ class MemTable(object):
             return out_Encoding
         except Exception as err:
             raise
+
+    def sqliteCharIndex_v2(self, needle, haystack, start=1, occurrence=1):
+        """Return the 1-based position expected by the legacy CSV-list SQL."""
+        if needle is None or haystack is None:
+            return 0
+        needle = str(needle)
+        haystack = str(haystack)
+        try:
+            offset = max(int(start) - 1, 0)
+            occurrence = int(occurrence)
+        except (TypeError, ValueError):
+            return 0
+        if not needle or occurrence < 1:
+            return 0
+
+        found = -1
+        for _ in range(occurrence):
+            found = haystack.find(needle, offset)
+            if found < 0:
+                return 0
+            offset = found + 1
+        return found + 1
 
     def sqliteJsonValue(self, val1):
         """
