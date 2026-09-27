@@ -17046,6 +17046,13 @@ class SetFileROTask(SPFTaskBase) :
 
             #file exists continue
             
+            if os.name != "nt":
+                import stat
+                mode = os.stat(destFile).st_mode
+                os.chmod(destFile, mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+                         if MyROCode == 1 else mode | stat.S_IWUSR)
+                self.ConsoleDoneWithTimeStamp2()
+                return
             destFileAttr = win32api.GetFileAttributes(destFile)                
             self.logger.debug("{0} - destFileAttr : {1}".format(calling_func, destFileAttr))
             #note File attributes are differein VB and python win32api(follows std windows codes)

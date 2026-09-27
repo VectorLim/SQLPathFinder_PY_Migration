@@ -34,7 +34,7 @@ capability proofs, not blanket equivalence for every historical option.
 | FILE-COMPARE | FileCompareTask | Equal-file comparison passes; optional email notification remains transport-bound | None for comparison | Delete FileCompareUtility; keep notification limitation explicit | file_compare |
 | CSVTOHTML | CSVToHTMLTask | Pass unchanged; raw HTML cell content is original behavior | None; do not adopt port escaping | Delete CsvToHtmlUtility | csv_html_xml, markup cells |
 | CSVTOXML | CSVToXMLTask | Pass unchanged; Main/Item format and dot for empty value | None | Delete CsvToXmlUtility | csv_html_xml |
-| XMLTOCSV | XMLToCSVTask | Windows spfExcelUtility.exe unavailable | Bounded Main/Item conversion at executable call boundary; other XML shapes rejected | Pending new Linux roundtrip gate; do not claim general Excel XML parity | xml_to_csv_original_roundtrip; xml_converter_rejects_unproven_shape |
+| XMLTOCSV | XMLToCSVTask | Windows spfExcelUtility.exe unavailable | Bounded Main/Item conversion at executable call boundary; other XML shapes rejected | Delete XmlToCsvUtility; Linux roundtrip passed at 081b611 (run 36315838567); no general Excel XML parity claim | xml_to_csv_original_roundtrip; xml_converter_rejects_unproven_shape |
 | STACK-DATA | StackDataTask.execute | Pass unchanged, union and numeric sorting | None | Delete StackDataUtility | stack_data, two files with different columns |
 | SMART-APPEND V4 | SmartAppendTask.smartAppend4_file_pandas -> File_Lock_Move | Algorithm passes; Windows move prevented final replacement | shutil.move at original move boundary | Delete SmartAppendUtility | smart_append_v4, deletion/update/schema-union fixture |
 | ZIP | SPFZipTask -> ZipFiles2/ZipFolder2 | Python zipfile/shutil already present; file archive passes | None | Delete ZipUtility | zip_original |
@@ -85,3 +85,16 @@ recipient restrictions. Broaden evidence only if production needs additional XML
 Excel, RoboCopy, authenticated web or remote application-server variants.
 Then remove the reference model/parser/runtime and remaining utilities/tests together;
 none may become a supported execution entrypoint. Report modernization remains separate.
+
+## Cleanup batch
+
+After the pre-deletion gates, removed utility composition (which eagerly created
+readers and a competing utility registry), duplicate process/Excel/web/SmartAppend
+modules, and proven file/metadata/CSV/stack implementations. Removed port-only
+runtime tests; original control-flow, isolation and query fixtures remain under
+scripthost_portable and no longer import the reference parser or interpreter.
+Retained only unresolved reference utilities and their temporary evidence tests.
+The executable entrypoint is a refusal message, not a forwarding compatibility facade.
+
+XML and email-boundary additions passed [Linux run 36315838567](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36315838567)
+at 081b611: 122 passed before cleanup. Final post-cleanup totals follow below.

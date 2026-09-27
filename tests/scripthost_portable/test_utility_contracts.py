@@ -6,10 +6,13 @@ import csv
 import json
 import os
 import shutil
+import sqlite3
+import stat
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -464,3 +467,79 @@ def test_email_original_task_keeps_role_and_recipient_policy(tmp_path: Path, mon
         "role",
         True,
     )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file mode replacement for Windows attributes")
+def test_readonly_original_task(tmp_path: Path):
+    path = tmp_path / "file.txt"
+    path.write_text("read only")
+    execute(tmp_path, utility(r"@EXEDIR@\SetFileRO.va", path, "READONLY"))
+    assert not path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+    execute(tmp_path, utility(r"@EXEDIR@\SetFileRO.va", path, "READWRITE"))
+    assert path.stat().st_mode & stat.S_IWUSR
+
+
+def test_echo_original(tmp_path: Path):
+    result = execute(tmp_path, utility("@Echo", "original echo"))
+    assert "original echo" in result.stdout
+
+
+def test_gmt_update_time_original(tmp_path: Path):
+    output = tmp_path / "time.csv"
+    execute(tmp_path, utility("{GET-SITE-TIME}", "GMT"), utility("{UPDATE-TIME}", output))
+    data = rows(output)
+    values = dict(zip(data[0], data[1], strict=True))
+    actual = datetime.strptime(values["last_Date"], "%Y-%m-%d %H:%M:%S")
+    assert datetime.strptime(values["Last_Date-15m"], "%Y-%m-%d %H:%M:%S") == actual - timedelta(
+        minutes=15
+    )
+
+
+def test_sqlite_load_delete_original(tmp_path: Path):
+    source = tmp_path / "input.csv"
+    source.write_text("ID,Value\n1,hello\n")
+    database = tmp_path / "loaded.sdb"
+    execute(tmp_path, utility(r"@EXEDIR@\SQLite-Load.va", source, database, "", "N"))
+    with sqlite3.connect(database) as connection:
+        tables = [
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        ]
+        assert tables
+        assert any(
+            connection.execute('SELECT COUNT(*) FROM "' + name.replace('"', '""') + '"').fetchone()[
+                0
+            ]
+            == 1
+            for name in tables
+        )
+    connection.close()  # sqlite3 context managers commit; they do not close handles.
+    execute(tmp_path, utility(r"@EXEDIR@\SQLiteDelete.va", database))
+    assert not database.exists()
+
+
+@pytest.mark.parametrize("continue_on_error", ["N", "Y"])
+def test_file_compare_mismatch_original(tmp_path: Path, continue_on_error):
+    a, b = tmp_path / "a.txt", tmp_path / "b.txt"
+    a.write_text("one\n")
+    b.write_text("two\n")
+    os.utime(a, (1000000000, 1000000000))
+    os.utime(b, (1000000010, 1000000010))
+    result = run_job(
+        ScriptHostJob(
+            working_directory=str(tmp_path),
+            script_text=utility("{FILE-COMPARE}", a, b, "N", continue_on_error, "10", "", "N"),
+        ),
+        timeout=30,
+    )
+    assert result.success is (continue_on_error == "Y"), result
+
+
+def test_zip_folder_delete_original(tmp_path: Path):
+    folder = tmp_path / "folder"
+    (folder / "nested").mkdir(parents=True)
+    (folder / "nested" / "file.txt").write_text("content")
+    execute(tmp_path, utility(r"@EXEDIR@\SPFZIP.va", folder, tmp_path / "folder.zip", "Y"))
+    assert not folder.exists()
+    with zipfile.ZipFile(tmp_path / "folder.zip") as archive:
+        assert archive.read("nested/file.txt") == b"content"
