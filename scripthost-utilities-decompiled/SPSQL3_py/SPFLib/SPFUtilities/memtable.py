@@ -1775,6 +1775,10 @@ class MemTable(object):
         'g_isSPFonSH: Is SPF SW on Drones
         '==========================================================
         """
+        # VG2's historical current-directory spelling is not a POSIX folder.
+        if os.name != "nt" and WorkDir == ".\\":
+            WorkDir = "."
+
         #constants
         __SQLITE_DATA_PATH = "@SQLITE-SPF-DATA-PATH@"
         __SQLITE_DATA_PATH2 = "@SQLITE-SPF-DATA-PATH2@"

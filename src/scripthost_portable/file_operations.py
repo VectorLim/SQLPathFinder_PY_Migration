@@ -159,7 +159,7 @@ def clean_delimited_file(source: str, destination: str, delimiter: str) -> None:
     Original ConvertDLM documents removal of quotes and replacement of embedded
     commas, tabs and CR/LF. Keep record delimiters; never reinterpret report SQL.
     """
-    if delimiter not in {",", "\t", "|", "+"}:
+    if delimiter not in {",", "\t"}:
         raise ValueError("UNCERTIFIED: CleanDelimsCRLF delimiter")
     with Path(source).open(encoding="utf-8-sig", newline="") as incoming:
         records = list(csv.reader(incoming, delimiter=delimiter, strict=True))

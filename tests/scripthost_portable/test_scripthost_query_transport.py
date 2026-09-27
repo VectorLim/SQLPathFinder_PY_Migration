@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+import scripthost_portable.query_transport as query_transport
 from scripthost_portable import (
     DataSyncXReaderFactory,
     PortableOracleConnection,
@@ -452,3 +453,19 @@ SELECT 1 FROM dual WHERE name IN SQL_Get_CSV_List("{source}", name, "name IN")
     assert "SQL_Get_CSV_List" not in query
     assert query.count("'O''Brien'") == 1
     assert "'B'" in query
+
+
+def test_datasyncx_invalid_return_is_not_an_empty_success(tmp_path):
+    class InvalidReader:
+        def read(self, **kwargs):
+            return None
+
+    class Factory:
+        def reader_for(self, backend, node):
+            return InvalidReader()
+
+    connection = PortableOracleConnection(reader_factory=Factory())
+    connection.openConnection(None, None, "KM.MARS")
+    with pytest.raises(query_transport.QueryExecutionError, match="pandas DataFrame"):
+        connection.execute("SELECT 1", OutFile=str(tmp_path / "invalid.csv"))
+    assert not (tmp_path / "invalid.csv").exists()

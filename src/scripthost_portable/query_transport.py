@@ -191,13 +191,7 @@ def _site_from_node(node: str) -> str:
 def _as_frame(result: Any) -> pd.DataFrame:
     if isinstance(result, pd.DataFrame):
         return result.copy()
-    if hasattr(result, "to_pandas"):
-        result = result.to_pandas()
-        if isinstance(result, pd.DataFrame):
-            return result.copy()
-    if result is None:
-        return pd.DataFrame()
-    return pd.DataFrame(result)
+    raise QueryExecutionError("DataSyncX 1.1.6 reader must return a pandas DataFrame.")
 
 
 def _delimiter(path: Path) -> str:
