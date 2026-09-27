@@ -404,7 +404,8 @@ def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux
     assert PortableScriptHostRuntime().run_text(text, root)
     generated = final.read_text(encoding="utf-8-sig")
     assert "Portable ScriptHost Report" in generated
-    assert ("80%" in generated) is (sys.platform == "win32")
+    # Preserving source path case lets original SQLite/report loading work on Linux.
+    assert "80%" in generated
     assert "<table" in generated.lower()
     # Shared portable SPFDelete now also completes the original report cleanup.
     assert not list(root.glob("*_MYREPORT5_tmp_.ini"))

@@ -555,3 +555,32 @@ def test_time_file_persistence_original(tmp_path: Path):
     assert list(tmp_path.glob("*.spf$data"))
     execute(tmp_path, task("{UPDATE-TIME-FILE}", second))
     assert rows(first) == rows(second)
+
+
+def test_sqlite_original_udfs(tmp_path: Path):
+    output = tmp_path / "udfs.csv"
+    database = tmp_path / "input.sdb"
+    sqlite3.connect(database).close()
+    execute(
+        tmp_path,
+        block(
+            f"/NODE={database}",
+            "/UN=",
+            "/OLEDB=SQLite",
+            "/ENGINE=SQLite",
+            "/TABLE=",
+            "/QUOTECSV=Y",
+            f"/CSV={output}",
+            body="""/*BEGIN SQL*/
+SELECT JsonValue('a"b') AS JSON_VALUE,
+       JsonKeyValPair('k', 'v') AS JSON_PAIR,
+       SPFRegexReplace('a', 'ABBA', 'x', 0, 2) AS REPLACED,
+       SPFRegexSearch('b+', 'ABBA', 2) AS MATCHED,
+       SPFPrepLikeValue('ABC') AS LIKE_VALUE,
+       CharIndex_v2('a', 'banana', 1, 2) AS POSITION,
+       SPFWriteLOBToFile('aGVsbG8=', 'lob.bin') AS LOB_FILE;
+/*END SQL*/""",
+        ),
+    )
+    assert rows(output)[1] == ['"a\\"b"', '"k":"v"', "xBBx", "BB", "ABC%", "4", "lob.bin"]
+    assert (tmp_path / "lob.bin").read_bytes() == b"hello"
