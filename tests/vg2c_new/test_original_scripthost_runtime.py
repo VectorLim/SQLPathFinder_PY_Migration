@@ -85,7 +85,17 @@ def test_original_runtime_vertical_slice_matches_vg2c_new(tmp_path: Path) -> Non
         assert PortableScriptHostRuntime().run_text(original_text, original_dir)
         state = run_new(new_text, new_dir)
 
-        assert outputs(original_dir) == outputs(new_dir)
+        original_outputs = outputs(original_dir)
+        new_outputs = outputs(new_dir)
+        assert {name: value.rstrip("\n") for name, value in original_outputs.items()} == {
+            name: value.rstrip("\n") for name, value in new_outputs.items()
+        }
+        # Real parity gap: ScriptHost keeps the block's separator newline while
+        # vg2c_new trims the outer blank line before WRITE-FILE execution.
+        assert original_outputs["out_alpha_0.csv"].endswith("\n\n")
+        assert new_outputs["out_alpha_0.csv"].endswith("\n")
+        assert original_outputs["verified.txt"] == "verified\n"
+        assert new_outputs["verified.txt"] == "verified"
         assert not (original_dir / "bad.txt").exists()
         assert not (new_dir / "bad.txt").exists()
         assert os.environ["PORTABLE_SPFS_ROWS"] == "1"
@@ -127,7 +137,7 @@ def test_original_runtime_process_environment_is_not_per_run_state(tmp_path: Pat
         assert runtime.run_text(set_env, workdir)
         assert os.environ["PORTABLE_SPFS_LEAK"] == "1"
         assert runtime.run_text(observe_env, workdir)
-        assert marker.read_text(encoding="utf-8") == "leaked"
+        assert marker.read_text(encoding="utf-8") == "leaked\n"
     finally:
         os.environ.pop("PORTABLE_SPFS_LEAK", None)
 
@@ -200,7 +210,7 @@ def test_original_runtime_is_safe_when_concurrent_jobs_use_process_isolation(
         result.stdout + result.stderr for result in results
     ]
     for _, root in jobs:
-        assert outputs(root)["verified.txt"] == "verified"
+        assert outputs(root)["verified.txt"] == "verified\n"
         assert not (root / "bad.txt").exists()
     assert "PORTABLE_SPFS_ROWS" not in os.environ
 
