@@ -318,7 +318,12 @@ def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path
 
     for index, (text, original_class, target) in enumerate(cases):
         original_task = manager.GetQuery(manager.gMyLocal, text, index, False)
-        current = parse(text)[0]
+        current_text = (
+            script(text, block("/UTILITIES={END-LOOP}"))
+            if original_class == "ForLoopTask"
+            else text
+        )
+        current = parse(current_text)[0]
         assert original_task.__class__.__name__ == original_class
         assert current.utility_type == target
 
