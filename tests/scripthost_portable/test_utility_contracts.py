@@ -407,3 +407,60 @@ def test_r_original_local_interpreter(tmp_path: Path, inline):
     )
     execute(tmp_path, command)
     assert (tmp_path / "r-output.txt").read_text().strip() == "original R"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for Excel XML conversion")
+def test_xml_to_csv_original_roundtrip(tmp_path: Path):
+    source = tmp_path / "input.csv"
+    source.write_text("ID,Value\n001,A&B\n002,\n", encoding="utf-8")
+    execute(
+        tmp_path,
+        utility(r"@EXEDIR@\CSVToXML.va", source, tmp_path / "out.xml", ""),
+        utility(r"@EXEDIR@\XMLToCSV.va", tmp_path / "out.xml", tmp_path / "back.tab"),
+    )
+    assert rows(tmp_path / "back.tab") == [["ID", "Value"], ["001", "A&B"], ["002", "."]]
+
+
+def test_xml_converter_rejects_unproven_shape(tmp_path: Path):
+    from scripthost_portable.file_operations import xml_to_csv
+
+    source = tmp_path / "spreadsheet.xml"
+    source.write_text("<Workbook><Worksheet /></Workbook>")
+    with pytest.raises(ValueError, match="Main/Item"):
+        xml_to_csv(str(source), str(tmp_path / "out.csv"), ",")
+    assert not (tmp_path / "out.csv").exists()
+
+
+def test_email_original_task_keeps_role_and_recipient_policy(tmp_path: Path, monkeypatch):
+    from scripthost_portable import PortableScriptHostRuntime
+    from scripthost_portable.runtime import _spf_manager_type
+
+    _spf_manager_type()
+    from SPFLib.SPFSQL3 import EmailTask
+
+    calls = []
+    monkeypatch.setattr(EmailTask, "SPFEmail", lambda self, *args: calls.append(args))
+    text = utility(
+        r"@EXEDIR@\SQLPathFinder_Email.va",
+        "attachment.csv",
+        "person@example.test",
+        "subject",
+        "body.txt",
+        "cc@example.test",
+        "bcc@example.test",
+        "role",
+        "Y",
+        "N",
+    )
+    assert PortableScriptHostRuntime().run_text(text, tmp_path)
+    assert len(calls) == 1
+    assert calls[0][1:9] == (
+        "attachment.csv",
+        "person@example.test",
+        "subject",
+        "body.txt",
+        "cc@example.test",
+        "bcc@example.test",
+        "role",
+        True,
+    )

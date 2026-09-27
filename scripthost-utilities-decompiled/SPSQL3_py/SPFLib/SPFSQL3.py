@@ -17529,7 +17529,11 @@ class XMLToCSVTask(SPFTaskBase) :
             cmdArgs = ['/mode="XMLTOCSV"',
                         '/XML="{0}"'.format(xmlFileToLoad),
                         '/out="{0}"'.format(csvFileToWrite)]
-            runStatus, runExitCode = self.Run(MyExe0, cmdArgs,usePopen=True)
+            if os.name != "nt":
+                from scripthost_portable.file_operations import xml_to_csv
+                xml_to_csv(xmlFileToLoad, csvFileToWrite, self.GetFileDLM(csvFileToWrite))
+            else:
+                runStatus, runExitCode = self.Run(MyExe0, cmdArgs,usePopen=True)
             self.ConsoleDoneWithTimeStamp2()
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -21306,7 +21310,7 @@ class GetFilesTask(SPFTaskBase):
             
             #now construct the pathparts
             path_parent = str(Path(*path_parts_without_wildcard))
-            path_glob_part = os.sep.join(path_parts_with_wildcard) 
+            path_glob_part = os.sep.join(path_parts_with_wildcard)
 
             if found_wild_card is False:
                 self.logger.debug("{0} - single file : {1}".format(calling_func, path_parent))

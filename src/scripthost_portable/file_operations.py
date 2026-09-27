@@ -2,12 +2,41 @@
 
 from __future__ import annotations
 
+import csv
 import glob
 import shutil
 import stat
 import time
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+
+def xml_to_csv(source: str, destination: str, delimiter: str) -> None:
+    """Convert ScriptHost CSVToXML's Main/Item format, rejecting other XML shapes.
+
+    The Windows Excel converter accepts additional formats; those remain unproven.
+    """
+    root = ET.parse(source).getroot()
+    if root.tag != "Main":
+        raise ValueError("Portable XMLTOCSV requires ScriptHost Main/Item XML")
+    records, columns = [], []
+    for item in root:
+        if item.tag != "Item" or item.attrib or (item.text or "").strip():
+            raise ValueError("Portable XMLTOCSV requires ScriptHost Main/Item XML")
+        row = {}
+        for field in item:
+            if list(field) or field.attrib or field.tag in row or "}" in field.tag:
+                raise ValueError("Portable XMLTOCSV requires unique, flat XML fields")
+            if field.tag not in columns:
+                columns.append(field.tag)
+            row[field.tag] = field.text or ""
+        records.append(row)
+    with Path(destination).open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=columns, delimiter=delimiter)
+        if columns:
+            writer.writeheader()
+            writer.writerows(records)
 
 
 def copy_files(source: str, destination: str) -> None:
