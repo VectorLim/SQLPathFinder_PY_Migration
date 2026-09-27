@@ -285,7 +285,7 @@ At reassessment commit `b5c1f40b2bf573381ca40eec9123160e4ee09bb5`:
   - 11 explicitly retired capabilities;
   - 2 flattened obsolete transports.
 
-Compared with the required base, the experiment modifies only four decompiled ScriptHost source files plus `SPFGlobals.py`, adds a small 61-line facade, and places most new code in tests/benchmarking. The legacy-source delta is approximately 47 additions and 28 deletions; the rest of the branch delta is evidence scaffolding rather than a replacement runtime.
+Compared with the required base, the experiment modifies only four decompiled ScriptHost source files (`SPFGlobals.py`, `SPFSQL3.py`, `SPFUtilities/spflogger.py`, and `SPFUtilities/utils.py`), adds a small 61-line facade, and places most new code in tests/benchmarking. The legacy-source delta is approximately 38 additions and 28 deletions; the rest of the branch delta is evidence scaffolding rather than a replacement runtime.
 
 ## Next implementation sequence
 
