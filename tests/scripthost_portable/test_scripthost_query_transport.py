@@ -412,3 +412,27 @@ def test_original_get_site_time_then_update(tmp_path: Path):
     result = pd.read_csv(tmp_path / "time.csv")
     assert result.loc[0, "last_Date"] == "2026-09-26 12:34:56"
     assert result.loc[0, "Last_Date-15m"] == "2026-09-26 12:19:56"
+
+
+def test_original_csv_list_quotes_and_deduplicates(tmp_path: Path):
+    source = tmp_path / "names.csv"
+    source.write_text("id,name\n1,O'Brien\n2,B\n1,O'Brien\n", encoding="utf-8")
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"x": [1]})})
+    text = block(
+        "/NODE=KM.MARS",
+        "/UN=//",
+        "/PW=",
+        "/OLEDB=SQLPlus",
+        "/ENGINE=VA",
+        "/CSV=out.csv",
+        "/T=",
+        body=f'''/*BEGIN SQL*/
+SELECT 1 FROM dual WHERE name IN SQL_Get_CSV_List("{source}", name, "name IN")
+/*END SQL*/''',
+    )
+    with use_reader_factory(factory):
+        assert PortableScriptHostRuntime().run_text(text, tmp_path)
+    query = factory.calls[0].query
+    assert "SQL_Get_CSV_List" not in query
+    assert query.count("'O''Brien'") == 1
+    assert "'B'" in query

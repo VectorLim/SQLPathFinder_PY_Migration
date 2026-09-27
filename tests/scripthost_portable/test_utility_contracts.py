@@ -584,3 +584,40 @@ SELECT JsonValue('a"b') AS JSON_VALUE,
     )
     assert rows(output)[1] == ['"a\\"b"', '"k":"v"', "xBBx", "BB", "ABC%", "4", "lob.bin"]
     assert (tmp_path / "lob.bin").read_bytes() == b"hello"
+
+
+@pytest.mark.parametrize("case", ["alias", "invalid_sql", "reserved_column"])
+def test_sqlite_original_reference_edges(tmp_path: Path, case):
+    source, output = tmp_path / "input.csv", tmp_path / "result.csv"
+    source.write_text("rowid,x\n1,a\n" if case == "reserved_column" else "id,name\n1,A\n2,B\n")
+    sql = (
+        "CREATE BOGUS THING;"
+        if case == "invalid_sql"
+        else "CREATE INDEX ix ON t(id);\nSELECT name FROM t ORDER BY id;"
+    )
+    result = run_job(
+        ScriptHostJob(
+            working_directory=str(tmp_path),
+            script_text=block(
+                "/NODE=",
+                "/UN=",
+                "/OLEDB=SQLite",
+                "/ENGINE=SQLite",
+                f"/TABLE={source}:t",
+                f"/CSV={output}",
+                "/QUOTECSV=Y",
+                body="/*BEGIN SQL*/ " + sql + " /*END SQL*/",
+            ),
+        ),
+        timeout=30,
+    )
+    if case == "alias":
+        assert result.success, result.message + result.stdout
+        assert rows(output)[1:] == [["A"], ["B"]]
+    else:
+        assert not result.success, result
+        assert (
+            "rowid" in result.message.lower()
+            if case == "reserved_column"
+            else "syntax" in result.message.lower()
+        )
