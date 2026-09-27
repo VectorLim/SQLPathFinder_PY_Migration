@@ -274,7 +274,7 @@ def test_portable_connection_rejects_unmapped_oracle_family() -> None:
 
 def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> None:
     """The original driver's 2.0.0.6 contract ignores MyHeaders when rows exist."""
-    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["é中", None, "."]})})
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["Ã©ä¸­", None, "."]})})
     connection = PortableOracleConnection(reader_factory=factory)
     connection.openConnection(None, None, "KM.MARS")
     output = tmp_path / "labels.tab"
@@ -287,7 +287,15 @@ def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> 
         )
     raw = output.read_bytes()
     assert not raw.startswith(codecs.BOM_UTF8)
-    assert raw.decode("utf-8").splitlines() == ["ACTUAL_LABEL", "é中", '""', ".", "é中", '""', "."]
+    assert raw.decode("utf-8").splitlines() == [
+        "ACTUAL_LABEL",
+        "Ã©ä¸­",
+        '""',
+        ".",
+        "Ã©ä¸­",
+        '""',
+        ".",
+    ]
 
 
 def test_empty_append_and_noheaders_do_not_add_headers(tmp_path: Path) -> None:
@@ -385,10 +393,14 @@ def test_real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle(
         "IMAGE_FULL_PATH",
         "NUMERIC_VALUE_MAX",
     ]
-    if sys.platform == "win32":
-        expected = [name.lower() for name in expected]
-        expected[8] = "image_full_path_RAW"
+    # Populated original SQLite results preserve SQL alias case on both hosts.
+    # The old Linux expectation was an empty fallback caused by a missing .\ path.
+    expected = [name.lower() for name in expected]
+    expected[8] = "image_full_path_RAW"
     assert list(result.columns) == expected
+    assert len(result) == 1
+    assert result.iloc[0]["lot"] == "LOT_A"
+    assert result.iloc[0]["visual_id"] == "VID_A"
 
 
 def test_original_empty_query_result_uses_original_header_fallback(tmp_path: Path) -> None:

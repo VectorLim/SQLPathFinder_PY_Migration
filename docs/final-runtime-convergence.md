@@ -56,6 +56,9 @@ recipient/role policy was weakened or replaced.
 - Worker control-flow slice: macros, IF/ELSE, ForLoop, SiteLoop, RunLoop final chunk.
 - Real 22844 MARS/ARIES/SQLite source slice: original preprocessing and output joins;
   deterministic readers live only in test fixtures at the external transport boundary.
+  Certification exposed an old Linux false positive: literal `.\` caused both imports
+  to be skipped and emitted only uppercase fallback headers. The POSIX directory fix
+  restores actual joined rows and original mixed-case SQL aliases on both platforms.
 - Reports: html_test and tcb_yield slices preserve report columns, sorting and layout;
   substituted local CSV/CSS/output paths, removed email destinations/attachments,
   and selected original batch mode. Assert data markers and cleanup, not just success.
