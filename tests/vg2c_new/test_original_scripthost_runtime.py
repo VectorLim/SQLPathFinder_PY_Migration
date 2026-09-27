@@ -335,9 +335,7 @@ def test_original_html_run_css_executes_on_linux_while_vg2c_new_marks_report_gap
     root.mkdir()
     css = root / "portable_report.css"
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
-        encoding="utf-8-sig"
-    )
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(encoding="utf-8-sig")
     report_block = next(
         segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
     ).strip()
