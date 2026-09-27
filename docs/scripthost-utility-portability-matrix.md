@@ -55,11 +55,11 @@ capability proofs, not blanket equivalence for every historical option.
 | Email | EmailTask -> SPFEmail/GetEmailAdss | SMTP helper unavailable; Outlook/identity/role lookups platform-bound. No send_msg implementation found in installed DataSyncX source | No guessed provider or recipient-policy rewrite | Retain reference; transport unresolved | email_original_task_keeps_role_and_recipient_policy captures task/helper boundary only; no email sent |
 | GET-SITE-TIME | GetSiteTimeTask -> nqOracleTask.Do_Get_Time | GMT and database time pass; transport previously wrote only files | Send memory-bound query results into original MemTable.LoadDF | Delete GetSiteTimeUtility | gmt_update_time_original; test_scripthost_query_transport original_get_site_time_then_update |
 | UPDATE-TIME / UPDATE-TIME-FILE | UpdateTimeTask/UpdateTimeFileTask -> Do_Update_Time/Do_Update_Time_File | Original offsets and persisted .spf$data pass across fresh workers with explicit INSTANCE | Native current-directory path for .spf$data | Delete file_values.py | time_file_persistence_original; gmt_update_time_original |
-| SQLite query/load/delete | nqSQLiteTask / SQLiteLoadTask / SQLiteDeleteTask -> MemTable | Query pipeline and load/delete pass; uppercasing source paths prevented Linux imports | Preserve case when deduplicating POSIX input paths | Delete sqlite.py once new original edge fixtures pass the Linux gate | sqlite_load_delete_original; sqlite_original_udfs; sqlite_original_reference_edges; real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle |
+| SQLite query/load/delete | nqSQLiteTask / SQLiteLoadTask / SQLiteDeleteTask -> MemTable | Query pipeline and load/delete pass; uppercasing source paths prevented Linux imports | Preserve case when deduplicating POSIX input paths | Delete sqlite.py; original edge fixtures pass | sqlite_load_delete_original; sqlite_original_udfs; sqlite_original_reference_edges; real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle |
 | Oracle query | nqOracleTask -> PortableOracleConnection | Existing original transport suite passes; Windows live evidence predates audit | Preserve original gLoadToMemTable result destination | Delete query.py, including unused PlatformGapUtility | test_scripthost_query_transport; test_scripthost_worker |
 | Echo / generic DOS/VA helpers | EchoTask/DOSCmdTask/vaTask -> Run | Literal ECHO passes after removal of COMSPEC call on POSIX; arbitrary Windows shell syntax remains unsupported | Console output for literal ECHO; reject shell operators | Delete misc.py; no generic shell translation | echo_original; source trace of generic helpers |
 | Parser / controllers | SPFManager.GetQuery; StartMacroTask, IfThenTask, ForLoopTask, SiteLoopTask, RunLoopTask | Existing original control-flow, HPC, 22844 task-tree and worker suites pass | None | Delete parallel parser/manifest and Interpreter; retain only email reference dependencies | test_original_scripthost_runtime vertical_slice, site_loop, run_loop_final_chunk, local_hpc_scope, real_22844_builds_original_task_tree |
-| CSV support | Utilities.GetFileDLM/getRowCountFromFile; NormalQueryTaskBase.Process_Get_CSV_List | Original delimiters, rows and real query expansion pass; apostrophe escaping and deduplication now have a dedicated original fixture | None | Delete csv.py after added quote/dedup Linux proof | write_rows_value_and_metadata; test_scripthost_query_transport original_csv_list_quotes_and_deduplicates |
+| CSV support | Utilities.GetFileDLM/getRowCountFromFile; NormalQueryTaskBase.Process_Get_CSV_List | Original delimiters, rows and real query expansion pass; apostrophe escaping and deduplication now have a dedicated original fixture | None | Delete csv.py; quote/dedup Linux fixture passes | write_rows_value_and_metadata; test_scripthost_query_transport original_csv_list_quotes_and_deduplicates |
 | Reports | Original HTML* task hierarchy | Existing characterization passes with original data after shared file-case/delete fixes | No report rewrite | Separate next phase | test_original_scripthost_runtime report fixtures |
 
 ## Observed semantic differences to preserve
@@ -85,7 +85,7 @@ capability proofs, not blanket equivalence for every historical option.
 Resolve an actual email transport plus the original identity/role boundary; preserve
 recipient restrictions. EmailUtility's injected send_msg is not an installed provider
 and intentionally drops those restrictions, so it must remain reference-only.
-After the SQLite/CSV cleanup gate, the sole utility reference will be email.py with
+After the SQLite/CSV cleanup gate, the sole utility reference is email.py with
 base.py/model.py/runtime.py (RuntimeState only)/paths.py and one reference test.
 Remove those together once the original email path is proven. The refused CLI stub
 can then be deleted with the package. There is no remaining need for its parser or
@@ -95,44 +95,31 @@ Broaden evidence only when production needs additional XML, Excel, RoboCopy,
 authenticated web, generic Windows shell/VA or remote interpreter variants.
 Report modernization remains separate and is not a reason to retain a second runtime.
 
-## Cleanup batch
+## Verified cleanup
 
-After the pre-deletion gates, removed utility composition (which eagerly created
-readers and a competing utility registry), duplicate process/Excel/web/SmartAppend
-modules, and proven file/metadata/CSV/stack implementations. Removed port-only
-runtime tests; original control-flow, isolation and query fixtures remain under
-scripthost_portable and no longer import the reference parser or interpreter.
-Retained only unresolved reference utilities and their temporary evidence tests.
-The executable entrypoint is a refusal message, not a forwarding compatibility facade.
+Pre-deletion gates: Ubuntu 5ccab6f (119 passes), 081b611 (122 passes), ba82dad
+(103 passes after early duplicate removals) and
+[b1502e3, run 36317277087](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36317277087)
+(105 passes including the final SQLite/CSV reference edge fixtures). Each successful
+gate also passed format, compilation, lint and process-isolation checks.
 
-XML and email-boundary additions passed [Linux run 36315838567](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36315838567)
-at 081b611: 122 passed before cleanup. Final post-cleanup totals follow below.
+Removed eleven duplicate utility modules: composition, excel, file_values, files,
+misc, process, query, smart_append, web, sqlite and csv. Also removed the parallel
+parser/manifest, Interpreter and compare_vars implementation, plus port-only parser
+and interpreter tests. Original tests live in tests/scripthost_portable and do not
+import reference runtime semantics. An import guard enforces that separation.
 
-The original time, read-only, ECHO and persistent SQLite load/delete fixtures passed
-Ubuntu run 36316728131 at 34d18a7. That run had 101 passes and one obsolete report
-assertion expecting missing Linux data; the assertion was updated after verifying
-that the path-case fix restores the original data. No report algorithm was changed.
+The sole remaining utility reference is email.py with its model/state/path/protocol
+dependencies and one reference fixture. The CLI refuses execution. Production remains
+VG2 -> fresh child -> original SPFManager/GetQuery/task/SPFGlobals.
 
-[Ubuntu run 36316933936](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36316933936)
-at ba82dad passed all 103 tests, formatting, compilation, lint and isolation benchmark.
-This gate also proves the original SQLite UDF fixture (regex matched text, JSON,
-base64 LOB output, LIKE preparation and CharIndex) without any UDF implementation change.
-Cleanup removed query.py, file_values.py, files.py and misc.py, plus their
-superseded port tests. Remaining utility modules are csv.py, sqlite.py and email.py
-(with shared base.py). Their model/parser/runtime dependencies remain reference-only.
-
-Further Windows shell/VA commands, remote interpreter services, integrated web auth,
-Outlook/AD and richer Excel/XML modes are not claimed as Linux-supported. In
-particular, arbitrary DOS/VA commands still need explicit platform-boundary handling;
-they must not be treated as validated merely because an original task returns success.
-
-Original SQLite edge tests now cover CSV aliases, multiple statements, visible SQL
-errors and rejection of rowid input. The dedicated original CSV-list fixture checks
-apostrophe escaping and deduplication. These complete the useful SQLite/CSV reference
-tests before their removal; broader format/option combinations remain bounded by the
-original implementation, not the discarded ports.
-
-Original SQLite regex search returns the matched string (or NULL), not a boolean.
-Regex arguments are pattern-first with integer flags; LOB writes decode base64;
+Original SQLite regex search returns matched text (or NULL), not a boolean. Regex
+arguments are pattern-first with integer flags; LOB writes decode base64;
 SPFPrepLikeValue prepares SQL LIKE patterns rather than translating shell wildcards.
-These original contracts were preserved rather than changed to match the port.
+These original contracts were preserved without changing the UDF implementations.
+
+Shared path-case and delete fixes also restore original report data and temporary-file
+cleanup. No report algorithm was rewritten. Arbitrary Windows DOS/VA helpers,
+remote interpreter services, integrated web auth, Outlook/AD and richer Excel/XML
+modes remain outside the demonstrated Linux subset. Their success is not implied
+by an original task returning without an exception.
