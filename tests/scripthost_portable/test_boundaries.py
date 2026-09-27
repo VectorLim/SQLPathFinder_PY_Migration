@@ -107,3 +107,9 @@ def test_report_preprocessing_preserves_records_and_cleans_embedded_text(tmp_pat
         delimiter.join(["name", "detail"]),
         delimiter.join(["é", "one;two three fourfive"]),
     ]
+
+
+def test_retired_package_trees_are_absent():
+    root = Path(__file__).resolve().parents[2]
+    for package in ("vg2c", "vg2c_new", "vg2c_ui"):
+        assert not (root / "src" / package).exists()

@@ -105,7 +105,6 @@ __pypackages__/
 # ---------------------------
 .env
 .env.*
-!.env.docker.example
 .venv
 env/
 venv/
@@ -177,8 +176,6 @@ secrets.yml
 .secrets
 
 /docs/*
-!/docs/symbol-dependency-resolution.md
-!/docs/docker-lan.md
 
 
 /data
