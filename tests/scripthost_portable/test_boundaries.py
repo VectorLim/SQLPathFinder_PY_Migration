@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
@@ -13,14 +14,14 @@ from scripthost_portable import file_operations
 def test_supported_runtime_has_no_reference_runtime_imports():
     root = Path(__file__).resolve().parents[2]
     sources = list((root / "src/scripthost_portable").glob("*.py"))
-    sources += list((root / "scripthost-utilities-decompiled/SPSQL3_py/SPFLib").rglob("*.py"))
+    sources += list((root / "scripthost-utilities-decompiled/SPSQL3_py").rglob("*.py"))
     for path in sources:
         tree = ast.parse(path.read_text(encoding="utf-8-sig"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                assert all(not name.name.startswith("vg2c_new") for name in node.names), path
+                assert all(name.name.split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"} for name in node.names), path
             elif isinstance(node, ast.ImportFrom):
-                assert not (node.module or "").startswith("vg2c_new"), path
+                assert (node.module or "").split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"}, path
 
 
 def test_robocopy_retries_io_and_rejects_unknown_switches(tmp_path, monkeypatch):
@@ -59,3 +60,25 @@ def test_copy_and_delete_dos_all_files_pattern_is_nonrecursive(tmp_path):
     file_operations.delete_files([str(target)], True)
     assert not (target / "extensionless").exists()
     assert (target / "nested" / "keep.txt").read_text() == "keep"
+
+
+def test_worker_runs_with_all_retired_imports_blocked(tmp_path, monkeypatch):
+    from scripthost_portable.worker import ScriptHostJob, run_job
+
+    guard = tmp_path / "guard"
+    guard.mkdir()
+    (guard / "sitecustomize.py").write_text(
+        "import sys\n"
+        "class RetiredImportGuard:\n"
+        "    def find_spec(self, fullname, path=None, target=None):\n"
+        "        if fullname.split('.')[0] in {'vg2c', 'vg2c_new', 'vg2c_ui'}:\n"
+        "            raise AssertionError('Retired runtime imported: ' + fullname)\n"
+        "sys.meta_path.insert(0, RetiredImportGuard())\n"
+    )
+    monkeypatch.setenv("PYTHONPATH", str(guard) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    result = run_job(ScriptHostJob(
+        working_directory=str(tmp_path),
+        script_text="<OPTIONS>\n/WRITE-FILE=Y\n/CSV=independent.txt\n</OPTIONS>\noriginal ScriptHost",
+    ), timeout=30)
+    assert result.success, result
+    assert (tmp_path / "independent.txt").read_text() == "original ScriptHost"

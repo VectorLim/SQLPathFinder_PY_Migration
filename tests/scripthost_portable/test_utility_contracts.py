@@ -151,17 +151,6 @@ def test_stack_data(tmp_path: Path):
     assert [r[0] for r in result[1:]] == ["1", "2"]
 
 
-def test_retired_entrypoint_cannot_execute(tmp_path: Path):
-    script = tmp_path / "job.spfsql"
-    script.write_text(block("/WRITE-FILE=Y", f"/CSV={tmp_path / 'unwanted.txt'}", body="bad"))
-    result = subprocess.run(
-        [sys.executable, "-m", "vg2c_new", str(script)], capture_output=True, text=True
-    )
-    assert result.returncode == 2
-    assert "scripthost_portable.worker.run_job" in result.stderr
-    assert not (tmp_path / "unwanted.txt").exists()
-
-
 def test_smart_append_v4(tmp_path: Path):
     old, new = tmp_path / "old.csv", tmp_path / "new.csv"
     old.write_text("ID,DATE,OLD\n1,2026-01-01 00:00:00,a\n2,2026-09-01 00:00:00,b\n")
