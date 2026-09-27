@@ -20,11 +20,11 @@ def _spf_manager_type():
 
 
 class PortableScriptHostRuntime:
-    """Minimal Linux facade around the original SPFManager/task runtime.
+    """Entry into the original SPFManager/task runtime inside an isolated worker.
 
     The historical top-level entrypoint and SPFManager.main initialize
     Windows/service/network integrations that are not needed to assess the
-    parser/controller/task engine. This facade intentionally enters at
+    parser/controller/task engine. This entrypoint intentionally enters at
     Run_SPFSQL after supplying the same command-line-derived per-run state.
     All parsing, task construction, control flow and utility execution remain
     the original ScriptHost implementations.

@@ -1,3 +1,5 @@
+"""Migration reference only. Supported jobs execute via scripthost_portable.worker."""
+
 from vg2c_new.model import Command, CommandKind, SourceSpan
 from vg2c_new.parser import RESOLVER_MANIFEST, Vg2ParseError, parse, parse_file
 from vg2c_new.runtime import Interpreter, RuntimeState, compare_vars

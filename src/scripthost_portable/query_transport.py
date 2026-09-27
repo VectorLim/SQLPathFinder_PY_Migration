@@ -95,6 +95,7 @@ class PortableOracleConnection:
 
     def __init__(self, queryOptions: Any = None, reader_factory: ReaderFactory | None = None):
         self.query_options = queryOptions
+        self.load_to_memtable = False
         self._factory = reader_factory
         self._node: str | None = None
         self._reader: Any = None
@@ -148,7 +149,13 @@ class PortableOracleConnection:
             ) from exc
 
         target = OutExcel or OutFile
-        if target and not frame.empty:
+        if target and self.load_to_memtable:
+            from SPFLib.SPFUtilities.memtable import MemTable
+
+            MemTable().LoadDF(
+                frame, Path(target).name, if_exists="replace" if FirstConnect else "append"
+            )
+        elif target and not frame.empty:
             _write_frame(frame, Path(target), first_connect=FirstConnect, no_headers=ll_NoHdrs)
         return len(frame.index)
 

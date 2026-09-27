@@ -543,3 +543,15 @@ def test_zip_folder_delete_original(tmp_path: Path):
     assert not folder.exists()
     with zipfile.ZipFile(tmp_path / "folder.zip") as archive:
         assert archive.read("nested/file.txt") == b"content"
+
+
+def test_time_file_persistence_original(tmp_path: Path):
+    first, second = tmp_path / "first.csv", tmp_path / "second.csv"
+
+    def task(name, arg):
+        return utility(name, arg).replace("<OPTIONS>", "<OPTIONS>\n/INSTANCE=4242")
+
+    execute(tmp_path, task("{GET-SITE-TIME-FILE}", "GMT"), task("{UPDATE-TIME}", first))
+    assert list(tmp_path.glob("*.spf$data"))
+    execute(tmp_path, task("{UPDATE-TIME-FILE}", second))
+    assert rows(first) == rows(second)

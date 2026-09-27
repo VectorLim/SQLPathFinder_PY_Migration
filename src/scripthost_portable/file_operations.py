@@ -41,6 +41,8 @@ def xml_to_csv(source: str, destination: str, delimiter: str) -> None:
 
 def copy_files(source: str, destination: str) -> None:
     """Replace the COPY operation after ScriptHost expands distribution tokens."""
+    if Path(source).name == "*.*":
+        source = str(Path(source).with_name("*"))
     matches = [Path(name) for name in glob.glob(source)]
     if not matches:
         raise FileNotFoundError(source)

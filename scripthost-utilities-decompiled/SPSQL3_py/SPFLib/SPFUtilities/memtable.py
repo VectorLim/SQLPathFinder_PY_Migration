@@ -2040,7 +2040,7 @@ class MemTable(object):
 
                 MyPair = MyTables.split(",") #'Extract File & Tbl Name Pairs
                 self.logger.debug("{0} - MyPair: {1}".format(calling_func, MyPair))
-                uniqueMyPair = list(set(item.upper() for item in MyPair)) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
+                uniqueMyPair = list(set(item.upper() for item in MyPair)) if os.name == "nt" else list(dict.fromkeys(MyPair)) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
                 self.logger.debug("{0} - uniqueMyPair: {1}".format(calling_func, uniqueMyPair))
                 uniqueMyPairCounter = 0
                 while len(uniqueMyPair) > 0 : #'For Each Text File

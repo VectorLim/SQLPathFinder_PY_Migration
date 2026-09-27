@@ -49,6 +49,7 @@ def test_force_portable_transport_preserves_default_driver_selection(
     task = SimpleNamespace(
         SQLEngine="VA",
         queryOptions={},
+        gLoadToMemTable=False,
         ll_ConnRetry=2,
         logger=logging.getLogger(__name__),
         getCallingFuncName=lambda *args: "test",
@@ -392,3 +393,22 @@ def test_original_empty_query_result_uses_original_header_fallback(tmp_path: Pat
         assert PortableScriptHostRuntime().run_text(text, tmp_path)
 
     assert (tmp_path / "empty.tab").read_text(encoding="utf-8") == "A\tB"
+
+
+def test_original_get_site_time_then_update(tmp_path: Path):
+    factory = FakeReaderFactory(
+        {"mars": pd.DataFrame({"last_update_date": ["2026-09-26 12:34:56"]})}
+    )
+    text = "\n<---- New Query ---->\n".join(
+        [
+            block('/UTILITIES={GET-SITE-TIME} "KM.MARS"'),
+            block(f'/UTILITIES={{UPDATE-TIME}} "{tmp_path / "time.csv"}"'),
+        ]
+    )
+    with use_reader_factory(factory):
+        assert PortableScriptHostRuntime().run_text(text, tmp_path)
+    assert len(factory.calls) == 1
+    assert "sysdate" in factory.calls[0].query.lower()
+    result = pd.read_csv(tmp_path / "time.csv")
+    assert result.loc[0, "last_Date"] == "2026-09-26 12:34:56"
+    assert result.loc[0, "Last_Date-15m"] == "2026-09-26 12:19:56"

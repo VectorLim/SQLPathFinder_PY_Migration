@@ -74,9 +74,5 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: python scripts/architecture/benchmark_scripthost_isolation.py
-      - name: Manifest status summary
-        env:
-          PYTHONPATH: src:.
-        run: python -c "from collections import Counter; from vg2c_new.parser import RESOLVER_MANIFEST; print(Counter(row[6] for row in RESOLVER_MANIFEST))"
       - name: Ruff
         run: ruff check src/vg2c_new src/scripthost_portable tests/vg2c_new tests/scripthost_portable --ignore E501

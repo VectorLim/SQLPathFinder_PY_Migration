@@ -6028,7 +6028,8 @@ class nqOracleTask(NormalQueryTaskBase) :
             #get from modules attribute -- expects the class to be in current module
             dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped, None)
             forcePortable = os.getenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT") == "1"
-            if forcePortable or dbDriverClsObject is None:
+            usePortable = forcePortable or dbDriverClsObject is None
+            if usePortable:
                 # The original parser/query-task lifecycle remains authoritative.
                 # Explicit opt-in also permits portable validation on Windows.
                 from scripthost_portable.query_transport import PortableOracleConnection
@@ -6036,6 +6037,8 @@ class nqOracleTask(NormalQueryTaskBase) :
                 self.logger.info("Oracle query transport: PortableOracleConnection (forced=%s)", forcePortable)
             #create the instance
             dbDriver = dbDriverClsObject(queryOptions=self.queryOptions)
+            if usePortable:
+                dbDriver.load_to_memtable = self.gLoadToMemTable
 
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -14274,7 +14277,7 @@ class GetSiteTimeTask(SPFTaskBase) :
             self.gMySPFJobTime = myFunc(MyArg)
 
             if self.MyUtilities[0] == "{GET-SITE-TIME-FILE}" : # (Do_Get_Time_File)
-                self.SetIni(os.path.join(".\\", "{0}.spf$data".format(self.gSPFInstance)), "SITE-TIME", "TIME", self.gMySPFJobTime)
+                self.SetIni(os.path.join(".", "{0}.spf$data".format(self.gSPFInstance)), "SITE-TIME", "TIME", self.gMySPFJobTime)
 
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -14308,7 +14311,7 @@ class UpdateTimeFileTask(SPFTaskBase) :
             fileToWrite = self.MyUtilities[1]
             self.logger.debug("{0} - fileToWrite: {1}".format(calling_func, fileToWrite))
             if self.IsEmptyOrNone(self.gMySPFJobTime) is True :
-                self.gMySPFJobTime = self.GetIni(os.path.join(".\\", "{0}.spf$data".format(self.gSPFInstance)),"SITE-TIME", "TIME")
+                self.gMySPFJobTime = self.GetIni(os.path.join(".", "{0}.spf$data".format(self.gSPFInstance)),"SITE-TIME", "TIME")
 
             self.Do_Update_Time(fileToWrite)
 
@@ -15858,7 +15861,7 @@ class SmartAppendTask(SPFTaskBase) :
             self.logger.debug("{0} - MyUpdateFile : {1}".format(calling_func,self.MyUpdateFile))
             if self.IsEmptyOrNone(self.MyUpdateFile) == False :
                 if self.IsEmptyOrNone(self.gSPFInstance) == False :
-                    self.Do_Update_Time_File(self.MyUpdateFile, os.path.join(".\\","{0}.spf$data".format(self.gSPFInstance)))
+                    self.Do_Update_Time_File(self.MyUpdateFile, os.path.join(".","{0}.spf$data".format(self.gSPFInstance)))
                 else :
                     self.Do_Update_Time(self.MyUpdateFile)
         except Exception as err:
@@ -19702,6 +19705,11 @@ class EchoTask(SPFTaskBase) :
         try :
             
             textToEcho = self.MyUtilitiesValue
+            if os.name != "nt":
+                if not textToEcho.upper().startswith("@ECHO ") or any(char in textToEcho for char in "&|<>"):
+                    raise RuntimeError("Windows shell commands/redirection are unavailable in portable Echo")
+                self.Console(textToEcho[6:])
+                return
             self.logger.debug("{0} - textToEcho: '{1}'".format(calling_func, textToEcho))
             if textToEcho.upper().startswith("@ECHO ") is False:
                 self.Write_Prompt()
@@ -21289,7 +21297,7 @@ class GetFilesTask(SPFTaskBase):
                 if Path(myPathToRead).is_dir() is True:
                     #this is path to a directory without any wildcards...add the *.*
                     self.logger.debug("{0} - Path points to a folder: {1}".format(calling_func, myPathToRead))
-                    myPathToRead = os.path.join(myPathToRead, "*.*" if os.name == "nt" else "*")
+                    myPathToRead = os.path.join(myPathToRead, "*.*")
                     self.logger.debug("{0} - Updated Path : {1}".format(calling_func, myPathToRead))
             except Exception as err:
                 #path is not plain directory...
