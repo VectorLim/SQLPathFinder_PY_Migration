@@ -1373,7 +1373,14 @@ class Utilities(SPFGlobals):
                         cmdToExecute = "%COMSPEC%"
                         cmdArgs = ['/c', 'move', '/Y', '"{0}"'.format(srcFile), '"{0}"'.format(DstFile)]
                         try:
-                            File_Lock_Move_Status, runExitCode = self.Run(cmdToExecute, cmdArgs)
+                            if os.name != "nt":
+                                try:
+                                    shutil.move(srcFile, DstFile)
+                                    File_Lock_Move_Status, runExitCode = True, 0
+                                except OSError as err:
+                                    raise SPFCMDRunExitWithErrorCodeException(str(err), 1, False) from err
+                            else:
+                                File_Lock_Move_Status, runExitCode = self.Run(cmdToExecute, cmdArgs)
                         except SPFCMDRunExitWithErrorCodeException as SPFCmdExErr:
                             errMsg = ("      Error during move "
                                       "\n      srcFile : {0}" 
@@ -2497,6 +2504,13 @@ class Utilities(SPFGlobals):
             self.logger.debug("{0} - parsed MySrc: {1}".format(calling_func, MySrc))
             if self.IsEmptyOrNone(MySrc) is True : 
                 self.Console("No delete files specified ...")
+                return
+
+            if os.name != "nt":
+                from scripthost_portable.file_operations import delete_files
+                delete_files(next(csv.reader(StringIO(MySrc), skipinitialspace=True)), forceDelete)
+                if displayPrompt:
+                    self.ConsoleDoneWithoutTimeStamp()
                 return
 
             #start building args to run in DOS
@@ -6821,7 +6835,7 @@ class Utilities(SPFGlobals):
                 myChunkSize = 64 * 1024
                 with requests.get(url=MyURL,
                                   verify=verify,
-                                  auth=auth, 
+                                  auth=auth,
                                   stream=True,
                                   timeout=reqtimeout,
                                   proxies=self.IGNORE_LOCAL_PROXIES) as response:

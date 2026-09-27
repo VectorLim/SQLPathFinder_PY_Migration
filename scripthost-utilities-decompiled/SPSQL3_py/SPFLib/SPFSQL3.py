@@ -21278,7 +21278,7 @@ class GetFilesTask(SPFTaskBase):
                 if Path(myPathToRead).is_dir() is True:
                     #this is path to a directory without any wildcards...add the *.*
                     self.logger.debug("{0} - Path points to a folder: {1}".format(calling_func, myPathToRead))
-                    myPathToRead = rf"{myPathToRead}\*.*"
+                    myPathToRead = os.path.join(myPathToRead, "*.*" if os.name == "nt" else "*")
                     self.logger.debug("{0} - Updated Path : {1}".format(calling_func, myPathToRead))
             except Exception as err:
                 #path is not plain directory...

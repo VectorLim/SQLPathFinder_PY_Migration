@@ -35,6 +35,8 @@ def execute(root: Path, *blocks: str):
         timeout=30,
     )
     assert result.success, result.message + "\n" + result.stdout + result.stderr
+    print(result.stdout)
+    print(result.stderr)
     return result
 
 
@@ -182,7 +184,7 @@ def test_smart_append_v4(tmp_path: Path):
     result = rows(old)
     assert result[0] == ["ID", "DATE", "NEW", "OLD"]
     assert [r[0] for r in result[1:]] == ["2", "3"]
-    assert [r[3] for r in result[1:]] == ["MISSING", "MISSING"]
+    assert [r[3] for r in result[1:]] == ["", ""]  # Original V4 ignores MyDefNew here.
 
 
 @pytest.mark.parametrize("pyscript", [False, True])
