@@ -226,6 +226,7 @@ def test_append_rename_delete(tmp_path: Path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for Windows unzip.exe")
 @pytest.mark.parametrize("preserve", ["Y", "N"])
 def test_unzip_original_task(tmp_path: Path, preserve):
+    (tmp_path / "out").mkdir()  # Original task requires the destination to exist.
     archive = tmp_path / "input.zip"
     with zipfile.ZipFile(archive, "w") as writer:
         writer.writestr("nested/value.txt", "content")

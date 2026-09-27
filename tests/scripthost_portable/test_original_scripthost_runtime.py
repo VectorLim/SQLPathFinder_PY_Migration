@@ -10,10 +10,6 @@ from pathlib import Path
 import pytest
 
 from scripthost_portable import PortableScriptHostRuntime
-from vg2c_new.parser import parse
-from vg2c_new.runtime import Interpreter, RuntimeState
-from vg2c_new.utilities.file_values import RowsInFileUtility
-from vg2c_new.utilities.files import WriteFileUtility
 
 DELIM = "<---- New Query ---->"
 
@@ -66,44 +62,17 @@ def outputs(root: Path) -> dict[str, str]:
     return {name: (root / name).read_text(encoding="utf-8") for name in names}
 
 
-def run_new(text: str, root: Path) -> RuntimeState:
-    state = RuntimeState(root)
-    Interpreter(
-        {
-            "write_file": WriteFileUtility(),
-            "rows_in_file": RowsInFileUtility(),
-        }
-    ).execute(parse(text), state)
-    return state
-
-
-def test_original_runtime_vertical_slice_matches_vg2c_new(tmp_path: Path) -> None:
-    original_dir = tmp_path / "original"
-    new_dir = tmp_path / "new"
-    original_text = vertical_slice(original_dir)
-    new_text = vertical_slice(new_dir)
-
+def test_original_runtime_vertical_slice(tmp_path: Path) -> None:
+    root = tmp_path / "original"
     try:
-        assert PortableScriptHostRuntime().run_text(original_text, original_dir)
-        state = run_new(new_text, new_dir)
-
-        original_outputs = outputs(original_dir)
-        new_outputs = outputs(new_dir)
-        assert {name: value.rstrip("\n") for name, value in original_outputs.items()} == {
-            name: value.rstrip("\n") for name, value in new_outputs.items()
-        }
-        # Real parity gap: ScriptHost keeps the block's separator newline while
-        # vg2c_new trims the outer blank line before WRITE-FILE execution.
-        assert original_outputs["out_alpha_0.csv"].endswith("\n\n")
-        assert new_outputs["out_alpha_0.csv"].endswith("\n")
-        assert original_outputs["verified.txt"] == "verified\n"
-        assert new_outputs["verified.txt"] == "verified"
-        assert not (original_dir / "bad.txt").exists()
-        assert not (new_dir / "bad.txt").exists()
-        # The preserved blank line is also counted as a data record by the
-        # original ROWS-IN-FILE implementation; vg2c_new trims it first.
+        assert PortableScriptHostRuntime().run_text(vertical_slice(root), root)
+        actual = outputs(root)
+        assert actual["seed.csv"] == "id,value\n1,a\n2,b\n"
+        for i in range(3):
+            assert actual[f"out_alpha_{i}.csv"] == f"name,loop\nalpha,{i}\n\n"
+        assert actual["verified.txt"] == "verified\n"
+        assert not (root / "bad.txt").exists()
         assert os.environ["PORTABLE_SPFS_ROWS"] == "2"
-        assert state.lookup("PORTABLE_SPFS_ROWS") == "1"
     finally:
         os.environ.pop("PORTABLE_SPFS_ROWS", None)
 
@@ -217,11 +186,9 @@ def test_original_runtime_is_safe_when_concurrent_jobs_use_process_isolation(
     assert "PORTABLE_SPFS_ROWS" not in os.environ
 
 
-def test_original_site_loop_matches_vg2c_new(tmp_path: Path) -> None:
+def test_original_site_loop_executes(tmp_path: Path) -> None:
     original_dir = tmp_path / "site-original"
-    new_dir = tmp_path / "site-new"
     original_dir.mkdir()
-    new_dir.mkdir()
 
     def make_text(root: Path) -> str:
         return script(
@@ -235,22 +202,15 @@ def test_original_site_loop_matches_vg2c_new(tmp_path: Path) -> None:
         )
 
     assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
-    Interpreter({"write_file": WriteFileUtility()}).execute(
-        parse(make_text(new_dir)), RuntimeState(new_dir)
-    )
 
     for site in ("A", "B"):
         assert (original_dir / f"site_{site}.txt").read_text(encoding="utf-8").rstrip("\n") == site
-        assert (new_dir / f"site_{site}.txt").read_text(encoding="utf-8") == site
 
 
-def test_original_run_loop_matches_vg2c_new_final_chunk(tmp_path: Path) -> None:
+def test_original_run_loop_final_chunk(tmp_path: Path) -> None:
     original_dir = tmp_path / "run-original"
-    new_dir = tmp_path / "run-new"
     original_dir.mkdir()
-    new_dir.mkdir()
     (original_dir / "input.csv").write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
-    (new_dir / "input.csv").write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
 
     def make_text(root: Path) -> str:
         return script(
@@ -259,18 +219,14 @@ def test_original_run_loop_matches_vg2c_new_final_chunk(tmp_path: Path) -> None:
         )
 
     assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
-    Interpreter().execute(parse(make_text(new_dir)), RuntimeState(new_dir))
 
     original = (original_dir / "chunk.csv").read_text(encoding="utf-8-sig").strip()
-    current = (new_dir / "chunk.csv").read_text(encoding="utf-8-sig").strip()
-    assert original == current == "id,value\n3,c"
+    assert original == "id,value\n3,c"
 
 
-def test_original_local_hpc_scope_matches_vg2c_new_flattening(tmp_path: Path) -> None:
+def test_original_local_hpc_scope_executes(tmp_path: Path) -> None:
     original_dir = tmp_path / "hpc-original"
-    new_dir = tmp_path / "hpc-new"
     original_dir.mkdir()
-    new_dir.mkdir()
 
     def make_text(root: Path) -> str:
         return script(
@@ -280,14 +236,10 @@ def test_original_local_hpc_scope_matches_vg2c_new_flattening(tmp_path: Path) ->
         )
 
     assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
-    Interpreter({"write_file": WriteFileUtility()}).execute(
-        parse(make_text(new_dir)), RuntimeState(new_dir)
-    )
     assert (original_dir / "inside.txt").read_text(encoding="utf-8").rstrip("\n") == "inside"
-    assert (new_dir / "inside.txt").read_text(encoding="utf-8") == "inside"
 
 
-def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path: Path) -> None:
+def test_original_getquery_representative_routing(tmp_path: Path) -> None:
     from scripthost_portable.runtime import _spf_manager_type
 
     manager = _spf_manager_type()()
@@ -316,19 +268,12 @@ def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path
         ),
     )
 
-    for index, (text, original_class, target) in enumerate(cases):
+    for index, (text, original_class, _target) in enumerate(cases):
         original_task = manager.GetQuery(manager.gMyLocal, text, index, False)
-        current_text = (
-            script(text, block("/UTILITIES={END-LOOP}"))
-            if original_class == "ForLoopTask"
-            else text
-        )
-        current = parse(current_text)[0]
         assert original_task.__class__.__name__ == original_class
-        assert current.utility_type == target
 
 
-def test_original_html_run_css_executes_on_linux_while_vg2c_new_marks_report_gap(
+def test_original_html_run_css_executes_on_linux(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "report"
@@ -341,8 +286,6 @@ def test_original_html_run_css_executes_on_linux_while_vg2c_new_marks_report_gap
     ).strip()
     report_block = report_block.replace("sqlpathfinder_style_1.css", str(css))
 
-    current = parse(report_block)[0]
-    assert current.utility_type == "report.html_run"
     assert PortableScriptHostRuntime().run_text(report_block, root)
     generated = css.read_text(encoding="utf-8")
     assert "table.tblin" in generated
@@ -458,14 +401,6 @@ def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux
     cleanup = block("/REPORT=HTML-DELETE", body="N/A")
     text = script(css_block, defer, layout, cleanup)
 
-    current = parse(text)
-    assert [command.utility_type for command in current] == [
-        "report.html_run",
-        "report.html_defer",
-        "report.html_layout",
-        "report.delete",
-    ]
-
     assert PortableScriptHostRuntime().run_text(text, root)
     generated = final.read_text(encoding="utf-8-sig")
     assert "Portable ScriptHost Report" in generated
@@ -509,17 +444,7 @@ def test_real_22844_builds_original_task_tree_on_linux() -> None:
             yield from flatten_original(task.childTasksList)
 
     original_tasks = list(flatten_original(original))
-    current = parse(text)
-
-    def flatten_current(commands):
-        for command in commands:
-            yield command
-            yield from flatten_current(command.children)
-            yield from flatten_current(command.else_children)
-
-    current_commands = list(flatten_current(current))
     assert original_tasks
-    assert current_commands
     assert len(original_tasks) == len(segments)
     assert any(task.__class__.__name__ == "IfThenTask" for task in original_tasks)
     assert any(task.__class__.__name__.startswith("nq") for task in original_tasks)

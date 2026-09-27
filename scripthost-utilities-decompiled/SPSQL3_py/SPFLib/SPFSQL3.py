@@ -21305,8 +21305,8 @@ class GetFilesTask(SPFTaskBase):
             self.logger.debug("{0} - found_wild_card : {1}".format(calling_func, found_wild_card))
             
             #now construct the pathparts
-            path_parent = "\\".join(path_parts_without_wildcard)
-            path_glob_part = "\\".join(path_parts_with_wildcard) 
+            path_parent = str(Path(*path_parts_without_wildcard))
+            path_glob_part = os.sep.join(path_parts_with_wildcard) 
 
             if found_wild_card is False:
                 self.logger.debug("{0} - single file : {1}".format(calling_func, path_parent))
