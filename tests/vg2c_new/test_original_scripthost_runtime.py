@@ -429,7 +429,10 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     source_line = next(
         line for line in defer_block.splitlines() if line.startswith("INPUT-FILE<\\\\>")
     )
-    defer = defer_block.replace(source_line, f"INPUT-FILE<\\\\>{data}<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>")
+    defer = defer_block.replace(
+        source_line,
+        f"INPUT-FILE<\\\\>{data}<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>",
+    )
     defer = defer.replace("sqlpathfinder_style_1.css", str(css))
 
     layout_body = "\n".join(
