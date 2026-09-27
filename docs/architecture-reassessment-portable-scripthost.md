@@ -167,13 +167,13 @@ Do **not** execute concurrent VG2 jobs as threads or as multiple manager instanc
 
 A one-job-per-process boundary is sufficient to contain the observed global state. Two concurrently executed subprocess jobs completed independently with correct outputs, and the parent environment remained unchanged.
 
-On the latest Ubuntu CI run:
+Across the final Ubuntu CI validation runs:
 
-- same-process representative execution: about **12.9 ms/job**;
-- fresh process-isolated execution: about **647.7 ms/job**;
-- measured cold process-boundary overhead: about **634.7 ms/job**.
+- same-process representative execution was about **13–18 ms/job**;
+- fresh process-isolated execution was about **648–824 ms/job**;
+- measured cold process-boundary overhead was about **0.63–0.81 seconds/job**.
 
-For normal SQLPathFinder jobs dominated by database/network/report work, this is a practical price for strong isolation. If startup cost later matters, Linux pre-fork or recyclable workers with one job per child can be benchmarked, but state isolation must not be weakened merely to avoid this overhead.
+For normal SQLPathFinder jobs dominated by database/network/report work, this appears to be a practical price for strong isolation. If startup cost later matters, Linux pre-fork or recyclable workers with one job per child can be benchmarked, but state isolation must not be weakened merely to avoid this overhead.
 
 ## Parser/runtime parity findings
 
