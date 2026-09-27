@@ -1,8 +1,0 @@
-.change-error {
-  display: block;
-  max-width: 54ch;
-  margin-top: 5px;
-  color: var(--danger);
-  font-size: 10px;
-  line-height: 1.35;
-}
