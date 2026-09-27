@@ -478,3 +478,53 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     assert "beta" in generated
     assert "<table" in generated.lower()
     assert not list(root.glob("*_MYREPORT_tmp_.ini"))
+
+
+def test_real_22844_builds_original_task_tree_on_linux() -> None:
+    from scripthost_portable.runtime import _spf_manager_type
+
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture = repo_root / "scripthost-utilities-decompiled" / "22844.spfsql"
+    text = fixture.read_text(encoding="utf-8-sig")
+
+    manager = _spf_manager_type()()
+    manager.gCommandLineArguments = [
+        str(repo_root / "scripthost-utilities-decompiled" / "SPSQL3_py" / "SPFSQL3.py"),
+        f'/MYLOCAL="{fixture.parent}"',
+        "/EXECMODE=UT",
+    ]
+    segments = [segment for segment in text.split(DELIM) if segment.strip()]
+    original = manager.Process_Query(
+        0,
+        len(segments),
+        list(segments),
+        manager.gMyLocal,
+        manager.gMyEXEDir,
+        None,
+        len(segments),
+        manager.gRNStr,
+        manager.TMP_F_NAME,
+        None,
+        False,
+    )
+
+    def flatten_original(tasks):
+        for task in tasks:
+            yield task
+            yield from flatten_original(task.childTasksList)
+
+    original_tasks = list(flatten_original(original))
+    current = parse(text)
+
+    def flatten_current(commands):
+        for command in commands:
+            yield command
+            yield from flatten_current(command.children)
+            yield from flatten_current(command.else_children)
+
+    current_commands = list(flatten_current(current))
+    assert original_tasks
+    assert current_commands
+    assert len(original_tasks) == len(segments)
+    assert any(task.__class__.__name__ == "ForLoopTask" for task in original_tasks)
+    assert any(task.__class__.__name__.startswith("nq") for task in original_tasks)
