@@ -397,7 +397,7 @@ print("chart_counter=" + str(second.g_ChartCtr))
     )
     assert result.returncode == 0, result.stderr
     lines = set(result.stdout.splitlines())
-    assert "execution_mode=UT" in lines
+    assert "execution_mode=Normal" in lines
     assert "same_run_id=True" in lines
     assert "cw_counter=7" in lines
     assert "chart_counter=9" in lines
@@ -415,9 +415,7 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     final = root / "portable_report.htm"
 
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
-        encoding="utf-8-sig"
-    )
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(encoding="utf-8-sig")
     css_block = next(
         segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
     ).strip()
