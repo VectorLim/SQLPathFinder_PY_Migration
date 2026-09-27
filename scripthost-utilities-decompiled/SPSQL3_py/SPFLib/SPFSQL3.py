@@ -269,8 +269,18 @@ from . import SPFUtilities
 from .SPFUtilities.utils import Utilities, SPFNothingToProcessException, SPFMutedException, SPFCMDRunExitWithErrorCodeException, SPFMacroNotFoundException
 from .SPFUtilities.memtable import MemTable
 from .SPFUtilities.utils import SPFRichProgressBar
-from . import dbDrivers
-from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+try:
+    from . import dbDrivers
+    from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
+except (ImportError, OSError):
+    dbDrivers = None
+    dbDriverBase = dbDriverODBCBase = dbDriverDotNetSQLServer = None
+    dbDriverDotNetTextJET = dbDriverDotNetTeradata = dbDriverDotNetOracle = None
+    dbDriverCxOracle = dbDriverODBCSQLServer = dbDriverODBCImpala = None
+    dbDriverODBCMYSQL = dbDriverODBCSAPHana = dbDriverMSOLAPWin32Com = None
+    dbDriverUBERWin32Com = dbDriverCB = dbDriverCBSQL = None
+    NodesInfo = spfsqlxParser = encryptSPFSQL = encryptConfigFile = encryptText = None
+    dbDriverODBCDenodo = dbDriverPGSQLPsycopg2 = dbDriverDotNetLibSQLServer = None
 
 class SPFManager(Utilities) :
     #class level variables
