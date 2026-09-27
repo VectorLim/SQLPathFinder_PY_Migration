@@ -110,3 +110,16 @@ The original time, read-only, ECHO and persistent SQLite load/delete fixtures pa
 Ubuntu run 36316728131 at 34d18a7. That run had 101 passes and one obsolete report
 assertion expecting missing Linux data; the assertion was updated after verifying
 that the path-case fix restores the original data. No report algorithm was changed.
+
+[Ubuntu run 36316933936](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36316933936)
+at ba82dad passed all 103 tests, formatting, compilation, lint and isolation benchmark.
+This gate also proves the original SQLite UDF fixture (regex matched text, JSON,
+base64 LOB output, LIKE preparation and CharIndex) without any UDF implementation change.
+The next cleanup removes query.py, file_values.py, files.py and misc.py, plus their
+superseded port tests. Remaining utility modules are csv.py, sqlite.py and email.py
+(with shared base.py). Their model/parser/runtime dependencies remain reference-only.
+
+Further Windows shell/VA commands, remote interpreter services, integrated web auth,
+Outlook/AD and richer Excel/XML modes are not claimed as Linux-supported. In
+particular, arbitrary DOS/VA commands still need explicit platform-boundary handling;
+they must not be treated as validated merely because an original task returns success.
