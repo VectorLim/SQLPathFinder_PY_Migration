@@ -217,6 +217,110 @@ def test_original_runtime_is_safe_when_concurrent_jobs_use_process_isolation(
     assert "PORTABLE_SPFS_ROWS" not in os.environ
 
 
+def test_original_site_loop_matches_vg2c_new(tmp_path: Path) -> None:
+    original_dir = tmp_path / "site-original"
+    new_dir = tmp_path / "site-new"
+    original_dir.mkdir()
+    new_dir.mkdir()
+
+    def make_text(root: Path) -> str:
+        return script(
+            block('/UTILITIES={SITE-LOOP} "A,B"'),
+            block(
+                "/WRITE-FILE=Y",
+                f"/CSV={root / 'site_<<<spf-site-for-file-name>>>.txt'}",
+                body="<<<spf-site>>>",
+            ),
+            block("/UTILITIES={END-LOOP}"),
+        )
+
+    assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
+    Interpreter({"write_file": WriteFileUtility()}).execute(
+        parse(make_text(new_dir)), RuntimeState(new_dir)
+    )
+
+    for site in ("A", "B"):
+        assert (original_dir / f"site_{site}.txt").read_text(encoding="utf-8").rstrip("\n") == site
+        assert (new_dir / f"site_{site}.txt").read_text(encoding="utf-8") == site
+
+
+def test_original_run_loop_matches_vg2c_new_final_chunk(tmp_path: Path) -> None:
+    original_dir = tmp_path / "run-original"
+    new_dir = tmp_path / "run-new"
+    original_dir.mkdir()
+    new_dir.mkdir()
+    (original_dir / "input.csv").write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
+    (new_dir / "input.csv").write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
+
+    def make_text(root: Path) -> str:
+        return script(
+            block(
+                f'/UTILITIES={{RUN-LOOP}} "{root / "input.csv"}" "{root / "chunk.csv"}" "2" "N"'
+            ),
+            block("/UTILITIES={END-LOOP}"),
+        )
+
+    assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
+    Interpreter().execute(parse(make_text(new_dir)), RuntimeState(new_dir))
+
+    original = (original_dir / "chunk.csv").read_text(encoding="utf-8-sig").strip()
+    current = (new_dir / "chunk.csv").read_text(encoding="utf-8-sig").strip()
+    assert original == current == "id,value\n3,c"
+
+
+def test_original_local_hpc_scope_matches_vg2c_new_flattening(tmp_path: Path) -> None:
+    original_dir = tmp_path / "hpc-original"
+    new_dir = tmp_path / "hpc-new"
+    original_dir.mkdir()
+    new_dir.mkdir()
+
+    def make_text(root: Path) -> str:
+        return script(
+            block('/UTILITIES={BEGIN-HPC} "LOCAL"'),
+            block("/WRITE-FILE=Y", f"/CSV={root / 'inside.txt'}", body="inside"),
+            block("/UTILITIES={END-HPC}"),
+        )
+
+    assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
+    Interpreter({"write_file": WriteFileUtility()}).execute(
+        parse(make_text(new_dir)), RuntimeState(new_dir)
+    )
+    assert (original_dir / "inside.txt").read_text(encoding="utf-8").rstrip("\n") == "inside"
+    assert (new_dir / "inside.txt").read_text(encoding="utf-8") == "inside"
+
+
+def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path: Path) -> None:
+    from scripthost_portable.runtime import _spf_manager_type
+
+    manager = _spf_manager_type()()
+    manager.gCommandLineArguments = [
+        str(tmp_path / "SPFSQL3.py"),
+        f'/MYLOCAL="{tmp_path}"',
+        "/EXECMODE=UT",
+    ]
+
+    cases = (
+        (block("/WRITE-FILE=Y", f"/CSV={tmp_path / 'x.txt'}", body="x"), "WriteFileTask", "write_file"),
+        (block('/UTILITIES={FOR-LOOP} "0" "1" "1" "x" "N"'), "ForLoopTask", None),
+        (
+            block(
+                "/REPORT=HTML-RUN",
+                "/WRITE-FILE=Y",
+                f"/CSV={tmp_path / 'ignored.txt'}",
+                body="ignored",
+            ),
+            "HTMLRunTask",
+            "report.html_run",
+        ),
+    )
+
+    for index, (text, original_class, target) in enumerate(cases):
+        original_task = manager.GetQuery(manager.gMyLocal, text, index, False)
+        current = parse(text)[0]
+        assert original_task.__class__.__name__ == original_class
+        assert current.utility_type == target
+
+
 def test_windows_db_transport_fails_only_when_invoked() -> None:
     from SPFLib.SPFSQL3 import SPFManager, dbDriverBase
 
