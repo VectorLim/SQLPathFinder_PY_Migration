@@ -69,6 +69,20 @@ def main():
                         "csv_expanded": "SQL_Get_CSV_List" not in query,
                     }
                     evidence["calls"].append(call)
+                    assert call["schema_expanded"] and call["csv_expanded"]
+                    if backend == "aries":
+                        import pandas as pd
+
+                        mars_path = output / "yeuchuan_a0_22844.tab"
+                        lots = pd.read_csv(mars_path, sep="\t", dtype=str)["LOT_"].dropna().unique()
+                        call["mars_output_sha256"] = hashlib.sha256(
+                            mars_path.read_bytes()
+                        ).hexdigest()
+                        call["mars_unique_lots"] = len(lots)
+                        call["mars_lots_present_in_sql"] = all(
+                            "'" + lot.replace("'", "''") + "'" in query for lot in lots
+                        )
+                        assert call["mars_lots_present_in_sql"]
                     save()
                     try:
                         frame = reader.read(site=site, query=query)
@@ -99,10 +113,13 @@ def main():
 
     runtime = PortableScriptHostRuntime()
     with (
-        patch.object(spf, "dbDriverCxOracle", None),
+        patch.dict(os.environ, {"SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT": "1"}),
         patch.object(spf.nqOracleTask, "OpenConnection", observed_open),
         use_reader_factory(Factory()),
     ):
+        evidence["force_portable_query_transport"] = os.environ[
+            "SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT"
+        ]
         for name, text, filename in zip(
             ("mars", "aries", "sqlite"),
             selected,

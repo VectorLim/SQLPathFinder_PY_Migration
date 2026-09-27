@@ -1,5 +1,52 @@
 # Session 2.6A live DataSyncX validation
 
+## Follow-up: explicit portable transport override
+
+The separate follow-up commit adds only a production driver-selection override:
+`SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1`. Original
+`nqOracleTask.OpenConnection` selects `PortableOracleConnection` when the value is
+exactly `1`; otherwise the existing compiled-driver preference/fallback remains.
+It logs the portable selection and whether it was forced. No `vg2c_new` code or
+CSV-list preprocessing semantics changed.
+
+The live harness now sets that environment flag in a scoped context instead of
+patching `dbDriverCxOracle`. Its OpenConnection wrapper only observes/asserts
+the resulting type. It still enters `PortableScriptHostRuntime` and the original
+SPFManager/task lifecycle. It additionally asserts, before calling DataSyncX,
+that schema/CSV-list tokens are absent and each distinct lot from the generated
+MARS TAB appears as a SQL string literal in the ARIES query. It records the MARS
+file digest and matched lot count without recording business values.
+
+Reproduction from the repository in PowerShell:
+
+```powershell
+$env:PYTHONPATH = 'src'
+.\.venv\Scripts\python.exe scripts\architecture\validate_live_datasyncx.py --output data\new-force-portable-run
+```
+
+For other callers of `PortableScriptHostRuntime`, set
+`$env:SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT = '1'` in the launching environment.
+This flag does not change `python -m vg2c_new` into the original ScriptHost runtime.
+
+Live follow-up evidence: `data/live-datasyncx-force-flag/evidence.json`, PID 72100,
+Windows/Python 3.14.6/DataSyncX 1.1.6. Real 22844 MARS returned **3 rows**, ARIES
+**7,580 rows**, and original SQLite **1,114 rows**. Both reader calls used `KM`;
+all three MARS lots appeared in the expanded ARIES SQL. Captured connection types
+were PortableOracleConnection; reader types were actual DataSyncX MarsReader and
+AriesReader. `csv_expanded=true` was checked before both live calls. Counts differ
+from the earlier run because the fixture uses a moving three-hour window.
+
+All live header, null/dot, UTF-8/no-BOM, empty-result fallback, append, and real
+exception assertions passed again. Eight deterministic selection cases prove the
+override with a present legacy-driver stand-in and preserve default behavior with
+unset, `0`, or `true` flags. The actual compiled driver is unavailable in this
+Python 3.14 environment; no live compiled-driver comparison is claimed.
+
+Full direct-runtime regression: **89 passed, 2 failed (91 tests)**, with the same
+two baseline Windows-specific report/SQLite-header assertions detailed below.
+Ruff lint/format, compilation, and diff checks passed. Linux production gate
+remains NOT CLEARED for the previously documented reasons. No main merge.
+
 ## Decision
 
 **Linux production query transport gate: NOT CLEARED.** Real Windows DataSyncX

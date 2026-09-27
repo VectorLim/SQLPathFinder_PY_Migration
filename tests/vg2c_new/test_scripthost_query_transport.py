@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import codecs
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -19,6 +21,47 @@ from scripthost_portable import (
 )
 
 DELIM = "<---- New Query ---->"
+
+
+@pytest.mark.parametrize("flag", [None, "0", "1", "true"])
+@pytest.mark.parametrize("legacy_available", [False, True])
+def test_force_portable_transport_preserves_default_driver_selection(
+    monkeypatch, flag, legacy_available
+) -> None:
+    from scripthost_portable.runtime import _spf_manager_type
+
+    _spf_manager_type()
+    import SPFLib.SPFSQL3 as spf
+
+    class LegacyDriver:
+        def __init__(self, queryOptions):
+            self.query_options = queryOptions
+
+        def openConnection(self, *args):
+            self.arguments = args
+
+    monkeypatch.setattr(spf, "dbDriverCxOracle", LegacyDriver if legacy_available else None)
+    if flag is None:
+        monkeypatch.delenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT", raising=False)
+    else:
+        monkeypatch.setenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT", flag)
+    task = SimpleNamespace(
+        SQLEngine="VA",
+        queryOptions={},
+        ll_ConnRetry=2,
+        logger=logging.getLogger(__name__),
+        getCallingFuncName=lambda *args: "test",
+    )
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"VALUE": [1]})})
+    with use_reader_factory(factory):
+        connection = spf.nqOracleTask.OpenConnection(task, "//", "", "KM.MARS")
+    if flag == "1" or not legacy_available:
+        assert type(connection) is PortableOracleConnection
+        assert factory.requested == [("mars", "KM.MARS")]
+    else:
+        assert type(connection) is LegacyDriver
+        assert connection.arguments == ("//", "", "KM.MARS", 2)
+        assert factory.requested == []
 
 
 @dataclass

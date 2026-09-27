@@ -6027,11 +6027,13 @@ class nqOracleTask(NormalQueryTaskBase) :
             self.logger.debug(f"{calling_func} - dbDriverMapped : {dbDriverMapped}")
             #get from modules attribute -- expects the class to be in current module
             dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped, None)
-            if dbDriverClsObject is None:
+            forcePortable = os.getenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT") == "1"
+            if forcePortable or dbDriverClsObject is None:
                 # The original parser/query-task lifecycle remains authoritative.
-                # Only replace the unavailable compiled Windows transport.
+                # Explicit opt-in also permits portable validation on Windows.
                 from scripthost_portable.query_transport import PortableOracleConnection
                 dbDriverClsObject = PortableOracleConnection
+                self.logger.info("Oracle query transport: PortableOracleConnection (forced=%s)", forcePortable)
             #create the instance
             dbDriver = dbDriverClsObject(queryOptions=self.queryOptions)
 
