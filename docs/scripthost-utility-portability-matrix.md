@@ -38,7 +38,7 @@ capability proofs, not blanket equivalence for every historical option.
 | STACK-DATA | StackDataTask.execute | Pass unchanged, union and numeric sorting | None | Delete StackDataUtility | stack_data, two files with different columns |
 | SMART-APPEND V4 | SmartAppendTask.smartAppend4_file_pandas -> File_Lock_Move | Algorithm passes; Windows move prevented final replacement | shutil.move at original move boundary | Delete SmartAppendUtility | smart_append_v4, deletion/update/schema-union fixture |
 | ZIP | SPFZipTask -> ZipFiles2/ZipFolder2 | Python zipfile/shutil already present; file archive passes | None | Delete ZipUtility | zip_original |
-| UNZIP | SPFUNZipTask -> UnzipFile | Windows unzip.exe unavailable | Plain zipfile operation; preserve/flatten paths; validate all members before extraction | Delete UnzipUtility after gate | unzip_original_task Y/N; unzip_rejects_escape_before_extracting |
+| UNZIP | SPFUNZipTask -> UnzipFile | Windows unzip.exe unavailable | Plain zipfile operation; preserve/flatten paths; validate all members before extraction | Delete UnzipUtility; gate passed | unzip_original_task Y/N; unzip_rejects_escape_before_extracting |
 | WAIT-FILE | WaitFileTask -> WaitFile | Pass unchanged; original sleeps after each failed poll | None | Delete WaitFileUtility | wait_existing_and_zero_interval; wait_poll_count_original (clock patched only) |
 | WAIT-INTERVAL | WaitIntervalTask -> WaitInterval | Pass unchanged | None | Delete WaitIntervalUtility | wait_existing_and_zero_interval |
 | Python | RunPythonScriptTask -> Run_Python | Local execution passes using existing PYTHON3 INI setting | None | Delete RunPythonUtility | python_original_launch(False), real interpreter/argv |
@@ -51,14 +51,14 @@ capability proofs, not blanket equivalence for every historical option.
 | XLSToCSV | XLSToCSVTask | Existing pandas/openpyxl branch passes | None for tested .xlsx path | Delete XlsToCsvUtility; newline-replacement and legacy .xls need separate evidence | xlsx_to_csv_original |
 | Append / rename | AppendFileTask / SPFRenameTask | Pass unchanged | None | Delete AppendFileUtility/RenameFileUtility | append_rename_delete |
 | Delete | SPFDeleteTask -> SPFDelete | Windows DEL silently did nothing | Native file-only deletion after original argument parsing; directory contents are nonrecursive | Delete DeleteFileUtility | append_rename_delete; report cleanup also now removes temp INI |
-| Set read-only | SetFileROTask | Source: win32api.Get/SetFileAttributes | Not amended yet | Retain reference | Source inspection; no original execution claim |
+| Set read-only | SetFileROTask | Linux read-only/read-write fixture passes | POSIX chmod replaces only win32 attributes | Delete files.py | readonly_original_task; Ubuntu 87d151e |
 | Email | EmailTask -> SPFEmail/GetEmailAdss | SMTP helper unavailable; Outlook/identity/role lookups platform-bound. No send_msg implementation found in installed DataSyncX source | No guessed provider or recipient-policy rewrite | Retain reference; transport unresolved | email_original_task_keeps_role_and_recipient_policy captures task/helper boundary only; no email sent |
-| GET-SITE-TIME | GetSiteTimeTask -> nqOracleTask.Do_Get_Time | Specialized original connection/time path not yet characterized | None pending fixture | Retain GetSiteTimeUtility | Source trace only; prior port mocks are not original evidence |
-| UPDATE-TIME / UPDATE-TIME-FILE | UpdateTimeTask/UpdateTimeFileTask -> Do_Update_Time/Do_Update_Time_File | Original job-time/.spf$data contract differs from RuntimeState port | None pending original state fixture | Retain UpdateTimeUtility | Source trace only |
-| SQLite query/load/delete | nqSQLiteTask / SQLiteLoadTask / SQLiteDeleteTask -> MemTable | Real 22844 query pipeline passes; port-specific UDF/load/delete contracts not yet all harvested | Existing original query path unchanged | Retain sqlite.py as reference until remaining fixtures move | test_scripthost_query_transport real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle |
-| Oracle query | nqOracleTask -> PortableOracleConnection | Existing deterministic original transport suite passes; Windows live evidence predates audit | No additional transport change | Retain query.py only while shared site-time evidence remains | test_scripthost_query_transport; test_scripthost_worker |
-| Echo / generic DOS/VA helpers | EchoTask/DOSCmdTask/vaTask -> Run | Echo and generic shell variants not yet characterized; Windows command syntax remains platform-specific | Do not install a generic command interpreter or shell translation layer | Retain Echo reference; generic port gaps are not implementations | Source inspection only |
-| Reports | Original HTML* task hierarchy | Existing characterization retained; shared delete amendment fixes cleanup incidentally | No report rewrite | Separate next phase | test_original_scripthost_runtime report fixtures |
+| GET-SITE-TIME | GetSiteTimeTask -> nqOracleTask.Do_Get_Time | GMT and database time pass; transport previously wrote only files | Send memory-bound query results into original MemTable.LoadDF | Delete GetSiteTimeUtility | gmt_update_time_original; test_scripthost_query_transport original_get_site_time_then_update |
+| UPDATE-TIME / UPDATE-TIME-FILE | UpdateTimeTask/UpdateTimeFileTask -> Do_Update_Time/Do_Update_Time_File | Original offsets and persisted .spf$data pass across fresh workers with explicit INSTANCE | Native current-directory path for .spf$data | Delete file_values.py | time_file_persistence_original; gmt_update_time_original |
+| SQLite query/load/delete | nqSQLiteTask / SQLiteLoadTask / SQLiteDeleteTask -> MemTable | Query pipeline and load/delete pass; uppercasing source paths prevented Linux imports | Preserve case when deduplicating POSIX input paths | Retain sqlite.py until alias/multiple-statement/reserved-column edge evidence is harvested | sqlite_load_delete_original; original_udfs; real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle |
+| Oracle query | nqOracleTask -> PortableOracleConnection | Existing original transport suite passes; Windows live evidence predates audit | Preserve original gLoadToMemTable result destination | Delete query.py, including unused PlatformGapUtility | test_scripthost_query_transport; test_scripthost_worker |
+| Echo / generic DOS/VA helpers | EchoTask/DOSCmdTask/vaTask -> Run | Literal ECHO passes after removal of COMSPEC call on POSIX; arbitrary Windows shell syntax remains unsupported | Console output for literal ECHO; reject shell operators | Delete misc.py; no generic shell translation | echo_original; source trace of generic helpers |
+| Reports | Original HTML* task hierarchy | Existing characterization passes with original data after shared file-case/delete fixes | No report rewrite | Separate next phase | test_original_scripthost_runtime report fixtures |
 
 ## Observed semantic differences to preserve
 
@@ -75,16 +75,23 @@ capability proofs, not blanket equivalence for every historical option.
 - The two baseline Windows failures were platform-characterization assertions, not
   query transport regressions. Windows SQLite labels retain mixed case; Linux
   labels remain uppercase. Shared portable deletion legitimately changes the
-  old Linux report cleanup limitation without altering report algorithms.
+  old Linux report cleanup limitation without altering report algorithms. Preserving
+  input path case also restores report table data.
 
 ## Remaining work before deleting vg2c_new entirely
 
-Harvest original time-state/.spf$data, SQLite utility/UDF, read-only, and Echo coverage.
+Harvest remaining SQLite alias/multiple-statement/reserved-column and CSV-list edge fixtures
+from the reference tests, then retire sqlite.py and csv.py.
 Resolve an actual email transport plus identity/role boundary; preserve original
 recipient restrictions. Broaden evidence only if production needs additional XML,
 Excel, RoboCopy, authenticated web or remote application-server variants.
 Then remove the reference model/parser/runtime and remaining utilities/tests together;
 none may become a supported execution entrypoint. Report modernization remains separate.
+
+- Original SQLite regex search returns the matched string (or NULL), not the port's
+  boolean. Regex arguments are pattern-first with integer flags. LOB writes decode
+  base64; SPFPrepLikeValue prepares SQL LIKE patterns rather than translating shell
+  wildcards. These are original contracts, not deficiencies to repair to match the port.
 
 ## Cleanup batch
 
@@ -98,3 +105,8 @@ The executable entrypoint is a refusal message, not a forwarding compatibility f
 
 XML and email-boundary additions passed [Linux run 36315838567](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/36315838567)
 at 081b611: 122 passed before cleanup. Final post-cleanup totals follow below.
+
+The original time, read-only, ECHO and persistent SQLite load/delete fixtures passed
+Ubuntu run 36316728131 at 34d18a7. That run had 101 passes and one obsolete report
+assertion expecting missing Linux data; the assertion was updated after verifying
+that the path-case fix restores the original data. No report algorithm was changed.
