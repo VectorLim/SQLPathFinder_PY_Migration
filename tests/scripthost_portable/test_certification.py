@@ -157,7 +157,13 @@ def test_real_22844_query_slice_through_worker(tmp_path, monkeypatch):
     assert result.success, result
     with (tmp_path / "XRAY_results.csv").open(encoding="utf-8-sig", newline="") as stream:
         rows = [{k.upper(): v for k, v in row.items()} for row in csv.DictReader(stream)]
-    assert len(rows) == 1
+    diagnostics = result.stdout + result.stderr
+    for path in tmp_path.glob("*.tab"):
+        diagnostics += "\n" + path.name + "\n" + path.read_text(encoding="utf-8-sig")
+    log = ROOT / f"{result.child_pid}.log"
+    if log.exists():
+        diagnostics += log.read_text(encoding="utf-8")[-12000:]
+    assert len(rows) == 1, diagnostics
     assert rows[0]["LOT"] == "LOT_A"
     assert rows[0]["VISUAL_ID"] == "VID_A"
     assert float(rows[0]["NUMERIC_VALUE_MAX"]) == 5.0
