@@ -205,11 +205,10 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
-if isPYTHON313 is True:
-    # import SPFLib.dbDrivers
+try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
-else:
-    from SPFLib.dbDrivers import SPFSMTPAuthEmail
+except (ImportError, OSError):
+    SPFSMTPAuthEmail = None
 
 #region packages used for SMTP email -- SPFEmail
 import email
@@ -7094,6 +7093,8 @@ class Utilities(SPFGlobals):
                     #    useSMTPAuth = False 
                     self.logger.debug("{0} - useSMTPAuth : '{1}'".format(calling_func, useSMTPAuth))
                     #useSMTPAuth = True if self.SHisSHEntry is False else False # Default use SMTPAuth
+                    if SPFSMTPAuthEmail is None:
+                        raise RuntimeError("Legacy ScriptHost SMTP transport is unavailable on this platform")
                     try:
                         SPFSMTPAuthEmail_ = SPFSMTPAuthEmail().SendEmail(userEmailAddress, MailToIn + MailCC + MailBCC, emailMessage.as_string(), useSMTPAuth=useSMTPAuth)
                     except Exception as err:
