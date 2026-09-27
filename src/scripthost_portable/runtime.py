@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -41,7 +42,18 @@ class PortableScriptHostRuntime:
             "/EXECMODE=UT",
         ]
         manager.MySPFSQLFileData = text
-        return bool(manager.Run_SPFSQL())
+
+        # The legacy runtime writes several temporary/report artifacts relative
+        # to the process working directory. Preserve that execution contract for
+        # one job, then restore the caller's directory. This is intentionally
+        # process-global and is another reason concurrent jobs must be isolated
+        # into separate worker processes rather than threads.
+        previous = Path.cwd()
+        os.chdir(workdir)
+        try:
+            return bool(manager.Run_SPFSQL())
+        finally:
+            os.chdir(previous)
 
     def run_file(self, script: Path, working_directory: Path | None = None) -> bool:
         path = Path(script).resolve(strict=True)
