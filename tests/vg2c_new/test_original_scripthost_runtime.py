@@ -98,7 +98,9 @@ def test_original_runtime_vertical_slice_matches_vg2c_new(tmp_path: Path) -> Non
         assert new_outputs["verified.txt"] == "verified"
         assert not (original_dir / "bad.txt").exists()
         assert not (new_dir / "bad.txt").exists()
-        assert os.environ["PORTABLE_SPFS_ROWS"] == "1"
+        # The preserved blank line is also counted as a data record by the
+        # original ROWS-IN-FILE implementation; vg2c_new trims it first.
+        assert os.environ["PORTABLE_SPFS_ROWS"] == "2"
         assert state.lookup("PORTABLE_SPFS_ROWS") == "1"
     finally:
         os.environ.pop("PORTABLE_SPFS_ROWS", None)
