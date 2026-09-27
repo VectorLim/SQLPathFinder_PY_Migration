@@ -421,24 +421,16 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     ).strip()
     css_block = css_block.replace("sqlpathfinder_style_1.css", str(css))
 
-    report_spec = (
-        "Type<\\\\>Key<\\\\>COL1<\\\\>COL2\n"
-        "TYPE<\\\\>HTML<\\\\><\\\\><\\\\>\n"
-        f"INPUT-FILE<\\\\>{data}<\\\\><\\\\><\\\\>\n"
-        "OUTPUT-FILE<\\\\>unused.htm<\\\\><\\\\><\\\\>\n"
-        f"CSS<\\\\>{css}<\\\\><\\\\><\\\\>\n"
-        "COLSPAN<\\\\><\\\\><\\\\><\\\\>\n"
-        "DRILLDOWN<\\\\>N<\\\\><\\\\><\\\\>\n"
-        "DYNAMICSORT<\\\\><\\\\><\\\\><\\\\>\n"
-        "DYNAMICFILTER<\\\\><\\\\><\\\\><\\\\>\n"
-        "ATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\>\n"
-        "NOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\>\n"
-        "COLUMN-DATA<\\\\><\\\\>id<\\\\>value\n"
-        "COLUMN-HEADERS<\\\\><\\\\>ID<\\\\>Value\n"
-        "COLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left\n"
-        "COLUMN-FORMAT<\\\\><\\\\><\\\\>"
+    defer_block = next(
+        segment
+        for segment in fixture.split(DELIM)
+        if "/REPORT=HTML-DEFER" in segment and "/ID=MYREPORT5" in segment
+    ).strip()
+    source_line = next(
+        line for line in defer_block.splitlines() if line.startswith("INPUT-FILE<\\\\>")
     )
-    defer = block("/ID=MYREPORT", "/REPORT=HTML-DEFER", body=report_spec)
+    defer = defer_block.replace(source_line, f"INPUT-FILE<\\\\>{data}<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>")
+    defer = defer.replace("sqlpathfinder_style_1.css", str(css))
 
     layout_body = "\n".join(
         [
@@ -452,7 +444,7 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
             '<table class="tblout">',
             '<tr class="tblout">',
             '<td class="tblout">',
-            "HTM:MYREPORT",
+            "HTM:MYREPORT5",
             "</td>",
             "</tr>",
             "</table>",
@@ -477,7 +469,7 @@ def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
     assert "alpha" in generated
     assert "beta" in generated
     assert "<table" in generated.lower()
-    assert not list(root.glob("*_MYREPORT_tmp_.ini"))
+    assert not list(root.glob("*_MYREPORT5_tmp_.ini"))
 
 
 def test_real_22844_builds_original_task_tree_on_linux() -> None:
