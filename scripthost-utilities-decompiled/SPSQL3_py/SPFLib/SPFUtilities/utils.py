@@ -1,4 +1,4 @@
-﻿"""
+"""
 License : Copyright (c) Intel Corporation 2023
 Product: Intel.ATTD.Auto.SQLPathFinder
 Module : SQLPathFinder Python Extract Engine 
@@ -6806,16 +6806,22 @@ class Utilities(SPFGlobals):
                     self.Console("Retrieving {0} ...{1}".format(MyURL, self.DatetimeNow))
                 
                 import requests
-                from .requests_negotiate_sspi import HttpNegotiateAuth
-                
+                auth = None
+                verify = True
+                if os.name == "nt":
+                    from .requests_negotiate_sspi import HttpNegotiateAuth
+                    auth = HttpNegotiateAuth()
+                    verify = self.generate_pems()
+                # POSIX uses requests' system CA verification. Integrated Windows
+                # credentials and SharePoint remain separate platform integrations.
                 if self.isSPO_URL(MyURL) is True:
                     self.SPOHandler2("DOWNLOADFILE", MyURL, MyFile)
                     return
 
                 myChunkSize = 64 * 1024
                 with requests.get(url=MyURL,
-                                  verify=self.generate_pems(),
-                                  auth=HttpNegotiateAuth(), 
+                                  verify=verify,
+                                  auth=auth, 
                                   stream=True,
                                   timeout=reqtimeout,
                                   proxies=self.IGNORE_LOCAL_PROXIES) as response:
@@ -7646,6 +7652,9 @@ class Utilities(SPFGlobals):
         self.logger.debug("{0} - sFile: '{1}'".format(calling_func, sFile))
         self.logger.debug("{0} - sTarget: '{1}'".format(calling_func, sTarget))
         self.logger.debug("{0} - bDelDirs: '{1}'".format(calling_func, bDelDirs))
+        if os.name != "nt":
+            from scripthost_portable.file_operations import unzip_file
+            return unzip_file(sFile, sTarget, bDelDirs)
         cmdToExecute = "unzip.exe"
         sDirs = "-j"
         try : 
@@ -7715,7 +7724,7 @@ class Utilities(SPFGlobals):
                 raise Exception(errMsg)
 
             self.Console("Looking for: {0}".format(FP))
-            FPList = FP.split("\\")
+            FPList = FP.split("\\" if os.name == "nt" else "/")
             TmpF = ""
             while len(FPList) > 0 :
                 FPListItem = FPList.pop(0)
@@ -7723,7 +7732,7 @@ class Utilities(SPFGlobals):
                 MaxF = ""
                 MaxFDate = ""
                 if self.IsEmptyOrNone(FPListItem) is True : # this a \\
-                    TmpF = "{0}\\".format(TmpF)
+                    TmpF = "{0}{1}".format(TmpF, os.sep)
                 #backward compatible Token1Token2 format and new format Token1\Token2
                 elif FPListItem.lower().find(Token1) != -1 : #get the folder with max modified date                    
                     if FPListItem.lower().find(Token2) != -1 :
@@ -7836,7 +7845,11 @@ class Utilities(SPFGlobals):
 
             if emitConsoleMessages is True:
                 self.Console("  Copying {0} to {1}".format(MySrc, MyDest))
-            if usePyCopy is True:
+            if os.name != "nt":
+                from scripthost_portable.file_operations import copy_files
+                copy_files(MySrc, MyDest)
+                runExitCode = 0
+            elif usePyCopy is True:
                 try:
                     #supports only files
                     shutil.copy2(MySrc, MyDest)

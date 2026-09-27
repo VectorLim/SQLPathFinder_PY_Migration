@@ -9,7 +9,9 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
@@ -216,3 +218,131 @@ def test_append_rename_delete(tmp_path: Path):
     assert not dest.exists()
     execute(tmp_path, utility(r"@EXEDIR@\SPFDelete.bat", renamed, "N"))
     assert not renamed.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for Windows unzip.exe")
+@pytest.mark.parametrize("preserve", ["Y", "N"])
+def test_unzip_original_task(tmp_path: Path, preserve):
+    archive = tmp_path / "input.zip"
+    with zipfile.ZipFile(archive, "w") as writer:
+        writer.writestr("nested/value.txt", "content")
+    execute(tmp_path, utility(r"@EXEDIR@\SPFUNZIP.va", archive, tmp_path / "out", preserve))
+    target = tmp_path / "out" / ("nested/value.txt" if preserve == "Y" else "value.txt")
+    assert target.read_text() == "content"
+
+
+@pytest.mark.parametrize(
+    "member", ["../escape.txt", "/absolute.txt", r"C:\escape.txt", r"..\escape.txt"]
+)
+def test_unzip_rejects_escape_before_extracting(tmp_path: Path, member):
+    from scripthost_portable.file_operations import unzip_file
+
+    archive = tmp_path / "bad.zip"
+    with zipfile.ZipFile(archive, "w") as writer:
+        writer.writestr("good.txt", "good")
+        writer.writestr(member, "bad")
+    with pytest.raises(ValueError, match="Unsafe ZIP member"):
+        unzip_file(str(archive), str(tmp_path / "out"), True)
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX replacement for COPY")
+def test_copy_original_distribution_tokens(tmp_path: Path):
+    source, dest = tmp_path / "source", tmp_path / "dest"
+    source.mkdir()
+    dest.mkdir()
+    (source / "old.txt").write_text("old")
+    (source / "new.txt").write_text("new")
+    os.utime(source / "old.txt", (1000000000, 1000000000))
+    execute(
+        tmp_path,
+        utility(r"@EXEDIR@\SPFCopy.bat", str(source / "<file-datelastmodified>"), dest, "N"),
+    )
+    assert sorted(p.name for p in dest.iterdir()) == ["new.txt"]
+    execute(tmp_path, utility(r"@EXEDIR@\SPFCopy.bat", source / "*.txt", dest, "N"))
+    assert (dest / "old.txt").read_text() == "old"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX requests boundary, no Windows SSPI")
+def test_web_v2_original_local_http(tmp_path: Path):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200 if self.path == "/ok" else 404)
+            self.end_headers()
+            self.wfile.write("hello café".encode())
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        execute(
+            tmp_path,
+            utility(
+                r"@EXEDIR@\Get_Web_Text.exe",
+                base + "/ok",
+                tmp_path / "web.txt",
+                "N",
+                "N",
+                "Version 2",
+                "2",
+            ),
+        )
+        assert (tmp_path / "web.txt").read_bytes() == "hello café".encode()
+        execute(
+            tmp_path,
+            utility(
+                r"@EXEDIR@\Get_Web_Text.exe",
+                base + "/missing",
+                tmp_path / "missing.txt",
+                "N",
+                "Y",
+                "Version 2",
+                "2",
+            ),
+        )
+        assert not (tmp_path / "missing.txt").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_wait_poll_count_original(tmp_path: Path, monkeypatch):
+    from SPFLib.SPFUtilities import utils
+
+    from scripthost_portable.runtime import _spf_manager_type
+
+    sleeps = []
+    monkeypatch.setattr(utils.time, "sleep", sleeps.append)
+    manager = _spf_manager_type()()
+    manager.WaitFile(str(tmp_path / "missing"), "3")
+    assert sleeps == [10, 10, 10]
+
+
+def test_xlsx_to_csv_original(tmp_path: Path):
+    from openpyxl import Workbook
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Data"
+    sheet.append(["ID", "Value"])
+    sheet.append(["001", "hello"])
+    book.save(tmp_path / "input.xlsx")
+    execute(
+        tmp_path,
+        utility(
+            r"@EXEDIR@\XLSToCSV.va",
+            tmp_path / "input.xlsx",
+            tmp_path / "output.csv",
+            "Data",
+            "0",
+            "0",
+            "N",
+            "N",
+        ),
+    )
+    assert rows(tmp_path / "output.csv") == [["ID", "Value"], ["001", "hello"]]
