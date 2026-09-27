@@ -1,233 +1,128 @@
-"""Opt-in live 22844 validation; run in a fresh process with --output DIR.
-
-Outputs may contain corporate query data. Keep the output directory local.
-No credentials, SQL text, or row values are included in evidence.json.
-"""
+"""Opt-in live worker certification. Outputs stay local; evidence contains no row values."""
 
 from __future__ import annotations
 
 import argparse
-import codecs
 import hashlib
 import inspect
 import json
 import os
 import platform
+from importlib.metadata import version
 from pathlib import Path
-from unittest.mock import patch
 
-from scripthost_portable import PortableOracleConnection, PortableScriptHostRuntime
-from scripthost_portable.query_transport import DataSyncXReaderFactory, use_reader_factory
-from scripthost_portable.runtime import _spf_manager_type
+import pandas as pd
+
+from scripthost_portable.worker import ScriptHostJob, run_job
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--timeout", type=float, default=240)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    import datasyncx
+    from datasyncx import AriesReader, MarsReader, OracleReader
 
     evidence = {
-        "pid": os.getpid(),
         "platform": platform.platform(),
         "python": platform.python_version(),
-        "datasyncx": datasyncx.version,
-        "calls": [],
-        "steps": [],
+        "datasyncx": version("datasyncx"),
+        "entrypoint": "scripthost_portable.worker.run_job",
+        "contract": {
+            cls.__name__: {
+                "constructor": str(inspect.signature(cls)),
+                "read": str(inspect.signature(cls.read)),
+            }
+            for cls in (MarsReader, AriesReader, OracleReader)
+        },
+        "jobs": [],
+        "outputs": [],
     }
-    _spf_manager_type()
-    import SPFLib.SPFSQL3 as spf
-
-    evidence["legacy_driver_available"] = spf.dbDriverCxOracle is not None
     fixture = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled/22844.spfsql"
     segments = fixture.read_text(encoding="utf-8-sig").split("<---- New Query ---->")
     selected = [
         next(s for s in segments if marker in s).strip()
         for marker in ("/NODE=KM.[A15_PROD_21.].MARS", "/NODE=KM.ARIES", "/CSV=XRAY_results.csv")
     ]
+    os.environ["SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT"] = "1"
 
-    def save():
-        (output / "evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
-
-    class Factory(DataSyncXReaderFactory):
-        def reader_for(self, backend, node):
-            reader = super().reader_for(backend, node)
-
-            class Observed:
-                def read(self, *, site, query):
-                    call = {
-                        "backend": backend,
-                        "node": node,
-                        "site": site,
-                        "reader": f"{type(reader).__module__}.{type(reader).__name__}",
-                        "constructor": str(inspect.signature(type(reader))),
-                        "read_signature": str(inspect.signature(reader.read)),
-                        "sql_sha256": hashlib.sha256(query.encode()).hexdigest(),
-                        "schema_expanded": "@[]@" not in query,
-                        "csv_expanded": "SQL_Get_CSV_List" not in query,
-                    }
-                    evidence["calls"].append(call)
-                    assert call["schema_expanded"] and call["csv_expanded"]
-                    if backend == "aries":
-                        import pandas as pd
-
-                        mars_path = output / "yeuchuan_a0_22844.tab"
-                        lots = pd.read_csv(mars_path, sep="\t", dtype=str)["LOT_"].dropna().unique()
-                        call["mars_output_sha256"] = hashlib.sha256(
-                            mars_path.read_bytes()
-                        ).hexdigest()
-                        call["mars_unique_lots"] = len(lots)
-                        call["mars_lots_present_in_sql"] = all(
-                            "'" + lot.replace("'", "''") + "'" in query for lot in lots
-                        )
-                        assert call["mars_lots_present_in_sql"]
-                    save()
-                    try:
-                        frame = reader.read(site=site, query=query)
-                    except Exception as exc:
-                        call["exception"] = f"{type(exc).__module__}.{type(exc).__name__}"
-                        call["message"] = str(exc)
-                        save()
-                        raise
-                    call.update(
-                        return_type=f"{type(frame).__module__}.{type(frame).__name__}",
-                        rows=len(frame),
-                        columns=list(frame.columns),
-                        nulls=int(frame.isna().sum().sum()),
-                    )
-                    save()
-                    return frame
-
-            return Observed()
-
-    original_open = spf.nqOracleTask.OpenConnection
-
-    def observed_open(self, *arguments):
-        connection = original_open(self, *arguments)
-        assert type(connection) is PortableOracleConnection
-        evidence.setdefault("connections", []).append(type(connection).__name__)
-        save()
-        return connection
-
-    runtime = PortableScriptHostRuntime()
-    with (
-        patch.dict(os.environ, {"SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT": "1"}),
-        patch.object(spf.nqOracleTask, "OpenConnection", observed_open),
-        use_reader_factory(Factory()),
-    ):
-        evidence["force_portable_query_transport"] = os.environ[
-            "SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT"
-        ]
-        for name, text, filename in zip(
-            ("mars", "aries", "sqlite"),
-            selected,
-            ("yeuchuan_a0_22844.tab", "yeuchuan_a1_22844.tab", "XRAY_results.csv"),
-            strict=True,
-        ):
-            step = {
+    def execute(name: str, text: str) -> bool:
+        result = run_job(
+            ScriptHostJob(working_directory=str(output), script_text=text), timeout=args.timeout
+        )
+        evidence["jobs"].append(
+            {
                 "name": name,
-                "fixture_headers": next(
-                    line.split("=", 1)[1]
-                    for line in text.splitlines()
-                    if line.startswith("/HEADERS=")
-                ),
+                "success": result.success,
+                "error_category": result.error_category,
+                "child_pid": result.child_pid,
+                "script_sha256": hashlib.sha256(text.encode()).hexdigest(),
             }
-            evidence["steps"].append(step)
-            try:
-                step["success"] = runtime.run_text(text, output)
-            except Exception as exc:
-                step.update(
-                    success=False,
-                    exception=f"{type(exc).__module__}.{type(exc).__name__}",
-                    message=str(exc),
-                )
-            path = output / filename
-            if path.exists():
-                raw = path.read_bytes()
-                step.update(
-                    bom=raw.startswith(codecs.BOM_UTF8),
-                    bytes=len(raw),
-                    generated_header=raw.decode("utf-8-sig").splitlines()[0],
-                )
-            save()
-            if not step["success"]:
-                break  # Never fabricate MARS data to make downstream queries appear live.
-        empty_text = r"""<OPTIONS>
-/NODE=KM.MARS
-/UN=//
-/PW=
-/OLEDB=SQLPlus
-/ENGINE=VA
-/WORKDIR=.\
-/T=
-/CSV=empty_lifecycle.tab
-/HEADERS=fallback_name
-</OPTIONS>
-/*BEGIN SQL*/ SELECT 1 AS actual_label FROM dual WHERE 1=0 /*END SQL*/"""
-        evidence["empty_lifecycle"] = {"success": runtime.run_text(empty_text, output)}
-        empty_path = output / "empty_lifecycle.tab"
-        evidence["empty_lifecycle"]["text"] = empty_path.read_text(encoding="utf-8-sig")
-        assert evidence["empty_lifecycle"]["text"] == "FALLBACK_NAME"
-        save()
-    # Synthetic read-only SQL probes use the real reader/transport, not fake frames.
-    evidence["probes"] = []
-    connection = PortableOracleConnection()
-    connection.openConnection(None, None, "KM.MARS")
-    probe_sql = "SELECT CAST(NULL AS VARCHAR2(10)) AS null_value, '.' AS dot_value, UNISTR('\\00E9\\4E2D') AS unicode_value FROM dual"
-    for name, query in (
-        ("null_unicode", probe_sql),
-        ("append", probe_sql),
-        ("empty", probe_sql + " WHERE 1=0"),
-        ("error", "SELECT SQLPATHFINDER_MISSING_COLUMN FROM dual"),
-    ):
-        probe = {"name": name}
-        evidence["probes"].append(probe)
-        path = output / ("probe.tab" if name == "append" else f"{name}.tab")
-        if name == "null_unicode":
-            path = output / "probe.tab"
-        try:
-            probe["rows"] = connection.execute(
-                query,
-                OutExcel=str(path),
-                FirstConnect=name != "append",
-                MyHeaders="DIFFERENT,HEADERS,HERE",
+        )
+        (output / f"{name}.log").write_text(
+            result.message + "\n" + result.stdout + result.stderr, encoding="utf-8"
+        )
+        return result.success
+
+    success = execute("22844-query-slice", "\n<---- New Query ---->\n".join(selected))
+    if success:
+        frames = []
+        for name in ("yeuchuan_a0_22844.tab", "yeuchuan_a1_22844.tab", "XRAY_results.csv"):
+            path = output / name
+            frame = pd.read_csv(path, sep="\t" if path.suffix == ".tab" else ",", dtype=str)
+            frame.columns = frame.columns.str.upper()
+            frames.append(frame)
+            evidence["outputs"].append(
+                {
+                    "file": name,
+                    "rows": len(frame),
+                    "columns": list(frame.columns),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
             )
-            probe["file_exists"] = path.exists()
-            if path.exists():
-                raw = path.read_bytes()
-                probe.update(bom=raw.startswith(codecs.BOM_UTF8), text=raw.decode("utf-8"))
-        except Exception as exc:
-            probe.update(
-                exception=f"{type(exc).__module__}.{type(exc).__name__}",
-                cause=f"{type(exc.__cause__).__module__}.{type(exc.__cause__).__name__}",
-                message=str(exc),
+        mars, aries, sqlite = frames
+        assert not mars.empty and not aries.empty and not sqlite.empty
+        assert set(aries["LOT"].dropna()) <= set(mars["LOT_"].dropna())
+        assert set(sqlite["LOT"].dropna()) <= set(aries["LOT"].dropna())
+        assert set(sqlite["VISUAL_ID"].dropna()) <= set(aries["VISUAL_ID"].dropna())
+        evidence["query_chain_relationships"] = True
+
+        def query_block(filename: str, sql: str) -> str:
+            return (
+                "<OPTIONS>\n/NODE=KM.MARS\n/UN=//\n/PW=\n/OLEDB=SQLPlus\n"
+                "/ENGINE=VA\n/WORKDIR=.\\\n/T=\n/CSV="
+                + filename
+                + "\n/HEADERS=fallback_name\n</OPTIONS>\n/*BEGIN SQL*/ "
+                + sql
+                + " /*END SQL*/"
             )
-        save()
-    connection.close()
-    probes = {p["name"]: p for p in evidence["probes"]}
-    assert probes["null_unicode"]["rows"] == probes["append"]["rows"] == 1
-    assert probes["null_unicode"]["text"].splitlines() == [
-        "NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE",
-        "\t.\té中",
-    ]
-    assert probes["append"]["text"].splitlines() == [
-        "NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE",
-        "\t.\té中",
-        "\t.\té中",
-    ]
-    assert not probes["null_unicode"]["bom"]
-    assert probes["empty"]["rows"] == 0 and not probes["empty"]["file_exists"]
-    assert probes["error"]["cause"] == "oracledb.exceptions.DatabaseError"
-    for step, call in zip(evidence["steps"][:2], evidence["calls"][:2], strict=True):
-        step["historical_expected_headers_from_source"] = step["fixture_headers"].upper().split(",")
-        assert call["site"] == "KM" and call["schema_expanded"] and call["csv_expanded"]
-        assert call["columns"] == step["historical_expected_headers_from_source"]
-        assert step["generated_header"].split("\t") == call["columns"]
-    save()
+
+        success = execute(
+            "empty", query_block("empty.tab", "SELECT 1 AS actual_label FROM dual WHERE 1=0")
+        )
+        if success:
+            assert (output / "empty.tab").read_text(encoding="utf-8-sig").strip() == "FALLBACK_NAME"
+            evidence["empty_header_fallback"] = True
+        success = (
+            execute(
+                "null-unicode",
+                query_block(
+                    "probe.tab",
+                    "SELECT CAST(NULL AS VARCHAR2(10)) AS null_value, '.' AS dot_value, UNISTR('\\00E9\\4E2D') AS unicode_value FROM dual",
+                ),
+            )
+            and success
+        )
+        if success:
+            lines = (output / "probe.tab").read_text(encoding="utf-8-sig").splitlines()
+            assert lines == ["NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE", "\t.\té中"]
+            evidence["null_dot_unicode"] = True
+    evidence["success"] = success
+    (output / "evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     print(json.dumps(evidence, indent=2))
-    return 0 if len(evidence["steps"]) == 3 and all(s["success"] for s in evidence["steps"]) else 1
+    return 0 if success else 1
 
 
 if __name__ == "__main__":

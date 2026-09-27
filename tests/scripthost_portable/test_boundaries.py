@@ -90,3 +90,20 @@ def test_worker_runs_with_all_retired_imports_blocked(tmp_path, monkeypatch):
     )
     assert result.success, result
     assert (tmp_path / "independent.txt").read_text() == "original ScriptHost"
+
+
+@pytest.mark.parametrize("delimiter", [",", "\t"])
+def test_report_preprocessing_preserves_records_and_cleans_embedded_text(tmp_path, delimiter):
+    import csv
+
+    source = tmp_path / "input.csv"
+    target = tmp_path / "clean.tmp"
+    with source.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream, delimiter=delimiter)
+        writer.writerow(["name", "detail"])
+        writer.writerow(["é", 'one,two\tthree\nfour"five'])
+    file_operations.clean_delimited_file(str(source), str(target), delimiter)
+    assert target.read_text(encoding="utf-8").splitlines() == [
+        delimiter.join(["name", "detail"]),
+        delimiter.join(["é", "one;two three fourfive"]),
+    ]

@@ -13,13 +13,7 @@ DELIM = "<---- New Query ---->"
 
 
 def _script(output: Path) -> str:
-    return (
-        "<OPTIONS>\n"
-        "/WRITE-FILE=Y\n"
-        f"/CSV={output}\n"
-        "</OPTIONS>\n"
-        "benchmark"
-    )
+    return f"<OPTIONS>\n/WRITE-FILE=Y\n/CSV={output}\n</OPTIONS>\nbenchmark"
 
 
 def _child_env(repo_root: Path) -> dict[str, str]:

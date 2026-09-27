@@ -151,3 +151,22 @@ def unzip_file(source: str, destination: str, preserve_paths: bool) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as reader, target.open("wb") as writer:
                 shutil.copyfileobj(reader, writer)
+
+
+def clean_delimited_file(source: str, destination: str, delimiter: str) -> None:
+    """POSIX CleanDelimsCRLF boundary for UTF-8 CSV/TAB input.
+
+    Original ConvertDLM documents removal of quotes and replacement of embedded
+    commas, tabs and CR/LF. Keep record delimiters; never reinterpret report SQL.
+    """
+    if delimiter not in {",", "\t", "|", "+"}:
+        raise ValueError("UNCERTIFIED: CleanDelimsCRLF delimiter")
+    with Path(source).open(encoding="utf-8-sig", newline="") as incoming:
+        records = list(csv.reader(incoming, delimiter=delimiter, strict=True))
+    clean = str.maketrans({'"': "", ",": ";", "\t": " ", "\r": " ", "\n": " "})
+    with Path(destination).open("w", encoding="utf-8", newline="") as outgoing:
+        for record in records:
+            fields = [field.translate(clean) for field in record]
+            if any(delimiter in field for field in fields):
+                raise ValueError("UNCERTIFIED: embedded output delimiter in CleanDelimsCRLF")
+            outgoing.write(delimiter.join(fields) + "\n")

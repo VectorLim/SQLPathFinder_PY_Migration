@@ -1,4 +1,4 @@
-﻿"""
+"""
 License : Copyright (c) Intel Corporation 2023
 Product: Intel.ATTD.Auto.SQLPathFinder
 Module : SQLPathFinder Python Extract Engine 
@@ -2124,7 +2124,7 @@ class MemTable(object):
                             """
                             self.logger.debug("{0} - PreProcCSV: {1}".format(calling_func, PreProcCSV))
                             if PreProcCSV == True :
-                                MySrcTxt2 = os.path.join(".\\", "{0}_{1}.tmp".format(uniqueMyPairCounter, RNStr))
+                                MySrcTxt2 = os.path.join("." if os.name != "nt" else ".\\", "{0}_{1}.tmp".format(uniqueMyPairCounter, RNStr))
                                 self.logger.debug("{0} - MySrcTxt2: {1}".format(calling_func, MySrcTxt2))
                                 self.myUtils.ConvertDLM(MySrcTxt, MySrcTxt2, MyCvtExe,IsQuiet)
                                 MySrcTxt = MySrcTxt2

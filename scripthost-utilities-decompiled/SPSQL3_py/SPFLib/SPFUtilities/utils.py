@@ -2866,6 +2866,11 @@ class Utilities(SPFGlobals):
         ' None
         '================================================
         """
+        if os.name != "nt":
+            from scripthost_portable.file_operations import clean_delimited_file
+            clean_delimited_file(InFile, OutFile, self.GetFileDLM(InFile))
+            return
+
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         MyLog = r".\CleanDelimsCRLF.log"
