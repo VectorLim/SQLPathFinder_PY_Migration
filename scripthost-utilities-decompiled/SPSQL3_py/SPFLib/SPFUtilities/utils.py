@@ -5491,15 +5491,6 @@ class Utilities(SPFGlobals):
         dow = None
         #self.logger.debug("{0} - yyyy: '{1}'".format(calling_func, yyyy))
         #self.logger.debug("{0} - date.month: '{1}'".format(calling_func, date.month))
-        #new set locale to en_US -- and reset back to defaultlocale
-        import locale
-        defaultLocale = locale.setlocale(locale.LC_ALL,'')
-        #self.logger.debug("{0} -defaultLocale: '{1}'".format(calling_func, defaultLocale))
-
-        usLocale = 'English_United States.1252'
-        usLocaleSet = locale.setlocale(locale.LC_ALL,usLocale)
-        #self.logger.debug("{0} -updated locale: '{1}'".format(calling_func, locale.getlocale()))
-
         try : 
             if date.month == 12 :
                 jan1 = date.day - 32
@@ -5518,7 +5509,7 @@ class Utilities(SPFGlobals):
                     ww = 1
                 self.logger.debug("{0} - date.month == 12 : ww: '{1}'".format(calling_func, ww))
             if ww is None:
-                jan1 = datetime.strptime("1-JAN-{0}".format(yyyy),"%d-%b-%Y").date() #just get the datepart
+                jan1 = datetime(yyyy, 1, 1).date() # locale-independent equivalent of 1-JAN-yyyy
                 #self.logger.debug("{0} - jan1: '{1}'".format(calling_func, jan1))
 
                 dow = jan1.isoweekday() #+ 1  #removed  + 1 not needed after removing the timepart from date input
@@ -5538,10 +5529,6 @@ class Utilities(SPFGlobals):
         except Exception as err:
             self.logger.exception("{0} - {1}".format(calling_func, err))
             raise
-        finally :
-            #reset back to default locale
-            defLocale = locale.setlocale(locale.LC_ALL,defaultLocale)
-            #self.logger.debug("{0} -reset locale: '{1}'".format(calling_func, locale.getlocale()))
     #END : def IntelWW
     #endregion -- methods from intel.va
 
