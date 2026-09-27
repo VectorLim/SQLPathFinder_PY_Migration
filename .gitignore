@@ -185,3 +185,5 @@ secrets.yml
 
 /sqlpathfinder3-decompiled
 
+
+!/docs/scripthost-utility-portability-matrix.md

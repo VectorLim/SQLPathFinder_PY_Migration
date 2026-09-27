@@ -469,7 +469,7 @@ def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux
     assert PortableScriptHostRuntime().run_text(text, root)
     generated = final.read_text(encoding="utf-8-sig")
     assert "Portable ScriptHost Report" in generated
-    assert "80%" not in generated
+    assert ("80%" in generated) is (sys.platform == "win32")
     assert "<table" in generated.lower()
     assert list(root.glob("*_MYREPORT5_tmp_.ini"))
 

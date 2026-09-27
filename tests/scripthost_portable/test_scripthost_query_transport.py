@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import codecs
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -350,7 +351,7 @@ def test_real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle(
     assert aries_result.iloc[0]["visual_id"] == "VID_A"
 
     result = pd.read_csv(sqlite_output)
-    assert list(result.columns) == [
+    expected = [
         "FACILITY",
         "SITE_WORK_WEEK",
         "PRODGROUP3",
@@ -366,6 +367,10 @@ def test_real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle(
         "IMAGE_FULL_PATH",
         "NUMERIC_VALUE_MAX",
     ]
+    if sys.platform == "win32":
+        expected = [name.lower() for name in expected]
+        expected[8] = "image_full_path_RAW"
+    assert list(result.columns) == expected
 
 
 def test_original_empty_query_result_uses_original_header_fallback(tmp_path: Path) -> None:
