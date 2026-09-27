@@ -401,3 +401,82 @@ print("chart_counter=" + str(second.g_ChartCtr))
     assert "same_run_id=True" in lines
     assert "cw_counter=7" in lines
     assert "chart_counter=9" in lines
+
+
+def test_original_report_defer_layout_delete_lifecycle_executes_on_linux(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "report-lifecycle"
+    root.mkdir()
+    (root / "schema").mkdir()
+    data = root / "report.csv"
+    data.write_text("id,value\n1,alpha\n2,beta\n", encoding="utf-8")
+    css = root / "portable_report.css"
+    final = root / "portable_report.htm"
+
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
+        encoding="utf-8-sig"
+    )
+    css_block = next(
+        segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
+    ).strip()
+    css_block = css_block.replace("sqlpathfinder_style_1.css", str(css))
+
+    report_spec = (
+        "Type<\\\\>Key<\\\\>COL1<\\\\>COL2\n"
+        "TYPE<\\\\>HTML<\\\\><\\\\><\\\\>\n"
+        f"INPUT-FILE<\\\\>{data}<\\\\><\\\\><\\\\>\n"
+        "OUTPUT-FILE<\\\\>unused.htm<\\\\><\\\\><\\\\>\n"
+        f"CSS<\\\\>{css}<\\\\><\\\\><\\\\>\n"
+        "COLSPAN<\\\\><\\\\><\\\\><\\\\>\n"
+        "DRILLDOWN<\\\\>N<\\\\><\\\\><\\\\>\n"
+        "DYNAMICSORT<\\\\><\\\\><\\\\><\\\\>\n"
+        "DYNAMICFILTER<\\\\><\\\\><\\\\><\\\\>\n"
+        "ATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\>\n"
+        "NOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\>\n"
+        "COLUMN-DATA<\\\\><\\\\>id<\\\\>value\n"
+        "COLUMN-HEADERS<\\\\><\\\\>ID<\\\\>Value\n"
+        "COLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left\n"
+        "COLUMN-FORMAT<\\\\><\\\\><\\\\>"
+    )
+    defer = block("/ID=MYREPORT", "/REPORT=HTML-DEFER", body=report_spec)
+
+    layout_body = "\n".join(
+        [
+            '<table class="tblout"><tr class="tblout"><td class="tblout">',
+            f":FILE:{final}",
+            f":CSS:{css}",
+            ":CSSEMBED:N",
+            ":RR:NO",
+            ":B:Y",
+            ":TITLE:Portable ScriptHost Report",
+            '<table class="tblout">',
+            '<tr class="tblout">',
+            '<td class="tblout">',
+            "HTM:MYREPORT",
+            "</td>",
+            "</tr>",
+            "</table>",
+            "</td></tr></table>",
+        ]
+    )
+    layout = block("/REPORT=HTML-LAYOUT", "/OUTLOOK=N", body=layout_body)
+    cleanup = block("/REPORT=HTML-DELETE", body="N/A")
+    text = script(css_block, defer, layout, cleanup)
+
+    current = parse(text)
+    assert [command.utility_type for command in current] == [
+        "report.html_run",
+        "report.html_defer",
+        "report.html_layout",
+        "report.delete",
+    ]
+
+    assert PortableScriptHostRuntime().run_text(text, root)
+    generated = final.read_text(encoding="utf-8-sig")
+    assert "Portable ScriptHost Report" in generated
+    assert "alpha" in generated
+    assert "beta" in generated
+    assert "<table" in generated.lower()
+    assert not list(root.glob("*_MYREPORT_tmp_.ini"))
