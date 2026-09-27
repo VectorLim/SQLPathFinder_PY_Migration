@@ -254,9 +254,7 @@ def test_original_run_loop_matches_vg2c_new_final_chunk(tmp_path: Path) -> None:
 
     def make_text(root: Path) -> str:
         return script(
-            block(
-                f'/UTILITIES={{RUN-LOOP}} "{root / "input.csv"}" "{root / "chunk.csv"}" "2" "N"'
-            ),
+            block(f'/UTILITIES={{RUN-LOOP}} "{root / "input.csv"}" "{root / "chunk.csv"}" "2" "N"'),
             block("/UTILITIES={END-LOOP}"),
         )
 
@@ -300,7 +298,11 @@ def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path
     ]
 
     cases = (
-        (block("/WRITE-FILE=Y", f"/CSV={tmp_path / 'x.txt'}", body="x"), "WriteFileTask", "write_file"),
+        (
+            block("/WRITE-FILE=Y", f"/CSV={tmp_path / 'x.txt'}", body="x"),
+            "WriteFileTask",
+            "write_file",
+        ),
         (block('/UTILITIES={FOR-LOOP} "0" "1" "1" "x" "N"'), "ForLoopTask", None),
         (
             block(
