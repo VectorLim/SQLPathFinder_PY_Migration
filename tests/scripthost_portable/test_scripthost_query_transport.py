@@ -274,7 +274,7 @@ def test_portable_connection_rejects_unmapped_oracle_family() -> None:
 
 def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> None:
     """The original driver's 2.0.0.6 contract ignores MyHeaders when rows exist."""
-    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["Ã©ä¸­", None, "."]})})
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["é中", None, "."]})})
     connection = PortableOracleConnection(reader_factory=factory)
     connection.openConnection(None, None, "KM.MARS")
     output = tmp_path / "labels.tab"
@@ -289,10 +289,10 @@ def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> 
     assert not raw.startswith(codecs.BOM_UTF8)
     assert raw.decode("utf-8").splitlines() == [
         "ACTUAL_LABEL",
-        "Ã©ä¸­",
+        "é中",
         '""',
         ".",
-        "Ã©ä¸­",
+        "é中",
         '""',
         ".",
     ]
