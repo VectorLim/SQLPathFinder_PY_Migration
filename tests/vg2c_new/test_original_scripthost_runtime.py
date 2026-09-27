@@ -328,6 +328,34 @@ def test_original_getquery_and_vg2c_new_agree_on_representative_routing(tmp_path
         assert current.utility_type == target
 
 
+def test_original_html_run_css_executes_on_linux_while_vg2c_new_marks_report_gap(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "report"
+    root.mkdir()
+    css = root / "portable_report.css"
+    body = "\n".join(
+        (
+            r"Type<\>Key<\>COL1<\>COL2<\>COL3<\>COL4<\>COL5<\>COL6<\>COL7<\>COL8",
+            r"TYPE<\>CSS<\><\><\><\><\><\><\><\>",
+            f"CSS<\\>{css}<\\><\\><\\><\\><\\><\\><\\><\\>",
+            r"FORMAT<\>Column-Headers<\>background-color:#dbd9c0<\>color:#444<\>font-family:Arial<\>font-size:12<\>font-weight:bold<\>text-align:left<\>vertical-align:middle",
+            r"FORMAT<\>Column-Data<\>background-color:white<\>color:#444<\>font-family:Arial<\>font-size:12<\>text-align:left<\>vertical-align:middle<\>",
+            r"FORMAT<\>Column-Alt-Row<\>background-color:#f7f5dc<\>color:#333<\>font-family:Arial<\>font-size:12<\>text-align:left<\>vertical-align:middle<\>",
+            r"FORMAT<\>At-Top-of-Report<\>background-color:white<\>color:#444<\>font-family:Arial<\>font-size:15<\>font-weight:bold<\>text-align:center<\>vertical-align:middle",
+            r"FORMAT<\>COLUMN-BORDER<\>border-color:#cc9<\>border-collapse:collapse<\>border-style:solid<\>border-width:1px<\>border-spacing:4px<\><\><\>",
+        )
+    )
+    text = block("/REPORT=HTML-RUN", "/INSTANCE=501", body=body)
+
+    current = parse(text)[0]
+    assert current.utility_type == "report.html_run"
+    assert PortableScriptHostRuntime().run_text(text, root)
+    generated = css.read_text(encoding="utf-8")
+    assert "table.tblin" in generated
+    assert "background-color" in generated
+
+
 def test_windows_db_transport_fails_only_when_invoked() -> None:
     from SPFLib.SPFSQL3 import SPFManager, dbDriverBase
 
