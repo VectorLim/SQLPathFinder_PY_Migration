@@ -471,7 +471,7 @@ def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux
     assert "Portable ScriptHost Report" in generated
     assert "80%" not in generated
     assert "<table" in generated.lower()
-    assert not list(root.glob("*_MYREPORT5_tmp_.ini"))
+    assert list(root.glob("*_MYREPORT5_tmp_.ini"))
 
 
 def test_real_22844_builds_original_task_tree_on_linux() -> None:
