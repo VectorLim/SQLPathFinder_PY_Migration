@@ -53,28 +53,20 @@ def use_reader_factory(factory: ReaderFactory) -> Iterator[None]:
 
 
 class DataSyncXReaderFactory:
-    """Single provisional DataSyncX-facing module for live Intel validation.
-
-    Session 2.6A intentionally does not claim these imports or constructors are
-    correct against the private package. The local validation agent should
-    adjust only this class if the real DataSyncX API differs.
-    """
+    """DataSyncX boundary, validated against installed DataSyncX 1.1.6."""
 
     _CLASS_CANDIDATES = {
         "mars": (
             ("datasyncx", "MarsReader"),
-            ("datasyncx.readers", "MarsReader"),
-            ("datasyncx.readers.mars", "MarsReader"),
+            ("datasyncx.readers.mars_reader", "MarsReader"),
         ),
         "aries": (
             ("datasyncx", "AriesReader"),
-            ("datasyncx.readers", "AriesReader"),
-            ("datasyncx.readers.aries", "AriesReader"),
+            ("datasyncx.readers.aries_reader", "AriesReader"),
         ),
         "oasys": (
             ("datasyncx", "OracleReader"),
-            ("datasyncx.readers", "OracleReader"),
-            ("datasyncx.readers.oracle", "OracleReader"),
+            ("datasyncx.readers.oracle_reader", "OracleReader"),
         ),
     }
 
@@ -94,8 +86,7 @@ class DataSyncXReaderFactory:
             config_reference = os.getenv(_CONFIG_REFERENCE_ENV)
             detail = f"; config reference={config_reference!r}" if config_reference else ""
             raise QueryConfigurationError(
-                "DataSyncX reader construction/configuration failed for "
-                f"{backend!r}{detail}. Constructor assumptions require live validation: {exc}"
+                f"DataSyncX reader construction/configuration failed for {backend!r}{detail}: {exc}"
             ) from exc
 
 
@@ -138,6 +129,9 @@ class PortableOracleConnection:
         incrementalRunCtr: int = 0,
         MyHeaders: str | None = None,
     ) -> int:
+        # Historical SPFSQL3 changelog 2.0.0.6 explicitly makes cursor labels
+        # authoritative for populated results. MyHeaders belongs to ScriptHost's
+        # empty-result fallback; applying it here would change that contract.
         del MyFetchSize, WorkDir, OutTT, FinalRow, incrementalRunCtr, MyHeaders
         if self._reader is None or self._node is None:
             raise QueryTransportUnavailable("Portable query connection was not opened.")

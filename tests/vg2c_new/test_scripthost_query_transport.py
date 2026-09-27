@@ -210,6 +210,36 @@ def test_portable_connection_rejects_unmapped_oracle_family() -> None:
         connection.openConnection("", "", "KM.UNKNOWN", None)
 
 
+def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> None:
+    """The original driver's 2.0.0.6 contract ignores MyHeaders when rows exist."""
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["é中", None, "."]})})
+    connection = PortableOracleConnection(reader_factory=factory)
+    connection.openConnection(None, None, "KM.MARS")
+    output = tmp_path / "labels.tab"
+    for first in (True, False):
+        assert (
+            connection.execute(
+                "select", OutExcel=str(output), FirstConnect=first, MyHeaders="DIFFERENT_HEADER"
+            )
+            == 3
+        )
+    raw = output.read_bytes()
+    assert not raw.startswith(codecs.BOM_UTF8)
+    assert raw.decode("utf-8").splitlines() == ["ACTUAL_LABEL", "é中", '""', ".", "é中", '""', "."]
+
+
+def test_empty_append_and_noheaders_do_not_add_headers(tmp_path: Path) -> None:
+    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL": [1]})})
+    connection = PortableOracleConnection(reader_factory=factory)
+    connection.openConnection(None, None, "KM.MARS")
+    output = tmp_path / "noheaders.tab"
+    connection.execute("select", OutExcel=str(output), ll_NoHdrs=True, MyHeaders="OTHER")
+    assert output.read_text() == "1\n"
+    connection._reader.frame = pd.DataFrame(columns=["ACTUAL"])
+    assert connection.execute("select", OutExcel=str(output), FirstConnect=False) == 0
+    assert output.read_text() == "1\n"
+
+
 def test_original_oasys_preprocessing_occurs_before_fake_transport(tmp_path: Path) -> None:
     factory = FakeReaderFactory({"oasys": pd.DataFrame({"x": [1]})})
     text = block(

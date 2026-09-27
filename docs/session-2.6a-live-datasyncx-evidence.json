@@ -1,0 +1,266 @@
+{
+  "pid": 16516,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.14.6",
+  "datasyncx": "1.1.6",
+  "calls": [
+    {
+      "backend": "mars",
+      "node": "KM.[A15_PROD_21.].MARS",
+      "site": "KM",
+      "reader": "datasyncx.readers.mars_reader.MarsReader",
+      "constructor": "(*, username=None, password=None, db_account=False)",
+      "read_signature": "(site, query, **kwargs) -> pandas.DataFrame",
+      "sql_sha256": "3343557c4c80305100ad8a68a5cd5082ae1b98c45b5515c3b03538a2ec91d586",
+      "schema_expanded": true,
+      "csv_expanded": true,
+      "return_type": "pandas.DataFrame",
+      "rows": 4,
+      "columns": [
+        "FACILITY",
+        "SITE_WORK_WEEK_",
+        "OPERATION",
+        "PRODGROUP3_",
+        "LOT_",
+        "OWNER",
+        "OUT_DATE"
+      ],
+      "nulls": 0
+    },
+    {
+      "backend": "aries",
+      "node": "KM.ARIES",
+      "site": "KM",
+      "reader": "datasyncx.readers.aries_reader.AriesReader",
+      "constructor": "(*, username=None, password=None, db_account=False)",
+      "read_signature": "(site, query, **kwargs) -> pandas.DataFrame",
+      "sql_sha256": "44b89563c63f68f0d14643a12958b6326e45adf312eb497d5d574908f7ae7e42",
+      "schema_expanded": true,
+      "csv_expanded": true,
+      "return_type": "pandas.DataFrame",
+      "rows": 10286,
+      "columns": [
+        "SITE_WORK_WEEK",
+        "PRODGROUP3",
+        "LOT",
+        "VISUAL_ID",
+        "IMAGE_NAME",
+        "IMAGE_FULL_PATH_RAW",
+        "RANK",
+        "RANK_",
+        "MAXRANK_",
+        "FILTER_",
+        "IMAGE_FULL_PATH",
+        "NUMERIC_VALUE",
+        "NUMERIC_VALUE_MAX"
+      ],
+      "nulls": 0
+    },
+    {
+      "backend": "mars",
+      "node": "KM.MARS",
+      "site": "KM",
+      "reader": "datasyncx.readers.mars_reader.MarsReader",
+      "constructor": "(*, username=None, password=None, db_account=False)",
+      "read_signature": "(site, query, **kwargs) -> pandas.DataFrame",
+      "sql_sha256": "b461edb600860b5cf3f2cd06ecab3b43a22dbb90c654b9e1477b0c68120f9aea",
+      "schema_expanded": true,
+      "csv_expanded": true,
+      "return_type": "pandas.DataFrame",
+      "rows": 0,
+      "columns": [
+        "ACTUAL_LABEL"
+      ],
+      "nulls": 0
+    }
+  ],
+  "steps": [
+    {
+      "name": "mars",
+      "fixture_headers": "facility,site_work_week_,operation,prodgroup3_,lot_,owner,out_date",
+      "success": true,
+      "bom": false,
+      "bytes": 300,
+      "generated_header": "FACILITY\tSITE_WORK_WEEK_\tOPERATION\tPRODGROUP3_\tLOT_\tOWNER\tOUT_DATE",
+      "historical_expected_headers_from_source": [
+        "FACILITY",
+        "SITE_WORK_WEEK_",
+        "OPERATION",
+        "PRODGROUP3_",
+        "LOT_",
+        "OWNER",
+        "OUT_DATE"
+      ]
+    },
+    {
+      "name": "aries",
+      "fixture_headers": "site_work_week,prodgroup3,lot,visual_id,image_name,image_full_path_RAW,rank,rank_,maxrank_,filter_,image_full_path,numeric_value,numeric_value_max",
+      "success": true,
+      "bom": false,
+      "bytes": 2898924,
+      "generated_header": "SITE_WORK_WEEK\tPRODGROUP3\tLOT\tVISUAL_ID\tIMAGE_NAME\tIMAGE_FULL_PATH_RAW\tRANK\tRANK_\tMAXRANK_\tFILTER_\tIMAGE_FULL_PATH\tNUMERIC_VALUE\tNUMERIC_VALUE_MAX",
+      "historical_expected_headers_from_source": [
+        "SITE_WORK_WEEK",
+        "PRODGROUP3",
+        "LOT",
+        "VISUAL_ID",
+        "IMAGE_NAME",
+        "IMAGE_FULL_PATH_RAW",
+        "RANK",
+        "RANK_",
+        "MAXRANK_",
+        "FILTER_",
+        "IMAGE_FULL_PATH",
+        "NUMERIC_VALUE",
+        "NUMERIC_VALUE_MAX"
+      ]
+    },
+    {
+      "name": "sqlite",
+      "fixture_headers": "facility,site_work_week,prodgroup3,lot,owner,out_date,visual_id,image_name,image_full_path_RAW,rank_,maxrank_,filter_,image_full_path,numeric_value_max",
+      "success": true,
+      "bom": false,
+      "bytes": 534179,
+      "generated_header": "facility,site_work_week,prodgroup3,lot,owner,out_date,visual_id,image_name,image_full_path_RAW,rank_,maxrank_,filter_,image_full_path,numeric_value_max"
+    }
+  ],
+  "legacy_driver_available": false,
+  "connections": [
+    "PortableOracleConnection",
+    "PortableOracleConnection",
+    "PortableOracleConnection"
+  ],
+  "empty_lifecycle": {
+    "success": true,
+    "text": "FALLBACK_NAME"
+  },
+  "probes": [
+    {
+      "name": "null_unicode",
+      "rows": 1,
+      "file_exists": true,
+      "bom": false,
+      "text": "NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE\r\n\t.\t\u00e9\u4e2d\r\n"
+    },
+    {
+      "name": "append",
+      "rows": 1,
+      "file_exists": true,
+      "bom": false,
+      "text": "NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE\r\n\t.\t\u00e9\u4e2d\r\n\t.\t\u00e9\u4e2d\r\n"
+    },
+    {
+      "name": "empty",
+      "rows": 0,
+      "file_exists": false
+    },
+    {
+      "name": "error",
+      "exception": "scripthost_portable.query_transport.QueryExecutionError",
+      "cause": "oracledb.exceptions.DatabaseError",
+      "message": "DataSyncX-compatible reader failed for node 'KM.MARS': ORA-00904: \"SQLPATHFINDER_MISSING_COLUMN\": invalid identifier"
+    }
+  ],
+  "recorded_utc": "2026-09-27T09:47:02.574287+00:00",
+  "base_commit": "2063649ff5316dc0745a90a3f1ce158327fdaf60",
+  "sqlite_rows": 1786,
+  "other_runs": [
+    {
+      "run": "live-datasyncx-01",
+      "pid": null,
+      "steps": [
+        {
+          "name": "mars",
+          "success": true
+        },
+        {
+          "name": "aries",
+          "success": true
+        },
+        {
+          "name": "sqlite",
+          "success": true
+        }
+      ],
+      "rows": [
+        4,
+        10286
+      ]
+    },
+    {
+      "run": "live-datasyncx-02",
+      "pid": 32300,
+      "steps": [
+        {
+          "name": "mars",
+          "success": true
+        },
+        {
+          "name": "aries",
+          "success": true
+        },
+        {
+          "name": "sqlite",
+          "success": true
+        }
+      ],
+      "rows": [
+        4,
+        10286
+      ]
+    },
+    {
+      "run": "live-datasyncx-concurrent-a",
+      "pid": 8184,
+      "steps": [
+        {
+          "name": "mars",
+          "success": true
+        },
+        {
+          "name": "aries",
+          "success": true
+        },
+        {
+          "name": "sqlite",
+          "success": true
+        }
+      ],
+      "rows": [
+        4,
+        10286
+      ]
+    },
+    {
+      "run": "live-datasyncx-concurrent-b",
+      "pid": 15164,
+      "steps": [
+        {
+          "name": "mars",
+          "success": true
+        },
+        {
+          "name": "aries",
+          "success": true
+        },
+        {
+          "name": "sqlite",
+          "success": true
+        }
+      ],
+      "rows": [
+        4,
+        10286
+      ]
+    }
+  ],
+  "installed_source_sha256": {
+    "readers/mars_reader.py": "9d29fe2e6792a2e23ded66e3d352afc0fbaff5f944b832bd0e3bef1572ccad8e",
+    "readers/aries_reader.py": "7dde8797e714751db312157446f2ca016b1a69be565e3e851068bdfbfb92eb4f",
+    "readers/oracle_reader.py": "be884f8906317974f87451170ad5ef094035102bc105b601f0c258c01891ba8d",
+    "utils/oracle_db.py": "08fd4d91dcc8d62ae091e45de7033931b9eda07005a27e7e6629b578fbc04bb9",
+    "utils/config.py": "5ade735ad87d5dadbde96741bee88bde3d896051064c54f3a53514bc9250e4f6",
+    "utils/retry.py": "a04b43ea138ffd361bd021a5a62840b533cec5098d0fc67f26bbcf201a3f8dfb",
+    "utils/linux_auth.py": "c017a57db73f417b614f56c9e3e8f7ace613f3c91cc40257228f582cafad9591"
+  }
+}
