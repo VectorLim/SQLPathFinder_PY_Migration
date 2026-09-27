@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -18,7 +19,8 @@ DELIM = "<---- New Query ---->"
 
 
 def block(*options: str, body: str = "") -> str:
-    return f"<OPTIONS>\n{'\n'.join(options)}\n</OPTIONS>\n{body}"
+    option_text = "\n".join(options)
+    return f"<OPTIONS>\n{option_text}\n</OPTIONS>\n{body}"
 
 
 def script(*blocks: str) -> str:
@@ -146,8 +148,6 @@ def test_original_runtime_process_environment_is_not_per_run_state(tmp_path: Pat
 
 def test_spfglobals_command_line_state_is_shared_between_threads() -> None:
     from SPFLib.SPFSQL3 import SPFManager
-
-    import threading
 
     barrier = threading.Barrier(2)
 
