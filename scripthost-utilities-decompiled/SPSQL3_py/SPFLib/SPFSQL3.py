@@ -274,7 +274,13 @@ try:
     from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
 except (ImportError, OSError):
     dbDrivers = None
-    dbDriverBase = dbDriverODBCBase = dbDriverDotNetSQLServer = None
+
+    class _UnavailableLegacyDBDriverBase:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("Legacy ScriptHost database transport is unavailable on this platform")
+
+    dbDriverBase = dbDriverODBCBase = _UnavailableLegacyDBDriverBase
+    dbDriverDotNetSQLServer = None
     dbDriverDotNetTextJET = dbDriverDotNetTeradata = dbDriverDotNetOracle = None
     dbDriverCxOracle = dbDriverODBCSQLServer = dbDriverODBCImpala = None
     dbDriverODBCMYSQL = dbDriverODBCSAPHana = dbDriverMSOLAPWin32Com = None
