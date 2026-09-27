@@ -334,23 +334,18 @@ def test_original_html_run_css_executes_on_linux_while_vg2c_new_marks_report_gap
     root = tmp_path / "report"
     root.mkdir()
     css = root / "portable_report.css"
-    body = "\n".join(
-        (
-            r"Type<\>Key<\>COL1<\>COL2<\>COL3<\>COL4<\>COL5<\>COL6<\>COL7<\>COL8",
-            r"TYPE<\>CSS<\><\><\><\><\><\><\><\>",
-            f"CSS<\\>{css}<\\><\\><\\><\\><\\><\\><\\><\\>",
-            r"FORMAT<\>Column-Headers<\>background-color:#dbd9c0<\>color:#444<\>font-family:Arial<\>font-size:12<\>font-weight:bold<\>text-align:left<\>vertical-align:middle",
-            r"FORMAT<\>Column-Data<\>background-color:white<\>color:#444<\>font-family:Arial<\>font-size:12<\>text-align:left<\>vertical-align:middle<\>",
-            r"FORMAT<\>Column-Alt-Row<\>background-color:#f7f5dc<\>color:#333<\>font-family:Arial<\>font-size:12<\>text-align:left<\>vertical-align:middle<\>",
-            r"FORMAT<\>At-Top-of-Report<\>background-color:white<\>color:#444<\>font-family:Arial<\>font-size:15<\>font-weight:bold<\>text-align:center<\>vertical-align:middle",
-            r"FORMAT<\>COLUMN-BORDER<\>border-color:#cc9<\>border-collapse:collapse<\>border-style:solid<\>border-width:1px<\>border-spacing:4px<\><\><\>",
-        )
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
+        encoding="utf-8-sig"
     )
-    text = block("/REPORT=HTML-RUN", "/INSTANCE=501", body=body)
+    report_block = next(
+        segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
+    ).strip()
+    report_block = report_block.replace("sqlpathfinder_style_1.css", str(css))
 
-    current = parse(text)[0]
+    current = parse(report_block)[0]
     assert current.utility_type == "report.html_run"
-    assert PortableScriptHostRuntime().run_text(text, root)
+    assert PortableScriptHostRuntime().run_text(report_block, root)
     generated = css.read_text(encoding="utf-8")
     assert "table.tblin" in generated
     assert "background-color" in generated
