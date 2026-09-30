@@ -212,8 +212,30 @@ def test_datasyncx_public_constructor_contract(monkeypatch, backend, symbol, kwa
         calls.append(arguments)
         return sentinel
 
+    monkeypatch.delenv("DATASYNCX_USERNAME", raising=False)
     monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(**{symbol: reader}))
     assert DataSyncXReaderFactory().reader_for(backend, "KM." + backend) is sentinel
+    assert calls == [kwargs]
+
+
+@pytest.mark.parametrize(
+    "backend,symbol,kwargs",
+    [
+        ("mars", "MarsReader", {"username": "titan"}),
+        ("aries", "AriesReader", {"username": "titan"}),
+        ("oasys", "OracleReader", {"database": "OASYS"}),
+    ],
+)
+def test_datasyncx_username_from_env(monkeypatch, backend, symbol, kwargs):
+    calls = []
+
+    def reader(**arguments):
+        calls.append(arguments)
+        return object()
+
+    monkeypatch.setenv("DATASYNCX_USERNAME", "titan")
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(**{symbol: reader}))
+    DataSyncXReaderFactory().reader_for(backend, "KM." + backend)
     assert calls == [kwargs]
 
 

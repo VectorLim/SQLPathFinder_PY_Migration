@@ -76,7 +76,9 @@ class DataSyncXReaderFactory:
         try:
             if backend == "oasys":
                 return reader_type(database="OASYS")
-            return reader_type()
+            # Linux containers have no Windows OS auth; use a DB account (e.g. titan).
+            username = os.getenv("DATASYNCX_USERNAME")
+            return reader_type(username=username) if username else reader_type()
         except Exception as exc:
             config_reference = os.getenv(_CONFIG_REFERENCE_ENV)
             detail = f"; config reference={config_reference!r}" if config_reference else ""

@@ -1,0 +1,35 @@
+project:
+  name: SQLPathFinder
+  description: SQLPathFinder ScriptHost runtime
+namespace: sqlpathfinder
+funcname: sqlpathfinder-app
+dnshostname: sqlpathfinder-app.rf3stg.intel.com
+targetname: active
+action: create
+containers:
+  - image: 'amr-registry.caas.intel.com/<harbor-project>/sqlpathfinder:1.0'
+    resources:
+      requests:
+        cpu: 2
+        gpu:
+          type: nvidia.com/gpu
+          quantity: 0
+        mem: 1000
+    usesInferenceClient: true
+    volume:
+      - name: data
+        mountpath: /mnt/data
+        networkpath: '<//fileserver/share/path>'
+        claim: ''
+    environmentvariable:
+      SCRIPT_PATH: /mnt/data/<script>.txt
+      WORKDIR: /mnt/data/<output-folder>
+      JOB_TIMEOUT: '3600'
+      ENV_MODE: test
+      DATASYNCX_USERNAME: titan
+version: '1.0'
+maxinstances: 1
+mininstances: 1
+targetclients: []
+deadline: ''
+loglabel: python-ecs

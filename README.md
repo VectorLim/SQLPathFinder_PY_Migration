@@ -35,6 +35,29 @@ Each call starts a fresh child process. Never use the in-process runtime concurr
 in threads. Original VG2 parsing, control flow, utility arguments and reports remain
 in ScriptHost. Portable helpers cover only external transport and OS operations.
 
+## imserverless (Linux container)
+
+`main.py` exposes `handle()` for the imserverless Python function base image. Each
+trigger runs `SCRIPT_PATH` in `WORKDIR` (both usually on the mounted share) through
+`run_job`, logs one JSON line to stdout (ELK) and returns `(success, message, message)`.
+The trigger body is ignored.
+
+```sh
+docker build -f imserverless.Dockerfile -t amr-registry.caas.intel.com/<project>/sqlpathfinder:1.0 .
+docker push amr-registry.caas.intel.com/<project>/sqlpathfinder:1.0
+```
+
+1. Fill in [deploy/AppSpec_sqlpathfinder-app_1_0.yaml](deploy/AppSpec_sqlpathfinder-app_1_0.yaml)
+   (image, share `networkpath`, `SCRIPT_PATH`, `WORKDIR`) and upload it in "Create Application".
+2. In Rancher, create a secret (e.g. `db-credentials`) with key `TITAN` = titan DB password,
+   add `envFrom: [{secretRef: {name: db-credentials}}]` to the deployment, and set the share
+   login in `cifs-secret`. Never put `TITAN` in the AppSpec or image.
+3. Ask the imserverless owner to enable the time-based trigger, then set the schedule.
+4. Run with `ENV_MODE=test`, check ELK and share outputs, then switch to `ENV_MODE=prod`.
+
+`DATASYNCX_USERNAME` (e.g. `titan`) makes MARS/ARIES readers use that DB account instead of
+OS/Kerberos auth. The base image's `python --version` must be 3.11-3.13.
+
 ## Capability vocabulary
 
 - SUPPORTED: exercised original behavior with asserted outputs in the documented subset.

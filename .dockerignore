@@ -1,6 +1,7 @@
 **
 !pyproject.toml
 !README.md
+!main.py
 !src/
 !src/scripthost_portable/
 !src/scripthost_portable/*.py
