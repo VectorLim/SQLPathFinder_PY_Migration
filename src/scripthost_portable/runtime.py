@@ -5,9 +5,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-_SCRIPT_HOST_ROOT = (
-    Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled" / "SPSQL3_py"
-)
+_SCRIPT_HOST_ROOT = Path(__file__).resolve().parent / "_vendor" / "SPSQL3_py"
 
 
 def _spf_manager_type():

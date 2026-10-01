@@ -45,6 +45,9 @@ include-package-data = true
 where = ["src"]
 include = ["scripthost_portable*"]
 
+[tool.setuptools.package-data]
+scripthost_portable = ["_vendor/SPSQL3_py/*.txt", "_vendor/SPSQL3_py/*.png"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
@@ -52,7 +55,7 @@ pythonpath = ["src", "."]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-extend-exclude = ["tests/fixtures"]
+extend-exclude = ["tests/fixtures", "src/scripthost_portable/_vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

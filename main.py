@@ -12,6 +12,7 @@ from scripthost_portable.worker import ScriptHostJob, run_job
 def _log(level: str, message: str, **fields: object) -> None:
     record = {
         "@timestamp": datetime.now(UTC).isoformat(),
+        "ecs.version": "1.6.0",
         "log.level": level,
         "message": message,
         **fields,
@@ -21,6 +22,7 @@ def _log(level: str, message: str, **fields: object) -> None:
 
 def handle(job_id=None, context=None, header=None, body=None) -> tuple[bool, str, str]:
     script_path = os.getenv("SCRIPT_PATH")
+    _log("info", "reaching inside the handle function", job_id=job_id, script_path=script_path)
     if not script_path:
         message = "SCRIPT_PATH environment variable is not set."
         _log("error", message, job_id=job_id)
@@ -46,3 +48,7 @@ def handle(job_id=None, context=None, header=None, body=None) -> tuple[bool, str
         stderr=result.stderr[-4000:],
     )
     return result.success, result.message, result.message
+
+
+if __name__ == "__main__":
+    handle()

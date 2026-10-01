@@ -1,13 +1,14 @@
 # imserverless image (Linux). The base already provides func.json (functionlib main.py),
 # Oracle Instant Client, tnsnames/krb5 and DataSyncX; it calls /app/main.py:handle().
-ARG BASE_IMAGE=gar-registry.caas.intel.com/opedaweb/soims:base
-FROM ${BASE_IMAGE}
+# Not BASE_IMAGE: soims build_push_rancher.ps1 passes that arg for dockerfile_base.
+ARG SOIMS_BASE_IMAGE=amr-registry.caas.intel.com/soia/soims:base
+FROM ${SOIMS_BASE_IMAGE}
 USER root
 WORKDIR /app
-ENV PYTHONUNBUFFERED=1 ENV_MODE=test SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1
+ENV PYTHONUNBUFFERED=1 ENV_MODE=test SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1 \
+    SCRIPT_PATH=/app/jobs/test_long.txt
 COPY pyproject.toml README.md main.py ./
+COPY tests/fixtures/test_long.txt ./jobs/test_long.txt
 COPY src/scripthost_portable ./src/scripthost_portable
-COPY scripthost-utilities-decompiled/SPSQL3_py ./scripthost-utilities-decompiled/SPSQL3_py
-# Editable install: runtime.py locates SPSQL3_py relative to the source tree.
-RUN python -m pip install --no-cache-dir -e . \
+RUN python -m pip install --no-cache-dir . \
     && chmod -R 777 /app

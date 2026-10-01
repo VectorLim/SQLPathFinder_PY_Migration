@@ -110,7 +110,7 @@ def block(*options: str, body: str = "") -> str:
 
 def _real_22844_segments() -> tuple[str, str, str]:
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = repo_root / "scripthost-utilities-decompiled" / "22844.spfsql"
+    fixture = repo_root / "tests" / "fixtures" / "22844.spfsql"
     segments = [segment.strip() for segment in fixture.read_text(encoding="utf-8-sig").split(DELIM)]
     mars = next(segment for segment in segments if "/NODE=KM.[A15_PROD_21.].MARS" in segment)
     aries = next(segment for segment in segments if "/NODE=KM.ARIES" in segment)

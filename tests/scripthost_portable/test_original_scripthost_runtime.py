@@ -324,7 +324,7 @@ print("chart_counter=" + str(second.g_ChartCtr))
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(repo_root / "scripthost-utilities-decompiled" / "SPSQL3_py"),
+            str(repo_root / "src" / "scripthost_portable" / "_vendor" / "SPSQL3_py"),
             str(repo_root),
             env.get("PYTHONPATH", ""),
         ]
@@ -415,12 +415,12 @@ def test_real_22844_builds_original_task_tree_on_linux() -> None:
     from scripthost_portable.runtime import _spf_manager_type
 
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = repo_root / "scripthost-utilities-decompiled" / "22844.spfsql"
+    fixture = repo_root / "tests" / "fixtures" / "22844.spfsql"
     text = fixture.read_text(encoding="utf-8-sig")
 
     manager = _spf_manager_type()()
     manager.gCommandLineArguments = [
-        str(repo_root / "scripthost-utilities-decompiled" / "SPSQL3_py" / "SPFSQL3.py"),
+        str(repo_root / "src" / "scripthost_portable" / "_vendor" / "SPSQL3_py" / "SPFSQL3.py"),
         f'/MYLOCAL="{fixture.parent}"',
         "/EXECMODE=UT",
     ]

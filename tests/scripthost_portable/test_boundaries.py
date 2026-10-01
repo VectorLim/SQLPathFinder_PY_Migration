@@ -14,7 +14,7 @@ from scripthost_portable import file_operations
 def test_supported_runtime_has_no_reference_runtime_imports():
     root = Path(__file__).resolve().parents[2]
     sources = list((root / "src/scripthost_portable").glob("*.py"))
-    sources += list((root / "scripthost-utilities-decompiled/SPSQL3_py").rglob("*.py"))
+    sources += list((root / "src/scripthost_portable/_vendor/SPSQL3_py").rglob("*.py"))
     for path in sources:
         tree = ast.parse(path.read_text(encoding="utf-8-sig"))
         for node in ast.walk(tree):

@@ -5,7 +5,9 @@ import logging
 import sys
 from pathlib import Path
 
-SCRIPT_HOST = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled" / "SPSQL3_py"
+SCRIPT_HOST = (
+    Path(__file__).resolve().parents[2] / "src" / "scripthost_portable" / "_vendor" / "SPSQL3_py"
+)
 
 
 def _with_scripthost_path() -> None:

@@ -7,7 +7,7 @@ dnshostname: sqlpathfinder-app.rf3stg.intel.com
 targetname: active
 action: create
 containers:
-  - image: 'amr-registry.caas.intel.com/<harbor-project>/sqlpathfinder:1.0'
+  - image: 'amr-registry.caas.intel.com/soia/sqlpathfinder:1.0.0'
     resources:
       requests:
         cpu: 2
@@ -22,8 +22,8 @@ containers:
         networkpath: '<//fileserver/share/path>'
         claim: ''
     environmentvariable:
-      SCRIPT_PATH: /mnt/data/<script>.txt
-      WORKDIR: /mnt/data/<output-folder>
+      SCRIPT_PATH: /app/jobs/test_long.txt
+      WORKDIR: /mnt/data/test_long
       JOB_TIMEOUT: '3600'
       ENV_MODE: test
       DATASYNCX_USERNAME: titan

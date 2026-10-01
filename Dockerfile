@@ -10,7 +10,6 @@ RUN apt-get update \
     && chown scripthost:scripthost /app
 COPY pyproject.toml README.md ./
 COPY src/scripthost_portable ./src/scripthost_portable
-COPY scripthost-utilities-decompiled/SPSQL3_py ./scripthost-utilities-decompiled/SPSQL3_py
 RUN python -m pip install --no-cache-dir -e .
 USER scripthost
 ENTRYPOINT ["python", "-m", "scripthost_portable.launcher"]
@@ -20,7 +19,6 @@ FROM runtime AS validation
 USER root
 RUN python -m pip install --no-cache-dir pytest
 COPY tests ./tests
-COPY scripthost-utilities-decompiled/22844.spfsql ./scripthost-utilities-decompiled/22844.spfsql
 USER scripthost
 ENTRYPOINT ["python", "-m", "pytest"]
 CMD ["tests/scripthost_portable", "-q", "-p", "no:cacheprovider"]

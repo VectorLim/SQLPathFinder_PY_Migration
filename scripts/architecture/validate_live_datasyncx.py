@@ -40,7 +40,7 @@ def main() -> int:
         "jobs": [],
         "outputs": [],
     }
-    fixture = Path(__file__).resolve().parents[2] / "scripthost-utilities-decompiled/22844.spfsql"
+    fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/22844.spfsql"
     segments = fixture.read_text(encoding="utf-8-sig").split("<---- New Query ---->")
     selected = [
         next(s for s in segments if marker in s).strip()
