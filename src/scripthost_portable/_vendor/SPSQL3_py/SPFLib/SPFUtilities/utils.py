@@ -6913,10 +6913,11 @@ class Utilities(SPFGlobals):
         'EmailUtility : 'O' or 'S' or 'SA'. Default 'SA' : SMTPAuth
         '===============================================================================
         """
-        if os.name != "nt":
+        is_linux = os.name != "nt"
+        if is_linux and self.IsEmptyOrNone(MyRole) is False:
             raise RuntimeError(
-                "UNRESOLVED: Linux EmailTask delivery/identity transport is unavailable; "
-                "original recipient and role restrictions must be retained."
+                "UNRESOLVED: Linux role verification (verifyrole.exe) is unavailable; "
+                "original role restriction must be retained."
             )
 
         #locals
@@ -6966,6 +6967,9 @@ class Utilities(SPFGlobals):
                 useSMTPAuth = False 
                 self.logger.debug("{0} - updated S ll_Outlook: '{1}'".format(calling_func, ll_Outlook))
                 self.logger.debug("{0} - updated S useSMTPAuth: '{1}'".format(calling_func, useSMTPAuth))
+
+            if is_linux:
+                ll_Outlook = False
 
             if (self.IsEmptyOrNone(MailToIn) is True 
                 and self.IsEmptyOrNone(MailCC) is True
@@ -7022,15 +7026,21 @@ class Utilities(SPFGlobals):
                 Subject = self.Substitute_Std_Tokens(Subject, "1") # '<TS> ...
 
             userEmailAddress = ""
-            try:
-                userEmailAddress = self.gUserPrincipal #self.getEmailForUser(self.gUN, self.gUDomain, MyLocal)
-            except pythoncom.com_error  as comErr:
-                if self.IsEmptyOrNone(comErr.args[2][2]) is True or "The directory property cannot be found in the cache." == comErr.args[2][2].strip():
-                    self.ConsoleWithCons80("Email ID not found for '{0}\\{1}'".format(self.gUDomain, self.gUN))
-                else:
+            if is_linux:
+                from datasyncx.utils.config import get_config_value
+                userEmailAddress = (get_config_value("scripthost_user_email") or "").strip()
+                if not userEmailAddress:
+                    self.logger.warning("{0} - SCRIPTHOST_USER_EMAIL not set; 'self' recipients skipped".format(calling_func))
+            else:
+                try:
+                    userEmailAddress = self.gUserPrincipal #self.getEmailForUser(self.gUN, self.gUDomain, MyLocal)
+                except pythoncom.com_error  as comErr:
+                    if self.IsEmptyOrNone(comErr.args[2][2]) is True or "The directory property cannot be found in the cache." == comErr.args[2][2].strip():
+                        self.ConsoleWithCons80("Email ID not found for '{0}\\{1}'".format(self.gUDomain, self.gUN))
+                    else:
+                        raise
+                except Exception as err:
                     raise
-            except Exception as err:
-                raise
 
             """
             '*****************
@@ -7068,6 +7078,13 @@ class Utilities(SPFGlobals):
             else :
                 MailBCC = MailToF
 
+            if is_linux:
+                MailToIn, MailCC, MailBCC = ([m for m in lst if m] for lst in (MailToIn, MailCC, MailBCC))
+                if not (MailToIn or MailCC or MailBCC):
+                    self.ConsoleWithCons80("No resolvable email addresses ...\nSkipping email ...")
+                    self.logger.warning("{0} - no resolvable recipients; email skipped".format(calling_func))
+                    return
+
             if ctr == 0 :
                 self.Cons80()
                 self.Console("There are no valid email addresses ...\nExiting ...")
@@ -7088,7 +7105,7 @@ class Utilities(SPFGlobals):
                         emailMessage = MIMEText(Body, contentType, "utf-8")
 
                     emailMessage['Subject'] = Subject
-                    emailMessage['From'] = userEmailAddress
+                    emailMessage['From'] = "atmanalytic@intel.com" if is_linux else userEmailAddress
                     emailMessage['To'] = ",".join(MailToIn)
                     if len(MailCC) > 0 :
                         emailMessage['Cc'] = ",".join(MailCC)
@@ -7123,6 +7140,16 @@ class Utilities(SPFGlobals):
                     #    useSMTPAuth = False 
                     self.logger.debug("{0} - useSMTPAuth : '{1}'".format(calling_func, useSMTPAuth))
                     #useSMTPAuth = True if self.SHisSHEntry is False else False # Default use SMTPAuth
+                    if is_linux:
+                        from datasyncx.utils.send_mail import get_smtp_service_module
+                        del emailMessage['Bcc']
+                        smtpObj = get_smtp_service_module().get_smtp_service()
+                        try:
+                            smtpObj.sendmail(emailMessage['From'], MailToIn + MailCC + MailBCC, emailMessage.as_string())
+                        finally:
+                            smtpObj.quit()
+                        self.ConsoleDoneWithTimeStamp()
+                        return
                     if SPFSMTPAuthEmail is None:
                         raise RuntimeError("Legacy ScriptHost SMTP transport is unavailable on this platform")
                     try:

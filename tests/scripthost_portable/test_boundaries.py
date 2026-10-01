@@ -24,9 +24,11 @@ def test_supported_runtime_has_no_reference_runtime_imports():
                     for name in node.names
                 ), path
             elif isinstance(node, ast.ImportFrom):
-                assert (node.module or "").split(".")[0] not in {"vg2c", "vg2c_new", "vg2c_ui"}, (
-                    path
-                )
+                assert (node.module or "").split(".")[0] not in {
+                    "vg2c",
+                    "vg2c_new",
+                    "vg2c_ui",
+                }, path
 
 
 def test_robocopy_retries_io_and_rejects_unknown_switches(tmp_path, monkeypatch):
@@ -44,10 +46,16 @@ def test_robocopy_retries_io_and_rejects_unknown_switches(tmp_path, monkeypatch)
 
     monkeypatch.setattr(file_operations.shutil, "copy2", flaky)
     monkeypatch.setattr(file_operations.time, "sleep", sleeps.append)
-    assert file_operations.robocopy_files(str(source), str(target), ["*.csv"], 1, 2, []) == 1
+    assert (
+        file_operations.robocopy_files(str(source), str(target), ["*.csv"], 1, 2, [])
+        == 1
+    )
     assert sleeps == [2]
     assert (target / "input.csv").read_text() == "data"
-    assert file_operations.robocopy_files(str(source), str(target), ["*.csv"], 0, 0, []) == 0
+    assert (
+        file_operations.robocopy_files(str(source), str(target), ["*.csv"], 0, 0, [])
+        == 0
+    )
     with pytest.raises(ValueError, match="Unsupported portable RoboCopy"):
         file_operations.robocopy_files(str(source), str(target), ["*"], 0, 0, ["/MIR"])
     assert (source / "input.csv").exists()
@@ -80,7 +88,9 @@ def test_worker_runs_with_all_retired_imports_blocked(tmp_path, monkeypatch):
         "            raise AssertionError('Retired runtime imported: ' + fullname)\n"
         "sys.meta_path.insert(0, RetiredImportGuard())\n"
     )
-    monkeypatch.setenv("PYTHONPATH", str(guard) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    monkeypatch.setenv(
+        "PYTHONPATH", str(guard) + os.pathsep + os.environ.get("PYTHONPATH", "")
+    )
     result = run_job(
         ScriptHostJob(
             working_directory=str(tmp_path),
@@ -93,7 +103,9 @@ def test_worker_runs_with_all_retired_imports_blocked(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("delimiter", [",", "\t"])
-def test_report_preprocessing_preserves_records_and_cleans_embedded_text(tmp_path, delimiter):
+def test_report_preprocessing_preserves_records_and_cleans_embedded_text(
+    tmp_path, delimiter
+):
     import csv
 
     source = tmp_path / "input.csv"

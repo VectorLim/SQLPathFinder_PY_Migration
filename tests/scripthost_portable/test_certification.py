@@ -91,7 +91,7 @@ def test_representative_original_reports_through_worker(tmp_path, fixture):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux delivery boundary")
-def test_original_email_is_explicitly_unresolved(tmp_path):
+def test_original_email_role_verification_is_explicitly_unresolved(tmp_path):
     text = block(
         r'/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "subject" "" "" "" "role" "Y" "N"'
     )

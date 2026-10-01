@@ -58,7 +58,13 @@ def vertical_slice(root: Path) -> str:
 
 
 def outputs(root: Path) -> dict[str, str]:
-    names = ["seed.csv", "out_alpha_0.csv", "out_alpha_1.csv", "out_alpha_2.csv", "verified.txt"]
+    names = [
+        "seed.csv",
+        "out_alpha_0.csv",
+        "out_alpha_1.csv",
+        "out_alpha_2.csv",
+        "verified.txt",
+    ]
     return {name: (root / name).read_text(encoding="utf-8") for name in names}
 
 
@@ -91,14 +97,18 @@ def test_original_runtime_task_tree_repeats_sequentially(tmp_path: Path) -> None
         os.environ.pop("PORTABLE_SPFS_ROWS", None)
 
 
-def test_original_runtime_process_environment_is_not_per_run_state(tmp_path: Path) -> None:
+def test_original_runtime_process_environment_is_not_per_run_state(
+    tmp_path: Path,
+) -> None:
     os.environ.pop("PORTABLE_SPFS_LEAK", None)
     workdir = tmp_path / "environment-leak"
     source = workdir / "rows.csv"
     marker = workdir / "leaked.txt"
     workdir.mkdir(parents=True)
     source.write_text("id\n1\n", encoding="utf-8")
-    set_env = script(block(f'/UTILITIES={{ROWS-IN-FILE}} "{source}" "PORTABLE_SPFS_LEAK" "N"'))
+    set_env = script(
+        block(f'/UTILITIES={{ROWS-IN-FILE}} "{source}" "PORTABLE_SPFS_LEAK" "N"')
+    )
     observe_env = script(
         block('/UTILITIES={IF-THEN} "PORTABLE_SPFS_LEAK" "GT" "0"'),
         block("/WRITE-FILE=Y", f"/CSV={marker}", body="leaked"),
@@ -204,17 +214,23 @@ def test_original_site_loop_executes(tmp_path: Path) -> None:
     assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
 
     for site in ("A", "B"):
-        assert (original_dir / f"site_{site}.txt").read_text(encoding="utf-8").rstrip("\n") == site
+        assert (original_dir / f"site_{site}.txt").read_text(encoding="utf-8").rstrip(
+            "\n"
+        ) == site
 
 
 def test_original_run_loop_final_chunk(tmp_path: Path) -> None:
     original_dir = tmp_path / "run-original"
     original_dir.mkdir()
-    (original_dir / "input.csv").write_text("id,value\n1,a\n2,b\n3,c\n", encoding="utf-8")
+    (original_dir / "input.csv").write_text(
+        "id,value\n1,a\n2,b\n3,c\n", encoding="utf-8"
+    )
 
     def make_text(root: Path) -> str:
         return script(
-            block(f'/UTILITIES={{RUN-LOOP}} "{root / "input.csv"}" "{root / "chunk.csv"}" "2" "N"'),
+            block(
+                f'/UTILITIES={{RUN-LOOP}} "{root / "input.csv"}" "{root / "chunk.csv"}" "2" "N"'
+            ),
             block("/UTILITIES={END-LOOP}"),
         )
 
@@ -236,7 +252,9 @@ def test_original_local_hpc_scope_executes(tmp_path: Path) -> None:
         )
 
     assert PortableScriptHostRuntime().run_text(make_text(original_dir), original_dir)
-    assert (original_dir / "inside.txt").read_text(encoding="utf-8").rstrip("\n") == "inside"
+    assert (original_dir / "inside.txt").read_text(encoding="utf-8").rstrip(
+        "\n"
+    ) == "inside"
 
 
 def test_original_getquery_representative_routing(tmp_path: Path) -> None:
@@ -280,7 +298,9 @@ def test_original_html_run_css_executes_on_linux(
     root.mkdir()
     css = root / "portable_report.css"
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(encoding="utf-8-sig")
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
+        encoding="utf-8-sig"
+    )
     report_block = next(
         segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
     ).strip()
@@ -358,7 +378,9 @@ def test_original_report_defer_layout_delete_lifecycle_characterization_on_linux
     final = root / "portable_report.htm"
 
     repo_root = Path(__file__).resolve().parents[2]
-    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(encoding="utf-8-sig")
+    fixture = (repo_root / "tests" / "fixtures" / "html_test.txt").read_text(
+        encoding="utf-8-sig"
+    )
     css_block = next(
         segment for segment in fixture.split(DELIM) if "/REPORT=HTML-RUN" in segment
     ).strip()
@@ -420,7 +442,14 @@ def test_real_22844_builds_original_task_tree_on_linux() -> None:
 
     manager = _spf_manager_type()()
     manager.gCommandLineArguments = [
-        str(repo_root / "src" / "scripthost_portable" / "_vendor" / "SPSQL3_py" / "SPFSQL3.py"),
+        str(
+            repo_root
+            / "src"
+            / "scripthost_portable"
+            / "_vendor"
+            / "SPSQL3_py"
+            / "SPFSQL3.py"
+        ),
         f'/MYLOCAL="{fixture.parent}"',
         "/EXECMODE=UT",
     ]

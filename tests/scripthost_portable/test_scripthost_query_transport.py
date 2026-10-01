@@ -41,7 +41,9 @@ def test_force_portable_transport_preserves_default_driver_selection(
         def openConnection(self, *args):
             self.arguments = args
 
-    monkeypatch.setattr(spf, "dbDriverCxOracle", LegacyDriver if legacy_available else None)
+    monkeypatch.setattr(
+        spf, "dbDriverCxOracle", LegacyDriver if legacy_available else None
+    )
     if flag is None:
         monkeypatch.delenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT", raising=False)
     else:
@@ -111,8 +113,13 @@ def block(*options: str, body: str = "") -> str:
 def _real_22844_segments() -> tuple[str, str, str]:
     repo_root = Path(__file__).resolve().parents[2]
     fixture = repo_root / "tests" / "fixtures" / "22844.spfsql"
-    segments = [segment.strip() for segment in fixture.read_text(encoding="utf-8-sig").split(DELIM)]
-    mars = next(segment for segment in segments if "/NODE=KM.[A15_PROD_21.].MARS" in segment)
+    segments = [
+        segment.strip()
+        for segment in fixture.read_text(encoding="utf-8-sig").split(DELIM)
+    ]
+    mars = next(
+        segment for segment in segments if "/NODE=KM.[A15_PROD_21.].MARS" in segment
+    )
     aries = next(segment for segment in segments if "/NODE=KM.ARIES" in segment)
     sqlite = next(
         segment
@@ -184,15 +191,21 @@ def test_datasyncx_factory_distinguishes_transport_from_configuration_failure(
     factory = DataSyncXReaderFactory()
 
     monkeypatch.setitem(sys.modules, "datasyncx", None)
-    with pytest.raises(QueryTransportUnavailable, match="public reader API unavailable"):
+    with pytest.raises(
+        QueryTransportUnavailable, match="public reader API unavailable"
+    ):
         factory.reader_for("mars", "KM.MARS")
 
     class BrokenReader:
         def __init__(self) -> None:
             raise RuntimeError("bad config")
 
-    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=BrokenReader))
-    with pytest.raises(QueryConfigurationError, match="construction/configuration failed"):
+    monkeypatch.setitem(
+        sys.modules, "datasyncx", SimpleNamespace(MarsReader=BrokenReader)
+    )
+    with pytest.raises(
+        QueryConfigurationError, match="construction/configuration failed"
+    ):
         factory.reader_for("mars", "KM.MARS")
 
 
@@ -274,8 +287,13 @@ def test_portable_connection_characterizes_output_format(tmp_path: Path) -> None
     connection.openConnection("", "", "KM.MARS", None)
     output = tmp_path / "characterization.tab"
 
-    assert connection.execute("select first", OutExcel=str(output), FirstConnect=True) == 2
-    assert connection.execute("select second", OutExcel=str(output), FirstConnect=False) == 2
+    assert (
+        connection.execute("select first", OutExcel=str(output), FirstConnect=True) == 2
+    )
+    assert (
+        connection.execute("select second", OutExcel=str(output), FirstConnect=False)
+        == 2
+    )
 
     raw = output.read_bytes()
     assert not raw.startswith(codecs.BOM_UTF8)
@@ -296,14 +314,19 @@ def test_portable_connection_rejects_unmapped_oracle_family() -> None:
 
 def test_cursor_labels_win_over_headers_for_nonempty_results(tmp_path: Path) -> None:
     """The original driver's 2.0.0.6 contract ignores MyHeaders when rows exist."""
-    factory = FakeReaderFactory({"mars": pd.DataFrame({"ACTUAL_LABEL": ["é中", None, "."]})})
+    factory = FakeReaderFactory(
+        {"mars": pd.DataFrame({"ACTUAL_LABEL": ["é中", None, "."]})}
+    )
     connection = PortableOracleConnection(reader_factory=factory)
     connection.openConnection(None, None, "KM.MARS")
     output = tmp_path / "labels.tab"
     for first in (True, False):
         assert (
             connection.execute(
-                "select", OutExcel=str(output), FirstConnect=first, MyHeaders="DIFFERENT_HEADER"
+                "select",
+                OutExcel=str(output),
+                FirstConnect=first,
+                MyHeaders="DIFFERENT_HEADER",
             )
             == 3
         )
@@ -325,14 +348,18 @@ def test_empty_append_and_noheaders_do_not_add_headers(tmp_path: Path) -> None:
     connection = PortableOracleConnection(reader_factory=factory)
     connection.openConnection(None, None, "KM.MARS")
     output = tmp_path / "noheaders.tab"
-    connection.execute("select", OutExcel=str(output), ll_NoHdrs=True, MyHeaders="OTHER")
+    connection.execute(
+        "select", OutExcel=str(output), ll_NoHdrs=True, MyHeaders="OTHER"
+    )
     assert output.read_text() == "1\n"
     connection._reader.frame = pd.DataFrame(columns=["ACTUAL"])
     assert connection.execute("select", OutExcel=str(output), FirstConnect=False) == 0
     assert output.read_text() == "1\n"
 
 
-def test_original_oasys_preprocessing_occurs_before_fake_transport(tmp_path: Path) -> None:
+def test_original_oasys_preprocessing_occurs_before_fake_transport(
+    tmp_path: Path,
+) -> None:
     factory = FakeReaderFactory({"oasys": pd.DataFrame({"x": [1]})})
     text = block(
         "/NODE=KM.OASYS",
@@ -425,7 +452,9 @@ def test_real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle(
     assert result.iloc[0]["visual_id"] == "VID_A"
 
 
-def test_original_empty_query_result_uses_original_header_fallback(tmp_path: Path) -> None:
+def test_original_empty_query_result_uses_original_header_fallback(
+    tmp_path: Path,
+) -> None:
     factory = FakeReaderFactory({"mars": pd.DataFrame(columns=["a", "b"])})
     text = block(
         "/NODE=KM.MARS",
@@ -477,9 +506,9 @@ def test_original_csv_list_quotes_and_deduplicates(tmp_path: Path):
         "/ENGINE=VA",
         "/CSV=out.csv",
         "/T=",
-        body=f'''/*BEGIN SQL*/
+        body=f"""/*BEGIN SQL*/
 SELECT 1 FROM dual WHERE name IN SQL_Get_CSV_List("{source}", name, "name IN")
-/*END SQL*/''',
+/*END SQL*/""",
     )
     with use_reader_factory(factory):
         assert PortableScriptHostRuntime().run_text(text, tmp_path)

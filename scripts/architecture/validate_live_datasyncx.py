@@ -44,13 +44,18 @@ def main() -> int:
     segments = fixture.read_text(encoding="utf-8-sig").split("<---- New Query ---->")
     selected = [
         next(s for s in segments if marker in s).strip()
-        for marker in ("/NODE=KM.[A15_PROD_21.].MARS", "/NODE=KM.ARIES", "/CSV=XRAY_results.csv")
+        for marker in (
+            "/NODE=KM.[A15_PROD_21.].MARS",
+            "/NODE=KM.ARIES",
+            "/CSV=XRAY_results.csv",
+        )
     ]
     os.environ["SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT"] = "1"
 
     def execute(name: str, text: str) -> bool:
         result = run_job(
-            ScriptHostJob(working_directory=str(output), script_text=text), timeout=args.timeout
+            ScriptHostJob(working_directory=str(output), script_text=text),
+            timeout=args.timeout,
         )
         evidence["jobs"].append(
             {
@@ -69,9 +74,15 @@ def main() -> int:
     success = execute("22844-query-slice", "\n<---- New Query ---->\n".join(selected))
     if success:
         frames = []
-        for name in ("yeuchuan_a0_22844.tab", "yeuchuan_a1_22844.tab", "XRAY_results.csv"):
+        for name in (
+            "yeuchuan_a0_22844.tab",
+            "yeuchuan_a1_22844.tab",
+            "XRAY_results.csv",
+        ):
             path = output / name
-            frame = pd.read_csv(path, sep="\t" if path.suffix == ".tab" else ",", dtype=str)
+            frame = pd.read_csv(
+                path, sep="\t" if path.suffix == ".tab" else ",", dtype=str
+            )
             frame.columns = frame.columns.str.upper()
             frames.append(frame)
             evidence["outputs"].append(
@@ -100,10 +111,13 @@ def main() -> int:
             )
 
         success = execute(
-            "empty", query_block("empty.tab", "SELECT 1 AS actual_label FROM dual WHERE 1=0")
+            "empty",
+            query_block("empty.tab", "SELECT 1 AS actual_label FROM dual WHERE 1=0"),
         )
         if success:
-            assert (output / "empty.tab").read_text(encoding="utf-8-sig").strip() == "FALLBACK_NAME"
+            assert (output / "empty.tab").read_text(
+                encoding="utf-8-sig"
+            ).strip() == "FALLBACK_NAME"
             evidence["empty_header_fallback"] = True
         success = (
             execute(
@@ -120,7 +134,9 @@ def main() -> int:
             assert lines == ["NULL_VALUE\tDOT_VALUE\tUNICODE_VALUE", "\t.\té中"]
             evidence["null_dot_unicode"] = True
     evidence["success"] = success
-    (output / "evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+    (output / "evidence.json").write_text(
+        json.dumps(evidence, indent=2), encoding="utf-8"
+    )
     print(json.dumps(evidence, indent=2))
     return 0 if success else 1
 

@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import stat
 import sys
+import types
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import datetime, timedelta
@@ -455,6 +456,63 @@ def test_email_original_task_keeps_role_and_recipient_policy(tmp_path: Path, mon
         "role",
         True,
     )
+
+
+@pytest.fixture
+def fake_datasyncx_smtp(monkeypatch):
+    sent = []
+
+    class SMTP:
+        def sendmail(self, sender, recipients, message):
+            sent.append((sender, recipients, message))
+
+        def quit(self):
+            pass
+
+    config = types.ModuleType("datasyncx.utils.config")
+    config.get_config_value = lambda section, option="password": os.environ.get(section.upper())
+    send_mail = types.ModuleType("datasyncx.utils.send_mail")
+    send_mail.get_smtp_service_module = lambda: types.SimpleNamespace(get_smtp_service=SMTP)
+    monkeypatch.setitem(sys.modules, "datasyncx.utils.config", config)
+    monkeypatch.setitem(sys.modules, "datasyncx.utils.send_mail", send_mail)
+    return sent
+
+
+def _email_manager():
+    from scripthost_portable.runtime import _spf_manager_type
+
+    return _spf_manager_type()()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux DataSyncX email transport")
+def test_email_linux_sends_via_datasyncx(tmp_path: Path, monkeypatch, fake_datasyncx_smtp):
+    monkeypatch.setenv("SCRIPTHOST_USER_EMAIL", "me@intel.com")
+    attachment = tmp_path / "data.csv"
+    attachment.write_text("ID\n1\n")
+    body = tmp_path / "body.txt"
+    body.write_text("hello")
+    _email_manager().SPFEmail(
+        "N", str(attachment), "self,other@intel.com", "subj", str(body), "", "bcc@intel.com", "", True, False
+    )
+    [(sender, recipients, message)] = fake_datasyncx_smtp
+    assert sender == "atmanalytic@intel.com"
+    assert recipients == ["me@intel.com", "other@intel.com", "bcc@intel.com"]
+    assert 'filename="data.csv"' in message
+    assert "Bcc:" not in message
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux DataSyncX email transport")
+def test_email_linux_skips_unresolved_self(monkeypatch, fake_datasyncx_smtp):
+    monkeypatch.delenv("SCRIPTHOST_USER_EMAIL", raising=False)
+    _email_manager().SPFEmail("N", "", "self", "subj", "", "", "", "", True, False)
+    assert fake_datasyncx_smtp == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux DataSyncX email transport")
+def test_email_linux_role_fails_closed(fake_datasyncx_smtp):
+    with pytest.raises(RuntimeError, match="UNRESOLVED"):
+        _email_manager().SPFEmail("N", "", "a@intel.com", "subj", "", "", "", "role", True, False)
+    assert fake_datasyncx_smtp == []
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode replacement for Windows attributes")

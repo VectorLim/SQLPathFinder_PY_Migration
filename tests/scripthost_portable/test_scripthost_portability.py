@@ -6,7 +6,11 @@ import sys
 from pathlib import Path
 
 SCRIPT_HOST = (
-    Path(__file__).resolve().parents[2] / "src" / "scripthost_portable" / "_vendor" / "SPSQL3_py"
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "scripthost_portable"
+    / "_vendor"
+    / "SPSQL3_py"
 )
 
 
@@ -43,8 +47,12 @@ def test_pyutils_fresh_instances_do_not_share_argument_state() -> None:
     module = importlib.import_module("PyUtils")
     logger = logging.getLogger(__name__)
 
-    first = module.BuildArgsClass({"value": "one"}, {"value": ""}, "none", "Y", "N", logger=logger)
-    second = module.BuildArgsClass({"value": "two"}, {"value": ""}, "none", "Y", "N", logger=logger)
+    first = module.BuildArgsClass(
+        {"value": "one"}, {"value": ""}, "none", "Y", "N", logger=logger
+    )
+    second = module.BuildArgsClass(
+        {"value": "two"}, {"value": ""}, "none", "Y", "N", logger=logger
+    )
 
     assert first.arg_values == {"value": "one"}
     assert second.arg_values == {"value": "two"}

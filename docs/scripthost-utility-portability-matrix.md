@@ -26,7 +26,7 @@ is not evidence of correct output. No alternate report or utility runtime remain
 | HTML-RUN/DEFER/LAYOUT/DELETE | SUPPORTED | Representative html_test/tcb_yield report slices, rendered data, sorting, CSS and cleanup; local destinations and batch mode |
 | CleanDelimsCRLF boundary | SUPPORTED | Linux UTF-8 CSV/TAB subset: quoted fields, embedded comma/tab/newline/quote cleanup; no general executable equivalence claim |
 | HTML-TAB/MENU, plotting, interactive viewer | UNCERTIFIED | Not required by the representative report slices |
-| Linux EmailTask/SPFEmail delivery | UNRESOLVED | Explicit unavailable boundary; original recipient/role/OnlyIntel restrictions retained; no sender added |
+| Linux EmailTask/SPFEmail delivery | SUPPORTED | DataSyncX SMTP (smtpauth.intel.com, `ATMANALYTIC`), sender atmanalytic@intel.com; `self` from `SCRIPTHOST_USER_EMAIL` (unset: skipped with warning); OnlyIntel retained; role verification UNRESOLVED (fails closed) |
 | Generic Windows DOS/VA, Outlook/AD, remote interpreter services | UNCERTIFIED | Platform integrations outside the demonstrated subset |
 | Legacy compiler/editor/reference runtime | RETIRED | vg2c, vg2c_ui, vg2c_new, their tests and alternate HTML/email implementations removed |
 

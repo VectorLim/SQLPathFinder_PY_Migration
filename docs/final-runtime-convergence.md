@@ -45,9 +45,9 @@ Portable code owns fresh-process execution, DataSyncX query I/O, copy/delete/unz
 RoboCopy-subset operations, bounded XML conversion, and CSV/TAB preprocessing.
 Original helper amendments cover POSIX path/case handling (including SQLite's VG2 `.\\` workdir), file modes, native moves,
 .xlsx conversion, local R temporary paths and public HTTP transport.
-Report algorithms and control-flow semantics remain original. Linux email explicitly
-fails at original SPFEmail: delivery and identity transport are UNRESOLVED, and no
-recipient/role policy was weakened or replaced.
+Report algorithms and control-flow semantics remain original. Linux email sends the
+original SPFEmail message through DataSyncX SMTP as atmanalytic@intel.com; `self`
+comes from `SCRIPTHOST_USER_EMAIL`. Role verification stays UNRESOLVED and fails closed.
 
 ## Certification
 
@@ -95,5 +95,5 @@ private credentials. See [container instructions](runtime-container.md). Local D
 Desktop denies engine access, so container execution is validated in Actions.
 Corporate DataSyncX inside the Linux container remains UNCERTIFIED until approved
 private dependencies, Oracle/authentication prerequisites and network access are supplied.
-Linux email delivery remains UNRESOLVED. These are explicit cutover limits; they do
+Linux email role verification remains UNRESOLVED. These are explicit cutover limits; they do
 not justify retaining or rebuilding a second runtime.
