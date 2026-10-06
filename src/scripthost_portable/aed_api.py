@@ -22,23 +22,40 @@ IAM_JOB = "ICMPCS_CWFNCO_CSR_IAM"
 DEFAULT_ROOT = r"\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS"
 # One job serves one site; same mapping as CSR_IAM.py.
 SITE_FACILITY = {
-    "CD": "A48_PROD_21", "PG": "A12_PROD_0", "KM": "A15_PROD_21",
-    "VN": "A90_PROD_21", "CR": "A61_PROD_4",
+    "CD": "A48_PROD_21",
+    "PG": "A12_PROD_0",
+    "KM": "A15_PROD_21",
+    "VN": "A90_PROD_21",
+    "CR": "A61_PROD_4",
 }
 _TASK = re.compile(r"^\s*/UTILITIES\s*=\s*\{AED\}(?:\s|$)", re.I | re.M)
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _ID = re.compile(r"[A-Za-z0-9_.-]+\Z")
 _PROTECTED = {
-    "PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP",
-    "PYTHONPATH", "PYTHONHOME", "LD_PRELOAD", "LD_LIBRARY_PATH", "ENV_MODE",
-    "ICMPCS_ROOT", "AED_CONFIG_PATH", "AED_CA_BUNDLE", "CONFIG_SOURCE",
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "ENV_MODE",
+    "ICMPCS_ROOT",
+    "AED_CONFIG_PATH",
+    "AED_CA_BUNDLE",
+    "CONFIG_SOURCE",
 }
 
 
 def _safe_name(name: str) -> None:
     upper = name.upper()
     if (
-        not _NAME.fullmatch(name) or upper in _PROTECTED
+        not _NAME.fullmatch(name)
+        or upper in _PROTECTED
         or upper.startswith(("DATASYNCX_", "CIFS_"))
         or any(word in upper for word in ("PASSWORD", "SECRET", "TOKEN", "API_KEY"))
     ):
@@ -66,8 +83,11 @@ def _read_text(path: str) -> str:
         import smbclient
 
         with smbclient.open_file(
-            path, encoding="utf-8-sig", newline="",
-            username=os.environ.get("CIFS_USERNAME"), password=os.environ.get("CIFS_PASSWORD"),
+            path,
+            encoding="utf-8-sig",
+            newline="",
+            username=os.environ.get("CIFS_USERNAME"),
+            password=os.environ.get("CIFS_PASSWORD"),
         ) as stream:
             return stream.read()
     with open(path, encoding="utf-8-sig", newline="") as stream:
@@ -79,7 +99,8 @@ def parse_config(text: str) -> dict[str, str]:
     reader = csv.reader(io.StringIO(text.lstrip("\ufeff")), strict=True)
     headers = next(reader, [])
     if len(headers) < 3 or [v.strip().lower() for v in headers[1:3]] != [
-        "parameter", "value",
+        "parameter",
+        "value",
     ]:
         raise ValueError("config.txt requires group,parameter,value columns")
     values: dict[str, str] = {}
@@ -121,9 +142,16 @@ def _read_history(path: str) -> list[dict[str, str]]:
     for row in reader:
         if None in row or any(value is None for value in row.values()):
             raise ValueError("Malformed history row")
-        record = {key: value for key, value in row.items() if key not in {
-            lot_column, names.get("FACILITY"), names.get("OUT_DATE"),
-        }}
+        record = {
+            key: value
+            for key, value in row.items()
+            if key
+            not in {
+                lot_column,
+                names.get("FACILITY"),
+                names.get("OUT_DATE"),
+            }
+        }
         record.update(
             LOT=row[lot_column].strip(),
             FACILITY=row.get(names.get("FACILITY", ""), "").strip(),
@@ -136,9 +164,12 @@ def _read_history(path: str) -> list[dict[str, str]]:
 
 def _save_history(path: str, records: list[dict[str, str]]) -> None:
     # ponytail: one writer per job/site; add locking if overlapping runs are needed.
-    fields = list(dict.fromkeys(
-        ["FACILITY", "LOT", "OUT_DATE"] + [key for record in records for key in record]
-    ))
+    fields = list(
+        dict.fromkeys(
+            ["FACILITY", "LOT", "OUT_DATE"]
+            + [key for record in records for key in record]
+        )
+    )
     temporary = _absolute(path) + "." + uuid.uuid4().hex + ".tmp"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
@@ -172,9 +203,12 @@ def _load_client(workdir: Path):
         if not os.environ.get("X_API_KEY"):
             raise ValueError("X_API_KEY is required for the AED API-key client")
         # The SOIMS 6.2.0 client resolves this certificate relative to the job cwd.
-        certificate = Path(os.environ.get(
-            "AED_CA_BUNDLE", str(Path(__file__).with_name("IntelSHA256RootCA-Base64.crt"))
-        )).resolve(strict=True)
+        certificate = Path(
+            os.environ.get(
+                "AED_CA_BUNDLE",
+                str(Path(__file__).with_name("IntelSHA256RootCA-Base64.crt")),
+            )
+        ).resolve(strict=True)
         destination = workdir / "IntelSHA256RootCA-Base64.crt"
         if certificate != destination:
             shutil.copyfile(certificate, destination)
@@ -199,11 +233,16 @@ def prepare_job(workdir: Path, script: str, script_path: str | None = None) -> s
     facility = SITE_FACILITY.get(site, "")
     defaults = {
         # Bracketed node lets SPF substitute @[]@; plain "KM.MARS" silently falls back to mc_1_.
-        "SITE": site, "SFOLDER": job,
+        "SITE": site,
+        "SFOLDER": job,
         "MARS": f"{site}.[{facility}.].MARS",
-        "ARIES": f"{site}.ARIES", "AED_FACILITY": facility,
-        "dEmail": "", "ATTR_LIST": "", "SKIP_OPERATION": "",
-        "AED_ENABLED": "Y", "HIST_PATH": str(workdir.resolve() / site / "HIST" / "HIST.txt"),
+        "ARIES": f"{site}.ARIES",
+        "AED_FACILITY": facility,
+        "dEmail": "",
+        "ATTR_LIST": "",
+        "SKIP_OPERATION": "",
+        "AED_ENABLED": "Y",
+        "HIST_PATH": str(workdir.resolve() / site / "HIST" / "HIST.txt"),
     }
     if job == IAM_JOB:
         defaults.update(ATTR_LIST="1064", SKIP_OPERATION="2446")
@@ -215,7 +254,9 @@ def prepare_job(workdir: Path, script: str, script_path: str | None = None) -> s
         defaults[name] = value
     values = defaults
     for name in values:
-        overrides = [value for key, value in os.environ.items() if key.upper() == name.upper()]
+        overrides = [
+            value for key, value in os.environ.items() if key.upper() == name.upper()
+        ]
         if len(set(overrides)) > 1:
             raise ValueError(f"Conflicting environment overrides for {name}")
         if overrides:
@@ -225,8 +266,15 @@ def prepare_job(workdir: Path, script: str, script_path: str | None = None) -> s
         key = next(key for key in values if key.upper() == identity)
         values[key] = value
     normalized = {key.upper(): value for key, value in values.items()}
-    for required in ("MARS", "ARIES", "AED_FACILITY", "DEMAIL", "ATTR_LIST",
-                     "SKIP_OPERATION", "HIST_PATH"):
+    for required in (
+        "MARS",
+        "ARIES",
+        "AED_FACILITY",
+        "DEMAIL",
+        "ATTR_LIST",
+        "SKIP_OPERATION",
+        "HIST_PATH",
+    ):
         if not normalized.get(required):
             raise ValueError(f"Missing required configuration parameter: {required}")
     _identifier(normalized["AED_FACILITY"], "AED_FACILITY")
@@ -264,13 +312,19 @@ def _attributes(client, facility: str, lot: str) -> list[dict]:
     result = payload.get("Result")
     if result is None:
         return []
-    if isinstance(result, dict) and result.get("Attributes") is None and "Attributes" in result:
+    if (
+        isinstance(result, dict)
+        and result.get("Attributes") is None
+        and "Attributes" in result
+    ):
         return []
     if not isinstance(result, dict) or not isinstance(result.get("Attributes"), list):
         raise ValueError("Malformed AED lot_status attributes")
     attributes = result["Attributes"]
-    if any(not isinstance(attr, dict) or not isinstance(attr.get("ID"), str)
-           for attr in attributes):
+    if any(
+        not isinstance(attr, dict) or not isinstance(attr.get("ID"), str)
+        for attr in attributes
+    ):
         raise ValueError("Malformed AED attribute record")
     return attributes
 
@@ -278,9 +332,12 @@ def _attributes(client, facility: str, lot: str) -> list[dict]:
 def process_candidates(candidates_path: str, logger=None) -> None:
     """Run once per distinct facility/lot and persist only confirmed production success."""
     logger = logger or logging.getLogger(__name__)
-    config = {key.upper(): value for key, value in json.loads(
-        Path(os.environ["AED_CONFIG_PATH"]).read_text(encoding="utf-8")
-    ).items()}
+    config = {
+        key.upper(): value
+        for key, value in json.loads(
+            Path(os.environ["AED_CONFIG_PATH"]).read_text(encoding="utf-8")
+        ).items()
+    }
     with Path(candidates_path).open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream, strict=True)
         if reader.fieldnames != ["FACILITY", "LOT"]:
@@ -289,10 +346,12 @@ def process_candidates(candidates_path: str, logger=None) -> None:
         for row in reader:
             if None in row or any(value is None for value in row.values()):
                 raise ValueError("Malformed AED candidate row")
-            candidates.append((
-                _identifier(row["FACILITY"].strip(), "FACILITY"),
-                _identifier(row["LOT"].strip(), "LOT"),
-            ))
+            candidates.append(
+                (
+                    _identifier(row["FACILITY"].strip(), "FACILITY"),
+                    _identifier(row["LOT"].strip(), "LOT"),
+                )
+            )
     history = _read_history(config["HIST_PATH"])
     previous = {(row["FACILITY"], row["LOT"]) for row in history}
     attributes = [value.strip() for value in config["ATTR_LIST"].split(",")]
@@ -313,20 +372,31 @@ def process_candidates(candidates_path: str, logger=None) -> None:
                 outcome["STATUS"] = "history_excluded"
             else:
                 before = _attributes(client, facility, lot)
-                correct = any(attr["ID"] in attributes and attr.get("Value") == target
-                              for attr in before)
+                correct = any(
+                    attr["ID"] in attributes and attr.get("Value") == target
+                    for attr in before
+                )
                 changed = aed_updater.update_lot_attributes(
-                    facility, lot, attributes, target, logger,
+                    facility,
+                    lot,
+                    attributes,
+                    target,
+                    logger,
                 )
                 after = _attributes(client, facility, lot)
-                confirmed = any(attr["ID"] in attributes and attr.get("Value") == target
-                                for attr in after)
+                confirmed = any(
+                    attr["ID"] in attributes and attr.get("Value") == target
+                    for attr in after
+                )
                 if mode != "prod":
                     outcome["STATUS"] = "dry_run"
                 elif confirmed:
                     outcome["STATUS"] = "already_correct" if correct else "updated"
-                    record = {"FACILITY": facility, "LOT": lot,
-                              "OUT_DATE": datetime.now(UTC).isoformat()}
+                    record = {
+                        "FACILITY": facility,
+                        "LOT": lot,
+                        "OUT_DATE": datetime.now(UTC).isoformat(),
+                    }
                     _save_history(config["HIST_PATH"], history + [record])
                     history.append(record)
                     previous.add((facility, lot))
@@ -338,15 +408,23 @@ def process_candidates(candidates_path: str, logger=None) -> None:
             # Do not put arbitrary service response bodies or credentials into audit files.
             outcome["STATUS"], outcome["ERROR"] = "failed", type(exc).__name__
             failed = True
-            logger.error("AED processing failed for facility=%s lot=%s (%s)",
-                         facility, lot, type(exc).__name__)
+            logger.error(
+                "AED processing failed for facility=%s lot=%s (%s)",
+                facility,
+                lot,
+                type(exc).__name__,
+            )
         outcomes.append(outcome)
         print(f"AED {facility}/{lot}: {outcome['STATUS']}")
         with Path("AED_results.csv").open("w", encoding="utf-8", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=["FACILITY", "LOT", "STATUS", "ERROR"])
+            writer = csv.DictWriter(
+                stream, fieldnames=["FACILITY", "LOT", "STATUS", "ERROR"]
+            )
             writer.writeheader()
             writer.writerows(outcomes)
     if not outcomes:
-        Path("AED_results.csv").write_text("FACILITY,LOT,STATUS,ERROR\n", encoding="utf-8")
+        Path("AED_results.csv").write_text(
+            "FACILITY,LOT,STATUS,ERROR\n", encoding="utf-8"
+        )
     if failed:
         raise RuntimeError("One or more AED lots failed; see AED_results.csv")

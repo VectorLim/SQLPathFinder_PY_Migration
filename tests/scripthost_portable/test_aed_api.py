@@ -34,9 +34,20 @@ def config_path(share, site):
 @pytest.fixture
 def network(monkeypatch, tmp_path):
     share = tmp_path / "mounted_share"
-    for name in ("SITE", "SFOLDER", "MARS", "ARIES", "dEmail", "DEMAIL", "HIST_PATH",
-                 "ATTR_LIST", "SKIP_OPERATION", "AED_ENABLED", "AED_CONFIG_PATH",
-                 "AED_FACILITY"):
+    for name in (
+        "SITE",
+        "SFOLDER",
+        "MARS",
+        "ARIES",
+        "dEmail",
+        "DEMAIL",
+        "HIST_PATH",
+        "ATTR_LIST",
+        "SKIP_OPERATION",
+        "AED_ENABLED",
+        "AED_CONFIG_PATH",
+        "AED_FACILITY",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SITE", "KM")
     monkeypatch.setenv("ICMPCS_ROOT", str(share))
@@ -53,9 +64,12 @@ def network(monkeypatch, tmp_path):
             raise RuntimeError("fake read failure")
         response = Mock()
         response.json.return_value = {
-            "Success": True, "Result": {"Attributes": [
-                {"ID": "1064", "Value": values.get((client.facility, lot))},
-            ]},
+            "Success": True,
+            "Result": {
+                "Attributes": [
+                    {"ID": "1064", "Value": values.get((client.facility, lot))},
+                ]
+            },
         }
         return response
 
@@ -133,12 +147,15 @@ def test_share_folder_follows_script_filename(network, tmp_path):
         api.prepare_job(tmp_path, script, str(tmp_path / "OTHER_JOB.txt"))
 
 
-@pytest.mark.parametrize("text", [
-    "wrong,columns\n",
-    "icmpcs,parameter,value\nICMPCS,dEmail,a\nICMPCS,dEmail,b\n",
-    "icmpcs,parameter,value\nICMPCS,PATH,dangerous\n",
-    "icmpcs,parameter,value\nICMPCS,X_API_KEY,secret\n",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "wrong,columns\n",
+        "icmpcs,parameter,value\nICMPCS,dEmail,a\nICMPCS,dEmail,b\n",
+        "icmpcs,parameter,value\nICMPCS,PATH,dangerous\n",
+        "icmpcs,parameter,value\nICMPCS,X_API_KEY,secret\n",
+    ],
+)
 def test_invalid_configuration_is_rejected(text):
     with pytest.raises(ValueError):
         api.parse_config(text)
@@ -148,7 +165,9 @@ def test_prepare_failure_stops_spf_before_output(network, tmp_path):
     share, service, _ = network
     shutil.rmtree(share)
     script = '<OPTIONS>\n/UTILITIES={AED} "candidates.csv"\n</OPTIONS>'
-    result = _run_child(ScriptHostJob(working_directory=str(tmp_path), script_text=script))
+    result = _run_child(
+        ScriptHostJob(working_directory=str(tmp_path), script_text=script)
+    )
     assert not result.success
     assert "FileNotFoundError" in result.message
     assert not (tmp_path / "config.json").exists()
@@ -159,13 +178,21 @@ def test_updater_verification_history_and_partial_failure(network, tmp_path):
     share, service, values = network
     values["A15", "CORRECT"] = "2446"
     prepare(tmp_path)
-    path = candidates(tmp_path, [
-        ("A15", "NEW"), ("A15", "NEW"), ("A15", "CORRECT"), ("A15", "FAIL"),
-    ])
+    path = candidates(
+        tmp_path,
+        [
+            ("A15", "NEW"),
+            ("A15", "NEW"),
+            ("A15", "CORRECT"),
+            ("A15", "FAIL"),
+        ],
+    )
     with pytest.raises(RuntimeError, match="One or more"):
         api.process_candidates(path)
     assert [row["STATUS"] for row in outcomes(tmp_path)] == [
-        "updated", "already_correct", "failed",
+        "updated",
+        "already_correct",
+        "failed",
     ]
     assert service.lot_set_attr.call_count == 2
     history = api._read_history(os.environ["HIST_PATH"])
@@ -212,10 +239,14 @@ def test_original_worker_exports_before_parsing_and_routes_task(network, tmp_pat
     _, service, _ = network
     path = candidates(tmp_path, [("A15", "WORKER")])
     script = (
-        '<OPTIONS>\n/WRITE-FILE=Y\n/CSV=site.txt\n</OPTIONS>\n<<<%SITE%>>>\n'
-        '<---- New Query ---->\n<OPTIONS>\n/UTILITIES={AED} "' + path + '"\n</OPTIONS>\n'
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=site.txt\n</OPTIONS>\n<<<%SITE%>>>\n"
+        '<---- New Query ---->\n<OPTIONS>\n/UTILITIES={AED} "'
+        + path
+        + '"\n</OPTIONS>\n'
     )
-    result = _run_child(ScriptHostJob(working_directory=str(tmp_path), script_text=script))
+    result = _run_child(
+        ScriptHostJob(working_directory=str(tmp_path), script_text=script)
+    )
     assert result.success, result.message + result.stdout + result.stderr
     assert (tmp_path / "site.txt").read_text().strip() == "KM"
     assert outcomes(tmp_path)[0]["STATUS"] == "updated"
@@ -239,10 +270,15 @@ def test_environment_can_supply_missing_required_config(network, tmp_path, monke
     put(config_path(share, "KM"), "icmpcs,parameter,value\nICMPCS,dSubject,Risk\n")
     monkeypatch.setenv("dEmail", "override@example.test")
     prepare(tmp_path)
-    assert json.loads((tmp_path / "config.json").read_text())["dEmail"] == "override@example.test"
+    assert (
+        json.loads((tmp_path / "config.json").read_text())["dEmail"]
+        == "override@example.test"
+    )
 
 
-def test_failed_history_replace_preserves_existing_history(network, tmp_path, monkeypatch):
+def test_failed_history_replace_preserves_existing_history(
+    network, tmp_path, monkeypatch
+):
     share, _, _ = network
     prepare(tmp_path)
     path = os.environ["HIST_PATH"]
@@ -259,36 +295,53 @@ def test_failed_history_replace_preserves_existing_history(network, tmp_path, mo
 def test_unmapped_site_requires_configured_facility(network, tmp_path, monkeypatch):
     share, _, _ = network
     monkeypatch.setenv("SITE", "XX")
-    put(config_path(share, "XX"), "icmpcs,parameter,value\nICMPCS,dEmail,a@example.test\n")
+    put(
+        config_path(share, "XX"),
+        "icmpcs,parameter,value\nICMPCS,dEmail,a@example.test\n",
+    )
     with pytest.raises(ValueError, match="AED_FACILITY"):
         prepare(tmp_path)
     monkeypatch.setenv("AED_FACILITY", "X1_PROD_1")
     prepare(tmp_path)
-    assert json.loads((tmp_path / "config.json").read_text())["AED_FACILITY"] == "X1_PROD_1"
+    assert (
+        json.loads((tmp_path / "config.json").read_text())["AED_FACILITY"]
+        == "X1_PROD_1"
+    )
 
 
 def test_migrated_candidate_steps_run_in_original_worker(network, tmp_path):
     _, service, _ = network
-    (tmp_path / "IPM_Data.csv").write_text("facility,lot\nA15,LOT1\nA15,LOT1\nA15,LOT2\n")
+    (tmp_path / "IPM_Data.csv").write_text(
+        "facility,lot\nA15,LOT1\nA15,LOT1\nA15,LOT2\n"
+    )
     producer = migrate_aed.parse(
         "\n<OPTIONS>\n/NODE=.\\\n/OLEDB=SQLite\n/ENGINE=SQLite\n/WORKDIR=.\\\n"
         "/CSV=DATA.csv\n/TABLE=IPM_Data.csv\n/HEADERS=Lot_NCORisk\n</OPTIONS>\n"
         "SELECT DISTINCT a0.[lot] AS [Lot_NCORisk]\nFROM [IPM_Data] a0\n"
     )
     steps = migrate_aed.signal_source(producer, {}, "\n")[0].raws
-    script = migrate_aed.DELIM.join([
-        '\n<OPTIONS>\n/UTILITIES={START-MACRO} "configsets.csv" "N"\n</OPTIONS>\n',
-        *steps,
-        "\n<OPTIONS>\n/UTILITIES={END-MACRO}\n</OPTIONS>\n",
-    ])
-    result = _run_child(ScriptHostJob(working_directory=str(tmp_path), script_text=script))
+    script = migrate_aed.DELIM.join(
+        [
+            '\n<OPTIONS>\n/UTILITIES={START-MACRO} "configsets.csv" "N"\n</OPTIONS>\n',
+            *steps,
+            "\n<OPTIONS>\n/UTILITIES={END-MACRO}\n</OPTIONS>\n",
+        ]
+    )
+    result = _run_child(
+        ScriptHostJob(working_directory=str(tmp_path), script_text=script)
+    )
     assert result.success, result.message + result.stdout + result.stderr
-    assert [(row["FACILITY"], row["LOT"], row["STATUS"]) for row in outcomes(tmp_path)] == [
-        ("A15_PROD_21", "LOT1", "updated"), ("A15_PROD_21", "LOT2", "updated"),
+    assert [
+        (row["FACILITY"], row["LOT"], row["STATUS"]) for row in outcomes(tmp_path)
+    ] == [
+        ("A15_PROD_21", "LOT1", "updated"),
+        ("A15_PROD_21", "LOT2", "updated"),
     ]
 
 
-@pytest.mark.parametrize("name", ["ICMPCS.txt", "tests/fixtures/aed_migration/CSR_IAM_v2.txt"])
+@pytest.mark.parametrize(
+    "name", ["ICMPCS.txt", "tests/fixtures/aed_migration/CSR_IAM_v2.txt"]
+)
 def test_pilot_script_controller_tree(network, tmp_path, name):
     from scripthost_portable.runtime import _spf_manager_type
 
@@ -299,10 +352,24 @@ def test_pilot_script_controller_tree(network, tmp_path, name):
     script = migrate_aed.migrate(path.read_text(encoding="utf-8-sig")).text
     text = api.prepare_job(tmp_path, script)
     manager = _spf_manager_type()()
-    manager.gCommandLineArguments = ["SPFSQL3.py", f'/MYLOCAL="{tmp_path}"', "/EXECMODE=UT"]
+    manager.gCommandLineArguments = [
+        "SPFSQL3.py",
+        f'/MYLOCAL="{tmp_path}"',
+        "/EXECMODE=UT",
+    ]
     blocks = text.split("<---- New Query ---->")
-    tasks = manager.Process_Query(0, len(blocks), blocks, str(tmp_path), "", None,
-                                  len(blocks), "test", "tmp", None)
+    tasks = manager.Process_Query(
+        0,
+        len(blocks),
+        blocks,
+        str(tmp_path),
+        "",
+        None,
+        len(blocks),
+        "test",
+        "tmp",
+        None,
+    )
 
     def flatten(items):
         for task in items:

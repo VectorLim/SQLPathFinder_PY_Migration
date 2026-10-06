@@ -33,7 +33,9 @@ class ScriptHostJob:
 
     def validate(self) -> None:
         if (self.script_path is None) == (self.script_text is None):
-            raise ValueError("Exactly one of script_path or script_text must be supplied.")
+            raise ValueError(
+                "Exactly one of script_path or script_text must be supplied."
+            )
         if not self.working_directory:
             raise ValueError("working_directory must be supplied.")
 
@@ -116,7 +118,9 @@ def _run_child(job: ScriptHostJob) -> ScriptHostJobResult:
 
             script_text = job.script_text
             if script_text is None:
-                script_text = Path(job.script_path or "").read_text(encoding="utf-8-sig")
+                script_text = Path(job.script_path or "").read_text(
+                    encoding="utf-8-sig"
+                )
             script_text = prepare_job(workdir, script_text, job.script_path)
             runtime = PortableScriptHostRuntime()
             succeeded = runtime.run_text(
@@ -156,9 +160,13 @@ def _run_child(job: ScriptHostJob) -> ScriptHostJobResult:
             stderr,
         )
     except UnsupportedQueryBackend as exc:
-        return _failure("unsupported_legacy_integration", str(exc), workdir, before, stdout, stderr)
+        return _failure(
+            "unsupported_legacy_integration", str(exc), workdir, before, stdout, stderr
+        )
     except QueryExecutionError as exc:
-        return _failure("query_execution_failure", str(exc), workdir, before, stdout, stderr)
+        return _failure(
+            "query_execution_failure", str(exc), workdir, before, stdout, stderr
+        )
     except Exception as exc:
         return _failure(
             "script_host_error",
@@ -201,7 +209,9 @@ def _snapshot(root: Path) -> dict[str, tuple[int, int]]:
 
 def _changed_paths(root: Path, before: dict[str, tuple[int, int]]) -> tuple[str, ...]:
     after = _snapshot(root)
-    return tuple(sorted(name for name, state in after.items() if before.get(name) != state))
+    return tuple(
+        sorted(name for name, state in after.items() if before.get(name) != state)
+    )
 
 
 def _extract_result(stdout: str) -> dict[str, Any] | None:
@@ -235,7 +245,9 @@ def _to_text(value: str | bytes | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="One-job-per-process ScriptHost worker")
+    parser = argparse.ArgumentParser(
+        description="One-job-per-process ScriptHost worker"
+    )
     parser.add_argument("--child", action="store_true")
     args = parser.parse_args(argv)
     if not args.child:
