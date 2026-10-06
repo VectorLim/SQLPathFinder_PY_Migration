@@ -1,4 +1,4 @@
-﻿r"""
+r"""
 License : Copyright (c) Intel Corporation 2023
 Product: Intel.ATTD.Auto.SQLPathFinder
 Module : SQLPathFinder Python Extract Engine 
@@ -209,16 +209,13 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         if SPFGlobals.__gIsSvc is None:
-            if sys.platform != "win32" or "System" not in globals():
-                SPFGlobals.__gIsSvc = False
+            curHttpContext = System.Web.HttpContext.Current
+            curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
+            if [curHttpContext, curSvcSecContext] == [None, None]:
+                SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
             else:
-                curHttpContext = System.Web.HttpContext.Current
-                curSvcSecContext = System.ServiceModel.ServiceSecurityContext.Current
-                if [curHttpContext, curSvcSecContext] == [None, None]:
-                    SPFGlobals.__gIsSvc = False #Http & Service contexts are empty -- PyEE is not running as Web service
-                else:
-                    SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
-                self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
+                SPFGlobals.__gIsSvc = True #either http or Service context exists - PyEE is running as Web service
+            self.logger.debug("{0} - set : {1}; {2}".format(calling_func, SPFGlobals.__gIsSvc, [curHttpContext, curSvcSecContext]))
         return SPFGlobals.__gIsSvc
 
     __gSvcSessionUser = None
@@ -825,7 +822,7 @@ class SPFGlobals(ScriptHost) :
         """
         calling_func = self.getCallingFuncName()
         if SPFGlobals.__gLocalDir is None :
-            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + os.sep
+            SPFGlobals.__gLocalDir = os.path.abspath(os.path.curdir) + "\\"
         
         self.__logger.info("{0} - {1}".format(calling_func, SPFGlobals.__gLocalDir))
         return SPFGlobals.__gLocalDir
@@ -2020,7 +2017,7 @@ class SPFGlobals(ScriptHost) :
 
     def __init__(self, *args, **kwargs) :
         loggerName = None
-        super(SPFGlobals, self).__init__()
+        super().__init__()
         
         try :
             if SPFGlobals.__isInitialized is False :
@@ -2588,6 +2585,10 @@ class SPFGlobals(ScriptHost) :
             ptrn = "@(SQL7|MONGO|SAPHANAODBC|MYSQL)@.*"
             conn = re.sub(ptrn, "", conn, 0, re.IGNORECASE)
         return conn;
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.globals import SPFGlobals
     #END : def strip_connection
 #END : class SPFGlobals
     

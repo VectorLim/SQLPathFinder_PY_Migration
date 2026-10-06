@@ -51,6 +51,15 @@ def use_reader_factory(factory: ReaderFactory) -> Iterator[None]:
         _reader_factory_override.reset(token)
 
 
+def _load_datasyncx_env() -> None:
+    try:
+        from datasyncx.utils.config import ENV_PATH
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(ENV_PATH)
+
+
 class DataSyncXReaderFactory:
     """DataSyncX boundary, validated against installed DataSyncX 1.1.6."""
 
@@ -76,8 +85,15 @@ class DataSyncXReaderFactory:
         try:
             if backend == "oasys":
                 return reader_type(database="OASYS")
-            # Linux containers have no Windows OS auth; use a DB account (e.g. titan).
+            _load_datasyncx_env()
+            # Linux containers have no Windows OS auth; use a DB account (e.g. titan)
+            # or a Kerberos account (e.g. GAR\idsid).
             username = os.getenv("DATASYNCX_USERNAME")
+            password = os.getenv("DATASYNCX_PASSWORD")
+            if username and password:
+                # DataSyncX kinit looks the password up under the bare account name (TITAN, IDSID).
+                os.environ.setdefault(username.rsplit("\\", 1)[-1].upper(), password)
+                return reader_type(username=username, password=password)
             return reader_type(username=username) if username else reader_type()
         except Exception as exc:
             config_reference = os.getenv(_CONFIG_REFERENCE_ENV)
@@ -152,7 +168,8 @@ class PortableOracleConnection:
             MemTable().LoadDF(
                 frame, Path(target).name, if_exists="replace" if FirstConnect else "append"
             )
-        elif target and not frame.empty:
+        # Original dbDriver writes the cursor-label header even for 0-row results.
+        elif target and len(frame.columns):
             _write_frame(frame, Path(target), first_connect=FirstConnect, no_headers=ll_NoHdrs)
         return len(frame.index)
 

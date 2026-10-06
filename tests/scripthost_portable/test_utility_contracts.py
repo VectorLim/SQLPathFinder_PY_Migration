@@ -84,6 +84,19 @@ def test_value_empty_and_missing(tmp_path: Path, contents, expected):
     assert expected in result.stdout
 
 
+def test_env_var_names_are_case_insensitive_like_windows(tmp_path: Path):
+    source = tmp_path / "source.csv"
+    source.write_text("ID\n1\n")
+    execute(
+        tmp_path,
+        utility("{ROWS-IN-FILE}", source, "RowsInFile", "N"),
+        utility("{IF-THEN}", "RowsInFile", "GT", "0", "", "", "", ""),
+        block("/WRITE-FILE=Y", f"/CSV={tmp_path / 'hit.txt'}", body="hit"),
+        block("/UTILITIES={END-IF}"),
+    )
+    assert (tmp_path / "hit.txt").read_text().strip() == "hit"
+
+
 def test_csv_html_xml(tmp_path: Path):
     source = tmp_path / "input.csv"
     source.write_text("First_Name,Value\nA&B,<hello>\nsecond,\n", encoding="utf-8")

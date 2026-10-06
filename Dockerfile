@@ -8,9 +8,12 @@ RUN apt-get update \
     && groupadd --gid 10001 scripthost \
     && useradd --uid 10001 --gid scripthost --create-home scripthost \
     && chown scripthost:scripthost /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md aed_updater.py ./
 COPY src/scripthost_portable ./src/scripthost_portable
-RUN python -m pip install --no-cache-dir -e .
+COPY install_packages/aed_client_apikey-6.2.0-py3-none-any.whl ./install_packages/
+COPY ICMPCS.txt CSR_IAM_v2.txt ./jobs/
+RUN python -m pip install --no-cache-dir -e . \
+    ./install_packages/aed_client_apikey-6.2.0-py3-none-any.whl
 USER scripthost
 ENTRYPOINT ["python", "-m", "scripthost_portable.launcher"]
 CMD ["--help"]

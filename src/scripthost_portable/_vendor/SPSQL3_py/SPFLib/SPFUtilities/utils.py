@@ -205,8 +205,12 @@ from typing import Any, Optional, Union
 #from SPFLib.SPFUtilities.sh import ScriptHost
 from .spflogger import SPFLogger 
 from SPFLib.SPFGlobals import SPFGlobals
+# [Removed from current version] if isPYTHON313 is True:
+    # [Removed from current version] # import SPFLib.dbDrivers
 try:
     from SPFLib.dbDrivers import SPFSMTPAuthEmail
+# [Removed from current version] else:
+    # [Removed from current version] from SPFLib.dbDrivers import SPFSMTPAuthEmail
 except (ImportError, OSError):
     SPFSMTPAuthEmail = None
 
@@ -311,7 +315,7 @@ class Utilities(SPFGlobals):
     
     def __init__(self, *args, **kwargs): 
         loggerName = None       
-        super(Utilities, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         if not args is None and len(args) > 0:
             loggerName = args[0]["loggerName"]
@@ -1184,16 +1188,7 @@ class Utilities(SPFGlobals):
                     self.logger.debug(myCMDArgs)
                     runVal, runExitCode = False, -1
                     try :
-                      if os.name != "nt":
-                          from scripthost_portable.file_operations import robocopy_files
-                          try:
-                              runExitCode = robocopy_files(MySrc, MyDest, lMyArrRC, MyRetry, MyWait, MyArg or [])
-                              runVal = runExitCode in SPFRoboCopy_pass_ExitCode
-                          except (OSError, ValueError) as err:
-                              self.Console(str(err))
-                              raise SPFCMDRunExitWithErrorCodeException(str(err), 16, False) from err
-                      else:
-                          runVal, runExitCode = self.Run(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, CMDErrorExitCodes=SPFRoboCopy_err_ExitCode,usePopen=True)
+                      runVal, runExitCode =  self.Run(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, CMDErrorExitCodes=SPFRoboCopy_err_ExitCode,usePopen=True)
                     except Exception as err:
                         self.logger.exception("Error : {0}".format(err))
                         runVal = err.args[2]
@@ -1382,14 +1377,7 @@ class Utilities(SPFGlobals):
                         cmdToExecute = "%COMSPEC%"
                         cmdArgs = ['/c', 'move', '/Y', '"{0}"'.format(srcFile), '"{0}"'.format(DstFile)]
                         try:
-                            if os.name != "nt":
-                                try:
-                                    shutil.move(srcFile, DstFile)
-                                    File_Lock_Move_Status, runExitCode = True, 0
-                                except OSError as err:
-                                    raise SPFCMDRunExitWithErrorCodeException(str(err), 1, False) from err
-                            else:
-                                File_Lock_Move_Status, runExitCode = self.Run(cmdToExecute, cmdArgs)
+                            File_Lock_Move_Status, runExitCode = self.Run(cmdToExecute, cmdArgs)
                         except SPFCMDRunExitWithErrorCodeException as SPFCmdExErr:
                             errMsg = ("      Error during move "
                                       "\n      srcFile : {0}" 
@@ -2268,10 +2256,7 @@ class Utilities(SPFGlobals):
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).replace("\r\n", "\n")
                 #decompressedOutputString = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32).decode(encoding=self.gOSDefaultEncoding).replace("\r\n", "\n")
                 __t = zlib.decompress(base64.standard_b64decode(inputStringToDeCompress), zlib.MAX_WBITS|32)
-                try:
-                    decompressedOutputString = __t.decode("utf-8").replace("\r\n", "\n")
-                except UnicodeDecodeError:
-                    decompressedOutputString = __t.decode(encoding=self.detectCharacterEncoding(__t)).replace("\r\n", "\n")
+                decompressedOutputString =  __t.decode(encoding=self.detectCharacterEncoding(__t)).replace("\r\n", "\n")
             
             del inputStringToDeCompress
 
@@ -2513,13 +2498,6 @@ class Utilities(SPFGlobals):
             self.logger.debug("{0} - parsed MySrc: {1}".format(calling_func, MySrc))
             if self.IsEmptyOrNone(MySrc) is True : 
                 self.Console("No delete files specified ...")
-                return
-
-            if os.name != "nt":
-                from scripthost_portable.file_operations import delete_files
-                delete_files(next(csv.reader(StringIO(MySrc), skipinitialspace=True)), forceDelete)
-                if displayPrompt:
-                    self.ConsoleDoneWithoutTimeStamp()
                 return
 
             #start building args to run in DOS
@@ -2866,11 +2844,6 @@ class Utilities(SPFGlobals):
         ' None
         '================================================
         """
-        if os.name != "nt":
-            from scripthost_portable.file_operations import clean_delimited_file
-            clean_delimited_file(InFile, OutFile, self.GetFileDLM(InFile))
-            return
-
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         MyLog = r".\CleanDelimsCRLF.log"
@@ -5519,6 +5492,15 @@ class Utilities(SPFGlobals):
         dow = None
         #self.logger.debug("{0} - yyyy: '{1}'".format(calling_func, yyyy))
         #self.logger.debug("{0} - date.month: '{1}'".format(calling_func, date.month))
+        #new set locale to en_US -- and reset back to defaultlocale
+        import locale
+        defaultLocale = locale.setlocale(locale.LC_ALL,'')
+        #self.logger.debug("{0} -defaultLocale: '{1}'".format(calling_func, defaultLocale))
+
+        usLocale = 'English_United States.1252'
+        usLocaleSet = locale.setlocale(locale.LC_ALL,usLocale)
+        #self.logger.debug("{0} -updated locale: '{1}'".format(calling_func, locale.getlocale()))
+
         try : 
             if date.month == 12 :
                 jan1 = date.day - 32
@@ -5537,7 +5519,7 @@ class Utilities(SPFGlobals):
                     ww = 1
                 self.logger.debug("{0} - date.month == 12 : ww: '{1}'".format(calling_func, ww))
             if ww is None:
-                jan1 = datetime(yyyy, 1, 1).date() # locale-independent equivalent of 1-JAN-yyyy
+                jan1 = datetime.strptime("1-JAN-{0}".format(yyyy),"%d-%b-%Y").date() #just get the datepart
                 #self.logger.debug("{0} - jan1: '{1}'".format(calling_func, jan1))
 
                 dow = jan1.isoweekday() #+ 1  #removed  + 1 not needed after removing the timepart from date input
@@ -5557,6 +5539,13 @@ class Utilities(SPFGlobals):
         except Exception as err:
             self.logger.exception("{0} - {1}".format(calling_func, err))
             raise
+        finally :
+            #reset back to default locale
+            defLocale = locale.setlocale(locale.LC_ALL,defaultLocale)
+        # [Removed from current version] finally :
+            # [Removed from current version] #reset back to default locale
+            # [Removed from current version] defLocale = locale.setlocale(locale.LC_ALL,defaultLocale)
+            # [Removed from current version] #self.logger.debug("{0} -reset locale: '{1}'".format(calling_func, locale.getlocale()))
     #END : def IntelWW
     #endregion -- methods from intel.va
 
@@ -5656,7 +5645,7 @@ class Utilities(SPFGlobals):
                     Command1 = re.sub(r"\$spf\$dir\$(?P<source>.*\.r)", 
                                       lambda m : os.path.join(self.gSPFVaryLib, m.group("source")).replace("\\", "/"), 
                                       Command1, 0, re.IGNORECASE)
-                    q2 = os.path.join("." if os.name != "nt" and WorkDir == ".\\" else WorkDir, "sqlpathfinder.R")
+                    q2 = os.path.join(WorkDir, "sqlpathfinder.R")
                     q2 = os.path.abspath(q2)
                     self.logger.debug("{0} - q2: '{1}'".format(calling_func, q2))
 
@@ -6834,22 +6823,16 @@ class Utilities(SPFGlobals):
                     self.Console("Retrieving {0} ...{1}".format(MyURL, self.DatetimeNow))
                 
                 import requests
-                auth = None
-                verify = True
-                if os.name == "nt":
-                    from .requests_negotiate_sspi import HttpNegotiateAuth
-                    auth = HttpNegotiateAuth()
-                    verify = self.generate_pems()
-                # POSIX uses requests' system CA verification. Integrated Windows
-                # credentials and SharePoint remain separate platform integrations.
+                from .requests_negotiate_sspi import HttpNegotiateAuth
+
                 if self.isSPO_URL(MyURL) is True:
                     self.SPOHandler2("DOWNLOADFILE", MyURL, MyFile)
                     return
 
                 myChunkSize = 64 * 1024
                 with requests.get(url=MyURL,
-                                  verify=verify,
-                                  auth=auth,
+                                  verify=self.generate_pems(),
+                                  auth=HttpNegotiateAuth(),
                                   stream=True,
                                   timeout=reqtimeout,
                                   proxies=self.IGNORE_LOCAL_PROXIES) as response:
@@ -6913,13 +6896,6 @@ class Utilities(SPFGlobals):
         'EmailUtility : 'O' or 'S' or 'SA'. Default 'SA' : SMTPAuth
         '===============================================================================
         """
-        is_linux = os.name != "nt"
-        if is_linux and self.IsEmptyOrNone(MyRole) is False:
-            raise RuntimeError(
-                "UNRESOLVED: Linux role verification (verifyrole.exe) is unavailable; "
-                "original role restriction must be retained."
-            )
-
         #locals
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         self.logger.debug("{0} - MyLocal: '{1}'".format(calling_func, MyLocal))
@@ -6967,9 +6943,6 @@ class Utilities(SPFGlobals):
                 useSMTPAuth = False 
                 self.logger.debug("{0} - updated S ll_Outlook: '{1}'".format(calling_func, ll_Outlook))
                 self.logger.debug("{0} - updated S useSMTPAuth: '{1}'".format(calling_func, useSMTPAuth))
-
-            if is_linux:
-                ll_Outlook = False
 
             if (self.IsEmptyOrNone(MailToIn) is True 
                 and self.IsEmptyOrNone(MailCC) is True
@@ -7026,21 +6999,15 @@ class Utilities(SPFGlobals):
                 Subject = self.Substitute_Std_Tokens(Subject, "1") # '<TS> ...
 
             userEmailAddress = ""
-            if is_linux:
-                from datasyncx.utils.config import get_config_value
-                userEmailAddress = (get_config_value("scripthost_user_email") or "").strip()
-                if not userEmailAddress:
-                    self.logger.warning("{0} - SCRIPTHOST_USER_EMAIL not set; 'self' recipients skipped".format(calling_func))
-            else:
-                try:
-                    userEmailAddress = self.gUserPrincipal #self.getEmailForUser(self.gUN, self.gUDomain, MyLocal)
-                except pythoncom.com_error  as comErr:
-                    if self.IsEmptyOrNone(comErr.args[2][2]) is True or "The directory property cannot be found in the cache." == comErr.args[2][2].strip():
-                        self.ConsoleWithCons80("Email ID not found for '{0}\\{1}'".format(self.gUDomain, self.gUN))
-                    else:
-                        raise
-                except Exception as err:
+            try:
+                userEmailAddress = self.gUserPrincipal #self.getEmailForUser(self.gUN, self.gUDomain, MyLocal)
+            except pythoncom.com_error  as comErr:
+                if self.IsEmptyOrNone(comErr.args[2][2]) is True or "The directory property cannot be found in the cache." == comErr.args[2][2].strip():
+                    self.ConsoleWithCons80("Email ID not found for '{0}\\{1}'".format(self.gUDomain, self.gUN))
+                else:
                     raise
+            except Exception as err:
+                raise
 
             """
             '*****************
@@ -7078,13 +7045,6 @@ class Utilities(SPFGlobals):
             else :
                 MailBCC = MailToF
 
-            if is_linux:
-                MailToIn, MailCC, MailBCC = ([m for m in lst if m] for lst in (MailToIn, MailCC, MailBCC))
-                if not (MailToIn or MailCC or MailBCC):
-                    self.ConsoleWithCons80("No resolvable email addresses ...\nSkipping email ...")
-                    self.logger.warning("{0} - no resolvable recipients; email skipped".format(calling_func))
-                    return
-
             if ctr == 0 :
                 self.Cons80()
                 self.Console("There are no valid email addresses ...\nExiting ...")
@@ -7105,7 +7065,7 @@ class Utilities(SPFGlobals):
                         emailMessage = MIMEText(Body, contentType, "utf-8")
 
                     emailMessage['Subject'] = Subject
-                    emailMessage['From'] = "atmanalytic@intel.com" if is_linux else userEmailAddress
+                    emailMessage['From'] = userEmailAddress
                     emailMessage['To'] = ",".join(MailToIn)
                     if len(MailCC) > 0 :
                         emailMessage['Cc'] = ",".join(MailCC)
@@ -7140,18 +7100,6 @@ class Utilities(SPFGlobals):
                     #    useSMTPAuth = False 
                     self.logger.debug("{0} - useSMTPAuth : '{1}'".format(calling_func, useSMTPAuth))
                     #useSMTPAuth = True if self.SHisSHEntry is False else False # Default use SMTPAuth
-                    if is_linux:
-                        from datasyncx.utils.send_mail import get_smtp_service_module
-                        del emailMessage['Bcc']
-                        smtpObj = get_smtp_service_module().get_smtp_service()
-                        try:
-                            smtpObj.sendmail(emailMessage['From'], MailToIn + MailCC + MailBCC, emailMessage.as_string())
-                        finally:
-                            smtpObj.quit()
-                        self.ConsoleDoneWithTimeStamp()
-                        return
-                    if SPFSMTPAuthEmail is None:
-                        raise RuntimeError("Legacy ScriptHost SMTP transport is unavailable on this platform")
                     try:
                         SPFSMTPAuthEmail_ = SPFSMTPAuthEmail().SendEmail(userEmailAddress, MailToIn + MailCC + MailBCC, emailMessage.as_string(), useSMTPAuth=useSMTPAuth)
                     except Exception as err:
@@ -7713,9 +7661,6 @@ class Utilities(SPFGlobals):
         self.logger.debug("{0} - sFile: '{1}'".format(calling_func, sFile))
         self.logger.debug("{0} - sTarget: '{1}'".format(calling_func, sTarget))
         self.logger.debug("{0} - bDelDirs: '{1}'".format(calling_func, bDelDirs))
-        if os.name != "nt":
-            from scripthost_portable.file_operations import unzip_file
-            return unzip_file(sFile, sTarget, bDelDirs)
         cmdToExecute = "unzip.exe"
         sDirs = "-j"
         try : 
@@ -7785,7 +7730,7 @@ class Utilities(SPFGlobals):
                 raise Exception(errMsg)
 
             self.Console("Looking for: {0}".format(FP))
-            FPList = FP.split("\\" if os.name == "nt" else "/")
+            FPList = FP.split("\\")
             TmpF = ""
             while len(FPList) > 0 :
                 FPListItem = FPList.pop(0)
@@ -7793,7 +7738,7 @@ class Utilities(SPFGlobals):
                 MaxF = ""
                 MaxFDate = ""
                 if self.IsEmptyOrNone(FPListItem) is True : # this a \\
-                    TmpF = "{0}{1}".format(TmpF, os.sep)
+                    TmpF = "{0}\\".format(TmpF)
                 #backward compatible Token1Token2 format and new format Token1\Token2
                 elif FPListItem.lower().find(Token1) != -1 : #get the folder with max modified date                    
                     if FPListItem.lower().find(Token2) != -1 :
@@ -7906,11 +7851,7 @@ class Utilities(SPFGlobals):
 
             if emitConsoleMessages is True:
                 self.Console("  Copying {0} to {1}".format(MySrc, MyDest))
-            if os.name != "nt":
-                from scripthost_portable.file_operations import copy_files
-                copy_files(MySrc, MyDest)
-                runExitCode = 0
-            elif usePyCopy is True:
+            if usePyCopy is True:
                 try:
                     #supports only files
                     shutil.copy2(MySrc, MyDest)
@@ -8863,34 +8804,6 @@ class Utilities(SPFGlobals):
         
         MyExe0 = "spfExcelUtility.exe"
         try : 
-            if os.name != "nt":
-                from openpyxl import Workbook, load_workbook
-                if MyVBProc:
-                    raise RuntimeError("Excel VBA execution requires the original Windows Excel integration")
-                output = Path(ExcelResultFile or "SQLPathFinder.xlsx")
-                if output.suffix.lower() != ".xlsx" or (MyXLSFile and Path(MyXLSFile).suffix.lower() != ".xlsx"):
-                    raise RuntimeError("Portable Excel LOAD/IMPORT supports .xlsx workbooks only")
-                files = next(csv.reader(StringIO(MyCSVFile), skipinitialspace=True))
-                sheets = next(csv.reader(StringIO(MyWorkSheet), skipinitialspace=True)) if MyWorkSheet else []
-                if MyMode.upper() == "LOAD":
-                    files, sheets = [MyCSVFile], ["Sheet1"]
-                elif len(files) != len(sheets):
-                    raise ValueError("Excel IMPORT requires one worksheet name per CSV file")
-                frames = [pd.read_csv(name, sep=self.GetFileDLM(name), dtype=str,
-                                     keep_default_na=False, encoding=self.detectFileEncoding(name, readall=True))
-                          for name in files]
-                workbook = load_workbook(MyXLSFile) if MyXLSFile else Workbook()
-                if not MyXLSFile:
-                    workbook.remove(workbook.active)
-                for frame, name in zip(frames, sheets):
-                    sheet = workbook[name] if name in workbook.sheetnames else workbook.create_sheet(name)
-                    sheet.delete_rows(1, sheet.max_row)
-                    sheet.append(list(frame.columns))
-                    for row in frame.itertuples(index=False, name=None):
-                        sheet.append(list(row))
-                workbook.save(output)
-                workbook.close()
-                return
             MyExe0 = os.path.join(self.gSPFExe, MyExe0)
             self.logger.debug("{0} - MyExe0: '{1}'".format(calling_func, MyExe0))
             
@@ -18296,6 +18209,10 @@ class Utilities(SPFGlobals):
         # sys.modules[__module.__name__] = module
         __loader.exec_module(__module)
         return __module
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.utilities import Utilities
     #END : def load_py_module_source
 
 #END : class Utilities(SPFGlobals):    

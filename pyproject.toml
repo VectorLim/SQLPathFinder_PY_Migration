@@ -17,6 +17,7 @@ dependencies = [
     "rich",
     "chardet",
     "tabulate",
+    "smbprotocol>=1.13; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -38,7 +39,8 @@ default = true
 system-certs = true
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = {"" = ".", "scripthost_portable" = "src/scripthost_portable"}
+py-modules = ["aed_updater"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
@@ -46,7 +48,7 @@ where = ["src"]
 include = ["scripthost_portable*"]
 
 [tool.setuptools.package-data]
-scripthost_portable = ["_vendor/SPSQL3_py/*.txt", "_vendor/SPSQL3_py/*.png"]
+scripthost_portable = ["_vendor/SPSQL3_py/*.txt", "_vendor/SPSQL3_py/*.png", "*.crt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

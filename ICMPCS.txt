@@ -1,4 +1,3 @@
-<---- New Query ---->
 <OPTIONS>
 /REPORT=HTML-RUN
 /INSTANCE=22697
@@ -101,585 +100,6 @@ FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>bord
 /INSTANCE=22697
 </OPTIONS>
 N/A
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-2. create macro.tmp, update script name here
-/CSV=macrotmp.csv
-</OPTIONS>
-
-Sfolder,underDEV,useCSR,useMMS
-ICMPCS_CWFNCO_CSR_IAM,N,Y,Y
-<---- New Query ---->
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-4. create getcsrsu.bat
-/CSV=getcsrsu.bat
-</OPTIONS>
-
-@echo off
-set PriCSR="\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\Patrol\*.___"
-set SecCSR="\\KMATSHFS.intel.com\KMATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\Patrol\*.___"
-set BakCSR="\\SHUser-ProdAT.intel.com\SHProdATUser$\%username%\Patrol\*.___"
-copy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .
-ren setsiteparam.___ setsiteparam.exe
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=getcsrsu.bat
-/PROMPT-TEXT=Step 1-5. run getcsrsu.bat
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={START-MACRO} "macrotmp.csv" "N"
-/PROMPT-TEXT=Step 1-6. Start Macro Processing
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=setsiteparam.exe KM <<<SFOLDER>>> <<<UNDERDEV>>> <<<USECSR>>> <<<USEMMS>>>
-/PROMPT-TEXT=Step 1-7. run setsiteparam.exe
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/CSV=TT
-</OPTIONS>
-
-SST Rev3g
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-MACRO}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SPFDelete.bat "macrotmp.csv,getcsrsu.bat,setsiteparam.exe,csrsu.txt" "N"
-/PROMPT-TEXT=Step 1-9. delete temporary files
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={START-MACRO} "ctime.csv" "N"
-/PROMPT-TEXT=Step 1-10. pass server time info and CSR path to config file
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "ICMPCS_config.csv" "CONFIG" "N"
-/PROMPT-TEXT=Step 1-11. Check existence of config file
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "CONFIG" "LE" "0" "" "" "" ""
-/PROMPT-TEXT=Step 1-12. TRUE if config file not found
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "Critical: ICMPCS config file not found - Path: \\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\<<<SFOLDER>>>\KM\Config" "" "alex.chin.hooi.lee@intel.com" "" "" "N" "N"
-/PROMPT-TEXT=Step 1-13. Trigger if config file not found
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ELSE}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/NODE=.\
-/OLEDB=SQLite
-/ENGINE=SQLite
-/UN=
-/PW=
-/WORKDIR=.\
-/T=No
-/TS=_20260903170134
-/CSV=configsets.csv
-/CTROW=icmpcs,STARTTS,UTC,TZONE,TZS,SFOLDER,FAC,MARS,MARSN,RIMS,EIMS,ARIES,OASYS,MONGO,MMS,MMSI,TOOLLOG,VFMARS,VFARIES,VFMONGO,CSRPATH,MMSPATH,MIPPATH,LURL,IREPOP,UNDERDEV,CSRV,MMSV
-/CTVALUE=value
-/CTHEADER=parameter
-/CTARRAY=SQL,22697
-/TABLE=ICMPCS_config.csv
-/HEADERS=icmpcs,STARTTS,UTC,TZONE,TZS,SFOLDER,FAC,MARS,MARSN,RIMS,EIMS,ARIES,OASYS,MONGO,MMS,MMSI,TOOLLOG,VFMARS,VFARIES,VFMONGO,CSRPATH,MMSPATH,MIPPATH,LURL,IREPOP,UNDERDEV,CSRV,MMSV
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-14.1. Transpose config file to macro-friendly format
-/HEADERS_UNIQUE=Y
-/QUOTECSV=Y
-/EMPTY_TO_NULL=Y
-/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
-</OPTIONS>
-
-SELECT /*L10*/  DISTINCT 
-          [icmpcs] AS [icmpcs]
-         ,[parameter] AS [parameter]
-         ,Max([value]) AS [value]
-         ,[STARTTS] AS [STARTTS]
-         ,[UTC] AS [UTC]
-         ,[TZONE] AS [TZONE]
-         ,[TZS] AS [TZS]
-         ,[SFOLDER] AS [SFOLDER]
-         ,[FAC] AS [FAC]
-         ,[MARS] AS [MARS]
-         ,[MARSN] AS [MARSN]
-         ,[RIMS] AS [RIMS]
-         ,[EIMS] AS [EIMS]
-         ,[ARIES] AS [ARIES]
-         ,[OASYS] AS [OASYS]
-         ,[MONGO] AS [MONGO]
-         ,[MMS] AS [MMS]
-         ,[MMSI] AS [MMSI]
-         ,[TOOLLOG] AS [TOOLLOG]
-         ,[VFMARS] AS [VFMARS]
-         ,[VFARIES] AS [VFARIES]
-         ,[VFMONGO] AS [VFMONGO]
-         ,[CSRPATH] AS [CSRPATH]
-         ,[MMSPATH] AS [MMSPATH]
-         ,[MIPPATH] AS [MIPPATH]
-         ,[LURL] AS [LURL]
-         ,[IREPOP] AS [IREPOP]
-         ,[UNDERDEV] AS [UNDERDEV]
-         ,[CSRV] AS [CSRV]
-         ,[MMSV] AS [MMSV]
-FROM
-(
-SELECT /*L0*/  
-          a0.[icmpcs] AS [icmpcs]
-         ,a0.[parameter] AS [parameter]
-         ,a0.[value] AS [value]
-         ,'<<<STARTTS>>>' AS [STARTTS]
-         ,'<<<UTC>>>' AS [UTC]
-         ,'<<<TZONE>>>' AS [TZONE]
-         ,'<<<TZS>>>' AS [TZS]
-         ,'<<<SFOLDER>>>' AS [SFOLDER]
-         ,'<<<FAC>>>' AS [FAC]
-         ,'<<<MARS>>>' AS [MARS]
-         ,'<<<MARSN>>>' AS [MARSN]
-         ,'<<<RIMS>>>' AS [RIMS]
-         ,'<<<EIMS>>>' AS [EIMS]
-         ,'<<<ARIES>>>' AS [ARIES]
-         ,'<<<OASYS>>>' AS [OASYS]
-         ,'<<<MONGO>>>' AS [MONGO]
-         ,'<<<MMS>>>' AS [MMS]
-         ,'<<<MMSI>>>' AS [MMSI]
-         ,'<<<TOOLLOG>>>' AS [TOOLLOG]
-         ,'<<<VFMARS>>>' AS [VFMARS]
-         ,'<<<VFARIES>>>' AS [VFARIES]
-         ,'<<<VFMONGO>>>' AS [VFMONGO]
-         ,'<<<CSRPATH>>>' AS [CSRPATH]
-         ,'<<<MMSPATH>>>' AS [MMSPATH]
-         ,'<<<MIPPATH>>>' AS [MIPPATH]
-         ,'<<<LURL>>>' AS [LURL]
-         ,'<<<IREPOP>>>' AS [IREPOP]
-         ,'<<<UNDERDEV>>>' AS [UNDERDEV]
-         ,'<<<CSRV>>>' AS [CSRV]
-         ,'<<<MMSV>>>' AS [MMSV]
-FROM 
-[ICMPCS_config] a0
-WHERE
-              a0.[icmpcs] = 'ICMPCS' 
-) t /*L0*/
-GROUP BY 
-          [icmpcs]
-         ,[parameter]
-         ,[STARTTS]
-         ,[UTC]
-         ,[TZONE]
-         ,[TZS]
-         ,[SFOLDER]
-         ,[FAC]
-         ,[MARS]
-         ,[MARSN]
-         ,[RIMS]
-         ,[EIMS]
-         ,[ARIES]
-         ,[OASYS]
-         ,[MONGO]
-         ,[MMS]
-         ,[MMSI]
-         ,[TOOLLOG]
-         ,[VFMARS]
-         ,[VFARIES]
-         ,[VFMONGO]
-         ,[CSRPATH]
-         ,[MMSPATH]
-         ,[MIPPATH]
-         ,[LURL]
-         ,[IREPOP]
-         ,[UNDERDEV]
-         ,[CSRV]
-         ,[MMSV]
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "configsets.csv" "CONFIGSETS" "N"
-/PROMPT-TEXT=Step 1-15. Check config file conversion output
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "CONFIGSETS" "NE" "1" "" "" "" ""
-/PROMPT-TEXT=Step 1-16. TRUE if config file converted output >1 row
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "ICMPCS_config.csv,configsets.csv" "self" "Alert: Pls check ICMPCS (<<<SFOLDER>>>) config file as it contains not equal to 1 row" "" "alex.chin.hooi.lee@intel.com" "" "" "N" "N"
-/PROMPT-TEXT=Step 1-17. Trigger if converted config file contains not equal to 1 row
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ELSE}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={START-MACRO} "configsets.csv" "N"
-/PROMPT-TEXT=Step 1-18. Start Macro Processing
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "VAR(<<<CSRV>>>)" "EQS" "FAIL" "AND" "VAR(<<<UNDERDEV>>>)" "EQS" "N"
-/PROMPT-TEXT=Step 1-19. Validate CSR accessibility
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-20. create email content CSRVerror.htm
-/CSV=CSRVerror.htm
-</OPTIONS>
-
-<!DOCTYPE html>
-<html>
-<body>
-<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>
-
-<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>
-
-<p>Script Name: <strong><<<SFOLDER>>></strong>
-Path: <<<CSRPATH>>></p>
-</body>
-</html>
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "Critical: Cannot access to <<<CSRPATH>>>" "CSRVerror.htm" "alex.chin.hooi.lee@intel.com" "" "" "N" "N"
-/PROMPT-TEXT=Step 1-21. email when user have no access to CSR
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "VAR(<<<MMSV>>>)" "EQS" "FAIL" "AND" "VAR(<<<UNDERDEV>>>)" "EQS" "N"
-/PROMPT-TEXT=Step 1-22. Validate MMS accessibility
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-23. create email content MMSVerror.htm
-/CSV=MMSVerror.htm
-</OPTIONS>
-
-<!DOCTYPE html>
-<html
-<body>
-<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>
-
-<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>
-
-<p>Script Name: <strong><<<SFOLDER>>></strong><br/>
-Path: <<<MMSPATH>>></p>
-</body>
-</html>
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SQLPathFinder_Email.va "" "self" "Critical: Cannot access to <<<MMSPATH>>>" "MMSVerror.htm" "alex.chin.hooi.lee@intel.com" "" "" "N" "N"
-/PROMPT-TEXT=Step 1-24. email when user have no access to MMS Signal Tracer
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\RoboCopy.va "HIST.txt" "\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\<<<SFOLDER>>>\KM\HIST" "." "5" "30" "N" "" "N"
-/PROMPT-TEXT=Step 1-25. robocopy HIST.txt
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "HIST.txt" "HIST" "N"
-/PROMPT-TEXT=Step 1-26. check presence of HIST.txt
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "HIST" "LE" "0" "" "" "" ""
-/PROMPT-TEXT=Step 1-27. TRUE if HIST.txt is not found
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-28. create dummy HIST.csv
-/CSV=HIST.csv
-</OPTIONS>
-
-LOT,OUT_DATE
-DUMMY,2000-01-01 00:00:00
-<---- New Query ---->
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 1-29. create HISTERROR.txt
-/CSV=HISTERROR.txt
-</OPTIONS>
-
-ERROR
-ERROR
-ERROR
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ELSE}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SPFRename.va "HIST.txt" "HIST.csv"
-/PROMPT-TEXT=Step 1-30. convert HIST.txt to HIST.csv
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-MACRO}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-MACRO}
-</OPTIONS>
-
-
 <---- New Query ---->
 <OPTIONS>
 /WORKDIR=.\
@@ -688,11 +108,7 @@ ERROR
 /UTILITIES={START-MACRO} "configsets.csv" "N"
 /PROMPT-TEXT=Step 2. Apply variables from config file
 </OPTIONS>
-
-
-
 <---- New Query ---->
-
 <OPTIONS>
 /NODE=<<<MARS>>>
 /UN=
@@ -755,10 +171,7 @@ AND      f0.owner <> 'EMPTYFOUP'
 WHERE
               Interposer_SLI Is Not Null  
 /*END SQL*/
-
-
 <---- New Query ---->
-
 <OPTIONS>
 /NODE=<<<ARIES>>>
 /UN=
@@ -852,10 +265,7 @@ GROUP BY
          ,media_in_y
          ,parameter
 /*END SQL*/
-
-
 <---- New Query ---->
-
 <OPTIONS>
 /RESET=Y
 /NODE=.\
@@ -913,9 +323,7 @@ FROM
  LEFT OUTER JOIN [yeuchuan_a0_22697] a0
   ON a1.[lot_1] = a0.[lot] 
  AND a1.[operation_1] = a0.[operation]
-
 <---- New Query ---->
-
 <OPTIONS>
 /NODE=.\
 /OLEDB=SQLite
@@ -1127,9 +535,7 @@ T_L0_Result
 WHERE
               [FlagLot] = '1' 
 ;
-
 <---- New Query ---->
-
 <OPTIONS>
 /NODE=.\
 /OLEDB=SQLite
@@ -1137,120 +543,27 @@ WHERE
 /UN=
 /PW=
 /WORKDIR=.\
-/T=Yes
-/TS=_20260903170135
-/CSV=DATA.csv
+/CSV=AED_CANDIDATES.csv
 /TABLE=IPM_Data.csv
-/HEADERS=Lot_NCORisk
-/INSTANCE=22697
-/PROMPT-TEXT=Step 5-1.1. Fetching Text (SQLite) Data
-/HEADERS_UNIQUE=Y
+/HEADERS=FACILITY,LOT
 /QUOTECSV=Y
-/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+/PROMPT-TEXT=Select distinct flagged lots for AED
 </OPTIONS>
-
-SELECT /*L0*/  DISTINCT 
-          a0.[lot] AS [Lot_NCORisk]
-FROM 
-[IPM_Data] a0
-WHERE
- NOT          (a0.[lot] In 
-SQL_Get_CSV_List(".\HIST.csv", "1", "a0.[lot] In")
-
+SELECT DISTINCT facility AS FACILITY, lot AS LOT FROM [IPM_Data];
 <---- New Query ---->
-
 <OPTIONS>
 /WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "data.csv" "SIGNAL" "N" ""
-/PROMPT-TEXT=Step 6-1. check if got signal
+/UTILITIES={AED} "AED_CANDIDATES.csv"
+/PROMPT-TEXT=Apply and verify AED lot attributes
 </OPTIONS>
-
-
-
 <---- New Query ---->
-
 <OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""
-/PROMPT-TEXT=Step 6-2. TRUE if signal is found
+/UTILITIES={ROWS-IN-FILE} "AED_CANDIDATES.csv" "SIGNAL" "N"
 </OPTIONS>
-
-
-
 <---- New Query ---->
-
 <OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "VAR(<<<DCSR>>>)" "EQS" "Y" "" "" "" ""
-/PROMPT-TEXT=Step 6-3. TRUE if CSR is enabled
+/UTILITIES={IF-THEN} "SIGNAL" "GT" "0"
 </OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/NODE=.\
-/OLEDB=SQLite
-/ENGINE=SQLite
-/UN=
-/PW=
-/WORKDIR=.\
-/T=No
-/CSV=RESULT_<<<%username%>>>_CWFNCO{TS}.csv
-/TABLE=data.csv:T0
-/HEADERS=HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module
-/INSTANCE=22697
-/PROMPT-TEXT=Step 6-4. Create ICM-PCS CSR Signal, pls remove whichever not applicable
-/HEADERS_UNIQUE=Y
-</OPTIONS>
-
-SELECT DISTINCT 
- [Lot_NCORisk] AS [HOLD_LOT]
-,'Y' AS [AUTO_CONTAIN]
-,[lot] AS [LOT]
-,'<<<dEmail>>>' AS [EMAIL]
-,'<<<dCCB>>>' AS [CCB_NUMBER]
-,'<<<dHNote>>>' AS [HOLD_NOTE]
-,'<<<dHCat>>>' AS [HOLDCATEGORY]
-,'IAM' AS [Module]
-FROM [T0] 
-WHERE 1=1
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>" "5" "30" "N" "/MOV" "N"
-/PROMPT-TEXT=Step 6-5. submit to CSR depository
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-
 <---- New Query ---->
 <OPTIONS>
 /INSTANCE=22697
@@ -1273,7 +586,7 @@ DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><
 DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
 ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
 NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
-AT-TOP-OF-REPORT<\\><\\>CWF_MLINCO_LOTHOLD<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+AT-TOP-OF-REPORT<\\><\\>CWF_MLINCO_AED<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
 COLUMN-DATA<\\><\\>facility<\\>operation<\\>tool_entity<\\>primary_entity<\\>processing_end_date<\\>lot<\\>prodgroup3<\\>product<\\>visual_id<\\>ws_loss_code<\\>media_in_x<\\>media_in_y<\\>height<\\>patch_lift_roi1<\\>patch_lift_roi2<\\>patch_lift_roi3<\\>patch_lift_roi4<\\>patch_lift_roi5<\\>patch_lift_roi6<\\>patch_lift_roi7<\\>patch_lift_roi8<\\>patch_lift_roi_max<\\>lot_1<\\>patch_sli<\\>interposer_sli<\\>nco_risk
 COLUMN-HEADERS<\\><\\>Facility<\\>Operation<\\>Tool Entity<\\>Primary Entity<\\>Processing End Date<\\>Lot<\\>Prodgroup3<\\>Product<\\>Visual Id<\\>Ws Loss Code<\\>Media In X<\\>Media In Y<\\>Height<\\>Patch Lift Roi1<\\>Patch Lift Roi2<\\>Patch Lift Roi3<\\>Patch Lift Roi4<\\>Patch Lift Roi5<\\>Patch Lift Roi6<\\>Patch Lift Roi7<\\>Patch Lift Roi8<\\>Patch Lift Roi Max<\\>Lot 1<\\>Patch Sli<\\>Interposer Sli<\\>Nco Risk
 COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left
@@ -1296,11 +609,11 @@ COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\
 :EM-A:
 :EM-S:
 :SEC:Y
-:TITLE:CWF_MLINCO_LOTHOLD
+:TITLE:CWF_MLINCO_AED
 <table class="tblout">
 <tr class="tblout">
 <td class="tblout">
-<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black">Lot on hold due to suspected MLI NCO. Lot will need to go through 100% XRAY (2846)</font>
+<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black">Lots flagged for suspected MLI NCO. AED outcomes are recorded in AED_results.csv.</font>
 </td>
 </tr>
 <tr class="tblout">
@@ -1310,7 +623,7 @@ HTM:MYREPORT3
 </tr>
 <tr class="tblout">
 <td class="tblout">
-<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black"><strong>Configurations applied</strong><br>CSR enabled: <<<DCSR>>><br>ICMPCS MMS Workflow enabled: <<<DMWF>>><br>MMS Signal Tracer enabled: <<<DMST>>></font>
+<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black"><strong>Configurations applied</strong><br>AED enabled: <<<AED_ENABLED>>><br>Target attribute(s): <<<ATTR_LIST>>><br>Target value: <<<SKIP_OPERATION>>></font>
 </td>
 </tr>
 <tr class="tblout">
@@ -1330,295 +643,11 @@ IHJ:revision.htm
 /INSTANCE=22697
 </OPTIONS>
 N/A
-
-
 <---- New Query ---->
-
 <OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "HISTERROR.txt" "HISTERR" "N" ""
-/PROMPT-TEXT=Step 6-7. check existence of HISTERROR.txt
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "HISTERR" "LE" "0" "" "" "" ""
-/PROMPT-TEXT=Step 6-8. TRUE if HISTERROR.txt is not found
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SmartAppend.va "HIST.csv" "data.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
-/PROMPT-TEXT=Step 6-9. add new signal into HIST
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SPFRename.va "HIST.csv" "HIST.txt"
-/PROMPT-TEXT=Step 6-10. convert HIST.csv to HIST.txt
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\RoboCopy.va "HIST.txt" "." "<<<IREPOP>>>\<<<SFOLDER>>>\KM\HIST" "5" "30" "N" "" "N"
-/PROMPT-TEXT=Step 6-11. upload HIST.txt
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
 /UTILITIES={END-IF}
 </OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={ROWS-IN-FILE} "data.csv" "SIGNAL" "N" ""
-/PROMPT-TEXT=Step 7-1. check if got signal
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""
-/PROMPT-TEXT=Step 7-2. TRUE if signal is found
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={IF-THEN} "VAR(<<<DMWF>>>)" "EQS" "Y" "" "" "" ""
-/PROMPT-TEXT=Step 7-3. TRUE if ICMPCS MMS Workflow is enabled
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 7-4. Create ICM-PCS MMS Workflow
-/CSV=spfheaderfile.csv
-</OPTIONS>
-DATE,EMAIL,MODULE,SIGNALTYPE,COMPONENT_ID,HOLD_LOT,AUTO_CONTAIN,SHOULD_EMAIL,MMS,ALARMTYPE,SUB_ENTITY_1,SUB_ENTITY_2,SUB_ENTITY_3,FACILITY,PRODGROUP3,ENTITY,DEFECT_SIDE,DEFECT_MODE,LOT_OWNR,IMPACT_LOT_VI,IMPACT_VIDS
-
 <---- New Query ---->
 <OPTIONS>
-/NODE=.\
-/OLEDB=SQLite
-/ENGINE=SQLite
-/UN=
-/PW=
-/WORKDIR=.\
-/T=No
-/CSV=SPFMMSTMP.csv
-/TABLE=IPM_Data.csv:T0
-/HEADERS=MODULE,SIGNALTYPE,ALARMTYPE,EMAIL,HOLD_LOT,AUTO_CONTAIN,PRODGROUP3,IMPACT_LOT_VI,IMPACT_VIDS
-/INSTANCE=22697
-/HEADERS_UNIQUE=Y
-/QUOTECSV=Y
-</OPTIONS>
-
-SELECT DISTINCT 
- 'BA' AS [MODULE]
-,'ICMPCS' AS [SIGNALTYPE]
-,'IAM_CWF_NCO' AS [ALARMTYPE]
-,'<<<dEmail>>>' AS [EMAIL]
-,'Y' AS [HOLD_LOT]
-,'N' AS [AUTO_CONTAIN]
-,[prodgroup3] AS [PRODGROUP3]
-,[lot] AS [IMPACT_LOT_VI]
-,[visual_id] AS [IMPACT_VIDS]
-               ,'Y' AS [MMS]
-               ,'Y' AS [SHOULD_EMAIL]
-               ,CAST(DATETIME('now','localtime') AS TEXT)||'.000000' AS [DATE]
-               ,'' AS [FACILITY]
-FROM [T0]
-WHERE 1=1
-
-
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=Y
-/UTILITIES=@EXEDIR@\SmartAppend.va "spfheaderfile.csv" "SPFMMSTMP.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
-</OPTIONS>
-
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=Y
-/UTILITIES=@EXEDIR@\SPFRename.va "spfheaderfile.csv" "<TS>_<<<%username%>>>_output.pickle.csv"
-</OPTIONS>
-
-
-
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=Y
-/UTILITIES=@EXEDIR@\SPFDelete.bat "SPFMMSTMP.csv" "N"
-</OPTIONS>
-
-
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\RoboCopy.va "*_output.pickle.csv" "." "<<<MIPPATH>>>" "5" "30" "N" "/MOV" "N"
-/PROMPT-TEXT=Step 7-5. submit to ICMPCS MMS Workflow depository
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES={END-IF}
-</OPTIONS>
-
-
-<---- New Query ---->
-<OPTIONS>
-/WRITE-FILE=Y
-/INSTANCE=22697
-/PROMPT-TEXT=Step 8-1. create update.bat
-/CSV=update.bat
-</OPTIONS>
-
-@echo off
-set currd=%date:~10,4%-%date:~4,2%-%date:~7,2%
-set currms=%time:~2,6%
-set /a currh=%time:~0,2%
-if %currh% LSS 10 set currh=0%currh%
-set currt=%currh%%currms%
-set PriConfig=<<<IREPOP>>>\<<<SFOLDER>>>
-
-
-REM ************** edit here only if needed **************
-
-set record=<<<DCSR>>>,<<<DMST>>>,<<<DMWF>>>
-
-
-
-
-REM *************** do not edit below here ***************
-
-call :retry
-goto:eof
-
-:retry
-set /a tries=300
-
-:loop
-if %tries% LEQ 0 goto return
-echo <<<STARTTS>>>,%currd% %currt%,<<<UTC>>>,KM,<<<%username%>>>,<<<UNDERDEV>>>,%record%>>%PriConfig%\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop
-
-:return
-@exit /B
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=update.bat
-/PROMPT-TEXT=Step 8-2. run update.bat
-</OPTIONS>
-
-
-
-<---- New Query ---->
-
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
-/UTILITIES=@EXEDIR@\SPFDelete.bat "update.bat" "N"
-/PROMPT-TEXT=Step 8-3. delete update.bat
-</OPTIONS>
-
-
-<---- New Query ---->
-<OPTIONS>
-/WORKDIR=.\
-/INSTANCE=22697
-/OUTLOOK=N
 /UTILITIES={END-MACRO}
 </OPTIONS>
-

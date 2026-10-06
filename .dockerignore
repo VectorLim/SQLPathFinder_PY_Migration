@@ -2,6 +2,11 @@
 !pyproject.toml
 !README.md
 !main.py
+!ICMPCS.txt
+!CSR_IAM_v2.txt
+!aed_updater.py
+!install_packages/
+!install_packages/aed_client_apikey-6.2.0-py3-none-any.whl
 !src/
 !src/scripthost_portable/
 !src/scripthost_portable/**

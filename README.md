@@ -60,13 +60,15 @@ docker push $tag
    and the result line with `script_path`, `success`, `generated_outputs`.
 5. Run with `ENV_MODE=test`, check share outputs, then switch to `ENV_MODE=prod`.
 
-`DATASYNCX_USERNAME` (e.g. `titan`) makes MARS/ARIES readers use that DB account instead of
-OS/Kerberos auth. The base image's `python --version` must be 3.11-3.13.
+`DATASYNCX_USERNAME` (e.g. `titan` or `GAR\idsid`) makes MARS/ARIES readers use that account
+instead of OS auth; `DATASYNCX_PASSWORD` supplies its password. Both may live in the DataSyncX
+`.env` (`/app/.env` in the container) or come from secret env vars. The base image's
+`python --version` must be 3.11-3.13.
 
 ## Capability vocabulary
 
 - SUPPORTED: exercised original behavior with asserted outputs in the documented subset.
-- UNRESOLVED: a known required platform boundary is unavailable (Linux email delivery).
+- UNRESOLVED: a known required platform boundary is unavailable (Linux email role verification).
 - UNCERTIFIED: no execution evidence for this capability or variant.
 - RETIRED: compiler, editor, generated-Python runtime, and migration/reference runtime.
 
@@ -75,3 +77,43 @@ capabilities and [historical live evidence](docs/session-2.6a-live-datasyncx-val
 Linux email recipient/role policy is preserved; no replacement sender is provided.
 
 See [runtime container instructions](docs/runtime-container.md) for the prototype image.
+
+## AED IAM jobs
+
+`ICMPCS.txt` and `CSR_IAM_v2.txt` now use one `{AED}` task in place of the
+CSR/MMS preparation and posting chain. All new integration logic lives in
+`src/scripthost_portable/aed_api.py`, reusing the existing `aed_updater.py`.
+Both Dockerfiles install the SOIMS API-key client wheel;
+the imserverless image includes both IAM scripts under `/app/jobs`.
+
+Select `SCRIPT_PATH=/app/jobs/ICMPCS.txt` (or `CSR_IAM_v2.txt`), a writable
+`WORKDIR`, and `SITE=KM` (or another site). Inject `X_API_KEY` through deployment
+secrets. DataSyncX credentials remain as described above. Start with `ENV_MODE=test`;
+only `prod` writes AED/history.
+Site is the only required site-specific selection after deployment credentials
+and the job entry point are configured.
+
+Outputs, snapshots and `HIST` (default `<WORKDIR>/<SITE>/HIST/HIST.txt`) stay in
+`WORKDIR` on the single AppSpec `data` volume (`/mnt/data`). Config is read live from
+the ICM_PCS network path on every run:
+`\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\<SFOLDER>\<SITE>\CONFIG\config.txt`,
+where `SFOLDER` defaults to the script filename (`ICMPCS_CWFNCO_CSR_IAM.txt` ->
+`ICMPCS_CWFNCO_CSR_IAM`). Windows opens the UNC path natively; Linux reads it over SMB
+with `CIFS_USERNAME`/`CIFS_PASSWORD` (inject the password as a deployment secret).
+`ICMPCS_ROOT`, `SFOLDER` and `HIST_PATH` optionally override these.
+The existing `icmpcs,parameter,value[,comment]` format is authoritative;
+ICMPCS rows become `config.json`, `configsets.csv`, and original-name environment
+variables. Explicit environment values override matching keys. Secrets and OS
+control variables are rejected as config keys and never included in snapshots.
+MARS defaults to `<SITE>.[<facility>.].MARS` (KM: `KM.[A15_PROD_21.].MARS`) and ARIES
+to `<SITE>.ARIES`; `dEmail` must be supplied
+by the config or an original-name environment override. IAM attribute/value
+defaults remain `1064`/`2446`, overridable with `ATTR_LIST`/`SKIP_OPERATION`.
+
+`AED_results.csv` records each distinct facility/lot outcome. Production history
+is saved to the share's `<job>/<site>/HIST/HIST.txt` only after verification;
+legacy `LOT` and `Lot_NCORisk` history columns are accepted. Historical lots stay
+excluded even if their attributes later clear. Earlier successes survive a later
+lot failure, and any failed lot makes the job fail. Run one writer per job/site.
+Dry runs write local audit output but neither AED attributes nor shared history.
+The existing Linux email role-verification limitation still applies to reports.

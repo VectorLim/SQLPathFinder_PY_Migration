@@ -112,19 +112,18 @@ def _run_child(job: ScriptHostJob) -> ScriptHostJobResult:
 
     try:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            from .aed_api import prepare_job
+
+            script_text = job.script_text
+            if script_text is None:
+                script_text = Path(job.script_path or "").read_text(encoding="utf-8-sig")
+            script_text = prepare_job(workdir, script_text, job.script_path)
             runtime = PortableScriptHostRuntime()
-            if job.script_text is not None:
-                succeeded = runtime.run_text(
-                    job.script_text,
-                    workdir,
-                    execution_options=job.execution_options,
-                )
-            else:
-                succeeded = runtime.run_file(
-                    Path(job.script_path or ""),
-                    workdir,
-                    execution_options=job.execution_options,
-                )
+            succeeded = runtime.run_text(
+                script_text,
+                workdir,
+                execution_options=job.execution_options,
+            )
         if not succeeded:
             return _failure(
                 "script_host_error",

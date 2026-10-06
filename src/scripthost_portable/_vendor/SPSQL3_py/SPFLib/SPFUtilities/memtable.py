@@ -1775,10 +1775,6 @@ class MemTable(object):
         'g_isSPFonSH: Is SPF SW on Drones
         '==========================================================
         """
-        # VG2's historical current-directory spelling is not a POSIX folder.
-        if os.name != "nt" and WorkDir == ".\\":
-            WorkDir = "."
-
         #constants
         __SQLITE_DATA_PATH = "@SQLITE-SPF-DATA-PATH@"
         __SQLITE_DATA_PATH2 = "@SQLITE-SPF-DATA-PATH2@"
@@ -2044,7 +2040,7 @@ class MemTable(object):
 
                 MyPair = MyTables.split(",") #'Extract File & Tbl Name Pairs
                 self.logger.debug("{0} - MyPair: {1}".format(calling_func, MyPair))
-                uniqueMyPair = list(set(item.upper() for item in MyPair)) if os.name == "nt" else list(dict.fromkeys(MyPair)) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
+                uniqueMyPair = list(set(item.upper() for item in MyPair)) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
                 self.logger.debug("{0} - uniqueMyPair: {1}".format(calling_func, uniqueMyPair))
                 uniqueMyPairCounter = 0
                 while len(uniqueMyPair) > 0 : #'For Each Text File
@@ -2128,7 +2124,7 @@ class MemTable(object):
                             """
                             self.logger.debug("{0} - PreProcCSV: {1}".format(calling_func, PreProcCSV))
                             if PreProcCSV == True :
-                                MySrcTxt2 = os.path.join("." if os.name != "nt" else ".\\", "{0}_{1}.tmp".format(uniqueMyPairCounter, RNStr))
+                                MySrcTxt2 = os.path.join(".\\", "{0}_{1}.tmp".format(uniqueMyPairCounter, RNStr))
                                 self.logger.debug("{0} - MySrcTxt2: {1}".format(calling_func, MySrcTxt2))
                                 self.myUtils.ConvertDLM(MySrcTxt, MySrcTxt2, MyCvtExe,IsQuiet)
                                 MySrcTxt = MySrcTxt2
@@ -3039,7 +3035,6 @@ class MemTable(object):
         conTemp.create_function("SPFRegexSearch", 3, self.sqliteRegexSearch)
         conTemp.create_function("SPFWriteLOBToFile", 2, self.sqliteSaveLOBToFile)
         conTemp.create_function("SPFPrepLikeValue", 1, self.sqlitePrepLikeValue)
-        conTemp.create_function("CharIndex_v2", 4, self.sqliteCharIndex_v2)
         if AttachSQL is not None:
             conTemp.execute(AttachSQL)
         return conTemp
@@ -3060,27 +3055,6 @@ class MemTable(object):
         except Exception as err:
             raise
 
-    def sqliteCharIndex_v2(self, needle, haystack, start=1, occurrence=1):
-        """Return the 1-based position expected by the legacy CSV-list SQL."""
-        if needle is None or haystack is None:
-            return 0
-        needle = str(needle)
-        haystack = str(haystack)
-        try:
-            offset = max(int(start) - 1, 0)
-            occurrence = int(occurrence)
-        except (TypeError, ValueError):
-            return 0
-        if not needle or occurrence < 1:
-            return 0
-
-        found = -1
-        for _ in range(occurrence):
-            found = haystack.find(needle, offset)
-            if found < 0:
-                return 0
-            offset = found + 1
-        return found + 1
 
     def sqliteJsonValue(self, val1):
         """
@@ -3207,6 +3181,10 @@ class MemTable(object):
                 return f"{val1}%"
         except Exception as err:
             return val1
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.memtable import MemTable
 #END : class MemTable(object)
 if __name__ == "__main__":
     print("Running as main...noting to execute")

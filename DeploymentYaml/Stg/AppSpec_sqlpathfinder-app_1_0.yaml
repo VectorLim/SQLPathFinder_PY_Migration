@@ -27,6 +27,7 @@ containers:
       JOB_TIMEOUT: '3600'
       ENV_MODE: test
       DATASYNCX_USERNAME: titan
+      CIFS_USERNAME: ma_ngicmpcs
 version: '1.0'
 maxinstances: 1
 mininstances: 1

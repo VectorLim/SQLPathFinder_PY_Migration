@@ -35,7 +35,7 @@ OPERATION = "2303"
 SKIP_OPERATION = "2446"
 DURATION = "TRUNC(SYSDATE) - 2"
 
-HIST_PATH = ""
+HIST_PATH = str(Path(__file__).resolve().with_name("HIST.csv"))
 CONFIG_PATH = ""
 EMAIL_RECEIVER = ""
 EMAIL_SUBJECT = ""
@@ -244,6 +244,13 @@ class CsvIO:
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
             yield from reader
+
+    def count_rows(self, name: "str") -> "int":
+        """Count CSV data rows (excluding the header); return -1 if missing."""
+        try:
+            return sum(1 for _ in self.iter(name))
+        except FileNotFoundError:
+            return -1
 
     def single_row(self, name: "str") -> "dict[str, str]":
         """Return exactly one data row from *name*; raise on 0 or >1 rows."""
@@ -647,8 +654,11 @@ class SqliteReader:
         for stmt in stmts[:-1]:
             try:
                 conn.execute(stmt)
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as exc:
+                conn.close()
+                raise RuntimeError(
+                    f"SQLite error in execute: {exc}\nSQL:\n{stmt}"
+                ) from exc
         final_stmt = stmts[-1]
         alias_to_table: "dict[str, str]" = {}
         alias_map_re = re.compile(
@@ -1146,12 +1156,19 @@ def step_0004_sqlite_query(ctx) -> None:
 
 
 def step_0005_sqlite_query(ctx) -> None:
+    hist_df = read_csv(HIST_PATH)
+    history_filter = ""
+    if not hist_df.empty:
+        history_column = "LOT" if "LOT" in hist_df.columns else 1
+        history_lots = ctx.csv_io.sql_get_csv_list(HIST_PATH, history_column, "a0.[lot] IN")
+        history_filter = f"WHERE NOT (a0.[lot] IN {history_lots})"
     ctx.run_query(
-        sql="""
+        sql=f"""
     SELECT /*L0*/  DISTINCT 
               a0.[lot] AS [Lot_NCORisk]
     FROM 
     [IPM_Data] a0
+    {history_filter}
     """,
         output="DATA.csv",
         reader=SqliteReader(),
@@ -1163,11 +1180,14 @@ def step_0005_sqlite_query(ctx) -> None:
 def read_csv(path):
     try:
         if os.path.exists(path):
-            hist_df = pd.read_csv(path)
+            hist_df = pd.read_csv(path, dtype=str, keep_default_na=False)
             logger.info(f"Successfully read records from {path}")
             return hist_df
         else:
             return pd.DataFrame(columns=["LOT"])
+    except pd.errors.EmptyDataError:
+        logger.info(f"No records or headers in {path}; treating as empty history")
+        return pd.DataFrame(columns=["LOT"])
     except Exception as e:
         logger.info(f"Failed to read history from {path}")
         raise e
@@ -1178,16 +1198,23 @@ def get_facility_lot(ctx):
         # step_0001_sql_query(ctx)
         # step_0002_sql_query(ctx)
         # step_0003_sqlite_query(ctx)
+        if ctx.csv_io.count_rows("PARMI_IPM_RAW.csv") <= 0:
+            logger.info("No PARMI IPM data rows. Skipping SQLite processing.")
+            return pd.DataFrame(columns=["FACILITY", "LOT"])
+
         step_0004_sqlite_query(ctx)
         step_0005_sqlite_query(ctx)
 
-        # compare skip_lot to hist.csv. Exclude lot that is already in hist.csv
-        hist_df = read_csv(".\\HIST.csv")
-        skip_lot = read_csv(".\\SKIP_LOT.csv")
+        if ctx.csv_io.count_rows("DATA.csv") <= 0:
+            logger.info("No signal rows in DATA.csv. Skipping lot processing.")
+            return pd.DataFrame(columns=["FACILITY", "LOT"])
 
-        data_df = skip_lot[~skip_lot["LOT"].isin(hist_df["LOT"])]
-
-        return data_df
+        signals = read_csv(resolve_path("DATA.csv"))
+        ipm_data = read_csv(resolve_path("IPM_Data.csv"))
+        data_df = ipm_data.loc[
+            ipm_data["lot"].isin(signals["Lot_NCORisk"]), ["facility", "lot"]
+        ].drop_duplicates()
+        return data_df.rename(columns={"facility": "FACILITY", "lot": "LOT"})
 
     except Exception as e:
         logger.error(f"ERROR in get_facility_lot: {e}")
@@ -1230,7 +1257,7 @@ def process_facility_attribute_update(ctx):
 
         # save history record
         if os.path.exists(HIST_PATH):
-            hist_df = pd.read_csv(HIST_PATH)
+            hist_df = read_csv(HIST_PATH)
             hist_df = pd.concat([hist_df, result_df])
             # hist_df['OUT_DATE'] = pd.to_datetime(hist_df['OUT_DATE'])
             # hist_df = hist_df.loc[hist_df['OUT_DATE']

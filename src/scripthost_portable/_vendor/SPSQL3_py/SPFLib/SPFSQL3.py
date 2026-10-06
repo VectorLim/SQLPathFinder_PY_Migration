@@ -1,4 +1,4 @@
-﻿"""
+"""
 License : Copyright (c) Intel Corporation 2023
 Product: Intel.ATTD.Auto.SQLPathFinder
 Module : SQLPathFinder Python Extract Engine 
@@ -269,15 +269,17 @@ from . import SPFUtilities
 from .SPFUtilities.utils import Utilities, SPFNothingToProcessException, SPFMutedException, SPFCMDRunExitWithErrorCodeException, SPFMacroNotFoundException
 from .SPFUtilities.memtable import MemTable
 from .SPFUtilities.utils import SPFRichProgressBar
+# [Removed from current version] from . import dbDrivers
+# [Removed from current version] from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
 try:
     from . import dbDrivers
     from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
 except (ImportError, OSError):
+    from scripthost_portable.overrides.legacy_drivers import (
+        NodesInfo, _UnavailableLegacyDBDriverBase,
+    )
     dbDrivers = None
 
-    class _UnavailableLegacyDBDriverBase:
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError("Legacy ScriptHost database transport is unavailable on this platform")
 
     dbDriverBase = dbDriverODBCBase = _UnavailableLegacyDBDriverBase
     dbDriverDotNetSQLServer = None
@@ -285,12 +287,6 @@ except (ImportError, OSError):
     dbDriverCxOracle = dbDriverODBCSQLServer = dbDriverODBCImpala = None
     dbDriverODBCMYSQL = dbDriverODBCSAPHana = dbDriverMSOLAPWin32Com = None
     dbDriverUBERWin32Com = dbDriverCB = dbDriverCBSQL = None
-    class NodesInfo:
-        """Portable fallback for the node metadata bundled with compiled dbDrivers."""
-        def __init__(self, node):
-            self.node = node.strip()
-            self.un = ""
-            self.pw = ""
 
     spfsqlxParser = encryptSPFSQL = encryptConfigFile = encryptText = None
     dbDriverODBCDenodo = dbDriverPGSQLPsycopg2 = dbDriverDotNetLibSQLServer = None
@@ -863,6 +859,7 @@ class SPFManager(Utilities) :
                        r"U->MongoDB-Extract:Y@EXEDIR@\MongoDB-Extract.va"   :   "MongoExtractTask",
                        r"@EXEDIR@\VA_Join_By_Name.va"   :   "SPFJoinTask", #V1.0.0.8
                        #Special Utilities - derived from /UTILITIES option
+                       r"{AED}"                 :   "AEDTask",
                        r"{AGE-OF-FILE}"         :   "AgeOfFileTask",
                        r"{VERIFY-ROLE}"         :   "VerifyRoleTask",
                        r"{DATE-OF-FILE}"        :   "DateOfFileTask",
@@ -2301,7 +2298,7 @@ class NormalQueryTaskBase(SPFTaskBase) :
         ' auto called when class instance is created
         ' calls the base class init and set instance variables
         """
-        super(NormalQueryTaskBase, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
         try :
             self.logger.debug("{0} - NormalQueryTaskBase Initializing".format(calling_func))
@@ -3435,10 +3432,6 @@ class NormalQueryTaskBase(SPFTaskBase) :
         """
         calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
         try : 
-            # SPFSQL files commonly spell relative paths as ".\\file". Preserve
-            # that Windows meaning on portable hosts without changing CSV-list logic.
-            if os.sep == "/" and TmpFile.startswith(".\\"):
-                TmpFile = "./" + TmpFile[2:].replace("\\", "/")
             TmpInc= -1
             if TmpFile.find("->") > 0 :
                 TmpFile, TmpInc = TmpFile.split("->",1)
@@ -5711,6 +5704,10 @@ class NormalQueryTaskBase(SPFTaskBase) :
         """
         self.Console("Please note that parallelization is not supported for this Database driver. Continuing...")
         self.FinalRow = self.__ExceuteSQLQueryMulti__(Idx, sitei, SQLQuery, dbConnObject, fetchSize, OutExcel)
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.normal_query import NormalQueryTaskBase
     #END : def ExceuteSQLQueryMultiParallel
     #endregion END : methods/properties that will be implemented/Overridden in specific handlers
 #END : class NormalQueryTaskBase
@@ -5744,7 +5741,7 @@ class nqOracleTask(NormalQueryTaskBase) :
     #endregion properties
 
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
-        super(nqOracleTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         self.logger.debug("{0} - nqOracleTask Initialized".format(calling_func))
         return None
@@ -5940,7 +5937,7 @@ class nqOracleTask(NormalQueryTaskBase) :
                         l_DLM = ""
             
             #call base class method
-            super(nqOracleTask, self).performCommand()
+            super().performCommand()
             
         except Exception as err:
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -5957,7 +5954,7 @@ class nqOracleTask(NormalQueryTaskBase) :
         self.logger.debug("{0} - ExPlan : {1}".format(calling_func, self.ExPlan))
         if self.ExPlan == "N" :
             #call base class method
-            super(nqOracleTask, self).HandleMyHeaders2(MyHdrs, MyFile, MyOldFile, NoERow)
+            super().HandleMyHeaders2(MyHdrs, MyFile, MyOldFile, NoERow)
             self.ConsoleDoneWithTimeStamp3()
 
     #END : def HandleMyHeaders2
@@ -5974,7 +5971,7 @@ class nqOracleTask(NormalQueryTaskBase) :
         pwi = None
 
         #call method in parent class
-        uni, pwi = super(nqOracleTask, self).get_uni_pwi(Idx, InDBNode, UnList, PWList)
+        uni, pwi = super().get_uni_pwi(Idx, InDBNode, UnList, PWList)
         
         #proceed with oracle specific logic
         
@@ -6026,19 +6023,9 @@ class nqOracleTask(NormalQueryTaskBase) :
             dbDriverMapped = dbDriverMap[self.SQLEngine]
             self.logger.debug(f"{calling_func} - dbDriverMapped : {dbDriverMapped}")
             #get from modules attribute -- expects the class to be in current module
-            dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped, None)
-            forcePortable = os.getenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT") == "1"
-            usePortable = forcePortable or dbDriverClsObject is None
-            if usePortable:
-                # The original parser/query-task lifecycle remains authoritative.
-                # Explicit opt-in also permits portable validation on Windows.
-                from scripthost_portable.query_transport import PortableOracleConnection
-                dbDriverClsObject = PortableOracleConnection
-                self.logger.info("Oracle query transport: PortableOracleConnection (forced=%s)", forcePortable)
+            dbDriverClsObject = getattr(sys.modules[__name__], dbDriverMapped)
             #create the instance
             dbDriver = dbDriverClsObject(queryOptions=self.queryOptions)
-            if usePortable:
-                dbDriver.load_to_memtable = self.gLoadToMemTable
 
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -6239,6 +6226,10 @@ class nqOracleTask(NormalQueryTaskBase) :
         except Exception as err:
             self.logger.error(err)
             raise 
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.oracle import nqOracleTask
     #END :  def validateDBNodesAndPrepSubstituteArr
 #END : class nqOracleTask
 
@@ -14226,7 +14217,7 @@ class UpdateTimeTask(SPFTaskBase) :
 class GetSiteTimeTask(SPFTaskBase) :
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(GetSiteTimeTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         self.logger.debug("{0} - GetSiteTimeTask Initialized".format(calling_func))
         return None
 
@@ -14277,18 +14268,22 @@ class GetSiteTimeTask(SPFTaskBase) :
             self.gMySPFJobTime = myFunc(MyArg)
 
             if self.MyUtilities[0] == "{GET-SITE-TIME-FILE}" : # (Do_Get_Time_File)
-                self.SetIni(os.path.join(".", "{0}.spf$data".format(self.gSPFInstance)), "SITE-TIME", "TIME", self.gMySPFJobTime)
+                self.SetIni(os.path.join(".\\", "{0}.spf$data".format(self.gSPFInstance)), "SITE-TIME", "TIME", self.gMySPFJobTime)
 
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
             raise
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.site_time import GetSiteTimeTask
     #END : def executeTaskCommand
 #END : class GetSiteTimeTask
 
 class UpdateTimeFileTask(SPFTaskBase) :
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(UpdateTimeFileTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         self.logger.debug("{0} - UpdateTimeFileTask Initialized".format(calling_func))
         return None
 
@@ -14311,13 +14306,17 @@ class UpdateTimeFileTask(SPFTaskBase) :
             fileToWrite = self.MyUtilities[1]
             self.logger.debug("{0} - fileToWrite: {1}".format(calling_func, fileToWrite))
             if self.IsEmptyOrNone(self.gMySPFJobTime) is True :
-                self.gMySPFJobTime = self.GetIni(os.path.join(".", "{0}.spf$data".format(self.gSPFInstance)),"SITE-TIME", "TIME")
+                self.gMySPFJobTime = self.GetIni(os.path.join(".\\", "{0}.spf$data".format(self.gSPFInstance)),"SITE-TIME", "TIME")
 
             self.Do_Update_Time(fileToWrite)
 
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
             raise
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.update_time import UpdateTimeFileTask
 #END : class UpdateTimeFileTask
 
 class vaTask(SPFTaskBase) :
@@ -14787,7 +14786,7 @@ class SmartAppendTask(SPFTaskBase) :
 
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(SmartAppendTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         #region local class variables -- intialize
         #self.SrcFile = None -- moved to property
         #self.AppendFile = None  -- moved to property
@@ -15861,7 +15860,7 @@ class SmartAppendTask(SPFTaskBase) :
             self.logger.debug("{0} - MyUpdateFile : {1}".format(calling_func,self.MyUpdateFile))
             if self.IsEmptyOrNone(self.MyUpdateFile) == False :
                 if self.IsEmptyOrNone(self.gSPFInstance) == False :
-                    self.Do_Update_Time_File(self.MyUpdateFile, os.path.join(".","{0}.spf$data".format(self.gSPFInstance)))
+                    self.Do_Update_Time_File(self.MyUpdateFile, os.path.join(".\\","{0}.spf$data".format(self.gSPFInstance)))
                 else :
                     self.Do_Update_Time(self.MyUpdateFile)
         except Exception as err:
@@ -16262,6 +16261,10 @@ class SmartAppendTask(SPFTaskBase) :
             except Exception as e:
                 pass
         """
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.smart_append import SmartAppendTask
     #END : def return_old_file
 #END : class SmartAppendTask
 
@@ -16996,7 +16999,7 @@ class AppendFileTask(SPFTaskBase) :
 class SetFileROTask(SPFTaskBase) :
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(SetFileROTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         self.logger.debug("{0} - SetFileROTask Initialized".format(calling_func))
         return None
 
@@ -17049,13 +17052,6 @@ class SetFileROTask(SPFTaskBase) :
 
             #file exists continue
             
-            if os.name != "nt":
-                import stat
-                mode = os.stat(destFile).st_mode
-                os.chmod(destFile, mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-                         if MyROCode == 1 else mode | stat.S_IWUSR)
-                self.ConsoleDoneWithTimeStamp2()
-                return
             destFileAttr = win32api.GetFileAttributes(destFile)                
             self.logger.debug("{0} - destFileAttr : {1}".format(calling_func, destFileAttr))
             #note File attributes are differein VB and python win32api(follows std windows codes)
@@ -17072,6 +17068,10 @@ class SetFileROTask(SPFTaskBase) :
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
             raise
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.readonly import SetFileROTask
 #END : class SetFileROTask
 
 #status : dev Done, UT Done
@@ -17402,7 +17402,7 @@ class HadoopLoadTask(SPFTaskBase) :
 class XMLToCSVTask(SPFTaskBase) :
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(XMLToCSVTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         self.logger.debug("{0} - XMLToCSVTask Initialized".format(calling_func))
         return None
 
@@ -17539,17 +17539,17 @@ class XMLToCSVTask(SPFTaskBase) :
             cmdArgs = ['/mode="XMLTOCSV"',
                         '/XML="{0}"'.format(xmlFileToLoad),
                         '/out="{0}"'.format(csvFileToWrite)]
-            if os.name != "nt":
-                from scripthost_portable.file_operations import xml_to_csv
-                xml_to_csv(xmlFileToLoad, csvFileToWrite, self.GetFileDLM(csvFileToWrite))
-            else:
-                runStatus, runExitCode = self.Run(MyExe0, cmdArgs,usePopen=True)
+            runStatus, runExitCode = self.Run(MyExe0, cmdArgs,usePopen=True)
             self.ConsoleDoneWithTimeStamp2()
         except Exception as err: 
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
             raise
         finally : 
             self.CloseExcel(objExcel, XLBook)
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.xml_to_csv import XMLToCSVTask
 #END : class XMLToCSVTask
 
 #status : dev done, UT Done
@@ -19665,10 +19665,20 @@ class DOSCmdTask(SPFTaskBase) :
 #END : class DOSCmdTask
 
 #status : dev done, UT done 
+class AEDTask(SPFTaskBase):
+    def executeTaskCommand(self):
+        from scripthost_portable.aed_api import process_candidates
+
+        self.Write_Prompt()
+        if len(self.MyUtilities) != 2:
+            raise ValueError('{AED} requires one candidate CSV argument')
+        process_candidates(self.MyUtilities[1], self.logger)
+
+
 class EchoTask(SPFTaskBase) :
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
-        super(EchoTask, self).__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn, SPFTaskItemIdxIn)
         self.logger.debug("{0} - EchoTask Initialized".format(calling_func))
         return None
     def handle_DOSFC(self, runCode) :
@@ -19705,11 +19715,6 @@ class EchoTask(SPFTaskBase) :
         try :
             
             textToEcho = self.MyUtilitiesValue
-            if os.name != "nt":
-                if not textToEcho.upper().startswith("@ECHO ") or any(char in textToEcho for char in "&|<>"):
-                    raise RuntimeError("Windows shell commands/redirection are unavailable in portable Echo")
-                self.Console(textToEcho[6:])
-                return
             self.logger.debug("{0} - textToEcho: '{1}'".format(calling_func, textToEcho))
             if textToEcho.upper().startswith("@ECHO ") is False:
                 self.Write_Prompt()
@@ -19741,6 +19746,10 @@ class EchoTask(SPFTaskBase) :
             except Exception as err2 :
                 self.logger.exception("{0} - err2 {1}".format(calling_func, err2))
                 raise Exception(err)
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.echo import EchoTask
 #END : class EchoTask
 
 #status : dev done, UT done 
@@ -21187,7 +21196,7 @@ class SPFJoinTask(SPFTaskBase) :
 
 class GetFilesTask(SPFTaskBase):
     def __init__(self, SPFTaskItemIn=None, SPFTaskItemIdxIn=None):
-        super(GetFilesTask, self).__init__(SPFTaskItemIn=SPFTaskItemIn, SPFTaskItemIdxIn=SPFTaskItemIdxIn)
+        super().__init__(SPFTaskItemIn=SPFTaskItemIn, SPFTaskItemIdxIn=SPFTaskItemIdxIn)
         #local variables
         calling_func = self.getCallingFuncName(2, self.__class__.__name__)
         self.outputColumns = ['Path', 'Filename', 'Last_Modified_Date','Last_Access_Date','Creation_Date', 'Size']
@@ -21297,7 +21306,7 @@ class GetFilesTask(SPFTaskBase):
                 if Path(myPathToRead).is_dir() is True:
                     #this is path to a directory without any wildcards...add the *.*
                     self.logger.debug("{0} - Path points to a folder: {1}".format(calling_func, myPathToRead))
-                    myPathToRead = os.path.join(myPathToRead, "*.*")
+                    myPathToRead = rf"{myPathToRead}\*.*"
                     self.logger.debug("{0} - Updated Path : {1}".format(calling_func, myPathToRead))
             except Exception as err:
                 #path is not plain directory...
@@ -21324,8 +21333,8 @@ class GetFilesTask(SPFTaskBase):
             self.logger.debug("{0} - found_wild_card : {1}".format(calling_func, found_wild_card))
             
             #now construct the pathparts
-            path_parent = str(Path(*path_parts_without_wildcard))
-            path_glob_part = os.sep.join(path_parts_with_wildcard)
+            path_parent = "\\".join(path_parts_without_wildcard)
+            path_glob_part = "\\".join(path_parts_with_wildcard)
 
             if found_wild_card is False:
                 self.logger.debug("{0} - single file : {1}".format(calling_func, path_parent))
@@ -21365,6 +21374,10 @@ class GetFilesTask(SPFTaskBase):
                 datetime.strftime(datetime.fromtimestamp(statResult.st_atime), self.G_DT_FORMAT_YYYY_M_DD_HH24_MM_SS), 
                 datetime.strftime(datetime.fromtimestamp(statResult.st_ctime), self.G_DT_FORMAT_YYYY_M_DD_HH24_MM_SS), 
                 int(statResult.st_size)]
+
+
+# Existing callers and later subclasses use the derived class.
+from scripthost_portable.overrides.get_files import GetFilesTask
 #END : class GetFilesTask 
 
 class FileCompareTask(SPFTaskBase):

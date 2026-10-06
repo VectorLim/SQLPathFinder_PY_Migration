@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import codecs
 import logging
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -252,6 +253,18 @@ def test_datasyncx_username_from_env(monkeypatch, backend, symbol, kwargs):
     assert calls == [kwargs]
 
 
+def test_datasyncx_password_bridged_to_account_key(monkeypatch):
+    monkeypatch.setenv("DATASYNCX_USERNAME", "GAR\\someidsid")
+    monkeypatch.setenv("DATASYNCX_PASSWORD", "secret")
+    monkeypatch.delenv("SOMEIDSID", raising=False)
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=lambda **kw: kw))
+    assert DataSyncXReaderFactory().reader_for("mars", "KM.MARS") == {
+        "username": "GAR\\someidsid",
+        "password": "secret",
+    }
+    assert os.environ["SOMEIDSID"] == "secret"
+
+
 def test_portable_connection_routes_mars_aries_and_oasys(tmp_path: Path) -> None:
     factory = FakeReaderFactory(
         {
@@ -452,9 +465,11 @@ def test_real_22844_mars_aries_and_sqlite_progress_through_original_lifecycle(
     assert result.iloc[0]["visual_id"] == "VID_A"
 
 
-def test_original_empty_query_result_uses_original_header_fallback(
+def test_empty_query_result_writes_cursor_labels_like_original_driver(
     tmp_path: Path,
 ) -> None:
+    # Original Windows dbDriver on a 0-row ARIES query wrote "LOT_RAW,PARAM_RAW" (cursor
+    # labels), not /HEADERS; crosstab pivots require that header-only file to exist.
     factory = FakeReaderFactory({"mars": pd.DataFrame(columns=["a", "b"])})
     text = block(
         "/NODE=KM.MARS",
@@ -472,7 +487,7 @@ def test_original_empty_query_result_uses_original_header_fallback(
     with use_reader_factory(factory):
         assert PortableScriptHostRuntime().run_text(text, tmp_path)
 
-    assert (tmp_path / "empty.tab").read_text(encoding="utf-8") == "A\tB"
+    assert (tmp_path / "empty.tab").read_text(encoding="utf-8") == "a\tb\n"
 
 
 def test_original_get_site_time_then_update(tmp_path: Path):

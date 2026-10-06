@@ -1,0 +1,113 @@
+table.tblin, td.tblin, th, td.alt 
+{
+     border-color:#cc9;
+     border-collapse:collapse;
+     border-style:solid;
+     border-width:1px;
+     border-spacing:4px;
+}
+td.tblin,th,td.alt
+{
+      padding:5px;
+}
+  table.tblin 
+{
+     caption-side:top;
+}
+th, #colhdr
+{
+     background-color:#dbd9c0;
+     color:#444;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     font-weight:bold;
+     text-align:left;
+     text-decoration:normal;
+     vertical-align:middle;
+     padding-top:5px;
+     padding-bottom:4px;
+}
+td.tblin, caption, table.tblin 
+{
+     background-color:white;
+     color:#444;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     text-align:left;
+     vertical-align:middle;
+}
+
+  caption {padding-top:5px;}
+ 
+td.alt
+{
+     background-color:#f7f5dc;
+     color:#333;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     text-align:left;
+     vertical-align:middle;
+}
+p.at-top-of-report
+{
+     background-color:white;
+     color:#444;
+     font-family:Arial;
+     font-size:15px;
+     font-style:normal;
+     font-weight:bold;
+     text-align:center;
+     vertical-align:middle;
+}
+
+.jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text, .jqx-chart-axis-description, .jqx-chart-title-text, .jqx-chart-title-description {
+     background-color:white;
+     color:black;
+     font-family:Verdana;
+     font-size:11px;
+     font-style:normal;
+     font-weight:normal;
+     fill:black;
+}
+tr.at-bot-of-report, td.at-bot-of-report {
+     border-color:#cc9;
+     border-collapse:collapse;
+     border-style:solid;
+     border-width:1px;
+     border-spacing:4px;
+
+}
+
+p.at-top-of-col1 {
+     background-color:white;
+     color:#444;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     font-weight:bold;
+     text-align:left;
+     vertical-align:middle;
+}
+p.at-top-of-col2 {
+     background-color:white;
+     color:#444;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     font-weight:bold;
+     text-align:left;
+     vertical-align:middle;
+}
+p.at-top-of-col3 {
+     background-color:white;
+     color:#444;
+     font-family:Arial;
+     font-size:12px;
+     font-style:normal;
+     font-weight:bold;
+     text-align:left;
+     vertical-align:middle;
+}
