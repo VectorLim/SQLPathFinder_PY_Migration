@@ -1,219 +1,97 @@
 # Stage 1 — Thin Script API Over the Original Runtime
 
-## Goal
+Stage 1 lets ordinary Python drive the original ScriptHost backend. It includes no compiler, emitter, editor, embedded runtime, or historical utility expansion. The only compatibility targets are `ICMPCS.txt` and `output/aed-migration/CSR_IAM_v2.aed.txt`.
 
-Prove that readable Python can drive the existing ScriptHost backend without recreating ScriptHost semantics.
-
-No compiler work belongs in this stage.
-
-## Scope
-
-Add one small public module initially:
-
-```
-src/scripthost_portable/script_api.py
-```
-
-Keep it as one module until its size or test boundaries justify splitting it. Do not create a package hierarchy pre-emptively.
-
-Public names:
+## Public API
 
 ```python
-script_session
-macros
-utilities
-query
-reports
-aed
-```
+from scripthost_portable.script_api import aed, macros, query, reports, utilities
 
-Generated/user code must never import `_vendor`, `SPFLib`, `query_transport`, or override modules directly.
 
-## Session model
-
-The current runtime already assumes one job per fresh process. Reuse that constraint.
-
-Use a small private current-session value inside `script_api.py` rather than passing `ctx` through every call.
-
-```python
 def run():
-    with script_session(macro_overrides=MACRO_OVERRIDES):
-        ...
+    if macros.load_csv("configsets.csv"):
+        query.run(
+            sql="SELECT lot AS LOT FROM measurements WHERE value > 0",
+            tables=macros["SOURCE"],
+            output="candidates.csv",
+            quote_csv=True,
+        )
+        utilities.rows_in_file("candidates.csv", "SIGNAL")
+        if macros.compare("SIGNAL", "GT", "0"):
+            aed.process("candidates.csv")
 ```
 
-The session owns one original `SPFManager` instance so query/report/macro state can survive across calls.
+Launch with `python -m scripthost_portable.launcher job.py --workdir <directory>`.
 
-Avoid a new session manager/service abstraction.
+The launcher selects Python for `.py` files. `ScriptHostJob.python_path` is the explicit worker input; existing `script_path`/`script_text` remain VG2 inputs. Exactly one input is required. Python files must define a callable `run()`. They import only the five public facade objects. There is no public session API.
 
-### Small runtime refactor allowed
+## Hidden ownership
 
-`PortableScriptHostRuntime.run_text()` currently contains the manager construction and command-line initialization.
+`runtime._execution()` reuses existing manager construction, command-line options and cwd handling for both VG2 and Python. `run_python()` binds that manager privately during module loading and `run()`, calls original final cleanup and restores cwd. The binding is removed and its macro table dropped on exit, including exceptions. Nested Python execution is rejected before a second manager can disturb the current job.
 
-Factor that setup into one private helper in `runtime.py` and reuse it from both:
+All facade calls resolve that same original manager. `GetQuery()` still creates original task classes; those tasks share `SPFGlobals` state. The manager alone does not isolate globals or the environment. One fresh child per job remains required; in-process entrypoints are not thread-safe. Environment mutations retain original behavior and disappear when the worker exits.
 
-- `PortableScriptHostRuntime`;
-- `script_session()`.
-
-Do not duplicate the initialization logic.
-
-## Facade behavior
-
-### `macros`
-
-Minimum public surface:
+## Macros and utilities
 
 ```python
-macros[name]
+macros.load_csv(path, continue_on_error=False)
+macros["NAME"]
 macros.get(name)
 macros.set(name, value)
-macros.compare(lhs, op, rhs)
 macros.substitute(text)
-macros.load_csv(path, continue_on_error=False)
-```
-
-Rules:
-
-- comparison delegates to original `Utilities.CompareVars`;
-- substitution delegates to original `Utilities.Substitute_Macro` or the same original primitives it uses;
-- CSV loading reuses original `MemTable.LoadFromFile(..., EANImport=False)` behavior rather than pandas or a new CSV macro implementation;
-- original `START-MACRO` uses `Rowidx=1`; `load_csv()` therefore exposes only the first data row and never iterates rows 2..N;
-- `macros["MARS"]` and similar lookups are simple public syntax; internally they may resolve through the original `Substitute_Macro("<<<MARS>>>", parentMacTables, 1, 0)` machinery, but that call is backend-only and must never appear in generated Python;
-- `load_csv()` returns `True` when the original macro scope should execute and `False` when it should be skipped;
-- the second `START-MACRO` argument maps to `ContinueOnError`: missing file + `False` raises, missing file + `True` returns `False`, and an empty file returns `False`;
-- user `macro_overrides` are explicit job inputs, not a second macro engine.
-
-Initial generated form:
-
-```python
-if macros.load_csv("configsets.csv"):
-    query.run(
-        node=macros["MARS"],
-        ...
-    )
-```
-
-This is deliberately ordinary Python. Generated/user-facing code must not expose `MemTable`, `parentMacTables`, `Rowidx`, `MyMode`, or direct `Substitute_Macro(...)` calls.
-
-The two current target jobs have one `START-MACRO` scope each. Do not build a generalized nested-scope lifecycle in Stage 1. If nested `START-MACRO` appears in a future target, characterize the original `parentMacTables` lifecycle first and then add the minimum support required.
-
-### `utilities`
-
-Implement only the utility needed by the two target jobs first:
-
-```python
+macros.compare(lhs, operator, rhs)
 utilities.rows_in_file(path, variable)
 ```
 
-Reuse original methods:
+- Loading executes original `StartMacroTask`, which uses `MemTable.LoadFromFile(..., EANImport=False)`. Only data row 1 supplies macros; rows 2..N are not iterations. One successful CSV scope per job is supported.
+- A header-only CSV returns `False`. A missing CSV raises `FileNotFoundError`, or returns `False` with `continue_on_error=True`.
+- **Discovery differing from the earlier plan:** a zero-byte file has no header; the original loader raises `StopIteration` and its error handler exposes `IndexError`. The facade preserves this failure.
+- Ordinary names resolve through original `Substitute_Macro`, preserving case-insensitive lookup, empty values and missing-name errors. Original `Substitute_Global_Var` handles special/CLI tokens and environment substitution first, as in the original entrypoint.
+- **Bracket behavior:** the original CSV importer normalizes `[SITE]` to `(SITE)`, so `SITE` lookup then fails. The facade preserves this behavior.
+- CSV macros and environment variables remain separate original namespaces. `macros.set("VALUE", "7")` delegates to original `setEnv`; read it with `macros["%VALUE%"]` or `macros.substitute("<<<%VALUE%>>>")`. It does not override an ordinary CSV column of the same name.
+- Comparison executes original `IfThenTask`, preserving environment-name and `VAR(...)`/`ENV(...)` argument resolution and original `CompareVars` semantics.
+- Row counting executes original `RowsInFileTask` (original `getRowCountFromFile` and `setEnv`) and returns its environment-visible count. Original count errors set `-1` and continue.
 
-- `getRowCountFromFile(...)`;
-- `setEnv(...)`.
-
-Do not port main's `CsvIO.row_count` implementation.
-
-Keep the adapter close to the original parameter contract. Only hide parameters that are truly backend/session plumbing.
-
-### `query`
-
-Minimum public shape:
+## Queries
 
 ```python
-query.run(sql=..., ...)
+query.run(sql=..., output=..., engine="SQLite", node=None, tables=None, **options)
 ```
 
-Do not execute SQL through main's `SqliteEngine`, `OracleClient`, or `PipelineContext`.
+The facade internally constructs one options/body block and calls the existing manager's `GetQuery()` and original `task.execute()`. Original tasks still reach portability overrides and existing query transport. No query preprocessing, SQLite engine, Oracle client or output writer is reimplemented.
 
-Preferred implementation order:
+Only `SQLite` and `VA` engines and `SQLite`/`SQLPlus` OLEDB values are supported. The scoped readable names are:
 
-1. reuse the same original `SPFManager.Process_Query` / original task construction path on the session's existing manager;
-2. execute the resulting original task on that same manager/session;
-3. allow current query portability overrides to be reached naturally.
+| Python name | Original option |
+| --- | --- |
+| `node`, `engine`, `tables`, `output` | NODE, ENGINE, TABLE, CSV |
+| `oledb`, `username`, `password` | OLEDB, UN, PW |
+| `headers`, `unique_headers`, `quote_csv` | HEADERS, HEADERS_UNIQUE, QUOTECSV |
+| `ct_rows`, `ct_value`, `ct_header`, `ct_array` | CTROW, CTVALUE, CTHEADER, CTARRAY |
+| `record`, `reset`, `show_result`, `timestamp` | RECORD, RESET, T, TS |
+| `delete`, `sqlite_types`, `instance`, `prompt` | DELETE, SQLITE_DT, INSTANCE, PROMPT-TEXT |
+| `workdir`, `hadoop_server` | WORKDIR, HADOOP_SERVER_DEFAULT |
 
-If isolated `Process_Query` use is not safe, call the original concrete task class directly. Do not respond by reimplementing query semantics.
+Unknown options fail explicitly. Newlines/block tokens in option values and legacy task blocks in SQL/template bodies are rejected. `quote_csv=True` requests the original CSV writer; it does not promise quotation of every field.
 
-The public arguments should mirror the actual options needed by the current jobs, normalized to readable snake_case names. Examples include:
-
-- `node`;
-- `oledb`;
-- `engine`;
-- `output`;
-- `tables`;
-- `headers`;
-- current crosstab fields;
-- `record`;
-- the few current flags such as reset/quote/t.
-
-Do not design a complete SQLPathFinder option schema. Unknown compiler input must fail instead of being silently discarded.
-
-Internally, it is acceptable for the adapter to reconstruct one legacy OPTIONS/body block and feed it to the original parser/task machinery. That is reuse, not duplication, provided the generated Python exposes normal parameters rather than raw legacy blocks.
-
-### `reports`
-
-Minimum surface:
+## Reports and AED
 
 ```python
-reports.run(...)
-reports.defer(...)
-reports.layout(...)
-reports.delete(...)
+reports.run(template, **options)
+reports.defer(template, report_id=..., **options)
+reports.layout(template, **options)
+reports.delete(instance=None)
+aed.process(path)
 ```
 
-These must route to original report task behavior because the original report path is stateful.
+Report templates retain the original report data/layout format, without an options block. Options are `instance`, `prompt`, `app_server`, `outlook`, `json_only`, and `chart_instance`. Calls reach original HTML tasks with the same hidden manager and shared original report state. Templates must satisfy the original backend's layout requirements; abbreviated layouts are not repaired automatically.
 
-Do not use main's independent `HtmlReport` implementation.
+AED delegates to existing `aed_api.process_candidates`. Python jobs use prepared CSV/environment inputs; Stage 1 does not infer AED bootstrap needs by scanning Python source or translate `prepare_job` into another configuration path. Deployment bootstrap/cutover and full-job differential parity belong to later work. External AED side effects are mocked in API tests.
 
-As with query calls, reconstructing a small original report block internally is acceptable if that is the cleanest way to reuse the original task machinery.
+## Validation and boundary
 
-### `aed`
+`tests/scripthost_portable/test_script_api.py` characterizes plain `run()`, one manager, original macro edge cases, row counting/comparison, local SQLite, controlled Oracle transport, report lifecycle, AED delegation, worker isolation and cwd/binding cleanup.
 
-Use the already-current implementation:
+On Windows, installed native drivers can bypass fake readers. Run offline tests with `SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1`; production driver selection is unchanged. Existing baseline failures must be reported separately from regressions.
 
-```python
-aed.process("AED_CANDIDATES.csv")
-```
-
-Delegate directly to `scripthost_portable.aed_api.process_candidates`.
-
-Do not create another AED adapter layer beyond the public call needed by generated code.
-
-## Macro overrides
-
-Keep user-edited values obvious at the top of generated files:
-
-```python
-OPERATION = "2303"
-DURATION = "TRUNC(SYSDATE) - 2"
-
-MACRO_OVERRIDES = {
-    "OPERATION": OPERATION,
-    "DURATION": DURATION,
-}
-```
-
-`script_session(macro_overrides=...)` installs them using the same macro/environment mechanisms used by the backend.
-
-Do not invent precedence rules. Add characterization tests against the existing runtime before finalizing override precedence relative to the first macro CSV row and environment values.
-
-## Tests
-
-Add focused tests around behavior, not implementation shape.
-
-Required:
-
-- session creates and reuses one original manager;
-- session restores cwd/state on exit;
-- row count matches original `ROWS-IN-FILE`;
-- `CompareVars` parity for the operators used by current jobs;
-- `macros.load_csv()` uses row 1 only and never exposes row 2..N;
-- `macros["NAME"]` resolves values with original macro lookup semantics while hiding backend calls;
-- empty/missing-file return/raise behavior matches original `START-MACRO`;
-- a query adapter call reaches the existing portable query transport through original task handling;
-- report calls preserve state across run/defer/layout/delete;
-- AED facade calls existing `aed_api.process_candidates`;
-- using any facade outside `script_session()` fails clearly.
-
-## Exit criteria
-
-Stage 1 is complete when a small hand-written Python script using only the public facade can express the current job flow and its calls reach the original backend.
-
-Do not restore the compiler until this is proven.
+Stage 1 excludes nested macro scopes, RUN-LOOP, historical utility coverage, new runtime engines, compatibility frameworks and Stage 2 code. The direct VG2 runtime remains the later parity oracle.

@@ -29,52 +29,42 @@ from scripthost_portable.script_api import (
     macros,
     query,
     reports,
-    script_session,
     utilities,
 )
 
-OPERATION = "2303"
-DURATION = "TRUNC(SYSDATE) - 2"
-
-MACRO_OVERRIDES = {
-    "OPERATION": OPERATION,
-    "DURATION": DURATION,
-}
-
 def run():
-    with script_session(macro_overrides=MACRO_OVERRIDES):
-        if macros.load_csv("configsets.csv"):
+    if macros.load_csv("configsets.csv"):
+        query.run(
+            sql="""SELECT ...""",
+            engine="VA",
+            node=macros["MARS"],
+            output="PARMI_IPM_RAW.csv",
+        )
+
+        utilities.rows_in_file(
+            path="PARMI_IPM_RAW.csv",
+            variable="RowsInFile",
+        )
+
+        if macros.compare("RowsInFile", "GT", "0"):
             query.run(
                 sql="""SELECT ...""",
-                node=macros["MARS"],
-                output="PARMI_IPM_RAW.csv",
+                engine="SQLite",
+                output="AED_CANDIDATES.csv",
             )
 
             utilities.rows_in_file(
-                path="PARMI_IPM_RAW.csv",
-                variable="RowsInFile",
+                path="AED_CANDIDATES.csv",
+                variable="SIGNAL",
             )
 
-            if macros.compare("RowsInFile", "GT", "0"):
-                query.run(
-                    sql="""SELECT ...""",
-                    engine="SQLite",
-                    output="AED_CANDIDATES.csv",
-                )
-
-                utilities.rows_in_file(
-                    path="AED_CANDIDATES.csv",
-                    variable="SIGNAL",
-                )
-
-                if macros.compare("SIGNAL", "GT", "0"):
-                    aed.process("AED_CANDIDATES.csv")
-
-if __name__ == "__main__":
-    run()
+            if macros.compare("SIGNAL", "GT", "0"):
+                aed.process("AED_CANDIDATES.csv")
 ```
 
-`macros.load_csv(...)` is a normal public function. It loads the macro file into the hidden session using the original `MemTable` path, exposes first-row values through simple lookups such as `macros["MARS"]`, and returns whether the original macro scope is active. The compiler uses `if macros.load_csv(...):` because the original `START-MACRO` skips its child scope for an empty file (and for a missing file when `ContinueOnError=Y`). The original backend calls such as `MemTable.LoadFromFile(...)` and `Substitute_Macro(...)` remain completely hidden from generated/user-facing Python.
+Launch Python files with `python -m scripthost_portable.launcher job.py --workdir <directory>`. The worker initializes one original manager, binds it privately while importing the file and calling `run()`, then cleans up. User code has no session/context parameter.
+
+`macros.load_csv(...)` is a normal public function. It loads the macro file into the hidden runtime using the original `MemTable` path, exposes first-row values through simple lookups such as `macros["MARS"]`, and returns whether the original macro scope is active. The compiler uses `if macros.load_csv(...):` because the original `START-MACRO` skips its child scope for a header-only file (and for a missing file when `ContinueOnError=Y`). The original backend calls such as `MemTable.LoadFromFile(...)` and `Substitute_Macro(...)` remain completely hidden from generated/user-facing Python.
 
 ## Non-negotiable design rules
 
@@ -157,7 +147,7 @@ VG2 -> parse -> resolve -> emit readable Python
                  |       |       |       |
               macros  query  reports  utilities
                  \       |       |      /
-                  hidden current session
+                  hidden current runtime
                           |
                     original SPFManager
                           |

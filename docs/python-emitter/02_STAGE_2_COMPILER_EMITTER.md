@@ -63,13 +63,12 @@ Conceptually:
 
 ```python
 def run():
-    with script_session(...):
-        if macros.load_csv("configsets.csv"):
-            query.run(...)
-            utilities.rows_in_file(...)
+    if macros.load_csv("configsets.csv"):
+        query.run(...)
+        utilities.rows_in_file(...)
 
-            if macros.compare("RowsInFile", "GT", "0"):
-                ...
+        if macros.compare("RowsInFile", "GT", "0"):
+            ...
 ```
 
 No `step_000x` function declarations and no call sites.

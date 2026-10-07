@@ -30,11 +30,13 @@ class ScriptHostJob:
     script_text: str | None = None
     execution_options: tuple[str, ...] = ()
     transport_config_reference: str | None = None
+    python_path: str | None = None
 
     def validate(self) -> None:
-        if (self.script_path is None) == (self.script_text is None):
+        sources = (self.script_path, self.script_text, self.python_path)
+        if sum(value is not None for value in sources) != 1:
             raise ValueError(
-                "Exactly one of script_path or script_text must be supplied."
+                "Exactly one of script_path, script_text or python_path must be supplied."
             )
         if not self.working_directory:
             raise ValueError("working_directory must be supplied.")
@@ -116,18 +118,19 @@ def _run_child(job: ScriptHostJob) -> ScriptHostJobResult:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             from .aed_api import prepare_job
 
-            script_text = job.script_text
-            if script_text is None:
-                script_text = Path(job.script_path or "").read_text(
-                    encoding="utf-8-sig"
-                )
-            script_text = prepare_job(workdir, script_text, job.script_path)
             runtime = PortableScriptHostRuntime()
-            succeeded = runtime.run_text(
-                script_text,
-                workdir,
-                execution_options=job.execution_options,
-            )
+            if job.python_path is not None:
+                succeeded = runtime.run_python_file(
+                    Path(job.python_path), workdir, execution_options=job.execution_options
+                )
+            else:
+                script_text = job.script_text
+                if script_text is None:
+                    script_text = Path(job.script_path or "").read_text(encoding="utf-8-sig")
+                script_text = prepare_job(workdir, script_text, job.script_path)
+                succeeded = runtime.run_text(
+                    script_text, workdir, execution_options=job.execution_options
+                )
         if not succeeded:
             return _failure(
                 "script_host_error",
