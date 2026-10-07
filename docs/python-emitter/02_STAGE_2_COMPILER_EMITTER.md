@@ -6,6 +6,48 @@ Reuse the proven compiler work from `main` to translate the current VG2 job subs
 
 This stage changes code generation, not runtime semantics.
 
+## Implemented Stage 2 boundary
+
+The compiler now uses `parse -> classify -> resolve -> emit` through
+`vg2c.compile_document()`, with `translate()` / `python -m vg2c` writing output.
+There is no runtime dispatch stage: Stage 1 receives the original SQL, table
+bindings, crosstab syntax and option values, then delegates preprocessing to the
+original backend. The reader hierarchy from `main` is not required for this path.
+
+Reused/adapted core: frontend block/options/source-span models and separator
+parsing, source-indexed `ScopeNode` opener/closer traversal, compiler facade,
+indentation writer and the small source-range/invocation/parameter identity
+models. `sql_lexer.py` is reused unchanged for narrowly selected editable settings.
+The utility registry, descriptor/editor schemas, resolved text copies, operand
+runtime emission, step wrappers and embedding are not restored.
+
+One macro scope per job is supported, matching the actual Stage 1 API. The
+compiler also rejects ordinary macro references after `END-MACRO`, because the
+facade retains its table until cleanup while original VG2 limits substitution
+to that scope. This is a compiler boundary, not a runtime lifecycle redesign.
+Unnamed positional macros, ELSE, RUN-LOOP and nonempty second comparison clauses
+remain unsupported. Malformed/duplicate options and unmatched control tokens
+raise source-located compile errors instead of best-effort output.
+
+Utility arguments use the original CSV quoting rules. `ROWS-IN-FILE` supports
+only full counting (`N`) and an empty archive name, matching its public facade.
+Utility `INSTANCE`, current-directory `WORKDIR` and `OUTLOOK=N` wrappers do not
+affect these selected task commands. Utility `PROMPT-TEXT` is omitted (logging
+only); query and report prompts remain explicit arguments.
+
+SQL and report templates retain their readable content, including original
+`SQL_Get_CSV_List`, `CrossTab->`, schema and named macro references. Only equality
+predicates for `operation` and the observed simple `out_date >=` date expressions
+are promoted to plain constants. Their default evaluated SQL is unchanged;
+comment/string contents and longer arithmetic expressions are not promoted.
+ICMPCS uses `TRUNC(SYSDATE) - 2`; CSR uses `SYSDATE - 1`. CSR's two comparisons
+are sibling scopes, and AED belongs to its first comparison.
+
+`EmittedScript.blocks` keeps stable block/invocation/parameter IDs, original
+source spans and generated character ranges. Generated source has no metadata
+comments, editor framework, generic context, session API or runtime imports
+beyond the five public objects. The installed runtime and launcher remain unchanged.
+
 ## Restore only compiler-side code
 
 Start from the `main` implementations and preserve them where they are already correct.

@@ -121,7 +121,9 @@ def test_report_preprocessing_preserves_records_and_cleans_embedded_text(
     ]
 
 
-def test_retired_package_trees_are_absent():
+def test_retired_runtime_and_editor_trees_are_absent():
     root = Path(__file__).resolve().parents[2]
-    for package in ("vg2c", "vg2c_new", "vg2c_ui"):
+    for package in ("vg2c_new", "vg2c_ui"):
         assert not (root / "src" / package).exists()
+    for package in ("utilities", "embedding", "editing.py", "semantics.py"):
+        assert not (root / "src/vg2c" / package).exists()

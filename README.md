@@ -70,13 +70,40 @@ instead of OS auth; `DATASYNCX_PASSWORD` supplies its password. Both may live in
 - SUPPORTED: exercised original behavior with asserted outputs in the documented subset.
 - UNRESOLVED: a known required platform boundary is unavailable (Linux email role verification).
 - UNCERTIFIED: no execution evidence for this capability or variant.
-- RETIRED: compiler, editor, generated-Python runtime, and migration/reference runtime.
+- RETIRED: editor, embedded/generated runtime, and migration/reference runtime.
 
 See [the utility matrix](docs/scripthost-utility-portability-matrix.md) for bounded
 capabilities and [historical live evidence](docs/session-2.6a-live-datasyncx-validation.md).
 Linux email recipient/role policy is preserved; no replacement sender is provided.
 
 See [runtime container instructions](docs/runtime-container.md) for the prototype image.
+
+## Clean Python compiler (Stage 2)
+
+Compile the two current targets against the installed Stage 1 API:
+
+```sh
+python -m vg2c ICMPCS.txt output/aed-migration/CSR_IAM_v2.aed.txt --out-dir output/clean-python
+python -m scripthost_portable.launcher output/clean-python/ICMPCS.py --workdir <prepared-job-directory>
+```
+
+The compiler restores parsing, classification, scope/source identity and direct
+emission from the useful `main` architecture. It emits one ordinary `run()` with
+calls to `macros`, `query`, `utilities`, `reports` and `aed`. `OPERATION` and
+simple `out_date >= SYSDATE - N` / `TRUNC(SYSDATE) - N` filters become editable
+constants; all other SQL/report content and query options reach the original API.
+The launcher owns runtime initialization. Generated files need the installed
+`scripthost_portable` package and do not import the compiler or embed runtime code.
+
+Only the two target jobs' operation surface is supported. Unsupported options,
+utilities, malformed scopes, multiple/nested macro scopes, positional macros and
+multi-clause conditions fail compilation. Utility prompt labels affect logging
+only and are omitted because Stage 1's utility facade has no prompt argument.
+Query/report prompts are retained. Macro references after `END-MACRO` are rejected
+because the API retains its loaded table until job cleanup.
+
+Stage 2 tests compilation, output structure and a small offline API smoke test.
+Full differential parity, deployment bootstrap and production cutover remain Stage 3.
 
 ## AED IAM jobs
 

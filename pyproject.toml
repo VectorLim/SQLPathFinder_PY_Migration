@@ -39,13 +39,13 @@ default = true
 system-certs = true
 
 [tool.setuptools]
-package-dir = {"" = ".", "scripthost_portable" = "src/scripthost_portable"}
+package-dir = {"" = ".", "scripthost_portable" = "src/scripthost_portable", "vg2c" = "src/vg2c"}
 py-modules = ["aed_updater"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["scripthost_portable*"]
+include = ["scripthost_portable*", "vg2c*"]
 
 [tool.setuptools.package-data]
 scripthost_portable = ["_vendor/SPSQL3_py/*.txt", "_vendor/SPSQL3_py/*.png", "*.crt"]
