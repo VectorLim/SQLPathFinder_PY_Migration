@@ -68,7 +68,7 @@ macros.get(name)
 macros.set(name, value)
 macros.compare(lhs, op, rhs)
 macros.substitute(text)
-macros.from_csv(path)
+macros.scope_csv(path, continue_on_error=False)
 ```
 
 Rules:
@@ -76,19 +76,20 @@ Rules:
 - comparison delegates to original `Utilities.CompareVars`;
 - substitution delegates to original `Utilities.Substitute_Macro` or the same original primitives it uses;
 - CSV loading reuses original `MemTable` behavior rather than pandas or a new CSV macro implementation;
-- `from_csv(path)` is an iterator because `START-MACRO` is a row loop;
-- each yielded iteration installs the current row into the hidden macro state and removes it afterwards;
-- nested macro CSV scopes must use the original nested-parent semantics, not a new independent stack if the original primitives can be reused;
+- original `START-MACRO` loads the file but substitutes child tasks with `Rowidx=1`; it does **not** iterate every data row;
+- `scope_csv(...)` is therefore a 0-or-1 control iterable: yield once with the first data row when the macro scope is active, or yield zero times when the original runtime would skip that scope;
+- the second `START-MACRO` argument maps to `ContinueOnError`; preserve the original missing/empty-file behavior instead of treating it as `prompt_off`;
+- nested macro CSV scopes must use the original `parentMacTables` lookup/fallback semantics, not a new independent stack if the original primitives can be reused;
 - user `macro_overrides` are explicit job inputs, not a second macro engine.
 
 Initial generated form:
 
 ```python
-for _ in macros.from_csv("configsets.csv"):
+for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
     ...
 ```
 
-Do not emit a fake one-row `with` scope.
+Do not iterate rows 2..N. The loop syntax is only a clean way to model the original scope being active zero or one time while still allowing an empty/skipped macro file to bypass its child body.
 
 ### `utilities`
 
@@ -186,7 +187,7 @@ MACRO_OVERRIDES = {
 
 `script_session(macro_overrides=...)` installs them using the same macro/environment mechanisms used by the backend.
 
-Do not invent precedence rules. Add characterization tests against the existing runtime before finalizing override precedence relative to macro CSV rows and environment values.
+Do not invent precedence rules. Add characterization tests against the existing runtime before finalizing override precedence relative to the first macro CSV row, parent macro tables, and environment values.
 
 ## Tests
 
@@ -198,8 +199,8 @@ Required:
 - session restores cwd/state on exit;
 - row count matches original `ROWS-IN-FILE`;
 - `CompareVars` parity for the operators used by current jobs;
-- macro CSV iterates every row;
-- nested macro substitution behavior is characterized;
+- macro CSV uses row 1 only and does not execute row 2..N;
+- nested `parentMacTables` substitution/fallback behavior is characterized;
 - a query adapter call reaches the existing portable query transport through original task handling;
 - report calls preserve state across run/defer/layout/delete;
 - AED facade calls existing `aed_api.process_candidates`;

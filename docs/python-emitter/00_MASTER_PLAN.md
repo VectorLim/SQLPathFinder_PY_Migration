@@ -43,7 +43,7 @@ MACRO_OVERRIDES = {
 
 def run():
     with script_session(macro_overrides=MACRO_OVERRIDES):
-        for _ in macros.from_csv("configsets.csv"):
+        for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
             query.run(
                 sql="""SELECT ...""",
                 node=macros["MARS"],
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     run()
 ```
 
-`for _ in macros.from_csv(...)` is intentional. Original `START-MACRO` iterates rows; a `with macros.from_csv(...)` API would incorrectly model multi-row macro files.
+`macros.scope_csv(...)` is intentionally a **0-or-1 control iterable**, not a row iterator. The original `StartMacroTask` loads the whole file but substitutes child tasks with `Rowidx=1` and executes the child list once. A non-empty file therefore activates exactly one scope using the first data row; an empty/skipped macro activates none. The second utility argument is `ContinueOnError`, not a prompt flag.
 
 ## Non-negotiable design rules
 
@@ -101,7 +101,7 @@ Both contain:
 - `HTML-DEFER` x1;
 - `HTML-LAYOUT` x2;
 - `HTML-DELETE` x2;
-- `START-MACRO`;
+- `START-MACRO` (first data row only; second argument is `ContinueOnError`);
 - `ROWS-IN-FILE`;
 - `IF-THEN`;
 - `AED`;

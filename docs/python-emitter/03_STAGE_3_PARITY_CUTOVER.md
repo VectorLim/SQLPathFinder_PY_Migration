@@ -31,7 +31,7 @@ For the supported ICMPCS and migrated CSR jobs compare:
 - query SQL after the same legacy preprocessing path;
 - row-count results;
 - macro-driven branch decisions;
-- number of macro-row iterations;
+- macro scope activation and confirmation that only row 1 is applied;
 - HTML/CSS/report artifacts;
 - AED candidate file handed to `aed_api`;
 - success/failure category for induced failures;
@@ -45,7 +45,7 @@ Where the adapter boundary is uncertain, capture current behavior first.
 
 Priority cases:
 
-1. macro CSV row iteration and nested parent-row lookup;
+1. first-row-only macro behavior, empty/missing-file handling, and nested `parentMacTables` lookup;
 2. macro/environment/explicit-override precedence;
 3. `CompareVars` numeric vs string operators;
 4. query option preprocessing and output/header behavior;
