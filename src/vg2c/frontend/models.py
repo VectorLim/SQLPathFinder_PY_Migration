@@ -5,6 +5,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from types import MappingProxyType
 
+from scripthost_portable.task_introspection import TaskDescriptor
 from vg2c.kind import Kind
 
 
@@ -46,9 +47,9 @@ class ParsedBlock:
 @dataclass(frozen=True, slots=True)
 class ClassifiedBlock(ParsedBlock):
     kind: Kind
-    reason: str
+    task: TaskDescriptor
 
-    def __init__(self, parsed: ParsedBlock, kind: Kind, reason: str) -> None:
+    def __init__(self, parsed: ParsedBlock, kind: Kind, task: TaskDescriptor) -> None:
         copy_dataclass_fields(parsed, self, ParsedBlock)
         object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "task", task)

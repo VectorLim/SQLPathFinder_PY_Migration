@@ -23,7 +23,7 @@ def run():
 
 Launch with `python -m scripthost_portable.launcher job.py --workdir <directory>`.
 
-The launcher selects Python for `.py` files. `ScriptHostJob.python_path` is the explicit worker input; existing `script_path`/`script_text` remain VG2 inputs. Exactly one input is required. Python files must define a callable `run()`. They import only the five public facade objects. There is no public session API.
+The worker selects Python for `.py` files supplied through `ScriptHostJob.script_path`, case-insensitively. This lets the existing launcher and unchanged imserverless `main.handle()` use the same selection boundary. `python_path` remains the explicit Python input; other `script_path` files and `script_text` remain VG2 inputs. Exactly one input is required. Python files must define a callable `run()`. They import only the five public facade objects. There is no public session API.
 
 ## Hidden ownership
 

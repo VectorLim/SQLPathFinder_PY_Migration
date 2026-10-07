@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from scripthost_portable.runtime import _spf_manager_type
+from scripthost_portable.task_introspection import inspect_task
 from vg2c import CompileError
 from vg2c.frontend import classify, parse
 from vg2c.kind import Kind
@@ -23,8 +25,8 @@ def test_parser_preserves_order_body_and_source_spans():
     text = "\ufeff" + job(block("/B=2\n/A=1", "left"), block("/CSV=x.csv", "right\n"))
     blocks = parse(text.replace("\n", "\r\n").encode("utf-8"), Path("job.txt"))
     assert blocks[0].options.pairs == (("B", "2"), ("A", "1"))
-    assert blocks[0].body == "left"
-    assert blocks[1].body == "right"
+    assert blocks[0].body == "left\n"
+    assert blocks[1].body == "right\n"
     assert blocks[0].span.file == Path("job.txt")
     assert blocks[0].span.start_line == 1
     assert blocks[1].span.start_line == 7
@@ -34,8 +36,13 @@ def test_parser_inline_options_and_whitespace_separators():
     text = "/ENGINE=SQLite\n/CSV=x.csv\nSELECT 1\n   <----   New Query   ---->   \n"
     blocks = parse(text + block("/REPORT=HTML-DELETE", "N/A"))
     assert len(blocks) == 2
-    assert blocks[0].body == "SELECT 1"
+    assert blocks[0].body == "SELECT 1\n"
     assert classify(blocks)[0].kind is Kind.SQLITE_QUERY
+
+
+def test_parser_preserves_source_body_final_newline():
+    assert parse(block("/A=1", "payload\n"))[0].body == "payload\n"
+    assert parse(block("/A=1", "payload"))[0].body == "payload"
 
 
 @pytest.mark.parametrize(
@@ -69,7 +76,74 @@ def test_parser_rejects_lossy_recovery(text, code):
     ],
 )
 def test_scoped_classification(options, kind):
-    assert classify(parse(block(options)))[0].kind is kind
+    if kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
+        body = "SELECT 1"
+    elif kind is Kind.HTML_REPORT:
+        body = "TYPE<\\>HTML<\\>"
+    else:
+        body = ""
+    assert classify(parse(block(options, body)))[0].kind is kind
+
+
+def test_empty_query_is_not_classified_as_a_supported_query():
+    with pytest.raises(CompileError):
+        classify(parse(block("/ENGINE=SQLite\n/OLEDB=SQLite\n/CSV=result.csv")))
+
+
+def test_original_task_descriptors_are_inspected_without_execution(monkeypatch):
+    _spf_manager_type()
+    from SPFLib.SPFSQL3 import SPFTaskBase
+
+    def forbidden_execute(*args, **kwargs):
+        pytest.fail("task inspection must not execute a task")
+
+    monkeypatch.setattr(SPFTaskBase, "execute", forbidden_execute)
+    raw_blocks = [
+        block('/UTILITIES={START-MACRO} "config.csv" "N"'),
+        block('/UTILITIES={IF-THEN} "COUNT" "GT" "0"'),
+        block("/UTILITIES={END-IF}"),
+        block("/UTILITIES={END-MACRO}"),
+        block(
+            "/NODE=KM.MARS\n/UN=\n/PW=\n/OLEDB=SQLPlus\n/ENGINE=VA\n"
+            "/WORKDIR=.\\\n/CSV=result.csv\n/TABLE=source",
+            "SELECT 1",
+        ),
+        block("/REPORT=HTML-DEFER\n/ID=RPT1\n/INSTANCE=RPT1", "TYPE<\\>HTML<\\>"),
+    ]
+    expected = [
+        ("{START-MACRO}", "StartMacroTask", True, False, 0),
+        ("{IF-THEN}", "IfThenTask", True, False, 0),
+        ("{END-IF}", "EndIfTask", False, True, -1),
+        ("{END-MACRO}", "EndMacroTask", False, True, 0),
+        ("NQ_ORACLE_TASK", "nqOracleTask", False, False, 0),
+        ("HTML-DEFER", "HTMLDeferTask", False, False, 0),
+    ]
+    for index, (raw, values) in enumerate(zip(raw_blocks, expected)):
+        descriptor = inspect_task(raw, index)
+        assert (
+            descriptor.task_type,
+            descriptor.class_name,
+            descriptor.is_control_start,
+            descriptor.is_control_end,
+            descriptor.nest_level,
+        ) == values
+        assert descriptor.block_index == index
+
+
+def test_original_node_routing_precedes_compiler_backend_support(tmp_path):
+    raw = block(
+        "/NODE=prefix@uber@suffix\n/UN=\n/PW=\n/OLEDB=SQLPlus\n/ENGINE=VA\n"
+        "/CSV=result.csv\n/TABLE=source",
+        "SELECT 1",
+    )
+    descriptor = inspect_task(raw, 0)
+    assert (descriptor.task_type, descriptor.class_name) == ("NQ_UBER_Task", "nqUberTask")
+    with pytest.raises(CompileError) as error:
+        (tmp_path / "uber.txt").write_text(raw, encoding="utf-8")
+        from vg2c import compile_document
+
+        compile_document(tmp_path / "uber.txt")
+    assert error.value.code == "unsupported-engine"
 
 
 @pytest.mark.parametrize(

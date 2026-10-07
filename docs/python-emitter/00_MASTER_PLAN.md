@@ -15,6 +15,11 @@ VG2 text
 
 That authority must not be replaced.
 
+Compiler task identity is also obtained from original `SPFManager.GetQuery()` through
+the internal inspection adapter. Compiler parsing owns syntax/source locations;
+support validation, source-aware structural checks and emission remain compiler work.
+The runtime facade and emitter share the static option contract.
+
 The compiler code on `main` is useful for parsing, scope reconstruction, emission metadata, and editable Python generation, but its embedded/reimplemented runtime is not the runtime we want to restore.
 
 ## Goal

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 
+from scripthost_portable.api_contract import QUERY_OPTIONS, REPORT_OPTIONS
 from vg2c.diagnostics import fail
 from vg2c.emitter.globals import render_sql
 from vg2c.emitter.indent_writer import IndentWriter
@@ -21,40 +22,6 @@ from vg2c.kind import Kind
 from vg2c.operands import IfThen, ScopeNode, StartMacro, utility_arguments
 from vg2c.resolver.models import ResolvedProgram
 
-_QUERY_OPTIONS = {
-    "NODE": "node",
-    "OLEDB": "oledb",
-    "ENGINE": "engine",
-    "UN": "username",
-    "PW": "password",
-    "WORKDIR": "workdir",
-    "T": "show_result",
-    "TS": "timestamp",
-    "CSV": "output",
-    "TABLE": "tables",
-    "HEADERS": "headers",
-    "RECORD": "record",
-    "CTROW": "ct_rows",
-    "CTVALUE": "ct_value",
-    "CTHEADER": "ct_header",
-    "CTARRAY": "ct_array",
-    "RESET": "reset",
-    "DELETE": "delete",
-    "SQLITE_DT": "sqlite_types",
-    "QUOTECSV": "quote_csv",
-    "HEADERS_UNIQUE": "unique_headers",
-    "INSTANCE": "instance",
-    "PROMPT-TEXT": "prompt",
-    "HADOOP_SERVER_DEFAULT": "hadoop_server",
-}
-_REPORT_OPTIONS = {
-    "INSTANCE": "instance",
-    "PROMPT-TEXT": "prompt",
-    "APP_SERVER_DEFAULT": "app_server",
-    "OUTLOOK": "outlook",
-    "JSON-ONLY": "json_only",
-    "CHART-INSTANCE": "chart_instance",
-}
 _POSITIONAL_NAMES = {
     "macros.load_csv": ("path",),
     "macros.compare": ("lhs", "operator", "rhs"),
@@ -120,10 +87,10 @@ def emit(program: ResolvedProgram) -> EmittedScript:
             options = block.options.lookup
             if not options.get("CSV") or not block.body.strip():
                 fail("query-arguments", "A query needs /CSV and a nonempty SQL body.", block)
-            keywords = [("sql", render_sql(block.body.strip(), constants))]
+            keywords = [("sql", render_sql(block.body, constants))]
             keywords.append(("engine", repr("VA" if block.kind is Kind.SQL_QUERY else "SQLite")))
             keywords.extend(
-                (_QUERY_OPTIONS[key], _value(value))
+                (QUERY_OPTIONS[key], _value(value))
                 for key, value in options.items()
                 if key != "ENGINE"
             )
@@ -132,7 +99,7 @@ def emit(program: ResolvedProgram) -> EmittedScript:
             options = block.options.lookup
             report = options["REPORT"].upper().removeprefix("HTML-").lower()
             keywords = [
-                (_REPORT_OPTIONS[key], _value(value))
+                (REPORT_OPTIONS[key], _value(value))
                 for key, value in options.items()
                 if key not in {"REPORT", "ID"}
             ]
@@ -147,7 +114,7 @@ def emit(program: ResolvedProgram) -> EmittedScript:
                     if not options.get("ID"):
                         fail("report-id", "HTML-DEFER needs /ID.", block)
                     keywords.insert(0, ("report_id", _value(options["ID"])))
-                call(block, f"reports.{report}", (string_literal(block.body.strip()),), keywords)
+                call(block, f"reports.{report}", (string_literal(block.body),), keywords)
         elif block.kind is Kind.ROWS_IN_FILE:
             args = utility_arguments(block)
             if len(args) not in {2, 3, 4} or not all(args[:2]):
@@ -177,7 +144,11 @@ def emit(program: ResolvedProgram) -> EmittedScript:
     header = _API_IMPORT + "\n\n"
     if constants:
         header += "".join(f"{name} = {value!r}\n" for name, value in constants.items()) + "\n\n"
-    source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
+    source = header + writer.source() + (
+        '\n\nif __name__ == "__main__":\n'
+        '    raise SystemExit("Use python -m scripthost_portable.launcher '
+        '<job.py> --workdir <directory>.")\n'
+    )
     shift = header.count("\n")
     records = {line + shift: block for line, block in records.items()}
     return EmittedScript(source, (_API_IMPORT,), _metadata(source, records))
@@ -191,11 +162,11 @@ def _value(value: str) -> str:
 def _validate_options(block: ClassifiedBlock) -> None:
     options = block.options.lookup
     if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
-        allowed = _QUERY_OPTIONS.keys()
+        allowed = QUERY_OPTIONS.keys()
     elif block.kind is Kind.HTML_REPORT:
         report = options["REPORT"].upper()
         allowed = (
-            {"REPORT", "INSTANCE"} if report == "HTML-DELETE" else {"REPORT", *_REPORT_OPTIONS}
+            {"REPORT", "INSTANCE"} if report == "HTML-DELETE" else {"REPORT", *REPORT_OPTIONS}
         )
         if report == "HTML-DEFER":
             allowed.add("ID")

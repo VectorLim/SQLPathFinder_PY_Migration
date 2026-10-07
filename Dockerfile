@@ -10,8 +10,11 @@ RUN apt-get update \
     && chown scripthost:scripthost /app
 COPY pyproject.toml README.md aed_updater.py ./
 COPY src/scripthost_portable ./src/scripthost_portable
+COPY src/vg2c ./src/vg2c
 COPY install_packages/aed_client_apikey-6.2.0-py3-none-any.whl ./install_packages/
 COPY ICMPCS.txt CSR_IAM_v2.txt ./jobs/
+COPY output/aed-migration/CSR_IAM_v2.aed.txt ./jobs/
+COPY output/clean-python/*.py ./jobs/
 RUN python -m pip install --no-cache-dir -e . \
     ./install_packages/aed_client_apikey-6.2.0-py3-none-any.whl
 USER scripthost
@@ -21,9 +24,11 @@ CMD ["--help"]
 FROM runtime AS validation
 USER root
 RUN python -m pip install --no-cache-dir pytest
+COPY ICMPCS.txt main.py ./
+COPY output ./output
 COPY tests ./tests
 USER scripthost
 ENTRYPOINT ["python", "-m", "pytest"]
-CMD ["tests/scripthost_portable", "-q", "-p", "no:cacheprovider"]
+CMD ["tests/scripthost_portable", "tests/compiler", "tests/test_imserverless_main.py", "-q", "-p", "no:cacheprovider"]
 
 FROM runtime AS final

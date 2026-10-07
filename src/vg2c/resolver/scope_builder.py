@@ -1,4 +1,4 @@
-"""Main's opener/closer traversal, narrowed to one macro scope and IF-THEN."""
+"""Source-aware traversal using original ScriptHost controller descriptors."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import re
 
 from vg2c.diagnostics import fail
 from vg2c.frontend.models import ClassifiedBlock
-from vg2c.kind import Kind
 from vg2c.operands import IfThen, ScopeNode, StartMacro, utility_arguments
 
 _PLACEHOLDER = re.compile(r"<<<(.*?)>>>")
@@ -25,8 +24,9 @@ def build_scope_tree(blocks: list[ClassifiedBlock]) -> ScopeNode:
             text = block.body + "\n" + "\n".join(block.options.lookup.values())
             if any(not m.group(1) for m in _PLACEHOLDER.finditer(text)):
                 fail("positional-macro", "Unnamed positional macros are unsupported.", block)
-            token = block.reason if block.kind is Kind.MACRO_CONTROL else None
-            if token in {"{END-IF}", "{END-MACRO}"}:
+            task = block.task
+            token = task.task_type
+            if task.is_control_end:
                 if utility_arguments(block):
                     fail("control-arguments", f"{token} takes no arguments.", block)
                 if token != closer:
@@ -43,7 +43,9 @@ def build_scope_tree(blocks: list[ClassifiedBlock]) -> ScopeNode:
                         "Macro references outside START-MACRO are unsupported.",
                         block,
                     )
-            if token in {"{START-MACRO}", "{IF-THEN}"}:
+            if task.is_control_start:
+                if task.nest_level != 0:
+                    fail("control-structure", "Unsupported original controller nesting.", block)
                 if token == "{START-MACRO}":
                     if in_macro or macro_seen:
                         fail(

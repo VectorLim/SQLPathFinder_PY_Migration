@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +8,7 @@ from pathlib import Path
 
 from scripthost_portable import QueryConfigurationError, use_reader_factory
 from scripthost_portable.worker import ScriptHostJob, _run_child, run_job
+from vg2c import compile_document
 
 
 def block(*options: str, body: str = "") -> str:
@@ -45,6 +47,40 @@ def test_worker_uses_one_fresh_process_per_job(tmp_path: Path) -> None:
     assert "result.txt" in second.generated_outputs
     assert (first_dir / "result.txt").read_text(encoding="utf-8") == "first"
     assert (second_dir / "result.txt").read_text(encoding="utf-8") == "second"
+
+
+def test_worker_accepts_generated_python_path_and_keeps_child_isolation(tmp_path: Path) -> None:
+    source = tmp_path / "query.txt"
+    source.write_text(
+        '<OPTIONS>\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
+        '</OPTIONS>\nSELECT value FROM measurements',
+        encoding="utf-8",
+    )
+    generated = tmp_path / "query.py"
+    generated.write_text(compile_document(source).emitted.source, encoding="utf-8")
+    workdir = tmp_path / "python-job"
+    workdir.mkdir()
+    (workdir / "measurements.csv").write_text("value\n42\n", encoding="utf-8")
+
+    result = run_job(
+        ScriptHostJob(working_directory=str(workdir), script_path=str(generated)), timeout=60
+    )
+
+    assert result.success, result
+    assert result.child_pid is not None and result.child_pid != os.getpid()
+    assert "result.csv" in result.generated_outputs
+    with (workdir / "result.csv").open(encoding="utf-8-sig", newline="") as stream:
+        assert list(csv.reader(stream)) == [["value"], ["42"]]
+
+    explicit_dir = tmp_path / "explicit"
+    explicit_dir.mkdir()
+    (explicit_dir / "measurements.csv").write_text("value\n42\n", encoding="utf-8")
+    explicit = run_job(
+        ScriptHostJob(working_directory=str(explicit_dir), python_path=str(generated)),
+        timeout=60,
+    )
+    assert explicit.success, explicit
+    assert (explicit_dir / "result.csv").exists()
 
 
 def test_parallel_workers_do_not_share_cwd_or_outputs(tmp_path: Path) -> None:

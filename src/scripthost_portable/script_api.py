@@ -13,6 +13,8 @@ import os
 from collections import OrderedDict
 from contextlib import contextmanager
 
+from .api_contract import QUERY_OPTIONS, REPORT_OPTIONS
+
 __all__ = ["aed", "macros", "query", "reports", "utilities"]
 
 # ponytail: process-global binding; use the existing fresh-child worker per job.
@@ -119,15 +121,9 @@ class _Utilities:
         return int(os.environ[variable])
 
 
-# Only query options present in the two Stage 1 target jobs.
 _QUERY_OPTIONS = {
-    "oledb": "OLEDB", "username": "UN", "password": "PW",
-    "headers": "HEADERS", "ct_rows": "CTROW", "ct_value": "CTVALUE",
-    "ct_header": "CTHEADER", "ct_array": "CTARRAY", "record": "RECORD",
-    "reset": "RESET", "show_result": "T", "timestamp": "TS", "delete": "DELETE",
-    "sqlite_types": "SQLITE_DT", "quote_csv": "QUOTECSV", "unique_headers": "HEADERS_UNIQUE",
-    "instance": "INSTANCE", "prompt": "PROMPT-TEXT", "workdir": "WORKDIR",
-    "hadoop_server": "HADOOP_SERVER_DEFAULT",
+    public: legacy for legacy, public in QUERY_OPTIONS.items()
+    if public not in {"node", "engine", "output", "tables"}
 }
 
 
@@ -138,26 +134,30 @@ def _options(values: dict, allowed: dict) -> dict:
     return {allowed[name]: value for name, value in values.items()}
 
 
+def _query_task_options(*, output, engine="SQLite", node=None, tables=None, **options):
+    """Prepare the same original task options for execution and inspection."""
+    if engine.upper() not in {"SQLITE", "VA"}:
+        raise ValueError(f"Unsupported Stage 1 query engine: {engine}")
+    values = {
+        "NODE": node if node is not None else ".\\", "UN": "", "PW": "",
+        "OLEDB": "SQLite" if engine.upper() == "SQLITE" else "SQLPlus",
+        "ENGINE": engine, "WORKDIR": ".\\", "CSV": output, "TABLE": tables,
+    }
+    values.update(_options(options, _QUERY_OPTIONS))
+    expected_oledb = "SQLITE" if engine.upper() == "SQLITE" else "SQLPLUS"
+    if values["OLEDB"].upper() != expected_oledb:
+        raise ValueError(f"Unsupported Stage 1 oledb for {engine}: {values['OLEDB']}")
+    return values
+
+
 class _Query:
     def run(self, *, sql: str, output, engine="SQLite", node=None, tables=None, **options):
-        if engine.upper() not in {"SQLITE", "VA"}:
-            raise ValueError(f"Unsupported Stage 1 query engine: {engine}")
-        values = {
-            "NODE": node if node is not None else ".\\", "UN": "", "PW": "",
-            "OLEDB": "SQLite" if engine.upper() == "SQLITE" else "SQLPlus",
-            "ENGINE": engine, "WORKDIR": ".\\", "CSV": output, "TABLE": tables,
-        }
-        values.update(_options(options, _QUERY_OPTIONS))
-        expected_oledb = "SQLITE" if engine.upper() == "SQLITE" else "SQLPLUS"
-        if values["OLEDB"].upper() != expected_oledb:
-            raise ValueError(f"Unsupported Stage 1 oledb for {engine}: {values['OLEDB']}")
-        _execute(sql, values)
+        _execute(sql, _query_task_options(
+            output=output, engine=engine, node=node, tables=tables, **options,
+        ))
 
 
-_REPORT_OPTIONS = {
-    "instance": "INSTANCE", "prompt": "PROMPT-TEXT", "app_server": "APP_SERVER_DEFAULT",
-    "outlook": "OUTLOOK", "json_only": "JSON-ONLY", "chart_instance": "CHART-INSTANCE",
-}
+_REPORT_OPTIONS = {public: legacy for legacy, public in REPORT_OPTIONS.items()}
 
 
 class _Reports:

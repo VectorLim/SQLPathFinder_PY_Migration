@@ -16,12 +16,9 @@ def main() -> int:
     parser.add_argument("--workdir", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=None)
     args = parser.parse_args()
-    path = str(args.script.resolve())
-    is_python = args.script.suffix.lower() == ".py"
     result = run_job(
         ScriptHostJob(
-            python_path=path if is_python else None,
-            script_path=None if is_python else path,
+            script_path=str(args.script.resolve()),
             working_directory=str(args.workdir.resolve()),
         ),
         timeout=args.timeout,

@@ -20,6 +20,14 @@ job; the child enters original ScriptHost. There is no web server or editor.
 The production stage excludes tests and private DataSyncX; validation adds tests.
 R is installed for original local interpreter tasks.
 
+Both compiler and generated jobs are included. Run prepared Python jobs through
+the same launcher, for example `/app/jobs/ICMPCS.py --workdir /work`. The worker
+selects `.py` case-insensitively, so the imserverless image can set
+`SCRIPT_PATH=/app/jobs/ICMPCS.py` without changing `main.py` or `handle()`.
+Supply the existing prepared `configsets.csv`, AED configuration/environment and
+history inputs in the work directory; Python jobs do not automatically bootstrap
+AED configuration. Direct `python job.py` exits with launcher instructions.
+
 For live corporate queries, extend the runtime image in your corporate environment
 with the approved DataSyncX 1.1.6 distribution and its native database/authentication
 prerequisites. Configure network/CA and supply credentials at runtime. The inspected
@@ -28,5 +36,5 @@ needed. Never copy credentials into an image or the build context.
 
 Credential-free Linux/container certification does not certify corporate database
 connectivity inside the container. That remains UNCERTIFIED until run on the target
-network with the approved dependencies. Local Docker Desktop currently refuses
-engine access; GitHub Actions provides the container gate.
+network with the approved dependencies. Stage 3 local Linux/container evidence
+is recorded separately from live-service readiness.

@@ -17,7 +17,8 @@ FORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font
 FORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle
 FORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle
 FORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle
-FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>""",
+FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>
+""",
         instance='22697',
         prompt='Step 1-1. create revision footer',
         app_server='atd_atm.hadoop',
@@ -44,7 +45,8 @@ FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\
 <table class="tblout">
 <tr class="tblout"><td class="tblout"></td></tr>
 </table>
-</td></tr></table>""",
+</td></tr></table>
+""",
         outlook='N',
         instance='22697',
         json_only='N',
@@ -100,7 +102,8 @@ AND      f0.owner <> 'EMPTYFOUP'
 )
 WHERE
               Interposer_SLI Is Not Null  
-/*END SQL*/""",
+/*END SQL*/
+""",
             engine='VA',
             node=macros['MARS'],
             username='',
@@ -188,7 +191,8 @@ GROUP BY
          ,media_in_x
          ,media_in_y
          ,parameter
-/*END SQL*/""",
+/*END SQL*/
+""",
             engine='VA',
             node=macros['ARIES'],
             username='',
@@ -244,7 +248,8 @@ FROM
            [yeuchuan_a1_22697] a1
  LEFT OUTER JOIN [yeuchuan_a0_22697] a0
   ON a1.[lot_1] = a0.[lot] 
- AND a1.[operation_1] = a0.[operation]""",
+ AND a1.[operation_1] = a0.[operation]
+""",
             engine='SQLite',
             reset='Y',
             node='.\\',
@@ -454,7 +459,8 @@ T_L0_Result
 ) t /*L2*/
 WHERE
               [FlagLot] = '1' 
-;""",
+;
+""",
             engine='SQLite',
             node='.\\',
             oledb='SQLite',
@@ -473,7 +479,8 @@ WHERE
             hadoop_server='ATD_ATM.HADOOP',
         )
         query.run(
-            sql='SELECT DISTINCT facility AS FACILITY, lot AS LOT FROM [IPM_Data];',
+            sql="""SELECT DISTINCT facility AS FACILITY, lot AS LOT FROM [IPM_Data];
+""",
             engine='SQLite',
             node='.\\',
             oledb='SQLite',
@@ -505,7 +512,8 @@ AT-TOP-OF-REPORT<\\\\><\\\\>CWF_MLINCO_AED<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\
 COLUMN-DATA<\\\\><\\\\>facility<\\\\>operation<\\\\>tool_entity<\\\\>primary_entity<\\\\>processing_end_date<\\\\>lot<\\\\>prodgroup3<\\\\>product<\\\\>visual_id<\\\\>ws_loss_code<\\\\>media_in_x<\\\\>media_in_y<\\\\>height<\\\\>patch_lift_roi1<\\\\>patch_lift_roi2<\\\\>patch_lift_roi3<\\\\>patch_lift_roi4<\\\\>patch_lift_roi5<\\\\>patch_lift_roi6<\\\\>patch_lift_roi7<\\\\>patch_lift_roi8<\\\\>patch_lift_roi_max<\\\\>lot_1<\\\\>patch_sli<\\\\>interposer_sli<\\\\>nco_risk
 COLUMN-HEADERS<\\\\><\\\\>Facility<\\\\>Operation<\\\\>Tool Entity<\\\\>Primary Entity<\\\\>Processing End Date<\\\\>Lot<\\\\>Prodgroup3<\\\\>Product<\\\\>Visual Id<\\\\>Ws Loss Code<\\\\>Media In X<\\\\>Media In Y<\\\\>Height<\\\\>Patch Lift Roi1<\\\\>Patch Lift Roi2<\\\\>Patch Lift Roi3<\\\\>Patch Lift Roi4<\\\\>Patch Lift Roi5<\\\\>Patch Lift Roi6<\\\\>Patch Lift Roi7<\\\\>Patch Lift Roi8<\\\\>Patch Lift Roi Max<\\\\>Lot 1<\\\\>Patch Sli<\\\\>Interposer Sli<\\\\>Nco Risk
 COLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left
-COLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>""",
+COLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
+""",
                 report_id='MYREPORT3',
                 instance='22697',
                 prompt='Step 6-6. sending notification',
@@ -548,7 +556,8 @@ IHJ:revision.htm
 <table class="tblout">
 <tr class="tblout"><td class="tblout"></td></tr>
 </table>
-</td></tr></table>""",
+</td></tr></table>
+""",
                 outlook='N',
                 instance='22697',
                 json_only='N',
@@ -561,4 +570,4 @@ IHJ:revision.htm
 
 
 if __name__ == "__main__":
-    run()
+    raise SystemExit("Use python -m scripthost_portable.launcher <job.py> --workdir <directory>.")

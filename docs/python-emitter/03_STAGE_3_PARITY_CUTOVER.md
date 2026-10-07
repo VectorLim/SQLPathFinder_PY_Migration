@@ -84,11 +84,15 @@ vendored original ScriptHost runtime
 current portability overrides
 ```
 
-The generated script can run as a normal Python entrypoint:
+The existing launcher owns the hidden runtime and fresh worker process:
 
 ```
-python generated_job.py
+python -m scripthost_portable.launcher generated_job.py --workdir prepared-job-directory
 ```
+
+Direct `python generated_job.py` intentionally exits with the launcher command. It does not initialize a second runtime. The existing `main.py` and `handle()` signature remain unchanged; the worker also selects Python when their `SCRIPT_PATH` ends in `.py`.
+
+Python jobs require prepared `configsets.csv`, configuration/environment and history inputs. Unlike VG2 AED jobs, they do not run `prepare_job()` automatically. Validate preparation before selecting a generated job for a non-production trial.
 
 Use the existing one-job-per-process assumption. Do not add an in-process scheduler or concurrency framework.
 

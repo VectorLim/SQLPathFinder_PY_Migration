@@ -139,7 +139,7 @@ def test_real_jobs_clean_shape_and_exact_api_mapping(
     query_names.update({legacy: public for public, legacy in script_api._QUERY_OPTIONS.items()})
     original_queries = [b for b in result.resolved.blocks if "ENGINE" in b.options.lookup]
     for original, emitted in zip(original_queries, queries):
-        assert emitted["sql"] == original.body.strip()
+        assert emitted["sql"] == original.body.lstrip()
         for key, value in original.options.pairs:
             if value.startswith("<<<") and value.endswith(">>>"):
                 value = "NODE_" + value[3:-3]
@@ -150,7 +150,7 @@ def test_real_jobs_clean_shape_and_exact_api_mapping(
     report_names["ID"] = "report_id"
     for original, (_, args, kwargs) in zip(original_reports, emitted_reports):
         if original.options.lookup["REPORT"] != "HTML-DELETE":
-            assert args == (original.body.strip(),)
+            assert args == (original.body.lstrip(),)
         for key, value in original.options.pairs:
             if key != "REPORT":
                 assert kwargs[report_names[key]] == value

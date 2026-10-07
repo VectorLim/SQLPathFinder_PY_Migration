@@ -8,8 +8,17 @@ This stage changes code generation, not runtime semantics.
 
 ## Implemented Stage 2 boundary
 
-The compiler now uses `parse -> classify -> resolve -> emit` through
-`vg2c.compile_document()`, with `translate()` / `python -m vg2c` writing output.
+The compiler uses `parse -> ScriptHost inspection -> support policy -> resolve -> emit`
+through `vg2c.compile_document()`, with `translate()` / `python -m vg2c` writing output.
+The internal `task_introspection.inspect_task()` calls original `SPFManager.GetQuery()`
+without executing or parsing the task's command. The resulting task identity and
+controller flags drive the compiler's supported emission categories and source-aware
+scope tree. The compiler does not maintain a second backend router.
+
+`api_contract.py` holds the two static query/report option maps used by both the
+facade and emitter. Query shorthand is completed through the facade's existing
+option preparation before inspection. Original routes outside VA/SQLPlus and SQLite
+still fail the compiler support policy; inspection does not enable historical tasks.
 There is no runtime dispatch stage: Stage 1 receives the original SQL, table
 bindings, crosstab syntax and option values, then delegates preprocessing to the
 original backend. The reader hierarchy from `main` is not required for this path.
@@ -29,7 +38,8 @@ Unnamed positional macros, ELSE, RUN-LOOP and nonempty second comparison clauses
 remain unsupported. Malformed/duplicate options and unmatched control tokens
 raise source-located compile errors instead of best-effort output.
 
-Utility arguments use the original CSV quoting rules. `ROWS-IN-FILE` supports
+Utility arguments use strict compiler validation of the original CSV quoting rules;
+the original task retains its runtime parsing and recovery behavior. `ROWS-IN-FILE` supports
 only full counting (`N`) and an empty archive name, matching its public facade.
 Utility `INSTANCE`, current-directory `WORKDIR` and `OUTLOOK=N` wrappers do not
 affect these selected task commands. Utility `PROMPT-TEXT` is omitted (logging
@@ -46,7 +56,8 @@ are sibling scopes, and AED belongs to its first comparison.
 `EmittedScript.blocks` keeps stable block/invocation/parameter IDs, original
 source spans and generated character ranges. Generated source has no metadata
 comments, editor framework, generic context, session API or runtime imports
-beyond the five public objects. The installed runtime and launcher remain unchanged.
+beyond the five public objects. Compilation requires the installed original runtime;
+generated Python execution does not require the compiler or inspection adapter.
 
 ## Restore only compiler-side code
 

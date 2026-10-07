@@ -119,9 +119,12 @@ def _run_child(job: ScriptHostJob) -> ScriptHostJobResult:
             from .aed_api import prepare_job
 
             runtime = PortableScriptHostRuntime()
-            if job.python_path is not None:
+            python_path = job.python_path
+            if job.script_path is not None and Path(job.script_path).suffix.lower() == ".py":
+                python_path = job.script_path
+            if python_path is not None:
                 succeeded = runtime.run_python_file(
-                    Path(job.python_path), workdir, execution_options=job.execution_options
+                    Path(python_path), workdir, execution_options=job.execution_options
                 )
             else:
                 script_text = job.script_text

@@ -89,5 +89,5 @@ def _extract_options_and_body(segment: str, index: int, span: SourceSpan) -> tup
         while split < len(lines) and lines[split].startswith("/"):
             split += 1
         options, body = "".join(lines[:split]), "".join(lines[split:])
-    # The original parser trims one outer newline, leaving body content intact.
-    return options, body.removeprefix("\n").removesuffix("\n")
+    # Original task parsing removes leading whitespace but retains the ending.
+    return options, body.lstrip()

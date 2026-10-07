@@ -12,6 +12,7 @@ from vg2c.frontend.models import ClassifiedBlock
 
 
 def utility_arguments(block: ClassifiedBlock) -> list[str]:
+    """Validate compiler syntax strictly; runtime utility parsing remains original."""
     try:
         values = next(
             csv.reader(

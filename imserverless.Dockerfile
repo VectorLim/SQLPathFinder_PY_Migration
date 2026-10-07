@@ -11,7 +11,10 @@ COPY pyproject.toml README.md main.py aed_updater.py ./
 COPY install_packages/aed_client_apikey-6.2.0-py3-none-any.whl ./install_packages/
 COPY tests/fixtures/test_long.txt ./jobs/test_long.txt
 COPY ICMPCS.txt CSR_IAM_v2.txt ./jobs/
+COPY output/aed-migration/CSR_IAM_v2.aed.txt ./jobs/
+COPY output/clean-python/*.py ./jobs/
 COPY src/scripthost_portable ./src/scripthost_portable
+COPY src/vg2c ./src/vg2c
 RUN python -m pip install --no-cache-dir \
     ./install_packages/aed_client_apikey-6.2.0-py3-none-any.whl . \
     && chmod -R 777 /app
