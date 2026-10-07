@@ -21290,6 +21290,12 @@ class GetFilesTask(SPFTaskBase):
         del df1
         return filesCount
 
+    def _directory_glob(self, path):
+        return rf"{path}\*.*"
+
+    def _glob_parts(self, parent_parts, wildcard_parts):
+        return "\\".join(parent_parts), "\\".join(wildcard_parts)
+
     def getFilesInfoFromFolderGlob(self, myPathToRead, includeSubFolder=False):
         """
         helper function to scan for files matching the given pattern -- using pathlib.Path
@@ -21306,7 +21312,7 @@ class GetFilesTask(SPFTaskBase):
                 if Path(myPathToRead).is_dir() is True:
                     #this is path to a directory without any wildcards...add the *.*
                     self.logger.debug("{0} - Path points to a folder: {1}".format(calling_func, myPathToRead))
-                    myPathToRead = rf"{myPathToRead}\*.*"
+                    myPathToRead = self._directory_glob(myPathToRead)
                     self.logger.debug("{0} - Updated Path : {1}".format(calling_func, myPathToRead))
             except Exception as err:
                 #path is not plain directory...
@@ -21333,8 +21339,8 @@ class GetFilesTask(SPFTaskBase):
             self.logger.debug("{0} - found_wild_card : {1}".format(calling_func, found_wild_card))
             
             #now construct the pathparts
-            path_parent = "\\".join(path_parts_without_wildcard)
-            path_glob_part = "\\".join(path_parts_with_wildcard)
+            path_parent, path_glob_part = self._glob_parts(
+                path_parts_without_wildcard, path_parts_with_wildcard)
 
             if found_wild_card is False:
                 self.logger.debug("{0} - single file : {1}".format(calling_func, path_parent))

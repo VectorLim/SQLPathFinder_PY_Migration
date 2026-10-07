@@ -1,61 +1,79 @@
 # ScriptHost inheritance overrides
 
-Comparison baseline: `scripthost-utilities-decompiled/SPSQL3_py.zip`.
-The `original/SPSQL3_py` folder is the snapshot from the previous preservation edit. It already includes portable changes and cannot identify additions by itself.
+The source baseline is `scripthost-utilities-decompiled/SPSQL3_py.zip`.
+`original/SPSQL3_py` already contains portability edits and is not the pristine
+comparison source. Legacy modules define their original classes and then
+re-export the compatibility subclasses. Keep class names unchanged for private
+attribute storage, and use zero-argument `super()` in re-exported base classes.
 
-An AST comparison found 27 modified methods/properties and one added method across 12 classes. Their implementations now live in subclasses under `src/scripthost_portable/overrides`. Legacy modules re-export each subclass after defining its original base, so existing callers and later subclasses reach the portable implementation.
+Original ScriptHost owns validation, query parsing, task execution, state,
+status handling, and retries. Overrides access its module globals through
+`legacy`; they replace unavailable operations or normalize inputs.
 
-Historical method bodies remain in the base classes. Previous `[Removed from current version]` comments remain beside changed code in the override files. Explicit `super` calls in the affected base classes now use `super()` to prevent recursion after re-exporting. Derived classes keep legacy class names to preserve private attributes and task routing.
+## Utilities
 
-Overrides use `legacy` to access the original module globals, shared state, and monkeypatchable dependencies. The SSPI import still targets the original package.
+| Original method | Current adaptation | Reason |
+| --- | --- | --- |
+| `SPFRoboCopy` | Inherited; `_run_robocopy` replaces command execution | Windows ROBOCOPY is unavailable; original checks and exit-code interpretation remain authoritative |
+| `File_Lock_Move` | Inherited; `_move_file` replaces command execution | COMSPEC move is unavailable; original locking/retries remain authoritative |
+| `setEnv` | Normalize case aliases, then `super()` | POSIX environment names are case sensitive |
+| `unzipString` | Existing implementation retained | UTF-8-first decoding differs from the detector; this is a semantic exception awaiting an encoding decision |
+| `SPFDelete` | Linux-only file operation; Windows `super()` | Windows DEL is unavailable; preserve existing CSV/token parsing and messages |
+| `ConvertDLM` | Linux helper; Windows `super()` | CleanDelimsCRLF.exe is unavailable |
+| `IntelWW` | Linux numeric January 1 calculation; Windows `super()` | The legacy Windows English locale is unavailable on Linux |
+| `Run_R` | Normalize current-directory argument, then `super()` | The literal `.\` is not the POSIX current directory |
+| `SPFWebCopyPyReqs` | Inherited; `_web_auth_type` and `_web_verify` replace dependencies | SSPI and Windows certificate-store integration are unavailable; Linux retains system CA verification |
+| `SPFEmail` | Existing Linux behavior only; Windows `super()` | AD identity, verifyrole.exe, Outlook, and native SMTP are unavailable; retain role rejection, configured self identity, DataSyncX SMTP, fixed sender, recipient filtering, and BCC privacy |
+| `UnzipFile` | Linux helper; Windows `super()` | Replace the external Windows unzip operation |
+| `GetFilePattern` | Inherited; `_file_pattern_separator` supplies separator | Windows path splitting cannot interpret POSIX roots |
+| `SPFCopy` | Linux helper; Windows `super()` | COMSPEC COPY is unavailable |
+| `LoadExcel2` | Existing Linux .xlsx LOAD/IMPORT branch; Windows `super()` | Excel executable/COM integration is unavailable; VBA and binary workbooks remain unsupported |
 
-| Original module | Class | Method/property | Override file | Change |
-| --- | --- | --- | --- | --- |
-| `SPFLib/SPFGlobals.py` | `SPFGlobals` | `gIsSvc` | `globals.py` | Modified |
-| `SPFLib/SPFGlobals.py` | `SPFGlobals` | `gLocalDir` | `globals.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `SPFRoboCopy` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `File_Lock_Move` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `setEnv` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `unzipString` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `SPFDelete` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `ConvertDLM` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `IntelWW` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `Run_R` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `SPFWebCopyPyReqs` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `SPFEmail` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `UnzipFile` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `GetFilePattern` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `SPFCopy` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/utils.py` | `Utilities` | `LoadExcel2` | `utilities.py` | Modified |
-| `SPFLib/SPFUtilities/memtable.py` | `MemTable` | `Run_SQLite` | `memtable.py` | Modified |
-| `SPFLib/SPFUtilities/memtable.py` | `MemTable` | `getStandaloneCon` | `memtable.py` | Modified |
-| `SPFLib/SPFUtilities/memtable.py` | `MemTable` | `sqliteCharIndex_v2` | `memtable.py` | Added |
-| `SPFLib/SPFSQL3.py` | `NormalQueryTaskBase` | `Prep_Inc_Process` | `normal_query.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `nqOracleTask` | `OpenConnection` | `oracle.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `GetSiteTimeTask` | `executeTaskCommand` | `site_time.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `UpdateTimeFileTask` | `executeTaskCommand` | `update_time.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `SmartAppendTask` | `performUpdateTime` | `smart_append.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `SetFileROTask` | `executeTaskCommand` | `readonly.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `XMLToCSVTask` | `executeTaskCommand` | `xml_to_csv.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `EchoTask` | `executeTaskCommand` | `echo.py` | Modified |
-| `SPFLib/SPFSQL3.py` | `GetFilesTask` | `getFilesInfoFromFolderGlob` | `get_files.py` | Modified |
+The command hooks in the vendor preserve the original Windows command,
+arguments, and flags. Web hooks retain the archived SSPI import position and
+PEM/auth evaluation order. The existing missing-SMTP guard is retained in the
+original SMTP branch; it prevents fallback when that optional dependency is
+absent. No Linux implementation is placed in the vendor.
 
-## Other additions
+## Other overrides
 
-Two new fallback classes, `_UnavailableLegacyDBDriverBase` and `NodesInfo`, now live in `overrides/legacy_drivers.py`. Their compiled counterparts may be unavailable, so there is no importable original class to inherit from.
+| Class/member | Current adaptation and reason |
+| --- | --- |
+| `SPFGlobals.gIsSvc` | Cache false when .NET service contexts are unavailable; otherwise original property |
+| `SPFGlobals.gLocalDir` | Initialize POSIX separator, then original property/logging |
+| `MemTable.Run_SQLite` | Large override retained pending the explicit architecture decision; differences are work-directory spelling, case/order of CSV import pairs, and temporary CSV path spelling |
+| `MemTable.getStandaloneCon` | Original connection/UDF initialization, then add missing `CharIndex_v2` before attachment SQL |
+| `MemTable.sqliteCharIndex_v2` | Added UDF required by original CSV-list SQL generation |
+| `NormalQueryTaskBase.Prep_Inc_Process` | Normalize leading `.\`, then original incremental semantics, including legacy range behavior |
+| `NormalQueryTaskBase.SubStitute_CT` | Pre-existing CrossTab filename-case normalization retained; outside this cleanup |
+| `nqOracleTask.OpenConnection` | Original compiled driver when available; DataSyncX driver boundary when absent or explicitly selected |
+| `GetSiteTimeTask.SetIni` | Normalize persisted current-directory INI path; original execution inherited |
+| `UpdateTimeFileTask.GetIni` | Normalize persisted INI path; original execution inherited |
+| `SmartAppendTask.Do_Update_Time_File` | Normalize INI input; original append/time algorithm inherited |
+| `SetFileROTask.executeTaskCommand` | Linux chmod branch; original Windows attributes through `super()` |
+| `XMLToCSVTask.Run` | Replace only the generated XMLTOCSV executable command; original validation, deletion, completion, and cleanup inherited |
+| `EchoTask.executeTaskCommand` | Linux console echo only, with shell syntax rejection; original Windows execution through `super()` |
+| `GetFilesTask._directory_glob`, `_glob_parts` | POSIX path construction; original scanning, metadata, and error handling inherited |
 
-No added or modified standalone functions were found in the 35 archived source/asset files. Helper functions already in `file_operations.py` and `query_transport.py` remain module functions, called by the overrides. Direct imports or explicit delegation suit functions without requiring inheritance.
+`_UnavailableLegacyDBDriverBase` and `NodesInfo` remain minimal fallback shapes
+when compiled classes cannot be imported. They are not alternate query parsers.
 
-Import guards, package-relative imports, package initialization, and the logger install path remain at the import boundary. A subclass cannot repair an import failure that happens before its original base class is defined.
+The driver contract owns CSV writing, headers, append behavior, delimiter, and
+row counts. `query_transport.py` implements that missing driver contract;
+moving it to query tasks would change ownership. All six `file_operations.py`
+functions remain supported replacements, exercised by runtime paths/tests.
 
-No source or asset files were deleted.
+The runtime, Python facade, worker, and launcher retain their existing roles.
+Process isolation is required because the original runtime mutates cwd,
+environment, and shared state. AED orchestration and migration-tool package
+boundaries are documented in `docs/scripthost-portability-cleanup.md`; no package
+move is part of this cleanup.
 
 ## Verification
 
-All 28 copied method bodies match the pre-refactor snapshot in an AST comparison after reversing module qualification. The 27 restored base methods match the archived ZIP. All 147 preservation comment markers remain in the runtime sources and overrides.
-
-The final focused run of the inheritance and query transport tests passed: 30 passed. It includes further subclass construction, private property storage, portable/legacy driver selection, and direct registration of the added SQLite character-index method.
-
-The ScriptHost suite with SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1 produced 96 passed, 15 skipped, and 2 failed on Windows. Both remaining failures reproduced against a separate pre-refactor source copy with the same installed compiled drivers: native driver authorization, and native node parsing rejecting a Windows C: path in the SQLite UDF worker test.
-
-An undefined-name check found the inherited unzipString exception fallback after its input parameter has been deleted. That existing behavior was preserved during this refactor.
+`tests/scripthost_portable/test_adapter_characterization.py` records incremental
+paths/range/errors, UDF registration before attachment SQL, move retries/errors,
+newest-folder selection, Windows delegation, and the missing-SMTP guard.
+Existing utility integration tests execute actual original tasks and compare
+file output, state, and transport behavior. See the cleanup report for baseline
+and final results and platform limitations.

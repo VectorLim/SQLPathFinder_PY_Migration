@@ -984,6 +984,10 @@ class Utilities(SPFGlobals):
     #END : def replace_from_last
 
     # status : dev WIP
+    def _run_robocopy(self, command, arguments, pass_codes, error_codes):
+        return self.Run(command, arguments, pass_codes,
+                        CMDErrorExitCodes=error_codes, usePopen=True)
+
     def SPFRoboCopy(self, MyLocal, MyInstance, MyFile, MySrc, MyDest, MyRetry, MyWait, MyOpen, MyArg, MyErrOp, MyPassExitCodes=[]) :
         """
         '====================================================
@@ -1188,7 +1192,7 @@ class Utilities(SPFGlobals):
                     self.logger.debug(myCMDArgs)
                     runVal, runExitCode = False, -1
                     try :
-                      runVal, runExitCode =  self.Run(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, CMDErrorExitCodes=SPFRoboCopy_err_ExitCode,usePopen=True)
+                      runVal, runExitCode =  self._run_robocopy(myCMDToExecute, myCMDArgs, SPFRoboCopy_pass_ExitCode, SPFRoboCopy_err_ExitCode)
                     except Exception as err:
                         self.logger.exception("Error : {0}".format(err))
                         runVal = err.args[2]
@@ -1336,6 +1340,11 @@ class Utilities(SPFGlobals):
         return retVal
 
     #status : dev done, UT WIP
+    def _move_file(self, srcFile, DstFile):
+        cmdToExecute = "%COMSPEC%"
+        cmdArgs = ['/c', 'move', '/Y', '"{0}"'.format(srcFile), '"{0}"'.format(DstFile)]
+        return self.Run(cmdToExecute, cmdArgs)
+
     def File_Lock_Move(self, srcFile, DstFile):
         """
         '===========================
@@ -1374,10 +1383,8 @@ class Utilities(SPFGlobals):
                         raise Exception(errMsg)
                     else :
                         self.Console("     Renaming ... {0}".format(self.DatetimeNow))
-                        cmdToExecute = "%COMSPEC%"
-                        cmdArgs = ['/c', 'move', '/Y', '"{0}"'.format(srcFile), '"{0}"'.format(DstFile)]
                         try:
-                            File_Lock_Move_Status, runExitCode = self.Run(cmdToExecute, cmdArgs)
+                            File_Lock_Move_Status, runExitCode = self._move_file(srcFile, DstFile)
                         except SPFCMDRunExitWithErrorCodeException as SPFCmdExErr:
                             errMsg = ("      Error during move "
                                       "\n      srcFile : {0}" 
@@ -6721,6 +6728,13 @@ class Utilities(SPFGlobals):
     #END : def generate_pems
 
     #status : dev done, UT done
+    def _web_auth_type(self):
+        from .requests_negotiate_sspi import HttpNegotiateAuth
+        return HttpNegotiateAuth
+
+    def _web_verify(self):
+        return self.generate_pems()
+
     def SPFWebCopyPyReqs(self, MyLocal, MyURL, MyFile, lInter, lNoAbort, reqtimeout=(10, 60), returnDirectData=False, runSilent=False) :
         """
        '====================================================
@@ -6823,7 +6837,7 @@ class Utilities(SPFGlobals):
                     self.Console("Retrieving {0} ...{1}".format(MyURL, self.DatetimeNow))
                 
                 import requests
-                from .requests_negotiate_sspi import HttpNegotiateAuth
+                auth_type = self._web_auth_type()
 
                 if self.isSPO_URL(MyURL) is True:
                     self.SPOHandler2("DOWNLOADFILE", MyURL, MyFile)
@@ -6831,8 +6845,8 @@ class Utilities(SPFGlobals):
 
                 myChunkSize = 64 * 1024
                 with requests.get(url=MyURL,
-                                  verify=self.generate_pems(),
-                                  auth=HttpNegotiateAuth(),
+                                  verify=self._web_verify(),
+                                  auth=auth_type() if auth_type is not None else None,
                                   stream=True,
                                   timeout=reqtimeout,
                                   proxies=self.IGNORE_LOCAL_PROXIES) as response:
@@ -7100,6 +7114,8 @@ class Utilities(SPFGlobals):
                     #    useSMTPAuth = False 
                     self.logger.debug("{0} - useSMTPAuth : '{1}'".format(calling_func, useSMTPAuth))
                     #useSMTPAuth = True if self.SHisSHEntry is False else False # Default use SMTPAuth
+                    if SPFSMTPAuthEmail is None:
+                        raise RuntimeError("Legacy ScriptHost SMTP transport is unavailable on this platform")
                     try:
                         SPFSMTPAuthEmail_ = SPFSMTPAuthEmail().SendEmail(userEmailAddress, MailToIn + MailCC + MailBCC, emailMessage.as_string(), useSMTPAuth=useSMTPAuth)
                     except Exception as err:
@@ -7688,6 +7704,9 @@ class Utilities(SPFGlobals):
             raise
     #END : def UnzipFile
 
+    def _file_pattern_separator(self):
+        return "\\"
+
     def GetFilePattern(self, FP) :
         """
         '===============================================================================
@@ -7730,7 +7749,8 @@ class Utilities(SPFGlobals):
                 raise Exception(errMsg)
 
             self.Console("Looking for: {0}".format(FP))
-            FPList = FP.split("\\")
+            path_separator = self._file_pattern_separator()
+            FPList = FP.split(path_separator)
             TmpF = ""
             while len(FPList) > 0 :
                 FPListItem = FPList.pop(0)
@@ -7738,7 +7758,7 @@ class Utilities(SPFGlobals):
                 MaxF = ""
                 MaxFDate = ""
                 if self.IsEmptyOrNone(FPListItem) is True : # this a \\
-                    TmpF = "{0}\\".format(TmpF)
+                    TmpF = "{0}{1}".format(TmpF, path_separator)
                 #backward compatible Token1Token2 format and new format Token1\Token2
                 elif FPListItem.lower().find(Token1) != -1 : #get the folder with max modified date                    
                     if FPListItem.lower().find(Token2) != -1 :

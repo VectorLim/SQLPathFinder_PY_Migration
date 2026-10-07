@@ -864,22 +864,8 @@ class MemTable(legacy.MemTable):
                 pass
 
     def getStandaloneCon(self, dbFileToOpen='', AttachSQL=None):
-        """
-        helper function to not use memTable global connection but generate a standalone SQLite3 connection 
-        """
-        #locals
-        calling_func = self.myUtils.getCallingFuncName(2, self.__class__.__name__)
-        self.logger.debug("{0} - dbFileToOpen: '{1}'".format(calling_func, dbFileToOpen))
-        self.logger.debug("{0} - AttachSQL: '{1}'".format(calling_func, AttachSQL))
-        legacy.sqlite3.enable_callback_tracebacks(False) #True : prints error trace.
-        conTemp = legacy.sqlite3.connect(dbFileToOpen,isolation_level=None)
-        conTemp.text_factory = str
-        conTemp.create_function("JsonValue", 1, self.sqliteJsonValue)
-        conTemp.create_function("JsonKeyValPair", 2, self.sqliteJsonKeyValPair)
-        conTemp.create_function("SPFRegexReplace", 5, self.sqliteRegexReplace)
-        conTemp.create_function("SPFRegexSearch", 3, self.sqliteRegexSearch)
-        conTemp.create_function("SPFWriteLOBToFile", 2, self.sqliteSaveLOBToFile)
-        conTemp.create_function("SPFPrepLikeValue", 1, self.sqlitePrepLikeValue)
+        """Add the missing UDF before running the caller's attachment SQL."""
+        conTemp = super().getStandaloneCon(dbFileToOpen)
         conTemp.create_function("CharIndex_v2", 4, self.sqliteCharIndex_v2)
         if AttachSQL is not None:
             conTemp.execute(AttachSQL)
