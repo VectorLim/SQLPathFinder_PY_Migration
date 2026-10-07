@@ -1698,6 +1698,12 @@ class MemTable(object):
                     pass
     #END : def Get_SQlite_Cols
 
+    def _prepare_sqlite_import_pairs(self, pairs):
+        return list(set(item.upper() for item in pairs))
+
+    def _sqlite_preprocessed_temp_path(self, counter, rn):
+        return os.path.join(".\\", "{0}_{1}.tmp".format(counter, rn))
+
     #Status : dev WIP
     def Run_SQLite(self, 
                     Site1 = None, 
@@ -2040,7 +2046,7 @@ class MemTable(object):
 
                 MyPair = MyTables.split(",") #'Extract File & Tbl Name Pairs
                 self.logger.debug("{0} - MyPair: {1}".format(calling_func, MyPair))
-                uniqueMyPair = list(set(item.upper() for item in MyPair)) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
+                uniqueMyPair = self._prepare_sqlite_import_pairs(MyPair) #'Ignore this Table <--- this logic is not needed in PyEE as this step will get Unique items
                 self.logger.debug("{0} - uniqueMyPair: {1}".format(calling_func, uniqueMyPair))
                 uniqueMyPairCounter = 0
                 while len(uniqueMyPair) > 0 : #'For Each Text File
@@ -2124,7 +2130,7 @@ class MemTable(object):
                             """
                             self.logger.debug("{0} - PreProcCSV: {1}".format(calling_func, PreProcCSV))
                             if PreProcCSV == True :
-                                MySrcTxt2 = os.path.join(".\\", "{0}_{1}.tmp".format(uniqueMyPairCounter, RNStr))
+                                MySrcTxt2 = self._sqlite_preprocessed_temp_path(uniqueMyPairCounter, RNStr)
                                 self.logger.debug("{0} - MySrcTxt2: {1}".format(calling_func, MySrcTxt2))
                                 self.myUtils.ConvertDLM(MySrcTxt, MySrcTxt2, MyCvtExe,IsQuiet)
                                 MySrcTxt = MySrcTxt2

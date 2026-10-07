@@ -55,10 +55,12 @@ not only comments. Utilities alone fell from **1,793 to 413 lines**. The two
 vendor files together add 26 net lines. No override module or supported helper
 function was deleted.
 
-## MemTable decision
+## MemTable cleanup
 
-`Run_SQLite` remains unchanged pending the requested architecture decision.
-Its roughly 850 lines differ from the vendor at only three seams:
+The focused follow-up replaces the 856-line portable `Run_SQLite` copy with a
+23-line wrapper. The 850-line original vendored algorithm remains authoritative,
+with only two expressions routed through tiny default-preserving hooks.
+Linux compatibility is limited to three seams:
 
 1. Normalize `WorkDir == ".\\"` to `"."` on POSIX.
 2. Preserve CSV import-pair case and first-seen ordering on POSIX, rather than
@@ -66,12 +68,20 @@ Its roughly 850 lines differ from the vendor at only three seams:
 3. Construct preprocessed temporary CSV paths under `"."` on POSIX rather
    than the literal Windows current-directory spelling.
 
-Recommended option: add two tiny vendor helpers for pair preparation and
-temporary-path construction, with exactly the archived operations as defaults;
-normalize WorkDir externally and delegate the full algorithm to `super()`.
-Alternative: retain the large copy. The recommendation removes substantial
-duplication but requires mixed-case/import-order and temporary-file cleanup
-parity tests before deleting the copy. No deep helper rewrite is necessary.
+`_prepare_sqlite_import_pairs(pairs)` defaults to
+`list(set(item.upper() for item in pairs))`. Its POSIX override uses
+`list(dict.fromkeys(pairs))`. `_sqlite_preprocessed_temp_path(counter, rn)`
+defaults to `os.path.join(".\\", "{0}_{1}.tmp".format(counter, rn))`;
+the POSIX override joins the same filename under `"."`. Windows delegates both
+hooks to their defaults. The wrapper preserves the original signature and
+forwards every argument to `super().Run_SQLite` after WorkDir normalization.
+
+Behavior tests were added and passed against the copied method before removing
+it: Windows **2 passed, 3 skipped**; actual Linux **4 passed, 1 skipped**.
+They cover case/order, the historical current-directory spelling, preprocessing
+and cleanup on success/failure, quoting/aliases, empty headers, and append.
+The portable MemTable module shrinks from **894 to 71 lines**, removing
+**823 lines (92%)** without expanding any other compatibility implementation.
 
 Independent safe cleanup was completed: standalone connections inherit all
 original UDF registration, then register the missing `CharIndex_v2` before
@@ -126,8 +136,6 @@ should retain an import/CLI shim. No move was made without compatibility proof.
 
 ## Deliberate deferrals and decisions
 
-- MemTable's two-hook architecture needs the user's decision before replacing
-  `Run_SQLite`.
 - `unzipString` retains UTF-8-first decoding rather than the legacy detector.
   This is an existing cross-platform semantic difference; an encoding decision
   was requested. Valid UTF-8, short strings, and invalid input were characterized
@@ -230,5 +238,86 @@ this report.
 No mocked platform flag is presented as filesystem/process Linux validation.
 No live manufacturing or AED write was performed. All 26 pre-existing dirty
 files outside `normal_query.py` are byte-identical to the saved starting copies;
-that file's pre-existing `SubStitute_CT` AST and prefix are unchanged. The large
-`Run_SQLite` AST is also unchanged.
+that file's pre-existing `SubStitute_CT` AST and prefix are unchanged. That earlier
+cleanup retained the copied `Run_SQLite`; the focused follow-up above removes it.
+
+## Focused MemTable follow-up validation
+
+This follow-up started from clean `AED-integration` commit
+`b132ce00ab28dd1fe5b4f50a5b015aea8014e743`. Fetch confirmed that local and
+remote HEAD matched. Only the two MemTable modules, the override inventory,
+this report, and `test_memtable_sqlite.py` changed.
+
+The pristine ZIP comparison found exactly the three documented portability
+differences. Substituting the archived expressions back for the two vendor
+hook calls yields the exact archived `Run_SQLite` AST. The wrapper signature
+also matches the ZIP, and an independent call check verifies all 27 arguments
+through positional and keyword calls. `getStandaloneCon` and
+`sqliteCharIndex_v2` remain byte/AST-identical to the starting commit; registration
+still precedes attachment SQL. No new compatibility framework was added.
+
+Counts below are **passed / failed / skipped**. Characterization was run against
+the copied implementation before its removal, then against the wrapper.
+
+| Platform / suite | Baseline | Final |
+| --- | --- | --- |
+| Windows focused SQLite | 4 / 1 / 0 | 4 / 1 / 0 |
+| Windows new MemTable characterization | 2 / 0 / 3 | 2 / 0 / 3 |
+| Windows `tests/scripthost_portable` | 185 / 2 / 17 | 187 / 2 / 20 |
+| Windows `tests/compiler` | 67 / 0 / 0 | 67 / 0 / 0 |
+| Windows full `tests` | 262 / 8 / 17 | 264 / 8 / 20 |
+| Linux focused four modules | 92 / 2 / 0 | 92 / 2 / 0 |
+| Linux new MemTable characterization | 4 / 0 / 1 | 4 / 0 / 1 |
+| Linux `tests/scripthost_portable` | 202 / 2 / 0 | 206 / 2 / 1 |
+| Linux `tests/compiler` | 67 / 0 / 0 | 67 / 0 / 0 |
+| Linux remaining repository tests | 14 / 2 / 0 | 14 / 2 / 0 |
+| Linux full coverage, summed disjoint suites | 283 / 4 / 0 | 287 / 4 / 1 |
+
+Both full-platform runs include 19 successful subtests. Every baseline/final
+failure identity matches. Windows retains the same eight IDs listed above:
+native driver authorization, four DataSyncX credential/environment contract
+cases, the `C:` SQLite node-path case, and two missing CSR fixture cases.
+Linux's four unchanged failures are:
+
+- `tests/scripthost_portable/test_utility_contracts.py::test_r_original_local_interpreter[False]`
+- `tests/scripthost_portable/test_utility_contracts.py::test_r_original_local_interpreter[True]`
+- `tests/test_csr_iam.py::ConditionalFlowTests::test_sqlite_reports_first_error_for_incomplete_dummy_data`
+- `tests/test_csr_iam.py::ConditionalFlowTests::test_sqlite_with_complete_dummy_data`
+
+The Linux image lacks R, and the CSR cases lack
+`tests/fixtures/csr_iam/PARMI_IPM_RAW.csv`. Neither failure cause was changed.
+Windows final suite durations were 312.39 seconds (portable), 15.14 seconds
+(compiler), and 337.78 seconds (full). Linux durations were 165.00 seconds
+(portable), 8.46 seconds (compiler), and 4.25 seconds (remaining tests).
+
+Real Linux validation used Python 3.12.11 in existing image
+`sqlpathfinder-aed:validation`, image ID
+`sha256:8cf80eab937a5fb6ebb5843bbe3f967d1ba0cda41c88570c6b681f2d635f426f`.
+Current checkout files were copied to the container's `/tmp/sqlpf-checkout`,
+their hashes verified, and tested with `--network none`. This exercises the
+Linux filesystem, not a mocked platform flag or a Windows-mounted test folder.
+Windows used the existing project Python 3.13.14 environment. Both used
+`SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT=1` and the current source/root on
+`PYTHONPATH`.
+
+Both `ICMPCS.txt` and `output/aed-migration/CSR_IAM_v2.aed.txt` were re-run through
+the existing offline target fixtures. Seven scenarios per platform cover
+positive, no-candidates, zero-input, and CSR seed behavior. Baseline and final
+snapshots match exactly: CSV bytes/hashes, headers, row counts, control-driving
+files, task/branch events, and AED candidate bytes. Existing original/generated
+parity tests also pass. No live manufacturing or AED service was invoked.
+
+Commands were the baseline focused selection, the new MemTable test file,
+`python -m pytest -q tests/scripthost_portable`,
+`python -m pytest -q tests/compiler`, and full `tests` coverage (split into
+disjoint suites on Linux). Exact commands, logs, JUnit failure comparisons and
+the seven-scenario before/after JSON files are retained outside the repository:
+
+- Windows: `%TEMP%/sqlpathfinder-baseline-20261007-b132ce0`
+- Linux: `%TEMP%/sqlpf-linux-3bd956cf7ff84aef9eeeb8754d9d6047`
+
+No additional MemTable issue was observed in the tested Python SQLite paths.
+Native SQLite executable/app-server branches and Windows executable CSV
+preprocessing were preserved through archived defaults, without new execution
+coverage. There is one authoritative ScriptHost `Run_SQLite` implementation,
+and Linux portability is expressed only through small compatibility seams.

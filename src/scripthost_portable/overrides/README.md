@@ -41,7 +41,9 @@ absent. No Linux implementation is placed in the vendor.
 | --- | --- |
 | `SPFGlobals.gIsSvc` | Cache false when .NET service contexts are unavailable; otherwise original property |
 | `SPFGlobals.gLocalDir` | Initialize POSIX separator, then original property/logging |
-| `MemTable.Run_SQLite` | Large override retained pending the explicit architecture decision; differences are work-directory spelling, case/order of CSV import pairs, and temporary CSV path spelling |
+| `MemTable.Run_SQLite` | Normalize POSIX `WorkDir=".\\"` to `"."`, then delegate every argument to the original algorithm |
+| `MemTable._prepare_sqlite_import_pairs` | Original uppercase set on Windows; preserve case and first-seen order on POSIX |
+| `MemTable._sqlite_preprocessed_temp_path` | Original `os.path.join(".\\", "{counter}_{rn}.tmp")` on Windows; join under `"."` on POSIX |
 | `MemTable.getStandaloneCon` | Original connection/UDF initialization, then add missing `CharIndex_v2` before attachment SQL |
 | `MemTable.sqliteCharIndex_v2` | Added UDF required by original CSV-list SQL generation |
 | `NormalQueryTaskBase.Prep_Inc_Process` | Normalize leading `.\`, then original incremental semantics, including legacy range behavior |
@@ -77,3 +79,9 @@ newest-folder selection, Windows delegation, and the missing-SMTP guard.
 Existing utility integration tests execute actual original tasks and compare
 file output, state, and transport behavior. See the cleanup report for baseline
 and final results and platform limitations.
+
+`tests/scripthost_portable/test_memtable_sqlite.py` characterizes real POSIX
+mixed-case imports, first-seen ordering, `WORKDIR=.\\`, preprocessing/cleanup
+after success and SQL failure, plus Windows archived import behavior and
+cross-platform empty-result headers/append behavior. The two vendor hooks keep
+the archived expressions as defaults; Linux compatibility stays in the subclass.
