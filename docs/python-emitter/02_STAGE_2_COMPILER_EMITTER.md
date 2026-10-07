@@ -64,7 +64,7 @@ Conceptually:
 ```python
 def run():
     with script_session(...):
-        for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
+        if macros.load_csv("configsets.csv"):
             query.run(...)
             utilities.rows_in_file(...)
 
@@ -129,15 +129,25 @@ Use the existing `utility_name`/operation metadata rather than designing a gener
 
 ### START-MACRO
 
-Do **not** reuse `main`'s `StartMacro.prompt_off` interpretation or its independent `MacroState.scope(...)` runtime. The original `StartMacroTask` loads the macro file, substitutes child tasks with `Rowidx=1`, and executes the child list once. Its second utility argument is `ContinueOnError`.
+Do **not** reuse `main`'s `StartMacro.prompt_off` interpretation or its independent `MacroState.scope(...)` runtime. The original `StartMacroTask` loads the macro file, uses `Rowidx=1`, and executes its child scope once. Its second utility argument is `ContinueOnError`.
 
-Emit the smallest Python control structure that preserves that behavior:
+Emit a normal function call and ordinary Python condition:
 
 ```python
-for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
+if macros.load_csv("configsets.csv"):
+    ...
 ```
 
-`scope_csv()` must yield at most once. It is a 0-or-1 scope-control iterable, not a row iterator: first data row when active, zero iterations when the original runtime would skip the scope.
+For `START-MACRO ... "Y"`, emit:
+
+```python
+if macros.load_csv("configsets.csv", continue_on_error=True):
+    ...
+```
+
+The facade keeps original `MemTable` / `Substitute_Macro` mechanics hidden. Values inside the body use simple lookups such as `macros["MARS"]`. No generated code may contain `parentMacTables`, `Rowidx`, `MyMode`, or direct `Substitute_Macro(...)` calls.
+
+The current targets contain only one macro scope. Treat nested `START-MACRO` as unsupported in the first compiler cut rather than inventing lifecycle machinery before a real target requires it.
 
 ### IF-THEN
 

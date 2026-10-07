@@ -43,7 +43,7 @@ MACRO_OVERRIDES = {
 
 def run():
     with script_session(macro_overrides=MACRO_OVERRIDES):
-        for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
+        if macros.load_csv("configsets.csv"):
             query.run(
                 sql="""SELECT ...""",
                 node=macros["MARS"],
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     run()
 ```
 
-`macros.scope_csv(...)` is intentionally a **0-or-1 control iterable**, not a row iterator. The original `StartMacroTask` loads the whole file but substitutes child tasks with `Rowidx=1` and executes the child list once. A non-empty file therefore activates exactly one scope using the first data row; an empty/skipped macro activates none. The second utility argument is `ContinueOnError`, not a prompt flag.
+`macros.load_csv(...)` is a normal public function. It loads the macro file into the hidden session using the original `MemTable` path, exposes first-row values through simple lookups such as `macros["MARS"]`, and returns whether the original macro scope is active. The compiler uses `if macros.load_csv(...):` because the original `START-MACRO` skips its child scope for an empty file (and for a missing file when `ContinueOnError=Y`). The original backend calls such as `MemTable.LoadFromFile(...)` and `Substitute_Macro(...)` remain completely hidden from generated/user-facing Python.
 
 ## Non-negotiable design rules
 
@@ -101,7 +101,7 @@ Both contain:
 - `HTML-DEFER` x1;
 - `HTML-LAYOUT` x2;
 - `HTML-DELETE` x2;
-- `START-MACRO` (first data row only; second argument is `ContinueOnError`);
+- `START-MACRO` (load first data row into `macros[...]`; second argument is `ContinueOnError`);
 - `ROWS-IN-FILE`;
 - `IF-THEN`;
 - `AED`;
@@ -203,6 +203,7 @@ Exit condition: the supported jobs have meaningful output/control-flow parity an
 These are not prerequisites for the first working version:
 
 - full historical utility coverage;
+- nested `START-MACRO` scope lifecycle beyond what the current jobs require;
 - `RUN-LOOP`;
 - a visual editor;
 - automatic generated-Python mutation;

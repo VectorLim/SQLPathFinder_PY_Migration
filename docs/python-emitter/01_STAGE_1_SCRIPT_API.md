@@ -68,28 +68,33 @@ macros.get(name)
 macros.set(name, value)
 macros.compare(lhs, op, rhs)
 macros.substitute(text)
-macros.scope_csv(path, continue_on_error=False)
+macros.load_csv(path, continue_on_error=False)
 ```
 
 Rules:
 
 - comparison delegates to original `Utilities.CompareVars`;
 - substitution delegates to original `Utilities.Substitute_Macro` or the same original primitives it uses;
-- CSV loading reuses original `MemTable` behavior rather than pandas or a new CSV macro implementation;
-- original `START-MACRO` loads the file but substitutes child tasks with `Rowidx=1`; it does **not** iterate every data row;
-- `scope_csv(...)` is therefore a 0-or-1 control iterable: yield once with the first data row when the macro scope is active, or yield zero times when the original runtime would skip that scope;
-- the second `START-MACRO` argument maps to `ContinueOnError`; preserve the original missing/empty-file behavior instead of treating it as `prompt_off`;
-- nested macro CSV scopes must use the original `parentMacTables` lookup/fallback semantics, not a new independent stack if the original primitives can be reused;
+- CSV loading reuses original `MemTable.LoadFromFile(..., EANImport=False)` behavior rather than pandas or a new CSV macro implementation;
+- original `START-MACRO` uses `Rowidx=1`; `load_csv()` therefore exposes only the first data row and never iterates rows 2..N;
+- `macros["MARS"]` and similar lookups are simple public syntax; internally they may resolve through the original `Substitute_Macro("<<<MARS>>>", parentMacTables, 1, 0)` machinery, but that call is backend-only and must never appear in generated Python;
+- `load_csv()` returns `True` when the original macro scope should execute and `False` when it should be skipped;
+- the second `START-MACRO` argument maps to `ContinueOnError`: missing file + `False` raises, missing file + `True` returns `False`, and an empty file returns `False`;
 - user `macro_overrides` are explicit job inputs, not a second macro engine.
 
 Initial generated form:
 
 ```python
-for _ in macros.scope_csv("configsets.csv", continue_on_error=False):
-    ...
+if macros.load_csv("configsets.csv"):
+    query.run(
+        node=macros["MARS"],
+        ...
+    )
 ```
 
-Do not iterate rows 2..N. The loop syntax is only a clean way to model the original scope being active zero or one time while still allowing an empty/skipped macro file to bypass its child body.
+This is deliberately ordinary Python. Generated/user-facing code must not expose `MemTable`, `parentMacTables`, `Rowidx`, `MyMode`, or direct `Substitute_Macro(...)` calls.
+
+The two current target jobs have one `START-MACRO` scope each. Do not build a generalized nested-scope lifecycle in Stage 1. If nested `START-MACRO` appears in a future target, characterize the original `parentMacTables` lifecycle first and then add the minimum support required.
 
 ### `utilities`
 
@@ -187,7 +192,7 @@ MACRO_OVERRIDES = {
 
 `script_session(macro_overrides=...)` installs them using the same macro/environment mechanisms used by the backend.
 
-Do not invent precedence rules. Add characterization tests against the existing runtime before finalizing override precedence relative to the first macro CSV row, parent macro tables, and environment values.
+Do not invent precedence rules. Add characterization tests against the existing runtime before finalizing override precedence relative to the first macro CSV row and environment values.
 
 ## Tests
 
@@ -199,8 +204,9 @@ Required:
 - session restores cwd/state on exit;
 - row count matches original `ROWS-IN-FILE`;
 - `CompareVars` parity for the operators used by current jobs;
-- macro CSV uses row 1 only and does not execute row 2..N;
-- nested `parentMacTables` substitution/fallback behavior is characterized;
+- `macros.load_csv()` uses row 1 only and never exposes row 2..N;
+- `macros["NAME"]` resolves values with original macro lookup semantics while hiding backend calls;
+- empty/missing-file return/raise behavior matches original `START-MACRO`;
 - a query adapter call reaches the existing portable query transport through original task handling;
 - report calls preserve state across run/defer/layout/delete;
 - AED facade calls existing `aed_api.process_candidates`;

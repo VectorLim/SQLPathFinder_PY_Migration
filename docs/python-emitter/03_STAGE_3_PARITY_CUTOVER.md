@@ -31,7 +31,7 @@ For the supported ICMPCS and migrated CSR jobs compare:
 - query SQL after the same legacy preprocessing path;
 - row-count results;
 - macro-driven branch decisions;
-- macro scope activation and confirmation that only row 1 is applied;
+- `macros.load_csv()` activation/skip result, `macros["NAME"]` values, and confirmation that only row 1 is applied;
 - HTML/CSS/report artifacts;
 - AED candidate file handed to `aed_api`;
 - success/failure category for induced failures;
@@ -45,7 +45,7 @@ Where the adapter boundary is uncertain, capture current behavior first.
 
 Priority cases:
 
-1. first-row-only macro behavior, empty/missing-file handling, and nested `parentMacTables` lookup;
+1. first-row-only macro behavior, `macros["NAME"]` lookup parity, and empty/missing-file handling;
 2. macro/environment/explicit-override precedence;
 3. `CompareVars` numeric vs string operators;
 4. query option preprocessing and output/header behavior;
@@ -64,7 +64,8 @@ Examples:
 - `RUN-LOOP` before it is implemented;
 - query option not covered by the adapter and potentially semantic;
 - unknown report type;
-- malformed macro control nesting.
+- malformed macro control nesting;
+- nested `START-MACRO` before its lifecycle has been explicitly implemented.
 
 Never emit `pass` for unsupported work.
 
