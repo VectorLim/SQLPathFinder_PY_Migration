@@ -71,3 +71,14 @@ def encode_utility(name, arguments=()):
     csv.writer(stream, delimiter=" ", quotechar='"', quoting=csv.QUOTE_ALL, lineterminator="").writerow(
         [str(argument) for argument in arguments])
     return name + (" " + stream.getvalue() if arguments else "")
+
+
+def decode_utility(value):
+    """Return [name, *arguments] when encode_utility rewrites 'value' exactly, else None."""
+    parts = next(csv.reader([value], delimiter=" ", skipinitialspace=True, quotechar='"'), None)
+    if not parts:
+        return None
+    try:
+        return parts if encode_utility(parts[0], parts[1:]) == value else None
+    except ValueError:
+        return None

@@ -2,7 +2,10 @@
 import collections
 import copy
 
-import SPFLib.SPFSQL3 as legacy
+from .runtime import _spf_manager_type
+
+_spf_manager_type()  # puts the vendored SPFLib on sys.path
+import SPFLib.SPFSQL3 as legacy  # noqa: E402
 
 
 class DeferredChildTask(legacy.SPFTaskBase):

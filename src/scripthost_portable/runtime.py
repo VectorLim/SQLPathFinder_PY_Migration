@@ -39,6 +39,72 @@ def _execution(working_directory: Path, execution_options: Sequence[str]):
         os.chdir(previous)
 
 
+class _Session:
+    """One running Python job: the original manager and the controller bodies now executing."""
+
+    def __init__(self, manager):
+        self.manager = manager
+        # (substitution layers, error handler) of each open controller body, innermost last
+        self.bodies = []
+
+    @property
+    def layers(self) -> tuple:
+        return self.bodies[-1][0] if self.bodies else ()
+
+    def task(self, task_input):
+        """Original task object for one statement, routed as Process_Query routes a block."""
+        manager = self.manager
+        text = manager.Substitute_Global_Var(task_input.encode())
+        task = manager.GetQuery(manager.gMyLocal, text, 0, False)
+        task.RNStr = manager.gRNStr
+        return task
+
+    def prepare(self, task) -> None:
+        """Apply the substitutions the enclosing controllers apply to their children."""
+        for layer in self.layers:
+            layer([task])
+
+    def fail(self, error: Exception) -> None:
+        """Enclosing body's error policy: return to continue with the next statement, else raise."""
+        if not self.bodies:
+            self.manager.handleRootTaskError(error)
+        elif self.bodies[-1][1] is None:
+            raise error
+        else:
+            self.bodies[-1][1](error)
+
+    def run(self, task_input) -> None:
+        """Execute one statement through the original router, task and error policy."""
+        try:
+            task = self.task(task_input)
+            self.prepare(task)
+            task.execute()
+        except Exception as error:
+            self.fail(error)
+
+
+# ponytail: process-global binding; use the existing fresh-child worker per job.
+_current_session: _Session | None = None
+
+
+def _session() -> _Session:
+    if _current_session is None:
+        raise RuntimeError("Script API requires a job invoked through the ScriptHost runtime.")
+    return _current_session
+
+
+@contextmanager
+def _bind(manager):
+    global _current_session
+    if _current_session is not None:
+        raise RuntimeError("A Python ScriptHost job is already running in this process.")
+    _current_session = _Session(manager)
+    try:
+        yield
+    finally:
+        _current_session = None
+
+
 class PortableScriptHostRuntime:
     """Entry into the original SPFManager/task runtime inside an isolated worker.
 
@@ -73,10 +139,14 @@ class PortableScriptHostRuntime:
         Like run_text(), this in-process entry is not thread-safe or a job
         isolation mechanism. Use worker.run_job for fresh-process execution.
         """
-        from .script_api import _bind, _check_unbound
+        from .script_api import _bind as _bind_stage1, _check_unbound
 
         _check_unbound()
-        with _execution(working_directory, execution_options) as manager, _bind(manager):
+        with (
+            _execution(working_directory, execution_options) as manager,
+            _bind(manager),
+            _bind_stage1(manager),
+        ):
             try:
                 run()
                 return True

@@ -14,8 +14,11 @@ from collections import OrderedDict
 from contextlib import contextmanager
 
 from .api_contract import QUERY_OPTIONS, REPORT_OPTIONS
+from .control_api import controls
+from .runtime import _session
+from .task_inputs import Options, TaskInput, option_pairs, utility_input
 
-__all__ = ["aed", "macros", "query", "reports", "utilities"]
+__all__ = ["aed", "controls", "macros", "query", "reports", "script", "utilities"]
 
 # ponytail: process-global binding; use the existing fresh-child worker per job.
 _current_manager = None
@@ -189,3 +192,24 @@ utilities = _Utilities()
 query = _Query()
 reports = _Reports()
 aed = _Aed()
+
+
+class _Script:
+    """Run one original ScriptHost task; the original router picks the task class."""
+
+    def invoke(self, *, options: Options = None, command: str = "") -> None:
+        """Task selected by its options (queries, reports, WRITE-FILE, ...)."""
+        _session().run(TaskInput(option_pairs(options), command))
+
+    def utility(self, name: str, *arguments, options: Options = None, external: bool = False,
+                command: str = "") -> None:
+        """/UTILITIES route: ``name`` is braced ({NAME}) unless ``external`` keeps an alias as written."""
+        route = name if external else "{" + name + "}"
+        _session().run(utility_input(route, arguments, options, command))
+
+    def command(self, command: str, *, options: Options = None) -> None:
+        """External (DOS) command line, kept exactly as written."""
+        _session().run(TaskInput((("UTILITIES", command), *option_pairs(options))))
+
+
+script = _Script()

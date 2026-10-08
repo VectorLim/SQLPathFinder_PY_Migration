@@ -360,7 +360,7 @@ def test_python_file_runs_in_fresh_worker_without_public_session(tmp_path):
     assert result.child_pid != os.getpid()
     assert "result.csv" in result.generated_outputs
     assert os.environ["STAGE1_SIGNAL"] == "0"
-    assert script_api.__all__ == ["aed", "macros", "query", "reports", "utilities"]
+    assert script_api.__all__ == ["aed", "controls", "macros", "query", "reports", "script", "utilities"]
     assert not hasattr(script_api, "script_session")
 
 
