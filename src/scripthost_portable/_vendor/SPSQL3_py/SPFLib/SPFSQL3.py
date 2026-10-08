@@ -269,6 +269,7 @@ from . import SPFUtilities
 from .SPFUtilities.utils import Utilities, SPFNothingToProcessException, SPFMutedException, SPFCMDRunExitWithErrorCodeException, SPFMacroNotFoundException
 from .SPFUtilities.memtable import MemTable
 from .SPFUtilities.utils import SPFRichProgressBar
+from .SPFTaskInput import split_task_item, iter_options
 # [Removed from current version] from . import dbDrivers
 # [Removed from current version] from .dbDrivers import dbDriverBase, dbDriverODBCBase, dbDriverDotNetSQLServer, dbDriverDotNetTextJET, dbDriverDotNetTeradata, dbDriverDotNetOracle, dbDriverCxOracle, dbDriverODBCSQLServer, dbDriverODBCImpala, dbDriverODBCMYSQL, dbDriverODBCSAPHana, dbDriverMSOLAPWin32Com, dbDriverUBERWin32Com, dbDriverCB, dbDriverCBSQL, NodesInfo, spfsqlxParser, encryptSPFSQL, encryptConfigFile, encryptText, dbDriverODBCDenodo, dbDriverPGSQLPsycopg2, dbDriverDotNetLibSQLServer #, dbDriverODBCSnowflake
 try:
@@ -572,11 +573,13 @@ class SPFManager(Utilities) :
                     taskItem = tasksList.pop(0)
                     taskItem.execute()
                 except SPFNothingToProcessException as SPFNTPErr:
-                        self.logger.warn("{0} - {1}\n..this is no execution scenario...print to console and exit...continue with next task".format(calling_func, SPFNTPErr))
-                        #..this is no execution scenario...print to console and exit
-                        self.gMyAbort = False
-                        self.ConsoleWithCons80(SPFNTPErr)
-                        #...continue with next task
+                    # [Portable seam] moved to handleRootTaskError(); original lines kept for traceability:
+                    #     self.logger.warn("{0} - {1}\n..this is no execution scenario...print to console and exit...continue with next task".format(calling_func, SPFNTPErr))
+                    #     #..this is no execution scenario...print to console and exit
+                    #     self.gMyAbort = False
+                    #     self.ConsoleWithCons80(SPFNTPErr)
+                    #     #...continue with next task
+                    self.handleRootTaskError(SPFNTPErr)
             #END : while len(tasksList) > 0
 
             self.Final_CleanUp(MyTmpFName)
@@ -587,6 +590,18 @@ class SPFManager(Utilities) :
             self.logger.exception("Error in Run_SPFSQL function: {0}".format(err.args[0]))
             raise
     #END : def Run_SPFSQL
+
+    def handleRootTaskError(self, err) :
+        """
+        Policy for an error raised by a top-level task: SPFNothingToProcessException continues with the next task.
+        """
+        if not isinstance(err, SPFNothingToProcessException) :
+            raise err
+        self.logger.warn("{0} - {1}\n..this is no execution scenario...print to console and exit...continue with next task".format(self.getCallingFuncName(levelValue=-2), err))
+        #..this is no execution scenario...print to console and exit
+        self.gMyAbort = False
+        self.ConsoleWithCons80(err)
+        #...continue with next task
 
     def Run_SPFSQL_Macro(self, AlreadyMacFile=False) : 
         """
@@ -660,11 +675,13 @@ class SPFManager(Utilities) :
                     taskItem = tasksList.pop(0)
                     taskItem.execute()
                 except SPFNothingToProcessException as SPFNTPErr:
-                        self.logger.warn(r"{0} - {1}\...this is no execution scenario...print to console and exit...continue with next task".format(calling_func, SPFNTPErr))
-                        #..this is no execution scenario...print to console and exit
-                        self.gMyAbort = False
-                        self.ConsoleWithCons80(SPFNTPErr)
-                        #...continue with next task
+                    # [Portable seam] moved to handleRootTaskError(); original lines kept for traceability:
+                    #     self.logger.warn(r"{0} - {1}\...this is no execution scenario...print to console and exit...continue with next task".format(calling_func, SPFNTPErr))
+                    #     #..this is no execution scenario...print to console and exit
+                    #     self.gMyAbort = False
+                    #     self.ConsoleWithCons80(SPFNTPErr)
+                    #     #...continue with next task
+                    self.handleRootTaskError(SPFNTPErr)
 
             self.Final_CleanUp(MyTmpFName)
             return Run_SPFSQL_MacroStatus
@@ -1535,6 +1552,32 @@ class SPFTaskBase(Utilities) :
             raise
     #END : def execute(self)
 
+    #region -- [Portable seam] generator forms, used only by portable Python sessions
+    isDeferredSlot = False #True only for scripthost_portable.deferred_task.DeferredChildTask
+
+    def executeSteps(self) :
+        """
+        Generator form of execute() for a controller driven by a portable Python session.
+        It yields the deferred child slots where the controller would execute its children.
+        """
+        calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
+        self.logger.info("{0} - Base class ".format(calling_func))
+        try :
+            self.parseTaskOptions()
+            if self.parseTaskCommandDone is False : 
+                self.parseTaskCommandDone = self.parseTaskCommand()
+            yield from self.executeTaskCommandSteps()
+            yield from self.executeChildTasksSteps()
+        except Exception as err:
+            self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
+            raise
+
+    def executeTaskCommandSteps(self) :
+        """Controllers that execute child tasks within their command override this generator."""
+        self.executeTaskCommand()
+        yield from ()
+    #endregion -- [Portable seam] generator forms
+
     def parseTaskOptions(self):
         calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
         self.logger.debug("{0} - inside : parseTaskOptionsDone : {1}".format(calling_func, self.parseTaskOptionsDone))
@@ -1543,56 +1586,62 @@ class SPFTaskBase(Utilities) :
             return 
         try :
             tmpSPFTaskItem = self.SPFTaskItem
-            if tmpSPFTaskItem.strip().find("<OPTIONS>") == -1 :
-                errMsg = "Error: Missing the <OPTIONS> Token : {0}".format(tmpSPFTaskItem)
-                #self.logger.exception(errMsg)
-                raise Exception(errMsg)
-            
-            if tmpSPFTaskItem.strip().find("</OPTIONS>") == -1 :
-                errMsg = "Error: Missing the Options terminator token </OPTIONS>"
-                #self.logger.exception(errMsg)
-                raise Exception(errMsg)
-            
-            SPFTaskItemSplits = tmpSPFTaskItem.lstrip().split("</OPTIONS>",1)
-            #self.logger.debug("{0} - len(SPFTaskItemSplits) : {1}".format(calling_func, len(SPFTaskItemSplits)))
-            #self.logger.debug("{0} - SPFTaskItemSplits : {1}".format(calling_func, SPFTaskItemSplits))
+            # [Portable seam] lexical splitting moved to SPFTaskInput (shared with the portable Python API);
+            # original lines kept for traceability:
+            # if tmpSPFTaskItem.strip().find("<OPTIONS>") == -1 :
+            #     errMsg = "Error: Missing the <OPTIONS> Token : {0}".format(tmpSPFTaskItem)
+            #     #self.logger.exception(errMsg)
+            #     raise Exception(errMsg)
+            #
+            # if tmpSPFTaskItem.strip().find("</OPTIONS>") == -1 :
+            #     errMsg = "Error: Missing the Options terminator token </OPTIONS>"
+            #     #self.logger.exception(errMsg)
+            #     raise Exception(errMsg)
+            #
+            # SPFTaskItemSplits = tmpSPFTaskItem.lstrip().split("</OPTIONS>",1)
+            # #self.logger.debug("{0} - len(SPFTaskItemSplits) : {1}".format(calling_func, len(SPFTaskItemSplits)))
+            # #self.logger.debug("{0} - SPFTaskItemSplits : {1}".format(calling_func, SPFTaskItemSplits))
+            #
+            # optionsData = SPFTaskItemSplits[0].strip()
+            #
+            # if SPFTaskItemSplits[1].strip().find("<OPTIONS>") > 0 :
+            #     errMsg = "Error: <OPTIONS> Token found in SQL Region. May be missing a\n<---- New Query ----> delimiter"
+            #     #self.logger.exception(errMsg)
+            #     raise Exception(errMsg)
+            #
+            # if optionsData is None or len(optionsData.strip()) == 0 :
+            #     raise Exception("Options data is invalid {0}".format(optionsData))
+            #
+            # optionsDataSplits = optionsData.strip().split("\n")
+            #
+            # optionTxt0 = optionsDataSplits.pop(0).strip() #1st element 
+            # if optionTxt0 != "<OPTIONS>" : 
+            #     raise Exception("Options list is not starting with <OPTIONS>")
+            #
+            # regexPatStr = r"^/(?P<optToken>[\S\w]*?)=(?P<optVal>[\S\w ]*)"
+            # regexPatern = re.compile(regexPatStr, re.MULTILINE|re.IGNORECASE)
+            #
+            # for itemIdx in range(len(optionsDataSplits)) :
+            #     optionTxt = optionsDataSplits.pop(0).strip()
+            #     #self.logger.debug("{0} - optionTxt : {1}".format(calling_func, optionTxt))
+            #     if self.IsEmptyOrNone(optionTxt) is True:
+            #         continue #empty line in options section -- ignore and continue
+            #     try :
+            #         optionToken, optionTokenVal = regexPatern.findall(optionTxt)[0]
+            #         self.taskOptionsDict[f"/{optionToken}"] = optionTokenVal
+            #         #self.logger.debug("{0} - optionToken : {1}".format(calling_func, optionToken))
+            #         #self.logger.debug("{0} - optionTokenVal : {1}".format(calling_func, optionTokenVal))
+            #     except Exception as err:
+            #         self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
+            #         errMsg = "Error: Missing = in Token Line. Problem Line is: {0}".format(optionTxt)
+            #         raise Exception(errMsg)
+            #
+            #     #self.logger.debug("{0} - itemIdx {1} : optionsDataSplits : {2}".format(calling_func, itemIdx, optionTxt))
+            #     #self.logger.debug("{0} - optionToken = {1} : optionTokenVal = {2}".format(calling_func, optionToken, optionTokenVal))            
+            optionLines, taskCommand = split_task_item(tmpSPFTaskItem)
 
-            optionsData = SPFTaskItemSplits[0].strip()
-
-            if SPFTaskItemSplits[1].strip().find("<OPTIONS>") > 0 :
-                errMsg = "Error: <OPTIONS> Token found in SQL Region. May be missing a\n<---- New Query ----> delimiter"
-                #self.logger.exception(errMsg)
-                raise Exception(errMsg)
-
-            if optionsData is None or len(optionsData.strip()) == 0 :
-                raise Exception("Options data is invalid {0}".format(optionsData))
-
-            optionsDataSplits = optionsData.strip().split("\n")
-
-            optionTxt0 = optionsDataSplits.pop(0).strip() #1st element 
-            if optionTxt0 != "<OPTIONS>" : 
-                raise Exception("Options list is not starting with <OPTIONS>")
-
-            regexPatStr = r"^/(?P<optToken>[\S\w]*?)=(?P<optVal>[\S\w ]*)"
-            regexPatern = re.compile(regexPatStr, re.MULTILINE|re.IGNORECASE)
-
-            for itemIdx in range(len(optionsDataSplits)) :
-                optionTxt = optionsDataSplits.pop(0).strip()
-                #self.logger.debug("{0} - optionTxt : {1}".format(calling_func, optionTxt))
-                if self.IsEmptyOrNone(optionTxt) is True:
-                    continue #empty line in options section -- ignore and continue
-                try :
-                    optionToken, optionTokenVal = regexPatern.findall(optionTxt)[0]
-                    self.taskOptionsDict[f"/{optionToken}"] = optionTokenVal
-                    #self.logger.debug("{0} - optionToken : {1}".format(calling_func, optionToken))
-                    #self.logger.debug("{0} - optionTokenVal : {1}".format(calling_func, optionTokenVal))
-                except Exception as err:
-                    self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
-                    errMsg = "Error: Missing = in Token Line. Problem Line is: {0}".format(optionTxt)
-                    raise Exception(errMsg)
-
-                #self.logger.debug("{0} - itemIdx {1} : optionsDataSplits : {2}".format(calling_func, itemIdx, optionTxt))
-                #self.logger.debug("{0} - optionToken = {1} : optionTokenVal = {2}".format(calling_func, optionToken, optionTokenVal))            
+            for optionToken, optionTokenVal in iter_options(optionLines) :
+                self.taskOptionsDict[f"/{optionToken}"] = optionTokenVal
                 if optionToken == "OLEDB" :
                     self.OLEDBopt = self.getTxtOptValue(optionToken, optionTokenVal,doUpper=True)
                 elif optionToken == "NODE":
@@ -1782,7 +1831,8 @@ class SPFTaskBase(Utilities) :
                 elif optionToken == "PARALLEL":
                     self.queryOptions.PARALLEL = self.getNumericOptValue(optionToken, optionTokenVal, defaultValueIfEmptyOrNone=self.queryOptions.PARALLEL, castTo=int)
                 else :
-                    errMsg = "unknown option {0}".format(optionTxt)
+                    #errMsg = "unknown option {0}".format(optionTxt) #[Portable seam] optionTxt no longer exists
+                    errMsg = "unknown option /{0}={1}".format(optionToken, optionTokenVal)
                     self.logger.exception("{0} - {1}".format(calling_func, errMsg))
                     raise Exception(errMsg)
                         #perform post processing -- common for all task types
@@ -1841,11 +1891,12 @@ class SPFTaskBase(Utilities) :
             #END : if self.LastOut == True :
 
             #save TaskCommand (SQL/Command text)
-            self.SPFTaskCommand = SPFTaskItemSplits[1].lstrip()
+            #self.SPFTaskCommand = SPFTaskItemSplits[1].lstrip() #[Portable seam]
+            self.SPFTaskCommand = taskCommand
             self.FirstConnect #initialize the FirstConnect property after query options have been parsed
             self.parseTaskOptionsDone = True #set this to indicate that parsing of options is done
             del tmpSPFTaskItem
-            del SPFTaskItemSplits
+            #del SPFTaskItemSplits #[Portable seam]
         except Exception as err:
             self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
             raise
@@ -1978,6 +2029,13 @@ class SPFTaskBase(Utilities) :
         """
         below method executes the child tasks
         """
+        runTaskSteps(self.executeChildTasksSteps())
+
+    #def executeChildTasks(self) : #[Portable seam] original body now lives in executeChildTasksSteps()
+    def executeChildTasksSteps(self) :
+        """
+        Generator form of executeChildTasks(); see executeSteps().
+        """
         calling_func = self.getCallingFuncName(2,clsName = self.__class__.__name__)
         #pick up child Tasks & call execute on each
         self.logger.info("{0} - SPFTaskBase method".format(calling_func))  
@@ -1992,24 +2050,38 @@ class SPFTaskBase(Utilities) :
             tmpChildTasksList = []
             while len(self.childTasksList) > 0 :
                 myChildTask = self.childTasksList.pop(0)
+                deferred = myChildTask.isDeferredSlot #[Portable seam]
                 #if self.retainChildTasks == True :
-                tmp = copy.deepcopy(myChildTask)
+                #tmp = copy.deepcopy(myChildTask) #[Portable seam]
+                tmp = myChildTask if deferred else copy.deepcopy(myChildTask)
                 #self.Console("myChildTask = {0}".format(myChildTask))
                 #self.Console("tmp = {0}".format(tmp))
                 tmpChildTasksList.append(tmp)
                 try : 
-                    myChildTask.execute()
-                except SPFNothingToProcessException as SPFNTPE_Err:
-                    self.logger.warn("Error while executing child task : {0}...continue...".format(SPFNTPE_Err))
-                    self.Console(SPFNTPE_Err)
-                    #continue -- this is to handle situations where error are to be ignored and execution continues
+                    # [Portable seam] original lines kept for traceability; the except body moved to handleChildError():
+                    # myChildTask.execute()
+                    # except SPFNothingToProcessException as SPFNTPE_Err:
+                    #     self.logger.warn("Error while executing child task : {0}...continue...".format(SPFNTPE_Err))
+                    #     self.Console(SPFNTPE_Err)
+                    #     #continue -- this is to handle situations where error are to be ignored and execution continues
+                    # except Exception as err :
+                    #     self.logger.exception("Error while executing child task : {0}".format(err.args[0]))
+                    #     if self.ContinueOnError is True :
+                    #         pass # continue with execution of child tasks
+                    #     else : #should raise error and stop further execution
+                    #         if self.IsEmptyOrNone(self.childTasksExecutionCompleted_failMessage) is False :
+                    #             self.Console(self.childTasksExecutionCompleted_failMessage)
+                    #         self.childTasksList = tmpChildTasksList + self.childTasksList #recreate the childTasksList for future processing
+                    #         raise 
+                    if deferred :
+                        myChildTask.errorHandler = self.handleChildError
+                    yield from runChildSteps(myChildTask)
                 except Exception as err :
-                    self.logger.exception("Error while executing child task : {0}".format(err.args[0]))
-                    if self.ContinueOnError is True :
-                        pass # continue with execution of child tasks
-                    else : #should raise error and stop further execution
-                        if self.IsEmptyOrNone(self.childTasksExecutionCompleted_failMessage) is False :
-                            self.Console(self.childTasksExecutionCompleted_failMessage)
+                    try :
+                        if deferred :
+                            raise #each deferred statement has already applied handleChildError
+                        self.handleChildError(err)
+                    except Exception :
                         self.childTasksList = tmpChildTasksList + self.childTasksList #recreate the childTasksList for future processing
                         raise 
             #if self.retainChildTasks == True :
@@ -2018,6 +2090,32 @@ class SPFTaskBase(Utilities) :
         if self.IsEmptyOrNone(self.childTasksExecutionCompleted_passMessage) is False :
             self.Console(self.childTasksExecutionCompleted_passMessage)
         self.logger.info("{0} - SPFTaskBase method: completed ".format(calling_func))  
+
+    def handleChildError(self, err) :
+        """
+        [Portable seam] Policy for an error raised by one child task: return to continue with the next child, or raise.
+        """
+        if isinstance(err, SPFNothingToProcessException) :
+            self.logger.warn("Error while executing child task : {0}...continue...".format(err))
+            self.Console(err)
+            #continue -- this is to handle situations where error are to be ignored and execution continues
+            return
+        self.logger.exception("Error while executing child task : {0}".format(err.args[0]))
+        if self.ContinueOnError is True :
+            return # continue with execution of child tasks
+        #should raise error and stop further execution
+        if self.IsEmptyOrNone(self.childTasksExecutionCompleted_failMessage) is False :
+            self.Console(self.childTasksExecutionCompleted_failMessage)
+        raise err
+
+    def applyChildSubstitution(self, tasks, substitute) :
+        """
+        [Portable seam] Return substitute(tasks). Deferred slots keep 'substitute' for the statements a portable session creates later.
+        """
+        for task in tasks :
+            if task.isDeferredSlot :
+                task.layers.append(substitute)
+        return substitute(tasks)
 		        
     def executeChildTasksSvc(self):
         """
@@ -2152,6 +2250,22 @@ class SPFTaskBase(Utilities) :
     #END: def substituteMacro    
     #endregion -- helper functions -- can be overidden in derived classes
 #END : class SPFTaskBase
+
+#region -- [Portable seam] generator drivers; the deferred slot itself lives in scripthost_portable/deferred_task.py
+def runTaskSteps(steps):
+    """Drive an execute generator; original jobs contain no deferred slots."""
+    for slot in steps:
+        raise RuntimeError("Deferred child task reached outside a portable Python session: {0}".format(slot))
+
+def runChildSteps(task):
+    """Execute one child task; only a slot, or a task directly holding one (ELSE of a portable IF), is delegated."""
+    if task.isDeferredSlot:
+        yield task
+    elif any(child.isDeferredSlot for child in task.childTasksList):
+        yield from task.executeSteps()
+    else:
+        task.execute()
+#endregion -- [Portable seam] generator drivers
 class DummyPassThroughTask(SPFTaskBase):
     def execute(self):
         pass #do nothing just pass through
@@ -12554,11 +12668,13 @@ class StartMacroTask(SPFTaskBase) :
             raise
     #END : executeTaskCommand
 
-    def executeChildTasks(self):
+    #def executeChildTasks(self): #[Portable seam]
+    def executeChildTasksSteps(self):
         """
         ' overidden SPFTaskBase method...just to print the message to console
         """
-        super(StartMacroTask, self).executeChildTasks()
+        #super(StartMacroTask, self).executeChildTasks() #[Portable seam]
+        yield from super(StartMacroTask, self).executeChildTasksSteps()
         self.Console("\nMacro Processing Completed ...\n")
     #END : executeChildTasks
 #END : class StartMacroTask
@@ -12585,7 +12701,10 @@ class RunLoopTask(SPFTaskBase) :
         self.logger.debug("{0} - RunLoopTask Initialized".format(calling_func))
         return None
 
-    def executeTaskCommand(self):
+    def executeTaskCommand(self): #[Portable seam] original body now lives in executeTaskCommandSteps()
+        runTaskSteps(self.executeTaskCommandSteps())
+
+    def executeTaskCommandSteps(self):
         """
         ' Overridden base method, implementation of Set_Run_Loop
         '================================
@@ -12659,7 +12778,8 @@ class RunLoopTask(SPFTaskBase) :
                 try : 
                     recsWritten = self.writeDFtoFile(dfChunk, MyOutFile, trgt_DLM, naRep='', createNew=True)
                     self.shouldExecuteChildTasks = True
-                    self.executeChildTasks()
+                    #self.executeChildTasks() #[Portable seam]
+                    yield from self.executeChildTasksSteps()
                 except Exception as err :
                     self.logger.exception("{0} - {1}".format(calling_func, err))
                     if ((self.gMyAbort is True 
@@ -12726,7 +12846,10 @@ class ForLoopTask(SPFTaskBase) :
         self.logger.debug("{0} - ForLoopTask Initialized".format(calling_func))
         return None
 
-    def executeTaskCommand(self):
+    def executeTaskCommand(self): #[Portable seam] original body now lives in executeTaskCommandSteps()
+        runTaskSteps(self.executeTaskCommandSteps())
+
+    def executeTaskCommandSteps(self):
         """
         ' Overridden base method, implementation of Set_For_Loop
         '================================
@@ -12878,12 +13001,16 @@ class ForLoopTask(SPFTaskBase) :
                         Inci = MyEndi - j
                     #END : if
                     self.logger.info("Inci = {0}".format(Inci))
-                    SPFArr3 = copy.deepcopy(self.childTasksList)
-                    SPFArr3 = self.Substitute_Loop_Counter(SPFArr3, MySuffix, MyStarti, MyEndi, -1*Inci, MyLoopCtrName, j)
+                    # [Portable seam] original lines:
+                    # SPFArr3 = copy.deepcopy(self.childTasksList)
+                    # SPFArr3 = self.Substitute_Loop_Counter(SPFArr3, MySuffix, MyStarti, MyEndi, -1*Inci, MyLoopCtrName, j)
+                    SPFArr3 = self.applyChildSubstitution(copy.deepcopy(self.childTasksList), functools.partial(
+                        self.Substitute_Loop_Counter, MySuffix=MySuffix, MyStarti=MyStarti, MyEndi=MyEndi, MyStepi=-1*Inci, MyLoopCtrName=MyLoopCtrName, Idx=j))
                     self.Console("\n\n  Loop Counter ({0}) = {1}\n".format(MyLoopCtrName, j))
                     while len(SPFArr3) > 0 :
                         myChildTask = SPFArr3.pop(0)
-                        myChildTask.execute()
+                        #myChildTask.execute() #[Portable seam]
+                        yield from runChildSteps(myChildTask)
                     j = j + Inci
                 #END : for m in range (1, Niters +1)
             else : # 'Version 1
@@ -12891,12 +13018,16 @@ class ForLoopTask(SPFTaskBase) :
                 j = MyStarti
                 MyEndi = int(MyEnd)
                 MyStepi = int(MyStep)
-                SPFArr3 = copy.deepcopy(self.childTasksList)
-                SPFArr3 = self.Substitute_Loop_Counter(SPFArr3, MySuffix, MyStarti, MyEndi, MyStepi, MyLoopCtrName, j)
+                # [Portable seam] original lines:
+                # SPFArr3 = copy.deepcopy(self.childTasksList)
+                # SPFArr3 = self.Substitute_Loop_Counter(SPFArr3, MySuffix, MyStarti, MyEndi, MyStepi, MyLoopCtrName, j)
+                SPFArr3 = self.applyChildSubstitution(copy.deepcopy(self.childTasksList), functools.partial(
+                    self.Substitute_Loop_Counter, MySuffix=MySuffix, MyStarti=MyStarti, MyEndi=MyEndi, MyStepi=MyStepi, MyLoopCtrName=MyLoopCtrName, Idx=j))
                 self.Console("\n\n  Loop Counter ({0}) = {1}\n".format(MyLoopCtrName, j))
                 while len(SPFArr3) > 0 :
                     myChildTask = SPFArr3.pop(0)
-                    myChildTask.execute()
+                    #myChildTask.execute() #[Portable seam]
+                    yield from runChildSteps(myChildTask)
                 
             self.shouldExecuteChildTasks = False
         except Exception as err: 
@@ -12969,7 +13100,10 @@ class SiteLoopTask(SPFTaskBase) :
         self.logger.debug("{0} - SiteLoopTask Initialized".format(calling_func))
         return None
 
-    def executeTaskCommand(self):
+    def executeTaskCommand(self): #[Portable seam] original body now lives in executeTaskCommandSteps()
+        runTaskSteps(self.executeTaskCommandSteps())
+
+    def executeTaskCommandSteps(self):
         """
         ' Overridden base method, implementation of Set_Site_Loop
         '================================
@@ -13006,12 +13140,16 @@ class SiteLoopTask(SPFTaskBase) :
                     #self.logger.debug("{0} - node1 : {1}".format(calling_func, node1))
                     Tmp = self.Replace_Special_Chars(node1)
 
-                    SPFArr3 = copy.deepcopy(self.childTasksList)
-                    SPFArr3 = self.Substitute_Site_Value(SPFArr3, node1, Tmp)
+                    # [Portable seam] original lines:
+                    # SPFArr3 = copy.deepcopy(self.childTasksList)
+                    # SPFArr3 = self.Substitute_Site_Value(SPFArr3, node1, Tmp)
+                    SPFArr3 = self.applyChildSubstitution(copy.deepcopy(self.childTasksList), functools.partial(
+                        self.Substitute_Site_Value, NodeValue=node1, Tmp=Tmp))
 
                     while len(SPFArr3) > 0 :
                         myChildTask = SPFArr3.pop(0)
-                        myChildTask.execute()
+                        #myChildTask.execute() #[Portable seam]
+                        yield from runChildSteps(myChildTask)
 
                 except Exception as err:
                     self.logger.exception("{0} - {1}".format(calling_func, err.args[0]))
@@ -13078,7 +13216,10 @@ class IfThenTask(SPFTaskBase) :
         self.logger.debug("{0} - IfThenTask Initialized".format(calling_func))
         return None
 
-    def executeTaskCommand(self):
+    def executeTaskCommand(self): #[Portable seam] original body now lives in executeTaskCommandSteps()
+        runTaskSteps(self.executeTaskCommandSteps())
+
+    def executeTaskCommandSteps(self):
         """
         ' Overridden base method, implementation of Set_If_Then
         '================================
@@ -13266,8 +13407,10 @@ class IfThenTask(SPFTaskBase) :
             else :
                 if ElseTask_tmp is not None :
                     self.Console("    If Condition is False. Starting ELSE clause logic...\n")
-                    ElseTask_tmp.execute() # execute the child tasks
-                    EndIfTask_tmp.execute() # execute the end-if task
+                    #ElseTask_tmp.execute() # execute the child tasks #[Portable seam]
+                    #EndIfTask_tmp.execute() # execute the end-if task #[Portable seam]
+                    yield from runChildSteps(ElseTask_tmp) # execute the child tasks
+                    yield from runChildSteps(EndIfTask_tmp) # execute the end-if task
                 else :
                     self.Console("    If Condition is False. Steps Will not be executed\n")                
         except Exception as err: 
