@@ -9,12 +9,16 @@ from vg2c.diagnostics import CompileError
 from vg2c.frontend.models import SourceSpan
 
 
-def read_source(data: bytes, source: Path | None = None) -> tuple[str, tuple[SourceSpan, ...]]:
+def read_source(
+    data: bytes, source: Path | None = None
+) -> tuple[str, tuple[SourceSpan, ...]]:
     """Decoded text (UTF-8, universal newlines) and one span per delimiter-split block index."""
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as error:
-        raise CompileError("encoding", "Input must be UTF-8.", SourceSpan(source, 1, 1), 0) from error
+        raise CompileError(
+            "encoding", "Input must be UTF-8.", SourceSpan(source, 1, 1), 0
+        ) from error
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     spans, line = [], 1
     for segment in text.split(task_delimiter()):

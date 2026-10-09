@@ -36,32 +36,58 @@ class RemoteScope:
     def invoke(self, *, options: Options = None, command: str = "") -> None:
         self._steps.append(TaskInput(option_pairs(options), command))
 
-    def utility(self, name: str, *arguments, options: Options = None, external: bool = False,
-                command: str = "") -> None:
-        self._steps.append(utility_input(name if external else "{" + name + "}", arguments, options, command))
+    def utility(
+        self,
+        name: str,
+        *arguments,
+        options: Options = None,
+        external: bool = False,
+        command: str = "",
+    ) -> None:
+        self._steps.append(
+            utility_input(
+                name if external else "{" + name + "}", arguments, options, command
+            )
+        )
 
     def command(self, command: str, *, options: Options = None) -> None:
         self._steps.append(TaskInput((("UTILITIES", command), *option_pairs(options))))
 
     def _block(self, route, arguments, options, end_route, end_options) -> _Block:
-        return _Block(self._steps, utility_input(route, arguments, options), utility_input(end_route, (), end_options))
+        return _Block(
+            self._steps,
+            utility_input(route, arguments, options),
+            utility_input(end_route, (), end_options),
+        )
 
-    def if_then(self, *arguments, options: Options = None, end_options: Options = None) -> _Block:
+    def if_then(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Block:
         return self._block("{IF-THEN}", arguments, options, "{END-IF}", end_options)
 
     def else_branch(self, *, options: Options = None) -> None:
         self._steps.append(utility_input("{ELSE}", (), options))
 
-    def macro(self, *arguments, options: Options = None, end_options: Options = None) -> _Block:
-        return self._block("{START-MACRO}", arguments, options, "{END-MACRO}", end_options)
+    def macro(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Block:
+        return self._block(
+            "{START-MACRO}", arguments, options, "{END-MACRO}", end_options
+        )
 
-    def for_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Block:
+    def for_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Block:
         return self._block("{FOR-LOOP}", arguments, options, "{END-LOOP}", end_options)
 
-    def site_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Block:
+    def site_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Block:
         return self._block("{SITE-LOOP}", arguments, options, "{END-LOOP}", end_options)
 
-    def run_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Block:
+    def run_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Block:
         return self._block("{RUN-LOOP}", arguments, options, "{END-LOOP}", end_options)
 
     def __enter__(self):
@@ -75,9 +101,21 @@ class RemoteScope:
         try:
             task = session.task(self._header)
             manager = session.manager
-            items = [manager.Substitute_Global_Var(step.encode()) for step in self._steps]
+            items = [
+                manager.Substitute_Global_Var(step.encode()) for step in self._steps
+            ]
             task.childTasksList = manager.Process_Query(
-                0, len(items), items, manager.gMyLocal, "", None, len(items), manager.gRNStr, "", "")
+                0,
+                len(items),
+                items,
+                manager.gMyLocal,
+                "",
+                None,
+                len(items),
+                manager.gRNStr,
+                "",
+                "",
+            )
             session.prepare(task)
             task.execute()
         except Exception as failure:

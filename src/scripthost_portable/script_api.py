@@ -22,8 +22,14 @@ class _Script:
         """Task selected by its options (queries, reports, WRITE-FILE, ...)."""
         _session().run(TaskInput(option_pairs(options), command))
 
-    def utility(self, name: str, *arguments, options: Options = None, external: bool = False,
-                command: str = "") -> None:
+    def utility(
+        self,
+        name: str,
+        *arguments,
+        options: Options = None,
+        external: bool = False,
+        command: str = "",
+    ) -> None:
         """/UTILITIES route: ``name`` is braced ({NAME}) unless ``external`` keeps an alias as written."""
         route = name if external else "{" + name + "}"
         _session().run(utility_input(route, arguments, options, command))

@@ -28,12 +28,16 @@ class Emitter:
     def __init__(self, spans: Sequence[SourceSpan]):
         self.spans = spans
         self.writer = IndentWriter()
-        self.records: dict[int, tuple[TaskDescriptor, ...]] = {}  # first line of a call -> its blocks
+        self.records: dict[int, tuple[TaskDescriptor, ...]] = (
+            {}
+        )  # first line of a call -> its blocks
         self.uses_controls = False
         self._names: list[str] = []
 
     def fail(self, code: str, message: str, task: TaskDescriptor) -> NoReturn:
-        raise CompileError(code, message, self.spans[task.block_index], task.block_index)
+        raise CompileError(
+            code, message, self.spans[task.block_index], task.block_index
+        )
 
     def write(self, line: str) -> None:
         self.writer.write(line)
@@ -55,21 +59,38 @@ class Emitter:
         finally:
             self._names.pop()
 
-    def call(self, head: str, arguments: list[Argument], blocks: Sequence[TaskDescriptor], suffix: str = "") -> None:
+    def call(
+        self,
+        head: str,
+        arguments: list[Argument],
+        blocks: Sequence[TaskDescriptor],
+        suffix: str = "",
+    ) -> None:
         self.uses_controls |= head.startswith("with controls.")
         self.records[self.writer.line_number] = tuple(blocks)
         flat = f"{head}({', '.join(argument[0] for argument in arguments)}){suffix}"
-        if all(len(argument) == 1 for argument in arguments) and "\n" not in flat \
-                and self.writer.indent_depth * 4 + len(flat) <= _LINE_LIMIT:
+        if (
+            all(len(argument) == 1 for argument in arguments)
+            and "\n" not in flat
+            and self.writer.indent_depth * 4 + len(flat) <= _LINE_LIMIT
+        ):
             self.write(flat)
             return
         self.write(head + "(")
         self.push()
-        positional = [argument[0] for argument in arguments if len(argument) == 1 and not _KEYWORD.match(argument[0])]
+        positional = [
+            argument[0]
+            for argument in arguments
+            if len(argument) == 1 and not _KEYWORD.match(argument[0])
+        ]
         joined = ", ".join(positional) + ","
-        if len(positional) > 1 and "\n" not in joined and self.writer.indent_depth * 4 + len(joined) <= _LINE_LIMIT:
+        if (
+            len(positional) > 1
+            and "\n" not in joined
+            and self.writer.indent_depth * 4 + len(joined) <= _LINE_LIMIT
+        ):
             self.write(joined)
-            arguments = arguments[len(positional):]
+            arguments = arguments[len(positional) :]
         for argument in arguments:
             for line in argument[:-1]:
                 self.write(line)
@@ -116,8 +137,11 @@ def emit(program: ProgramDescriptor, spans: Sequence[SourceSpan]) -> EmittedScri
     return EmittedScript(source, (api_import,), _metadata(source, records, spans))
 
 
-def _metadata(source: str, records: dict[int, tuple[TaskDescriptor, ...]],
-              spans: Sequence[SourceSpan]) -> tuple[EmittedBlock, ...]:
+def _metadata(
+    source: str,
+    records: dict[int, tuple[TaskDescriptor, ...]],
+    spans: Sequence[SourceSpan],
+) -> tuple[EmittedBlock, ...]:
     lines = source.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
@@ -125,7 +149,9 @@ def _metadata(source: str, records: dict[int, tuple[TaskDescriptor, ...]],
 
     def offset(line: int, column: int) -> int:
         # AST columns count UTF-8 bytes; ranges count Python characters.
-        return offsets[line - 1] + len(lines[line - 1].encode("utf-8")[:column].decode("utf-8"))
+        return offsets[line - 1] + len(
+            lines[line - 1].encode("utf-8")[:column].decode("utf-8")
+        )
 
     first_calls: dict[int, ast.Call] = {}
     for node in ast.walk(ast.parse(source)):
@@ -135,8 +161,19 @@ def _metadata(source: str, records: dict[int, tuple[TaskDescriptor, ...]],
                 first_calls[node.lineno] = node
     emitted = []
     for line, node in sorted(first_calls.items()):
-        source_range = SourceRange(offset(node.lineno, node.col_offset), offset(node.end_lineno, node.end_col_offset))
-        text = source[source_range.start_offset:source_range.end_offset]
+        source_range = SourceRange(
+            offset(node.lineno, node.col_offset),
+            offset(node.end_lineno, node.end_col_offset),
+        )
+        text = source[source_range.start_offset : source_range.end_offset]
         for task in records[line]:
-            emitted.append(EmittedBlock(task.block_index, task.class_name, text, source_range, spans[task.block_index]))
+            emitted.append(
+                EmittedBlock(
+                    task.block_index,
+                    task.class_name,
+                    text,
+                    source_range,
+                    spans[task.block_index],
+                )
+            )
     return tuple(sorted(emitted, key=lambda block: block.block_index))

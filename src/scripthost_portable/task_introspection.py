@@ -44,11 +44,16 @@ def inspect_task(raw_block: str, block_index: int) -> TaskDescriptor:
 
 def inspect_program(text: str) -> ProgramDescriptor:
     """Build the original task tree in a fresh process and scratch cwd; no task is parsed or executed."""
-    with tempfile.TemporaryDirectory(prefix="scripthost-inspect-", ignore_cleanup_errors=True) as scratch:
+    with tempfile.TemporaryDirectory(
+        prefix="scripthost-inspect-", ignore_cleanup_errors=True
+    ) as scratch:
         Path(scratch, _PROGRAM_FILE).write_text(text, encoding="utf-8")
         completed = subprocess.run(
             [sys.executable, "-m", __name__, scratch],
-            cwd=scratch, capture_output=True, text=True, check=False,
+            cwd=scratch,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         result = Path(scratch, _RESULT_FILE)
         if not result.is_file():
@@ -65,27 +70,38 @@ def inspect_program(text: str) -> ProgramDescriptor:
 def _build_program(text: str) -> ProgramDescriptor:
     manager = _spf_manager_type()()
     blocks = text.split(manager.SQLFILE_DELIM)
-    roots = manager.Process_Query(0, len(blocks), blocks, "", "", None, len(blocks), "", "", "")
+    roots = manager.Process_Query(
+        0, len(blocks), blocks, "", "", None, len(blocks), "", "", ""
+    )
     return ProgramDescriptor(tuple(_describe(task) for task in roots))
 
 
 def _describe(task) -> TaskDescriptor:
     return TaskDescriptor(
-        task.SPFTaskItemIdx, task.SPFTaskType, type(task).__name__, TaskInput.parse(task.SPFTaskItem),
-        task.isControlerStartTask, task.isControlerEndTask, task.nestLevel,
+        task.SPFTaskItemIdx,
+        task.SPFTaskType,
+        type(task).__name__,
+        TaskInput.parse(task.SPFTaskItem),
+        task.isControlerStartTask,
+        task.isControlerEndTask,
+        task.nestLevel,
         tuple(_describe(child) for child in task.childTasksList),
     )
 
 
 def _from_json(data: dict) -> TaskDescriptor:
-    task_input = TaskInput(tuple(map(tuple, data["input"]["options"])), data["input"]["command"])
+    task_input = TaskInput(
+        tuple(map(tuple, data["input"]["options"])), data["input"]["command"]
+    )
     children = tuple(_from_json(child) for child in data["children"])
     return TaskDescriptor(**{**data, "input": task_input, "children": children})
 
 
 def _main(scratch: Path) -> None:
     try:
-        program = _build_program(scratch.joinpath(_PROGRAM_FILE).read_text(encoding="utf-8"))
+        program = _build_program(
+            scratch.joinpath(_PROGRAM_FILE).read_text(encoding="utf-8")
+        )
         payload = {"tasks": [asdict(task) for task in program.tasks]}
     except Exception as error:
         payload = {"error": f"{type(error).__name__}: {error}"}

@@ -1,4 +1,5 @@
 """Deferred child slot for running native Python bodies inside original ScriptHost controllers."""
+
 import collections
 import copy
 
@@ -14,6 +15,7 @@ class DeferredChildTask(legacy.SPFTaskBase):
     would execute its child tasks; the session then runs Python statements there. Substitutions the
     controller applies to its children are kept in 'layers' and replayed on each of those statements.
     """
+
     isDeferredSlot = True
 
     def __init__(self):
@@ -46,9 +48,15 @@ class MacroLayer:
             if task.isDeferredSlot or task.isControlerEndTask is True:
                 continue  # end tasks never substitute macros; slots inherit this layer from their session
             task.SPFTaskItem = task.Substitute_Macro(
-                task.SPFTaskItem, parentMacTables=self.tables, Rowidx=self.Rowidx, MyMode=self.MyMode,
-                currentRow=self.currentRow)
+                task.SPFTaskItem,
+                parentMacTables=self.tables,
+                Rowidx=self.Rowidx,
+                MyMode=self.MyMode,
+                currentRow=self.currentRow,
+            )
             task.parentMacTables = self.live
             if type(task) is not legacy.StartMacroTask:
-                self(task.childTasksList)  # a nested START-MACRO substitutes its own children when it executes
+                self(
+                    task.childTasksList
+                )  # a nested START-MACRO substitutes its own children when it executes
         return tasks

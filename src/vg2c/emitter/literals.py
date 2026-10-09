@@ -13,7 +13,12 @@ def escape_string(text: str, quote: str = '"') -> str:
 def string_literal(text: str) -> str:
     if "\n" not in text:
         return repr(text)
-    if "\\" in text and '"""' not in text and not text.endswith(("\\", '"')) and not {"\r", "\0"} & set(text):
+    if (
+        "\\" in text
+        and '"""' not in text
+        and not text.endswith(("\\", '"'))
+        and not {"\r", "\0"} & set(text)
+    ):
         return 'r"""' + text + '"""'
     quote = '"' if '"""' not in text else "'"
     if quote * 3 in text:

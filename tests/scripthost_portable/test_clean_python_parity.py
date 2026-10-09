@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 _CHILD_MARKER = "__CLEAN_PYTHON_PARITY__="
 _ROOT = Path(__file__).resolve().parents[2]
 _TARGETS = {
@@ -55,15 +54,56 @@ def _child(argv: list[str]) -> int:
             "FACILITY,LOT\nATC,LOT-SEED\n", encoding="utf-8"
         )
         fields = [
-            "lot_1", "newqty1", "facility", "operation", "tool_entity", "primary_entity",
-            "processing_end_date", "lot", "prodgroup3", "product", "visual_id", "ws_loss_code",
-            "media_in_x", "media_in_y", "height", *[f"patch_lift_roi{i}" for i in range(1, 9)],
-            "patch_lift_roi_max", "patch_sli", "interposer_sli", "NCO_Risk", "VIDCount", "FlagLot",
+            "lot_1",
+            "newqty1",
+            "facility",
+            "operation",
+            "tool_entity",
+            "primary_entity",
+            "processing_end_date",
+            "lot",
+            "prodgroup3",
+            "product",
+            "visual_id",
+            "ws_loss_code",
+            "media_in_x",
+            "media_in_y",
+            "height",
+            *[f"patch_lift_roi{i}" for i in range(1, 9)],
+            "patch_lift_roi_max",
+            "patch_sli",
+            "interposer_sli",
+            "NCO_Risk",
+            "VIDCount",
+            "FlagLot",
         ]
-        row = ["LOT-SEED", 10, "ATC", "2303", "TOOL", "PRIMARY", "2026-10-01 01:00:00",
-               "LOT-SEED", "CWF", "PRODUCT", "VIS-SEED", "", 1, 1, 10, *([0] * 8),
-               0, "PSLI", "ISLI", "0", 2, "0"]
-        with (workdir / "IPM_Data.csv").open("w", encoding="utf-8", newline="") as stream:
+        row = [
+            "LOT-SEED",
+            10,
+            "ATC",
+            "2303",
+            "TOOL",
+            "PRIMARY",
+            "2026-10-01 01:00:00",
+            "LOT-SEED",
+            "CWF",
+            "PRODUCT",
+            "VIS-SEED",
+            "",
+            1,
+            1,
+            10,
+            *([0] * 8),
+            0,
+            "PSLI",
+            "ISLI",
+            "0",
+            2,
+            "0",
+        ]
+        with (workdir / "IPM_Data.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as stream:
             writer = csv.writer(stream)
             writer.writerow(fields)
             writer.writerow(row)
@@ -71,14 +111,36 @@ def _child(argv: list[str]) -> int:
         (workdir / "items.csv").write_text('LOT\n"unterminated\n', encoding="utf-8")
 
     mars_columns = [
-        "lot_1", "operation_1", "out_date", "oldqty1", "newqty1", "Interposer_SLI",
-        "Patch_SLI", "prodgroup3_1", "entity", "transaction",
+        "lot_1",
+        "operation_1",
+        "out_date",
+        "oldqty1",
+        "newqty1",
+        "Interposer_SLI",
+        "Patch_SLI",
+        "prodgroup3_1",
+        "entity",
+        "transaction",
     ]
     aries_columns = [
-        "facility", "operation", "module_name", "tool_entity", "primary_entity",
-        "processing_start_date", "processing_end_date", "lot", "product", "prodgroup3",
-        "product_desc", "owner", "visual_id", "ws_loss_code", "media_in_x", "media_in_y",
-        "parameter", "numeric_value",
+        "facility",
+        "operation",
+        "module_name",
+        "tool_entity",
+        "primary_entity",
+        "processing_start_date",
+        "processing_end_date",
+        "lot",
+        "product",
+        "prodgroup3",
+        "product_desc",
+        "owner",
+        "visual_id",
+        "ws_loss_code",
+        "media_in_x",
+        "media_in_y",
+        "parameter",
+        "numeric_value",
     ]
     mars: list[list[object]] = []
     aries: list[list[object]] = []
@@ -92,22 +154,52 @@ def _child(argv: list[str]) -> int:
         mars_lots: set[str] = set()
         for lot, visual, roi in lots:
             if scenario != "zero-input" and lot not in mars_lots:
-                mars.append([
-                    lot, "2303", "2026-10-01 00:00:00", 10, 10, "ISLI", "PSLI", "CWF",
-                    "IAM-1", "MVOU",
-                ])
+                mars.append(
+                    [
+                        lot,
+                        "2303",
+                        "2026-10-01 00:00:00",
+                        10,
+                        10,
+                        "ISLI",
+                        "PSLI",
+                        "CWF",
+                        "IAM-1",
+                        "MVOU",
+                    ]
+                )
                 mars_lots.add(lot)
             values = {
                 "height": 10,
-                **{f"patch_lift_roi{index}": roi if index == 4 else 0 for index in range(1, 9)},
+                **{
+                    f"patch_lift_roi{index}": roi if index == 4 else 0
+                    for index in range(1, 9)
+                },
                 "patch_lift_roi_max": roi,
             }
             for parameter, value in values.items():
-                aries.append([
-                    "ATC", "2303", "MODULE", "TOOL", "PRIMARY", "2026-10-01 00:00:00",
-                    "2026-10-01 01:00:00", lot, "PRODUCT", "CWF", "test product", "owner",
-                    visual, "", 1, 1, parameter, value,
-                ])
+                aries.append(
+                    [
+                        "ATC",
+                        "2303",
+                        "MODULE",
+                        "TOOL",
+                        "PRIMARY",
+                        "2026-10-01 00:00:00",
+                        "2026-10-01 01:00:00",
+                        lot,
+                        "PRODUCT",
+                        "CWF",
+                        "test product",
+                        "owner",
+                        visual,
+                        "",
+                        1,
+                        1,
+                        parameter,
+                        value,
+                    ]
+                )
 
     events: list[dict[str, object]] = []
 
@@ -116,11 +208,22 @@ def _child(argv: list[str]) -> int:
             self.backend, self.node = backend, node
 
         def read(self, *, site: str, query: str):
-            events.append({"kind": "query", "backend": self.backend, "node": self.node,
-                           "site": site, "sql": query})
+            events.append(
+                {
+                    "kind": "query",
+                    "backend": self.backend,
+                    "node": self.node,
+                    "site": site,
+                    "sql": query,
+                }
+            )
             if scenario == "transport-failure":
                 raise RuntimeError("injected offline reader failure")
-            rows, columns = (mars, mars_columns) if self.backend == "mars" else (aries, aries_columns)
+            rows, columns = (
+                (mars, mars_columns)
+                if self.backend == "mars"
+                else (aries, aries_columns)
+            )
             return pd.DataFrame(rows, columns=columns)
 
     class Factory:
@@ -130,21 +233,53 @@ def _child(argv: list[str]) -> int:
 
     def capture_aed(path, logger=None):
         candidate = Path(path)
-        events.append({"kind": "aed", "path": str(path),
-                       "bytes": candidate.read_bytes().decode("utf-8-sig")})
+        events.append(
+            {
+                "kind": "aed",
+                "path": str(path),
+                "bytes": candidate.read_bytes().decode("utf-8-sig"),
+            }
+        )
 
-    def capture_email(self, MyLocal, MyCSVFile, MailToIn, Subject, BodyF, MailCC,
-                      MailBCC, MyRole, OnlyIntel, ll_Outlook, EmailUtility="SA"):
+    def capture_email(
+        self,
+        MyLocal,
+        MyCSVFile,
+        MailToIn,
+        Subject,
+        BodyF,
+        MailCC,
+        MailBCC,
+        MyRole,
+        OnlyIntel,
+        ll_Outlook,
+        EmailUtility="SA",
+    ):
         body = Path(BodyF)
-        events.append({"kind": "email", "to": str(MailToIn), "subject": str(Subject),
-                       "body": body.read_text(encoding="utf-8-sig") if body.is_file() else str(BodyF),
-                       "attachments": str(MyCSVFile)})
+        events.append(
+            {
+                "kind": "email",
+                "to": str(MailToIn),
+                "subject": str(Subject),
+                "body": (
+                    body.read_text(encoding="utf-8-sig")
+                    if body.is_file()
+                    else str(BodyF)
+                ),
+                "attachments": str(MyCSVFile),
+            }
+        )
 
     aed_api.process_candidates = capture_aed
     Utilities.SPFEmail = capture_email
 
     query_classes = {"nqOracleTask", "nqSQLiteTask"}
-    report_classes = {"HTMLRunTask", "HTMLDeferTask", "HTMLLayoutTask", "HTMLDeleteTask"}
+    report_classes = {
+        "HTMLRunTask",
+        "HTMLDeferTask",
+        "HTMLLayoutTask",
+        "HTMLDeleteTask",
+    }
     control_classes = {"StartMacroTask", "RowsInFileTask", "IfThenTask"}
     instrumented_classes = query_classes | report_classes | control_classes
     manager_ids: dict[int, str] = {}
@@ -159,7 +294,8 @@ def _child(argv: list[str]) -> int:
                 str(workdir), "<WORKDIR>"
             )
             for path in workdir.iterdir()
-            if path.is_file() and path.suffix.lower() in {".htm", ".html", ".css", ".ini"}
+            if path.is_file()
+            and path.suffix.lower() in {".htm", ".html", ".css", ".ini"}
         }
 
     def instrument_get_query(manager, *args, **kwargs):
@@ -173,19 +309,44 @@ def _child(argv: list[str]) -> int:
             name = type(task).__name__
             files_before = {path.name for path in workdir.iterdir() if path.is_file()}
             event = {
-                "kind": "task", "class": name, "manager": manager_ids[id(manager)],
+                "kind": "task",
+                "class": name,
+                "manager": manager_ids[id(manager)],
             }
             if name in query_classes | report_classes:
                 event["raw_options"] = dict(task.taskOptionsDict)
                 event["effective_options"] = {
                     field: getattr(task, field)
                     for field in (
-                        "SQLEngine", "OLEDBopt", "Sitei", "MyTables", "OutExcel", "OutFile",
-                        "MyHeaders", "MyReset", "ll_QuoteCSV", "MyRecd", "MyPromptTxt",
-                        "CTRow", "CTVal", "CTHeader", "MyInstance", "g_ID", "MyCTArray",
-                        "MyTblDelete", "MySQLite_DT", "WorkDir", "OutTT", "MyTS",
-                        "ll_UniqueHdr", "ll_hadoopSvr", "ll_Outlook", "ll_AppSvr",
-                        "genJSDataOnly", "jsDataFileLabel", "gHTMLReport",
+                        "SQLEngine",
+                        "OLEDBopt",
+                        "Sitei",
+                        "MyTables",
+                        "OutExcel",
+                        "OutFile",
+                        "MyHeaders",
+                        "MyReset",
+                        "ll_QuoteCSV",
+                        "MyRecd",
+                        "MyPromptTxt",
+                        "CTRow",
+                        "CTVal",
+                        "CTHeader",
+                        "MyInstance",
+                        "g_ID",
+                        "MyCTArray",
+                        "MyTblDelete",
+                        "MySQLite_DT",
+                        "WorkDir",
+                        "OutTT",
+                        "MyTS",
+                        "ll_UniqueHdr",
+                        "ll_hadoopSvr",
+                        "ll_Outlook",
+                        "ll_AppSvr",
+                        "genJSDataOnly",
+                        "jsDataFileLabel",
+                        "gHTMLReport",
                     )
                 }
                 if name in query_classes:
@@ -193,7 +354,9 @@ def _child(argv: list[str]) -> int:
                 elif name != "HTMLDeleteTask":
                     event["report_template"] = task.SPFTaskCommand
             elif name in control_classes:
-                event["utilities"] = list(task.MyUtilities or [])[:4 if name == "IfThenTask" else 3]
+                event["utilities"] = list(task.MyUtilities or [])[
+                    : 4 if name == "IfThenTask" else 3
+                ]
             if name in report_classes:
                 event["report_before"] = report_files()
             events.append(event)
@@ -206,7 +369,9 @@ def _child(argv: list[str]) -> int:
             if name in query_classes:
                 event["query_after"] = task.SPFTaskCommand
             if name in control_classes:
-                event["execute_child_tasks"] = getattr(task, "shouldExecuteChildTasks", None)
+                event["execute_child_tasks"] = getattr(
+                    task, "shouldExecuteChildTasks", None
+                )
                 event["environment"] = {
                     key: os.environ.get(key) for key in ("RowsInFile", "SIGNAL")
                 }
@@ -241,27 +406,37 @@ def _child(argv: list[str]) -> int:
     try:
         with use_reader_factory(Factory()):
             if mode == "original":
-                success = runtime.run_text(Path(source).read_text(encoding="utf-8-sig"), workdir)
+                success = runtime.run_text(
+                    Path(source).read_text(encoding="utf-8-sig"), workdir
+                )
             else:
                 success = runtime.run_python_file(Path(source), workdir)
         error = None
     except Exception as exc:
         success = False
         error = {"type": type(exc).__name__, "message": str(exc)}
-    events.append({
-        "kind": "environment",
-        "values": {key: os.environ.get(key) for key in ("SIGNAL", "RowsInFile", "STAGE2_SIGNAL")},
-    })
+    events.append(
+        {
+            "kind": "environment",
+            "values": {
+                key: os.environ.get(key)
+                for key in ("SIGNAL", "RowsInFile", "STAGE2_SIGNAL")
+            },
+        }
+    )
     paths = sorted(path for path in workdir.iterdir() if path.is_file())
     snapshots = {}
     for path in paths:
         data = path.read_bytes()
         normalized = data.replace(str(workdir).encode(), b"<WORKDIR>")
         try:
-            snapshots[path.name] = {"sha256": hashlib.sha256(normalized).hexdigest(),
-                                    "text": normalized.decode("utf-8-sig")}
+            snapshots[path.name] = {
+                "sha256": hashlib.sha256(normalized).hexdigest(),
+                "text": normalized.decode("utf-8-sig"),
+            }
         except UnicodeDecodeError:
             snapshots[path.name] = {"sha256": hashlib.sha256(normalized).hexdigest()}
+
     def normalize(value):
         if isinstance(value, str):
             return value.replace(str(workdir), "<WORKDIR>")
@@ -271,11 +446,22 @@ def _child(argv: list[str]) -> int:
             return {key: normalize(item) for key, item in value.items()}
         return value
 
-    print(_CHILD_MARKER + json.dumps(normalize({
-        "success": success, "error": error, "events": events,
-        "files_before": sorted(before), "files_after": [path.name for path in paths],
-        "snapshots": snapshots,
-    }), sort_keys=True))
+    print(
+        _CHILD_MARKER
+        + json.dumps(
+            normalize(
+                {
+                    "success": success,
+                    "error": error,
+                    "events": events,
+                    "files_before": sorted(before),
+                    "files_after": [path.name for path in paths],
+                    "snapshots": snapshots,
+                }
+            ),
+            sort_keys=True,
+        )
+    )
     return 0
 
 
@@ -295,8 +481,15 @@ def _child_run(source: Path, workdir: Path, mode: str, scenario: str) -> dict:
         [str(_ROOT / "src"), str(_ROOT), env.get("PYTHONPATH", "")]
     )
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--child", str(source),
-         str(workdir), mode, scenario],
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--child",
+            str(source),
+            str(workdir),
+            mode,
+            scenario,
+        ],
         cwd=_ROOT,
         env=env,
         text=True,
@@ -304,13 +497,21 @@ def _child_run(source: Path, workdir: Path, mode: str, scenario: str) -> dict:
         timeout=180,
         check=False,
     )
-    line = next((line for line in reversed(result.stdout.splitlines())
-                 if line.startswith(_CHILD_MARKER)), None)
+    line = next(
+        (
+            line
+            for line in reversed(result.stdout.splitlines())
+            if line.startswith(_CHILD_MARKER)
+        ),
+        None,
+    )
     assert result.returncode == 0 and line, result.stdout + result.stderr
-    return json.loads(line[len(_CHILD_MARKER):])
+    return json.loads(line[len(_CHILD_MARKER) :])
 
 
-def _run_pair(source: Path, generated: Path, root: Path, scenario: str) -> tuple[dict, dict]:
+def _run_pair(
+    source: Path, generated: Path, root: Path, scenario: str
+) -> tuple[dict, dict]:
     original = _child_run(source, root / "original", "original", scenario)
     python = _child_run(generated, root / "python", "python", scenario)
     assert original["success"] == python["success"]
@@ -323,8 +524,9 @@ def _run_pair(source: Path, generated: Path, root: Path, scenario: str) -> tuple
 
 @pytest.mark.parametrize("job", ["icm", "csr"])
 @pytest.mark.parametrize("scenario", ["positive", "no-candidates", "zero-input"])
-def test_original_and_generated_jobs_match_in_clean_processes(tmp_path: Path, job: str,
-                                                               scenario: str) -> None:
+def test_original_and_generated_jobs_match_in_clean_processes(
+    tmp_path: Path, job: str, scenario: str
+) -> None:
     source = _TARGETS[job]
     generated = tmp_path / f"{job}.py"
     generated.write_text(compile_document(source).emitted.source, encoding="utf-8")
@@ -332,12 +534,15 @@ def test_original_and_generated_jobs_match_in_clean_processes(tmp_path: Path, jo
     assert result["success"]
 
     tasks = [event for event in result["events"] if event["kind"] == "task"]
-    queries = [event for event in tasks if event["class"] in {"nqOracleTask", "nqSQLiteTask"}]
+    queries = [
+        event for event in tasks if event["class"] in {"nqOracleTask", "nqSQLiteTask"}
+    ]
     transported = [event for event in result["events"] if event["kind"] == "query"]
     assert len(queries) == (3 if job == "csr" and scenario == "zero-input" else 5)
     assert [event["manager"] for event in tasks] == ["manager-0"] * len(tasks)
     assert [(event["backend"], event["site"]) for event in transported] == [
-        ("mars", "KM"), ("aries", "KM")
+        ("mars", "KM"),
+        ("aries", "KM"),
     ]
     aries_sql = transported[1]["sql"]
     assert "SQL_Get_CSV_List" not in aries_sql
@@ -358,17 +563,26 @@ def test_original_and_generated_jobs_match_in_clean_processes(tmp_path: Path, jo
     else:
         assert rows == [["FACILITY", "LOT"]]
 
-    reports = [event["class"] for event in tasks if event["class"] in {
-        "HTMLRunTask", "HTMLDeferTask", "HTMLLayoutTask", "HTMLDeleteTask"
-    }]
+    reports = [
+        event["class"]
+        for event in tasks
+        if event["class"]
+        in {"HTMLRunTask", "HTMLDeferTask", "HTMLLayoutTask", "HTMLDeleteTask"}
+    ]
     initial = ["HTMLRunTask", "HTMLLayoutTask", "HTMLDeleteTask"]
     if scenario == "positive":
-        assert reports == initial + ["HTMLDeferTask", "HTMLLayoutTask", "HTMLDeleteTask"]
+        assert reports == initial + [
+            "HTMLDeferTask",
+            "HTMLLayoutTask",
+            "HTMLDeleteTask",
+        ]
     else:
         assert reports == initial
 
 
-def test_csr_seed_skips_transformation_but_runs_later_signal_report(tmp_path: Path) -> None:
+def test_csr_seed_skips_transformation_but_runs_later_signal_report(
+    tmp_path: Path,
+) -> None:
     source = _TARGETS["csr"]
     generated = tmp_path / "csr.py"
     generated.write_text(compile_document(source).emitted.source, encoding="utf-8")
@@ -377,7 +591,9 @@ def test_csr_seed_skips_transformation_but_runs_later_signal_report(tmp_path: Pa
     tasks = [event for event in result["events"] if event["kind"] == "task"]
     rows = [event for event in tasks if event["class"] == "RowsInFileTask"]
     branches = [event for event in tasks if event["class"] == "IfThenTask"]
-    queries = [event for event in tasks if event["class"] in {"nqOracleTask", "nqSQLiteTask"}]
+    queries = [
+        event for event in tasks if event["class"] in {"nqOracleTask", "nqSQLiteTask"}
+    ]
     assert len(queries) == 3
     assert [event["manager"] for event in tasks] == ["manager-0"] * len(tasks)
     assert rows[0]["environment"]["RowsInFile"] == "0"
@@ -386,16 +602,26 @@ def test_csr_seed_skips_transformation_but_runs_later_signal_report(tmp_path: Pa
     assert branches[-1]["execute_child_tasks"] is True
     assert not [event for event in result["events"] if event["kind"] == "aed"]
     reports = [event["class"] for event in tasks if event["class"].startswith("HTML")]
-    assert reports == ["HTMLRunTask", "HTMLLayoutTask", "HTMLDeleteTask",
-                       "HTMLDeferTask", "HTMLLayoutTask", "HTMLDeleteTask"]
+    assert reports == [
+        "HTMLRunTask",
+        "HTMLLayoutTask",
+        "HTMLDeleteTask",
+        "HTMLDeferTask",
+        "HTMLLayoutTask",
+        "HTMLDeleteTask",
+    ]
 
 
-@pytest.mark.parametrize("scenario", ["transport-failure", "local-missing", "local-malformed"])
-def test_stage1_failure_boundaries_match_for_synthetic_query(tmp_path: Path, scenario: str) -> None:
+@pytest.mark.parametrize(
+    "scenario", ["transport-failure", "local-missing", "local-malformed"]
+)
+def test_stage1_failure_boundaries_match_for_synthetic_query(
+    tmp_path: Path, scenario: str
+) -> None:
     source = tmp_path / "query.txt"
     source.write_text(
-        '<OPTIONS>\n/NODE=KM.MARS\n/UN=\n/PW=\n/OLEDB=SQLPlus\n/ENGINE=VA\n'
-        '/WORKDIR=.\\\n/CSV=result.tab\n/HEADERS=LOT\n</OPTIONS>\n'
+        "<OPTIONS>\n/NODE=KM.MARS\n/UN=\n/PW=\n/OLEDB=SQLPlus\n/ENGINE=VA\n"
+        "/WORKDIR=.\\\n/CSV=result.tab\n/HEADERS=LOT\n</OPTIONS>\n"
         'SELECT LOT FROM source WHERE LOT IN SQL_Get_CSV_List("items.csv", LOT, "LOT IN")',
         encoding="utf-8",
     )
@@ -408,7 +634,9 @@ def test_stage1_failure_boundaries_match_for_synthetic_query(tmp_path: Path, sce
         assert original["error"]["type"] == "QueryExecutionError"
 
 
-def test_checked_in_generation_matches_both_sources_and_python311_grammar(tmp_path: Path) -> None:
+def test_checked_in_generation_matches_both_sources_and_python311_grammar(
+    tmp_path: Path,
+) -> None:
     checked_in = {
         "icm": _ROOT / "output" / "clean-python" / "ICMPCS.py",
         "csr": _ROOT / "output" / "clean-python" / "CSR_IAM_v2.aed.py",
@@ -418,11 +646,18 @@ def test_checked_in_generation_matches_both_sources_and_python311_grammar(tmp_pa
         assert checked_in[name].read_text(encoding="utf-8") == emitted
         ast.parse(emitted, feature_version=(3, 11))
         direct = subprocess.run(
-            [sys.executable, str(checked_in[name])], cwd=_ROOT,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(
-                [str(_ROOT / "src"), str(_ROOT), os.environ.get("PYTHONPATH", "")]
-            )},
-            capture_output=True, text=True, timeout=30, check=False,
+            [sys.executable, str(checked_in[name])],
+            cwd=_ROOT,
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(_ROOT / "src"), str(_ROOT), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
         assert direct.returncode != 0
         assert "python -m scripthost_portable.launcher" in direct.stderr

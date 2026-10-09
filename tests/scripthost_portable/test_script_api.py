@@ -73,14 +73,20 @@ def _outcome(trace, action, workdir):
         action()
         error = None
     except Exception as failure:
-        error = (type(failure).__name__, str(failure).replace(str(workdir), "<workdir>"))
+        error = (
+            type(failure).__name__,
+            str(failure).replace(str(workdir), "<workdir>"),
+        )
     return list(trace), error
 
 
 def assert_parity(tmp_path, trace, text, run, files=None):
     runtime = PortableScriptHostRuntime()
     outcomes = []
-    for name, action in (("original", runtime.run_text), ("python", runtime.run_python)):
+    for name, action in (
+        ("original", runtime.run_text),
+        ("python", runtime.run_python),
+    ):
         workdir = tmp_path / name
         workdir.mkdir()
         for file_name, content in (files or {}).items():
@@ -94,8 +100,11 @@ def assert_parity(tmp_path, trace, text, run, files=None):
 @pytest.mark.parametrize("value", ["1", "2"])
 def test_if_then(tmp_path, trace, value):
     text = vg2(
-        write("a", "before"), util(f'{{IF-THEN}} "FLAG" "EQ" "{value}"'), write("b", "then"),
-        util("{END-IF}"), write("c", "after"),
+        write("a", "before"),
+        util(f'{{IF-THEN}} "FLAG" "EQ" "{value}"'),
+        write("b", "then"),
+        util("{END-IF}"),
+        write("c", "after"),
     )
 
     def run():
@@ -121,8 +130,12 @@ def test_if_then(tmp_path, trace, value):
 def test_if_else(tmp_path, trace, arguments):
     quoted = " ".join(f'"{argument}"' for argument in arguments)
     text = vg2(
-        util(f"{{IF-THEN}} {quoted}"), write("then", "then"), util("{ELSE}"), write("else", "else"),
-        util("{END-IF}"), write("after", "after"),
+        util(f"{{IF-THEN}} {quoted}"),
+        write("then", "then"),
+        util("{ELSE}"),
+        write("else", "else"),
+        util("{END-IF}"),
+        write("after", "after"),
     )
 
     def run():
@@ -148,8 +161,10 @@ def test_if_else(tmp_path, trace, arguments):
 )
 def test_macro(tmp_path, trace, files, continue_on_error):
     text = vg2(
-        util(f'{{START-MACRO}} "macro.csv" "{continue_on_error}"'), write("<<<DIR>>>.txt", "hello <<<NAME>>>"),
-        util("{END-MACRO}"), write("after", "after <<<NAME>>>"),
+        util(f'{{START-MACRO}} "macro.csv" "{continue_on_error}"'),
+        write("<<<DIR>>>.txt", "hello <<<NAME>>>"),
+        util("{END-MACRO}"),
+        write("after", "after <<<NAME>>>"),
     )
 
     def run():
@@ -162,7 +177,10 @@ def test_macro(tmp_path, trace, files, continue_on_error):
 
 
 def test_nested_macro_precedence_and_barrier(tmp_path, trace):
-    files = {"outer.csv": "X,A,INNER\nouter,1,inner.csv\n", "inner.csv": "X,B\ninner,2\n"}
+    files = {
+        "outer.csv": "X,A,INNER\nouter,1,inner.csv\n",
+        "inner.csv": "X,B\ninner,2\n",
+    }
     text = vg2(
         util('{START-MACRO} "outer.csv" "N"', "/PROMPT-TEXT=outer"),
         write("o1", "<<<X>>> <<<A>>>"),
@@ -174,10 +192,14 @@ def test_nested_macro_precedence_and_barrier(tmp_path, trace):
     )
 
     def run():
-        with controls.macro("outer.csv", "N", options={"PROMPT-TEXT": "outer"}) as outer:
+        with controls.macro(
+            "outer.csv", "N", options={"PROMPT-TEXT": "outer"}
+        ) as outer:
             if outer.active:
                 put("o1", "<<<X>>> <<<A>>>")
-                with controls.macro("<<<INNER>>>", "N", options={"PROMPT-TEXT": "inner"}) as inner:
+                with controls.macro(
+                    "<<<INNER>>>", "N", options={"PROMPT-TEXT": "inner"}
+                ) as inner:
                     if inner.active:
                         put("i1", "<<<X>>> <<<A>>> <<<B>>>")
                 put("o2", "<<<X>>>")
@@ -187,11 +209,18 @@ def test_nested_macro_precedence_and_barrier(tmp_path, trace):
     assert events == [("o1", "outer 1"), ("i1", "inner 1 2"), ("o2", "outer")]
 
 
-@pytest.mark.parametrize("arguments", [("1", "5", "2", "1", "N"), ("1", "5", "2", "1", "Y"), ("0", "3", "1.5", "1", "N")])
+@pytest.mark.parametrize(
+    "arguments",
+    [("1", "5", "2", "1", "N"), ("1", "5", "2", "1", "Y"), ("0", "3", "1.5", "1", "N")],
+)
 def test_for_loop(tmp_path, trace, arguments):
     quoted = " ".join(f'"{argument}"' for argument in arguments)
     body = "<<<spf-loop-ctr-1>>> <<<spf-step-1>>> <<<spf-start-1>>>"
-    text = vg2(util(f"{{FOR-LOOP}} {quoted}"), write("f<<<spf-loop-ctr-1-int>>>", body), util("{END-LOOP}"))
+    text = vg2(
+        util(f"{{FOR-LOOP}} {quoted}"),
+        write("f<<<spf-loop-ctr-1-int>>>", body),
+        util("{END-LOOP}"),
+    )
 
     def run():
         with controls.for_loop(*arguments) as loop:
@@ -205,8 +234,15 @@ def test_for_loop(tmp_path, trace, arguments):
 
 @pytest.mark.parametrize("fail", [False, True])
 def test_site_loop_and_its_break_on_error(tmp_path, trace, fail):
-    body = [write("<<<spf-site-for-file-name>>>", "<<<spf-site>>>")] + ([write("x", "FAIL")] if fail else [])
-    text = vg2(util('{SITE-LOOP} "A.X,B.Y"'), *body, util("{END-LOOP}"), write("after", "after"))
+    body = [write("<<<spf-site-for-file-name>>>", "<<<spf-site>>>")] + (
+        [write("x", "FAIL")] if fail else []
+    )
+    text = vg2(
+        util('{SITE-LOOP} "A.X,B.Y"'),
+        *body,
+        util("{END-LOOP}"),
+        write("after", "after"),
+    )
 
     def run():
         with controls.site_loop("A.X,B.Y") as loop:
@@ -221,11 +257,17 @@ def test_site_loop_and_its_break_on_error(tmp_path, trace, fail):
     assert error is None and len(events) == (2 if fail else 3)
 
 
-@pytest.mark.parametrize(("error_trap", "fail"), [("N", False), ("Y", True), ("N", True)])
+@pytest.mark.parametrize(
+    ("error_trap", "fail"), [("N", False), ("Y", True), ("N", True)]
+)
 def test_run_loop(tmp_path, trace, error_trap, fail):
     files = {"in.csv": "ID\n1\n2\n3\n4\n5\n"}
     body = [write("read", "READ chunk.csv")] + ([write("x", "FAIL")] if fail else [])
-    text = vg2(util(f'{{RUN-LOOP}} "in.csv" "chunk.csv" "2" "{error_trap}"'), *body, util("{END-LOOP}"))
+    text = vg2(
+        util(f'{{RUN-LOOP}} "in.csv" "chunk.csv" "2" "{error_trap}"'),
+        *body,
+        util("{END-LOOP}"),
+    )
 
     def run():
         with controls.run_loop("in.csv", "chunk.csv", "2", error_trap) as loop:
@@ -237,7 +279,10 @@ def test_run_loop(tmp_path, trace, error_trap, fail):
 
     events, error = assert_parity(tmp_path, trace, text, run, files)
     assert len(events) == (1 if fail and error_trap == "N" else 3)
-    assert sorted(path.name for path in (tmp_path / "python").iterdir()) == ["chunk.csv", "in.csv"]
+    assert sorted(path.name for path in (tmp_path / "python").iterdir()) == [
+        "chunk.csv",
+        "in.csv",
+    ]
 
 
 def test_macro_inside_loop_and_loop_inside_macro(tmp_path, trace):
@@ -271,7 +316,13 @@ def test_macro_inside_loop_and_loop_inside_macro(tmp_path, trace):
 
     events, error = assert_parity(tmp_path, trace, text, run, files)
     assert error is None
-    assert events == [("x", "one 1"), ("x", "three 3"), ("y", "lbl 1"), ("y", "lbl 2"), ("y", "lbl 3")]
+    assert events == [
+        ("x", "one 1"),
+        ("x", "three 3"),
+        ("y", "lbl 1"),
+        ("y", "lbl 2"),
+        ("y", "lbl 3"),
+    ]
 
 
 @pytest.mark.parametrize("where", ["root", "if", "macro"])
@@ -350,16 +401,26 @@ def test_leaf_forms_reach_the_original_routes(tmp_path, monkeypatch):
     reached = []
 
     def spy(task):
-        reached.append((type(task).__name__, task.MyUtilitiesValue, task.SPFTaskCommand))
+        reached.append(
+            (type(task).__name__, task.MyUtilitiesValue, task.SPFTaskCommand)
+        )
 
-    for cls in (legacy.DOSCmdTask, legacy.SPFDeleteTask, legacy.AEDTask, legacy.RowsInFileTask, legacy.PyScriptTask):
+    for cls in (
+        legacy.DOSCmdTask,
+        legacy.SPFDeleteTask,
+        legacy.AEDTask,
+        legacy.RowsInFileTask,
+        legacy.PyScriptTask,
+    ):
         monkeypatch.setattr(cls, "executeTaskCommand", spy)
 
     def run():
         script.command('dir /b | find "x"  >  out.txt', options={"WORKDIR": ".\\"})
         script.utility(r"@EXEDIR@\SPFDelete.bat", "a.csv,b.csv", "N", external=True)
         script.utility("AED", "AED_CANDIDATES.csv")
-        script.utility("ROWS-IN-FILE", "data file.csv", "ROWS", "N", options=[("WORKDIR", ".\\")])
+        script.utility(
+            "ROWS-IN-FILE", "data file.csv", "ROWS", "N", options=[("WORKDIR", ".\\")]
+        )
         script.utility("PYSCRIPT:CHECK", command="print('x')")
 
     PortableScriptHostRuntime().run_python(run, tmp_path)
@@ -375,37 +436,66 @@ def test_leaf_forms_reach_the_original_routes(tmp_path, monkeypatch):
 def test_query_options_route_through_the_original_router(tmp_path, monkeypatch):
     legacy = _legacy()
     reached = []
-    monkeypatch.setattr(legacy.SPFTaskBase, "execute", lambda task: reached.append(type(task).__name__))
+    monkeypatch.setattr(
+        legacy.SPFTaskBase, "execute", lambda task: reached.append(type(task).__name__)
+    )
 
     def run():
-        for node, engine, oledb in (("local", "SQLite", "SQLite"), ("KM.MARS", "VA", "SQLPlus"), ("x@uber@y", "VA", "SQLPlus")):
-            script.invoke(options={"NODE": node, "UN": "", "OLEDB": oledb, "ENGINE": engine, "CSV": "r.csv"},
-                          command="SELECT 1")
+        for node, engine, oledb in (
+            ("local", "SQLite", "SQLite"),
+            ("KM.MARS", "VA", "SQLPlus"),
+            ("x@uber@y", "VA", "SQLPlus"),
+        ):
+            script.invoke(
+                options={
+                    "NODE": node,
+                    "UN": "",
+                    "OLEDB": oledb,
+                    "ENGINE": engine,
+                    "CSV": "r.csv",
+                },
+                command="SELECT 1",
+            )
 
     PortableScriptHostRuntime().run_python(run, tmp_path)
     assert reached == ["nqSQLiteTask", "nqOracleTask", "nqUberTask"]
 
 
 @pytest.mark.parametrize("environment", ["LOCAL", "SQLPFSVC_TEST"])
-def test_hpc_declares_steps_for_the_original_begin_hpc(tmp_path, trace, monkeypatch, environment):
+def test_hpc_declares_steps_for_the_original_begin_hpc(
+    tmp_path, trace, monkeypatch, environment
+):
     from scripthost_portable.task_inputs import TaskInput
 
     legacy = _legacy()
 
     def shape(tasks):
-        return [(type(task).__name__, TaskInput.parse(task.SPFTaskItem).options,
-                 TaskInput.parse(task.SPFTaskItem).command.strip(), shape(task.childTasksList)) for task in tasks]
+        return [
+            (
+                type(task).__name__,
+                TaskInput.parse(task.SPFTaskItem).options,
+                TaskInput.parse(task.SPFTaskItem).command.strip(),
+                shape(task.childTasksList),
+            )
+            for task in tasks
+        ]
 
     monkeypatch.setattr(legacy.BeginHPCTask, "Record_SPF", lambda *args: None)
-    monkeypatch.setattr(legacy.BeginHPCTask, "executeChildTasksSvc",
-                        lambda task: trace.append(("service", shape(task.childTasksList))))
+    monkeypatch.setattr(
+        legacy.BeginHPCTask,
+        "executeChildTasksSvc",
+        lambda task: trace.append(("service", shape(task.childTasksList))),
+    )
     files = {"in.txt": "", "out.txt": "", "optional.txt": ""}
     arguments = (environment, "in.txt", "out.txt", "optional.txt", "N", "N", "N")
     quoted = " ".join(f'"{argument}"' for argument in arguments)
     text = vg2(
         util(f"{{BEGIN-HPC}} {quoted}"),
         write("a", "a"),
-        util('{IF-THEN} "FLAG" "EQ" "1"'), write("b", "b"), util("{ELSE}", "/WORKDIR=.\\"), write("c", "c"),
+        util('{IF-THEN} "FLAG" "EQ" "1"'),
+        write("b", "b"),
+        util("{ELSE}", "/WORKDIR=.\\"),
+        write("c", "c"),
         util("{END-IF}"),
         util("{END-HPC}"),
         write("after", "after"),
@@ -438,8 +528,12 @@ def test_api_requires_a_running_job():
 
 def test_aed_runs_through_the_original_aed_task(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(aed_api, "process_candidates", lambda path, logger=None: calls.append(path))
-    assert PortableScriptHostRuntime().run_python(lambda: script.utility("AED", "candidates.csv"), tmp_path)
+    monkeypatch.setattr(
+        aed_api, "process_candidates", lambda path, logger=None: calls.append(path)
+    )
+    assert PortableScriptHostRuntime().run_python(
+        lambda: script.utility("AED", "candidates.csv"), tmp_path
+    )
     assert calls == ["candidates.csv"]
 
 
@@ -458,8 +552,18 @@ def test_oracle_query_reaches_portability_override_and_transport(tmp_path):
 
     def run():
         script.invoke(
-            options={"NODE": "KM.[A15_PROD_21.].MARS", "UN": "", "PW": "", "OLEDB": "SQLPlus", "ENGINE": "VA",
-                     "WORKDIR": ".\\", "CSV": "mars.csv", "HEADERS": "LOT", "RECORD": "Stage1", "QUOTECSV": "Y"},
+            options={
+                "NODE": "KM.[A15_PROD_21.].MARS",
+                "UN": "",
+                "PW": "",
+                "OLEDB": "SQLPlus",
+                "ENGINE": "VA",
+                "WORKDIR": ".\\",
+                "CSV": "mars.csv",
+                "HEADERS": "LOT",
+                "RECORD": "Stage1",
+                "QUOTECSV": "Y",
+            },
             command="/*BEGIN SQL*/ SELECT 'A' AS LOT FROM dual /*END SQL*/",
         )
 
@@ -498,7 +602,9 @@ def test_python_file_runs_in_fresh_worker(tmp_path):
         "        if condition.matched:\n"
         "            script.invoke(options={'WRITE-FILE': 'Y', 'CSV': 'flag.txt'}, command='rows')\n"
     )
-    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=60)
+    result = run_job(
+        ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=60
+    )
     assert result.success, result.message + result.stderr
     assert result.child_pid != os.getpid()
     assert {"result.csv", "flag.txt"} <= set(result.generated_outputs)
@@ -509,8 +615,12 @@ def test_python_file_runs_in_fresh_worker(tmp_path):
 def test_python_worker_requires_run_and_validates_one_input(tmp_path):
     job = tmp_path / "bad.py"
     job.write_text("value = 1\n")
-    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=30)
+    result = run_job(
+        ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=30
+    )
     assert not result.success
     assert "must define a callable run()" in result.message
     with pytest.raises(ValueError, match="Exactly one"):
-        ScriptHostJob(working_directory=str(tmp_path), python_path=str(job), script_text="x").validate()
+        ScriptHostJob(
+            working_directory=str(tmp_path), python_path=str(job), script_text="x"
+        ).validate()

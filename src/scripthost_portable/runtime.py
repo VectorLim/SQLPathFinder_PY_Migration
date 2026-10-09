@@ -89,7 +89,9 @@ _current_session: _Session | None = None
 
 def _session() -> _Session:
     if _current_session is None:
-        raise RuntimeError("Script API requires a job invoked through the ScriptHost runtime.")
+        raise RuntimeError(
+            "Script API requires a job invoked through the ScriptHost runtime."
+        )
     return _current_session
 
 
@@ -97,7 +99,9 @@ def _session() -> _Session:
 def _bind(manager):
     global _current_session
     if _current_session is not None:
-        raise RuntimeError("A Python ScriptHost job is already running in this process.")
+        raise RuntimeError(
+            "A Python ScriptHost job is already running in this process."
+        )
     _current_session = _Session(manager)
     try:
         yield
@@ -140,8 +144,13 @@ class PortableScriptHostRuntime:
         isolation mechanism. Use worker.run_job for fresh-process execution.
         """
         if _current_session is not None:
-            raise RuntimeError("A Python ScriptHost job is already running in this process.")
-        with _execution(working_directory, execution_options) as manager, _bind(manager):
+            raise RuntimeError(
+                "A Python ScriptHost job is already running in this process."
+            )
+        with (
+            _execution(working_directory, execution_options) as manager,
+            _bind(manager),
+        ):
             try:
                 run()
                 return True
@@ -163,7 +172,9 @@ class PortableScriptHostRuntime:
                 raise ValueError("Python ScriptHost job must define a callable run().")
             entrypoint()
 
-        return self.run_python(invoke, working_directory, execution_options=execution_options)
+        return self.run_python(
+            invoke, working_directory, execution_options=execution_options
+        )
 
     def run_file(
         self,

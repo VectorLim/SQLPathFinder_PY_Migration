@@ -20,7 +20,9 @@ class _Control:
 
     def __init__(self, route: str, arguments, options: Options, end_options: Options):
         self._input = utility_input(route, arguments, options)
-        self._end_input = utility_input(self._end_route, (), end_options) if self._end_route else None
+        self._end_input = (
+            utility_input(self._end_route, (), end_options) if self._end_route else None
+        )
         self._session = self._controller = self._steps = self._slot = None
         self._started = False
 
@@ -54,7 +56,9 @@ class _Control:
         layers = session.layers
         if isinstance(self._controller, legacy.StartMacroTask):
             # A nested START-MACRO substitutes its body with all tables at once, so outer macro layers stop here.
-            layers = tuple(layer for layer in layers if not isinstance(layer, MacroLayer))
+            layers = tuple(
+                layer for layer in layers if not isinstance(layer, MacroLayer)
+            )
         session.bodies.append((layers + tuple(slot.layers), slot.errorHandler))
         self._slot = slot
 
@@ -107,7 +111,9 @@ class _ConditionWithElse(_Condition):
 
     _end_route = None
 
-    def __init__(self, arguments, options: Options, else_options: Options, end_options: Options):
+    def __init__(
+        self, arguments, options: Options, else_options: Options, end_options: Options
+    ):
         super().__init__("{IF-THEN}", arguments, options, None)
         self._else_input = utility_input("{ELSE}", (), else_options)
         self._end_if_input = utility_input("{END-IF}", (), end_options)
@@ -172,26 +178,43 @@ class _Iteration:
 class _Controls:
     """Arguments are the original /UTILITIES arguments; options are the task's other /OPTIONS."""
 
-    def if_then(self, *arguments, options: Options = None, end_options: Options = None) -> _Condition:
+    def if_then(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Condition:
         return _Condition("{IF-THEN}", arguments, options, end_options)
 
-    def if_else(self, *arguments, options: Options = None, else_options: Options = None,
-                end_options: Options = None) -> _ConditionWithElse:
+    def if_else(
+        self,
+        *arguments,
+        options: Options = None,
+        else_options: Options = None,
+        end_options: Options = None,
+    ) -> _ConditionWithElse:
         return _ConditionWithElse(arguments, options, else_options, end_options)
 
-    def macro(self, *arguments, options: Options = None, end_options: Options = None) -> _Macro:
+    def macro(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Macro:
         return _Macro("{START-MACRO}", arguments, options, end_options)
 
-    def for_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Loop:
+    def for_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Loop:
         return _Loop("{FOR-LOOP}", arguments, options, end_options)
 
-    def site_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Loop:
+    def site_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Loop:
         return _Loop("{SITE-LOOP}", arguments, options, end_options)
 
-    def run_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Loop:
+    def run_loop(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> _Loop:
         return _Loop("{RUN-LOOP}", arguments, options, end_options)
 
-    def hpc(self, *arguments, options: Options = None, end_options: Options = None) -> RemoteScope:
+    def hpc(
+        self, *arguments, options: Options = None, end_options: Options = None
+    ) -> RemoteScope:
         """BEGIN-HPC: statements on the returned scope are declared for remote execution."""
         return RemoteScope(arguments, options, end_options)
 

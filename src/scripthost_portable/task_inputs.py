@@ -28,7 +28,9 @@ def option_pairs(options: Options) -> tuple[tuple[str, str], ...]:
     return tuple((str(token), str(value)) for token, value in items)
 
 
-def utility_input(route: str, arguments=(), options: Options = None, command: str = "") -> TaskInput:
+def utility_input(
+    route: str, arguments=(), options: Options = None, command: str = ""
+) -> TaskInput:
     """Task input whose /UTILITIES value is the route followed by every argument quoted."""
     value = _codec().encode_utility(route, arguments)
     return TaskInput((("UTILITIES", value), *option_pairs(options)), command)

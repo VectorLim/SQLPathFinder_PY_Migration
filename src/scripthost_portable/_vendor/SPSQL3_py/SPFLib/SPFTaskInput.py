@@ -6,12 +6,15 @@ API. Option meaning stays in SPFTaskBase.parseTaskOptions and /UTILITIES
 splitting stays in SPFTaskBase.MyUtilities; this module only splits text and
 builds the canonical text that parses back to the same input.
 """
+
 import csv
 import re
 from io import StringIO
 
 TASK_DELIMITER = "<---- New Query ---->"
-OPTION_LINE = re.compile(r"^/(?P<optToken>[\S\w]*?)=(?P<optVal>[\S\w ]*)", re.MULTILINE | re.IGNORECASE)
+OPTION_LINE = re.compile(
+    r"^/(?P<optToken>[\S\w]*?)=(?P<optVal>[\S\w ]*)", re.MULTILINE | re.IGNORECASE
+)
 
 
 def split_task_item(task_item):
@@ -23,7 +26,9 @@ def split_task_item(task_item):
     options_text, command = task_item.lstrip().split("</OPTIONS>", 1)
     options_text = options_text.strip()
     if command.strip().find("<OPTIONS>") > 0:
-        raise Exception("Error: <OPTIONS> Token found in SQL Region. May be missing a\n<---- New Query ----> delimiter")
+        raise Exception(
+            "Error: <OPTIONS> Token found in SQL Region. May be missing a\n<---- New Query ----> delimiter"
+        )
     if len(options_text) == 0:
         raise Exception("Options data is invalid {0}".format(options_text))
     lines = options_text.split("\n")
@@ -40,7 +45,9 @@ def iter_options(lines):
             continue
         found = OPTION_LINE.findall(line)
         if not found:
-            raise Exception("Error: Missing = in Token Line. Problem Line is: {0}".format(line))
+            raise Exception(
+                "Error: Missing = in Token Line. Problem Line is: {0}".format(line)
+            )
         yield found[0]
 
 
@@ -53,13 +60,27 @@ def parse_task_item(task_item):
 def encode_task_item(options, command=""):
     """Canonical task item text; raise ValueError unless it parses back unchanged."""
     options = [(str(token), str(value)) for token, value in options]
-    text = "\n".join(["<OPTIONS>", *("/{0}={1}".format(*pair) for pair in options), "</OPTIONS>", command])
+    text = "\n".join(
+        [
+            "<OPTIONS>",
+            *("/{0}={1}".format(*pair) for pair in options),
+            "</OPTIONS>",
+            command,
+        ]
+    )
     try:
-        exact = TASK_DELIMITER not in command and parse_task_item(text) == (options, command.lstrip())
+        exact = TASK_DELIMITER not in command and parse_task_item(text) == (
+            options,
+            command.lstrip(),
+        )
     except Exception:
         exact = False
     if not exact:
-        raise ValueError("Options/command cannot be written as one ScriptHost task item: {0!r}".format(options))
+        raise ValueError(
+            "Options/command cannot be written as one ScriptHost task item: {0!r}".format(
+                options
+            )
+        )
     return text
 
 
@@ -68,14 +89,17 @@ def encode_utility(name, arguments=()):
     if not name or any(char.isspace() or char == '"' for char in name):
         raise ValueError("Utility name must be one unquoted token: {0!r}".format(name))
     stream = StringIO()
-    csv.writer(stream, delimiter=" ", quotechar='"', quoting=csv.QUOTE_ALL, lineterminator="").writerow(
-        [str(argument) for argument in arguments])
+    csv.writer(
+        stream, delimiter=" ", quotechar='"', quoting=csv.QUOTE_ALL, lineterminator=""
+    ).writerow([str(argument) for argument in arguments])
     return name + (" " + stream.getvalue() if arguments else "")
 
 
 def decode_utility(value):
     """Return [name, *arguments] when encode_utility rewrites 'value' exactly, else None."""
-    parts = next(csv.reader([value], delimiter=" ", skipinitialspace=True, quotechar='"'), None)
+    parts = next(
+        csv.reader([value], delimiter=" ", skipinitialspace=True, quotechar='"'), None
+    )
     if not parts:
         return None
     try:

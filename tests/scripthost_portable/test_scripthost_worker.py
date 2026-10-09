@@ -49,11 +49,13 @@ def test_worker_uses_one_fresh_process_per_job(tmp_path: Path) -> None:
     assert (second_dir / "result.txt").read_text(encoding="utf-8") == "second"
 
 
-def test_worker_accepts_generated_python_path_and_keeps_child_isolation(tmp_path: Path) -> None:
+def test_worker_accepts_generated_python_path_and_keeps_child_isolation(
+    tmp_path: Path,
+) -> None:
     source = tmp_path / "query.txt"
     source.write_text(
-        '<OPTIONS>\n/NODE=.\\\n/UN=\n/PW=\n/OLEDB=SQLite\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
-        '</OPTIONS>\nSELECT value FROM measurements',
+        "<OPTIONS>\n/NODE=.\\\n/UN=\n/PW=\n/OLEDB=SQLite\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n"
+        "</OPTIONS>\nSELECT value FROM measurements",
         encoding="utf-8",
     )
     generated = tmp_path / "query.py"
@@ -63,7 +65,8 @@ def test_worker_accepts_generated_python_path_and_keeps_child_isolation(tmp_path
     (workdir / "measurements.csv").write_text("value\n42\n", encoding="utf-8")
 
     result = run_job(
-        ScriptHostJob(working_directory=str(workdir), script_path=str(generated)), timeout=60
+        ScriptHostJob(working_directory=str(workdir), script_path=str(generated)),
+        timeout=60,
     )
 
     assert result.success, result
@@ -114,7 +117,9 @@ def test_worker_child_environment_changes_do_not_leak_to_parent(tmp_path: Path) 
     source.write_text("id\n1\n", encoding="utf-8")
     text = block(f'/UTILITIES={{ROWS-IN-FILE}} "{source}" "{variable}" "N"')
 
-    result = run_job(ScriptHostJob(working_directory=str(root), script_text=text), timeout=30)
+    result = run_job(
+        ScriptHostJob(working_directory=str(root), script_text=text), timeout=30
+    )
 
     assert result.success, result
     assert variable not in os.environ
@@ -140,7 +145,9 @@ def test_worker_surfaces_datasyncx_configuration_failure(tmp_path: Path) -> None
     )
 
     with use_reader_factory(BrokenFactory()):
-        result = _run_child(ScriptHostJob(working_directory=str(root), script_text=text))
+        result = _run_child(
+            ScriptHostJob(working_directory=str(root), script_text=text)
+        )
 
     assert not result.success
     assert result.error_category == "datasyncx_configuration_failure"
@@ -162,7 +169,9 @@ def test_worker_surfaces_structured_script_failure(tmp_path: Path) -> None:
         body="/*BEGIN SQL*/ SELECT 1 AS x FROM dual /*END SQL*/",
     )
 
-    result = run_job(ScriptHostJob(working_directory=str(root), script_text=text), timeout=30)
+    result = run_job(
+        ScriptHostJob(working_directory=str(root), script_text=text), timeout=30
+    )
 
     assert not result.success
     assert result.error_category == "unsupported_legacy_integration"

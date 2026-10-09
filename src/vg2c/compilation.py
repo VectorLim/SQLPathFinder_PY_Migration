@@ -26,5 +26,7 @@ def compile_document(input_path: Path) -> CompilationResult:
     try:
         program = inspect_program(text)
     except ValueError as error:
-        raise CompileError("scripthost-inspection", str(error), SourceSpan(input_path, 1, 1), 0) from error
+        raise CompileError(
+            "scripthost-inspection", str(error), SourceSpan(input_path, 1, 1), 0
+        ) from error
     return CompilationResult(input_path.resolve(), program, emit(program, spans))

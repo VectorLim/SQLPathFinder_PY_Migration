@@ -32,13 +32,18 @@ def leaf_call(task: TaskDescriptor) -> tuple[str, list[Argument]]:
     task_input = task.input
     others = without_utilities(task)
     values = [value for token, value in task_input.options if token == "UTILITIES"]
-    command = [[f"command={py_string(task_input.command)}"]] if task_input.command else []
+    command = (
+        [[f"command={py_string(task_input.command)}"]] if task_input.command else []
+    )
     if task.task_type == "DOSCmdTask" and len(values) == 1 and not command:
         return "command", [[py_string(values[0])], *options_argument(others)]
     if task_input.utility is not None:
         route, *arguments = task_input.utility
         braced = route.startswith("{") and route.endswith("}")
-        positional = [[py_string(value)] for value in (route[1:-1] if braced else route, *arguments)]
+        positional = [
+            [py_string(value)]
+            for value in (route[1:-1] if braced else route, *arguments)
+        ]
         external = [] if braced else [["external=True"]]
         return "utility", [*positional, *options_argument(others), *external, *command]
     return "invoke", [*options_argument(task_input.options), *command]
