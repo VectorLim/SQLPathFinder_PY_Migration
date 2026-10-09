@@ -23,7 +23,7 @@ class MacroState(EmitterUtility):
     PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
     NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
     _MACRO_CONTROL_TOKEN_RE = re.compile(
-        r"^\s*\{(START-MACRO|END-MACRO|IF-THEN|ELSE|END-IF|RUN-LOOP|END-LOOP)\}",
+        r"^\s*\{(START-MACRO|END-MACRO|IF-THEN|ELSE|END-IF|RUN-LOOP|FOR-LOOP|SITE-LOOP|END-LOOP)\}",
         re.IGNORECASE,
     )
 

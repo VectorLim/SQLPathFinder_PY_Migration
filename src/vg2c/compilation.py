@@ -63,7 +63,8 @@ class _DiagnosticHandler(logging.Handler):
 def compile_document(input_path: Path) -> CompilationResult:
     """Compile one VG2 source file without writing it to disk."""
     input_path = Path(input_path)
-    text = input_path.read_text(encoding="utf-8", errors="replace")
+    with input_path.open(encoding="utf-8", errors="replace", newline="") as stream:
+        text = stream.read()
     handler = _DiagnosticHandler()
     compiler_logger = logging.getLogger("vg2c")
     compiler_logger.addHandler(handler)

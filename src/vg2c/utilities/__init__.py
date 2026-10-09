@@ -8,7 +8,12 @@ from __future__ import annotations
 
 import logging
 
-from vg2c.utilities._base import EmitterUtility, UtilitySpec
+def __getattr__(name: str):
+    if name not in {"EmitterUtility", "UtilitySpec"}:
+        raise AttributeError(name)
+    from vg2c.utilities import _base
+
+    return getattr(_base, name)
 
 # Concrete utility classes are imported lazily by the compiler embedding pass
 # to avoid circular imports (utilities→emitter→dispatch→dataflow loop).

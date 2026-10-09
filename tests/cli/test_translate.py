@@ -47,11 +47,12 @@ def test_translate_selected_file_to_output_directory(tmp_path):
     proc = _run_cli([str(input_dir), str(output_dir)])
 
     assert proc.returncode == 0, proc.stderr
-    out_file = output_dir / "script_short.py"
+    out_file = output_dir / "script_short" / "main.py"
     assert out_file.exists()
     text = out_file.read_text(encoding="utf-8")
-    assert "def run() -> None:" in text
-    assert "ctx = PipelineContext({" in text
+    assert "def run(workdir=WORK_DIR):" in text
+    assert "ctx" not in text
+    assert list(out_file.parent.glob("sql/*.sql"))
 
 
 def test_translate_defaults_output_to_input_directory(tmp_path):
@@ -61,7 +62,7 @@ def test_translate_defaults_output_to_input_directory(tmp_path):
     proc = _run_cli([str(input_dir)])
 
     assert proc.returncode == 0, proc.stderr
-    assert (input_dir / "script_short.py").exists()
+    assert (input_dir / "script_short" / "main.py").exists()
 
 
 def test_translate_all_selected_files(tmp_path):
@@ -73,8 +74,8 @@ def test_translate_all_selected_files(tmp_path):
     proc = _run_cli([str(input_dir), str(output_dir)], selection="*\n")
 
     assert proc.returncode == 0, proc.stderr
-    assert (output_dir / "a.py").exists()
-    assert (output_dir / "b.py").exists()
+    assert (output_dir / "a" / "main.py").exists()
+    assert (output_dir / "b" / "main.py").exists()
 
 
 def test_missing_input_directory_returns_error(tmp_path):
@@ -102,3 +103,13 @@ def test_help_documents_batch_directory_interface():
     assert proc.returncode == 0
     assert "vg2c [input_dir] [output_dir]" in proc.stdout
     assert "translate .txt files" in proc.stdout
+
+
+def test_batch_collision_fails_before_any_project_is_written(tmp_path):
+    _copy_script(tmp_path, "a.b.txt")
+    _copy_script(tmp_path, "a b.txt")
+    output = tmp_path / "projects"
+    process = _run_cli([str(tmp_path), str(output)], selection="*\n")
+    assert process.returncode != 0
+    assert "collide" in process.stderr
+    assert not output.exists()

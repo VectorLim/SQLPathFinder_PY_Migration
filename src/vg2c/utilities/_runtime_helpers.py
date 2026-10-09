@@ -12,8 +12,10 @@ def strip_quotes(value: str) -> str:
     return value
 
 
-def resolve_path(name: str | Path, *, for_write: bool = False) -> Path:
+def resolve_path(name: str | Path, *, for_write: bool = False, workdir: str | Path | None = None) -> Path:
     path = Path(name)
+    if workdir is not None:
+        return path if path.is_absolute() else Path(workdir).resolve() / path
     script_file = globals().get("__file__")
     if script_file and Path(script_file).name != "_runtime_helpers.py":
         base_dir = Path(script_file).resolve().parent

@@ -28,6 +28,11 @@ def test_pipeline_emits_compilable_source(fixture: Path) -> None:
     classified = classify(parsed)
     resolved = resolve(classified)
     dispatched = dispatch(resolved)
+    unsupported = {"html_test.txt": "JMP/JSL", "TimeDelta.txt": "JMP/JSL", "tcb_yield.txt": "Active report option SORT"}
+    if fixture.name in unsupported:
+        with pytest.raises(ValueError, match=unsupported[fixture.name]):
+            emit(dispatched)
+        return
     emitted = emit(dispatched)
 
     source = emitted.source

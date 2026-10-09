@@ -166,41 +166,8 @@ class MailService(EmitterUtility):
         from_addr: str | None = None,
         enabled: bool = True,
     ) -> None:
-        if not enabled:
-            return
-        cred = self._load_credential()
-        sender = from_addr or cred.username
-
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = to
-        msg.set_content(self._resolve_body(body))
-
-        for att_path in attachments or []:
-            p = Path(att_path)
-            if p.exists():
-                msg.add_attachment(
-                    p.read_bytes(),
-                    maintype="application",
-                    subtype="octet-stream",
-                    filename=p.name,
-                )
-
-        try:
-            with smtplib.SMTP(self.DEFAULT_SMTP_HOST, self.DEFAULT_SMTP_PORT) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.ehlo()
-                smtp.login(cred.username, cred.password)
-                smtp.send_message(msg)
-        except smtplib.SMTPAuthenticationError as exc:
-            raise RuntimeError(
-                "SMTP authentication failed. Check the SMTP credential stored in "
-                "Windows Credential Manager."
-            ) from exc
-        except (smtplib.SMTPException, OSError) as exc:
-            raise RuntimeError(f"SMTP send failed: {exc}") from exc
+        from vg2c.runtime.mail import send_mail
+        send_mail(to, subject, body, attachments, from_addr, enabled, workdir=Path.cwd())
 
     @staticmethod
     def _resolve_body(body: str) -> str:

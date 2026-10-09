@@ -102,8 +102,8 @@ def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
     )
     assert projected.valid
     assert (
-        "int(ctx.macro.named('COUNT')) <= int('0') and "
-        "int(ctx.macro.named('COUNT')) != int('10')"
+        "int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) <= int('0') and "
+        "int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) != int('10')"
         in projected.source
     )
 
@@ -177,7 +177,7 @@ inside
     projected = project_changes(result, [SemanticChange(binding.id, "after.csv")])
 
     assert projected.valid
-    assert "ctx.csv_io.single_row('after.csv')" in projected.source
+    assert "read_macro_row(substitute('after.csv'" in projected.source
 
 
 def test_embedded_python_is_a_focused_validated_binding(tmp_path):
@@ -207,23 +207,17 @@ print("before")
     assert any(issue.code == "invalid-python" for issue in invalid.issues)
 
 
-def test_shared_generated_global_records_each_semantic_operation_reference(tmp_path):
-    mail = (
-        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
-        '"person@example.com" "Report" "Body"\n</OPTIONS>\n'
-        '<---- New Query ---->\n'
-    )
+def test_literal_recipients_are_owned_by_each_semantic_operation(tmp_path):
+    mail = ('<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+            '"person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n')
     result = _compile(tmp_path, mail + mail)
     model = project_document(result)
-
-    email_operations = [op for op in model.operations if op.display_name == "Send Email"]
-    recipient = next(symbol for symbol in model.symbols if symbol.display_name == "EMAIL_TO")
-
-    assert len(email_operations) == 2
-    assert {ref.operation_id for ref in recipient.references} == {
-        op.id for op in email_operations
-    }
-    assert {ref.binding_id for ref in recipient.references} == {"global:EMAIL_TO"}
+    operations = [op for op in model.operations if op.display_name == "Send Email"]
+    assert len(operations) == 2
+    recipients = [next(b for b in op.bindings if b.name == "to") for op in operations]
+    assert recipients[0].id != recipients[1].id
+    assert [b.value for b in recipients] == ["person@example.com"] * 2
+    assert not any(symbol.display_name == "EMAIL_TO" for symbol in model.symbols)
 
 
 def test_macro_placeholder_reference_is_captured_before_python_rendering(tmp_path):
@@ -311,7 +305,7 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
         ])
         assert projection.valid
         assert projection.effective_values[bindings["rhs"].id] == token
-        assert "ctx.macro.named('COUNT')" in projection.source
+        assert "substitute('<<<COUNT>>>', values=job_values, macros=macro_values)" in projection.source
 
     assert not project_changes(result, [
         SemanticChange(bindings["rhs"].id, "literal", symbol_id=count.id)
@@ -322,7 +316,7 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
 
     operator_only = project_changes(result, [SemanticChange(bindings["op"].id, "EQS")])
     assert operator_only.valid
-    assert "ctx.macro.named('COUNT') == '0'" in operator_only.source
+    assert "substitute('<<<COUNT>>>', values=job_values, macros=macro_values) == '0'" in operator_only.source
 
 
 def test_rows_in_file_target_macro_is_editable(tmp_path):
@@ -335,7 +329,7 @@ def test_rows_in_file_target_macro_is_editable(tmp_path):
     projected = project_changes(result, [SemanticChange(target.id, "TOTAL")])
 
     assert projected.valid
-    assert "ctx.macro.set_named('TOTAL'," in projected.source
+    assert "macro_values['TOTAL'] = str(row_count('input.csv', workdir=workdir))" in projected.source
 
 
 def test_repeated_identical_condition_headers_keep_distinct_edit_ranges(tmp_path):
@@ -387,8 +381,8 @@ second
     projected = project_changes(result, [SemanticChange(rhs.id, "1")])
 
     assert projected.valid
-    assert projected.source.count("int(ctx.macro.named('COUNT')) > int('0')") == 1
-    assert projected.source.count("int(ctx.macro.named('COUNT')) > int('1')") == 1
+    assert projected.source.count("int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) > int('0')") == 1
+    assert projected.source.count("int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) > int('1')") == 1
 
 
 def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_path):
@@ -434,18 +428,13 @@ def test_required_parameter_default_is_generated_reset_value(tmp_path):
         for binding in operation.bindings
         if "structured-sql" in binding.capabilities
     )
-    overridden = project_document(result, [SemanticChange(sql.id, "SELECT 2 AS value")])
-    overridden_sql = next(
-        binding
-        for operation in overridden.operations
-        for binding in operation.bindings
-        if binding.id == sql.id
-    )
-
     assert sql.required
-    assert sql.default == "SELECT 1 AS value"
-    assert overridden_sql.value == "SELECT 2 AS value"
-    assert overridden_sql.default == "SELECT 1 AS value"
+    assert sql.default.strip() == "SELECT 1 AS value"
+    assert not sql.editable
+    projection = project_changes(result, [SemanticChange(sql.id, "SELECT 2 AS value")])
+    assert not projection.valid
+    assert projection.source == result.emitted.source
+    assert "external editable asset" in projection.issues[0].message
 
 
 def test_multiline_editor_hint_is_preserved_as_semantic_capability(tmp_path):

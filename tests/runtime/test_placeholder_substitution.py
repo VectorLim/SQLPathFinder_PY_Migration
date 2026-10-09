@@ -23,7 +23,7 @@ def test_mars_placeholder_in_emitted_sql():
     d = dispatch(r)
     e = emit(d)
 
-    source = e.source
+    source = "\n".join(body for name, body in e.assets if name.endswith(".sql"))
 
     # Verify that the emitted code has @[]@. placeholders (with the dot)
     assert (
@@ -36,6 +36,6 @@ def test_mars_placeholder_in_emitted_sql():
         "@[]@F_" not in source
     ), "Found @[]@F_ without dot - should be normalized to @[]@.F_"
 
-    assert "def _read_datasyncx" in source
+    assert "from vg2c.runtime import" in e.source
     assert "DATASYNCX_READER_MAP" not in source
-    assert "reader=MarsReader" in source
+    assert "reader=MarsReader" in e.source

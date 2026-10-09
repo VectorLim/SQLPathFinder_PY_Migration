@@ -42,6 +42,15 @@ def structured_sql_model(
     step, invocation, parameter = _structured_parameter(
         result, binding_id, require_editable=False
     )
+    if not parameter.editable and parameter.source_range is None:
+        projection = project_changes(result, changes)
+        if not projection.valid:
+            raise SqlEditError("; ".join(issue.message for issue in projection.issues))
+        return replace(
+            parse_sql(parameter.value),
+            capabilities=SqlEditCapabilities(False, False, False),
+            read_only_reason=parameter.read_only_reason,
+        )
     if not parameter.editable:
         block = next(item for item in result.resolved.blocks if item.index == step.block_index)
         projection = project_changes(result, changes)
@@ -107,6 +116,7 @@ def apply_sql_action(
     csv_header: CsvHeaderReader | None = None,
     file_choices: Iterable[str] = (),
 ) -> SemanticChange:
+    _structured_parameter(result, action.binding_id)
     if action.action == "update-file-list":
         _, invocation, _ = _structured_parameter(
             result, action.binding_id, require_editable=False

@@ -13,6 +13,8 @@ from vg2c.operands import (
     EndMacro,
     IfThen,
     RunLoop,
+    ForLoop,
+    SiteLoop,
     ScopeNode,
     StartMacro,
 )
@@ -25,6 +27,8 @@ TOKEN_RE = re.compile(r"^\s*\{([A-Z\-]+)\}")
 _SCOPE_TOKENS: dict[str, type] = {
     "START-MACRO": StartMacro,
     "RUN-LOOP": RunLoop,
+    "FOR-LOOP": ForLoop,
+    "SITE-LOOP": SiteLoop,
     "IF-THEN": IfThen,
 }
 

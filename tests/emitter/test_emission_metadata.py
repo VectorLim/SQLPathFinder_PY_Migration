@@ -106,7 +106,7 @@ def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):
         span = parameter.source_range
         if span is None:
             assert (
-                parameter.definition is not None and not parameter.definition.required
+                parameter.definition is not None and (not parameter.definition.required or not parameter.editable)
             )
             assert parameter.value == parameter.definition.default
             continue

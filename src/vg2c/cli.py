@@ -7,7 +7,6 @@ directory) and lets the user choose which ones to translate to Python.
 from __future__ import annotations
 
 import importlib.util
-import os
 import re
 import subprocess
 import sys
@@ -198,7 +197,7 @@ Arguments:
   input_dir   Directory containing .txt source files.
               Relative paths are resolved from the current working directory.
               Defaults to the current working directory.
-  output_dir  Directory for translated .py files.
+  output_dir  Root for projects containing main.py and editable SQL/HTML assets.
               Relative paths are resolved from the current working directory.
               Defaults to the same directory as each source file.
 
@@ -243,7 +242,6 @@ def main() -> None:
         if not work_dir.is_dir():
             print(f"ERROR: input directory '{work_dir}' not found.", file=sys.stderr)
             sys.exit(1)
-        os.chdir(work_dir)
     else:
         work_dir = original_cwd
 
@@ -263,6 +261,14 @@ def main() -> None:
         sys.exit(0)
 
     selected = _pick_files(txt_files)
+
+    from vg2c.project_paths import project_name
+    destinations = [(out_dir or path.parent) / project_name(path.stem) for path in selected]
+    if len({str(path.resolve()).casefold() for path in destinations}) != len(destinations):
+        raise ValueError("Selected sources collide after project-name sanitization")
+    for destination in destinations:
+        if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
+            raise FileExistsError(f"Nonempty project destination: {destination}")
 
     succeeded: list[str] = []
     failed: list[str] = []

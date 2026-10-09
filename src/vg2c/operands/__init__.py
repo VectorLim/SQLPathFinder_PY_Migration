@@ -15,11 +15,11 @@ from vg2c.operands.base import (
     ScopeNode,
 )
 from vg2c.operands.conditional import Else, EndIf, IfThen
-from vg2c.operands.loop import EndLoop, RunLoop
+from vg2c.operands.loop import EndLoop, ForLoop, RunLoop, SiteLoop
 from vg2c.operands.macro import EndMacro, StartMacro
 
 MacroControlPayload = (
-    StartMacro | EndMacro | IfThen | Else | EndIf | RunLoop | EndLoop
+    StartMacro | EndMacro | IfThen | Else | EndIf | RunLoop | ForLoop | SiteLoop | EndLoop
 )
 
 __all__ = [
@@ -28,6 +28,8 @@ __all__ = [
     "EndLoop",
     "EndMacro",
     "IfThen",
+    "ForLoop",
+    "SiteLoop",
     "MacroControlPayload",
     "MacroFrame",
     "ParseChildrenFn",

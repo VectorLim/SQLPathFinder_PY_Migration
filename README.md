@@ -1,6 +1,43 @@
 # vg2c
 
-`vg2c` compiles legacy VG2 `.txt` pipeline scripts into executable Python (`.py`) scripts.
+`vg2c` compiles legacy VG2 `.txt` pipelines into Python projects with editable SQL and HTML assets.
+
+`translate(input_path, out_dir=None)` returns `<root>/<sanitized-source-stem>/main.py`.
+The root defaults to the source directory. Existing nonempty projects and batch name
+collisions are rejected before generation writes files. Move the entire generated
+directory together; the original VG2 file is not needed for execution.
+
+Generated code imports the installed `vg2c.runtime`, uses native controls and local
+macro maps, and reads SQL/HTML assets each time an operation runs. By default,
+`run()` reads and writes job data under `<project>/output`; `run(workdir=...)`
+selects an explicit data root. SQL assets stay under `<project>/sql` and report
+shells under `<project>/html`. There is no process-wide working-directory change.
+CSV table inputs and backend node aliases are separate from SQL parameter binds.
+
+Relative CSS references resolve beside the HTML shell. A source CSS file there is
+read and copied beside the output on every render, or embedded for CSSEMBED. If
+absent, current native style updates supply the CSS; add the referenced file to
+override those defaults. Deferred reports read CSV data and resolve raw macro
+paths/options at layout time. Data and headers are escaped once; authored markup
+is preserved. Unsupported active report options fail with source locations.
+Legacy browser/delivery/security/chart integration settings produce explicit
+`local-html-only` diagnostics; the local renderer does not implement those services.
+
+The core Python editing/reorder APIs retain invocation identities and source
+ranges for direct calls. SQL and report definitions exposed through these APIs
+are read-only through Python offsets: edit their external assets or regenerate
+from VG2. Literal values belong to their individual calls rather than shared
+generated globals. Embedded Python must use explicit runtime functions and
+`workdir`; the retired `ctx` API and top-level return/yield have diagnostics.
+
+This migration has passed the selected offline core suites and a source-based
+Linux runtime probe. Installed-wheel validation and production AED integration
+remain blocked. AED requires an explicit per-run service factory supporting
+per-instance facility, API key, and absolute CA bundle; available client versions
+do not expose that contract. Test mode never writes lot attributes or success
+history. Embedding and `PipelineContext` remain pending these cutover gates.
+The visual editor's asset persistence/packaging, HPC, and JMP are outside this
+implementation and have not been validated against the new project contract.
 
 ---
 
@@ -12,14 +49,14 @@ graph TD
     B --> C[Resolve]
     C --> D[Analyze Dataflow]
     D --> E[Dispatch]
-    E --> F[Emit Python + Edit Manifest]
+    E --> F[Emit Native Python + SQL/HTML Assets + Metadata]
     F --> G[CompilationResult]
     G --> H[Thin UI API / Serialization]
     H --> I[React Presentation]
 
     subgraph Utilities
         J[UtilitySpec / @emittable metadata] -. definitions & capabilities .-> F
-        J -. runtime utilities .-> F
+        J -. direct vg2c.runtime calls .-> F
     end
 ```
 

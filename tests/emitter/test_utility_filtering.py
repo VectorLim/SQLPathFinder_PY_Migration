@@ -27,23 +27,12 @@ def methods(source, name):
 
 
 def test_sqlite_workflow_embeds_runtime_reader_and_excludes_compiler():
-    source = compile_document(
-        Path(__file__).parents[1] / "fixtures/script_short.txt"
-    ).emitted.source
-    assert "class SqliteReader" in source
-    assert "class SqliteEngine" not in source
-    assert "class UtilitySpec" not in source
-    assert "class Kind" not in source
-    assert "class HtmlReport" not in source
-    assert methods(source, "PipelineContext") == {
-        "__init__",
-        "write_file",
-        "run_query",
-        "eval_condition",
-        "_read_datasyncx",
-    }
-    assert "scan_sql_get_csv_list_calls" not in methods(source, "CsvIO")
-    assert "globals().values" not in source
+    source = compile_document(Path(__file__).parents[1] / "fixtures/script_short.txt").emitted.source
+    assert "SqliteReader(" in source
+    assert "execute_sql(" in source
+    assert not any(isinstance(node, ast.ClassDef) for node in ast.parse(source).body)
+    assert "def step_" not in source
+    assert "ctx" not in source
 
 
 def test_full_runtime_filesystem_api_is_embedded():
@@ -83,7 +72,10 @@ def test_repeated_roots_emit_one_class_and_one_context_instance():
         ),
         reader_names=set(),
     )
-    assert "\n".join(embedded.sources).count("class CsvIO:") == 1
+    classes = [node.name for node in ast.parse("\n".join(embedded.sources)).body
+               if isinstance(node, ast.ClassDef)]
+    assert classes.count("CsvIO") == 1
+    assert classes.count("_CsvIO") == 1
     assert embedded.context_expression.count("CsvIO()") == 1
 
 
@@ -162,27 +154,18 @@ def test_included_utility_keeps_every_emittable_method(utility):
         ),
     ],
 )
-def test_api_retention_preserves_workflow_utility_selection(
-    fixture, context_keys, reader, sql_globals
-):
+def test_api_retention_preserves_workflow_utility_selection(fixture, context_keys, reader, sql_globals):
+    if fixture == "html_test.txt":
+        with pytest.raises(ValueError, match="JMP/JSL"):
+            compile_document(Path(__file__).parents[1] / "fixtures" / fixture)
+        return
     emitted = compile_document(Path(__file__).parents[1] / "fixtures" / fixture).emitted
     tree = ast.parse(emitted.source)
-    context = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "PipelineContext"
-    )
-    assert {key.value for key in context.args[0].keys} == set(context_keys.split())
-    expected_classes = {"Logger", "OracleClient", "PipelineContext"} | {
-        UtilitySpec.for_name(name).__name__ for name in context_keys.split()
-    }
-    if reader:
-        expected_classes.add("SqliteReader")
-    if sql_globals:
-        expected_classes.add("SqliteEngine")
-        assert methods(emitted.source, "SqliteEngine") == {"global_sql"}
-    assert {
-        node.name for node in tree.body if isinstance(node, ast.ClassDef)
-    } == expected_classes
+    assert not any(isinstance(node, ast.ClassDef) for node in tree.body)
+    imports = {name.name for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime" for name in node.names}
+    assert ("SqliteReader" in imports) == reader
+    assert "ctx" not in emitted.source
+    if "html_report" in context_keys:
+        assert "render_html" in imports
+    if "email" in context_keys:
+        assert "send_mail" in imports

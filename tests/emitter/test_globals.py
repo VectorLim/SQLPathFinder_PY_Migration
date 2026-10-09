@@ -1,9 +1,9 @@
 import ast
 import sqlite3
-from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from pathlib import Path
 
 from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
@@ -123,102 +123,54 @@ def test_sql_preserves_behavior_and_changes_all_references():
     assert "0.123456789012345678901" in exact
 
 
-def test_generated_globals_metadata_and_shared_edits(tmp_path):
-    text = (
-        _sql_block("SELECT * FROM t WHERE lot = '1'")
-        + _sql_block("SELECT * FROM t WHERE lot = '1'")
-        + _mail_block()
-        + _mail_block()
-    )
-    result = _compile(tmp_path, text)
-    source = result.emitted.source
-    tree = ast.parse(source)
-    last_import = max(
-        i
-        for i, node in enumerate(tree.body)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-    )
-    assert (
-        ast.unparse(tree.body[last_import + 1])
-        == "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000"
-    )
-    assert ast.unparse(tree.body[last_import + 2]) == "LOT = '1'"
-    assert source.count("\nLOT = '1'\n") == 1
+def test_generated_literals_and_invocation_edits_are_independent(tmp_path):
+    result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'") * 2 + _mail_block() * 2)
+    assert len(result.emitted.assets) == 2
     assert len(result.emitted.steps) == 4
-    all_parameters = [p for step in result.emitted.steps for p in step.parameters]
-    for parameter in all_parameters:
-        span = parameter.source_range
-        if span is None:
-            assert (
-                parameter.definition is not None and not parameter.definition.required
-            )
-            continue
-        assert source[span.start_offset : span.end_offset] == parameter.source
-    lots = [p for p in all_parameters if p.name == "LOT"]
-    assert len(lots) == 2 and lots[0].id == lots[1].id
-    assert all(not p.editable for p in all_parameters if p.name == "sql")
-    assert (
-        len([p for p in all_parameters if p.id == "global:EMAIL_TO" and p.name == "to"])
-        == 2
-    )
-    assert all(p.definition is not None for p in all_parameters if p.name == "to")
-    assert not any(
-        "vg2c" in ast.unparse(node)
-        for node in tree.body
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-    )
-    change = SemanticChange(lots[0].id, "2")
-    projected = project_changes(result, [change, change])
-    assert projected.valid and projected.source.count("\nLOT = '2'\n") == 1
-    assert (
-        project_changes(result, [change, SemanticChange(lots[1].id, "3")])
-        .issues[0]
-        .code
-        == "conflicting-global-change"
-    )
-    assert _compile(tmp_path, text).emitted.source == source
+    parameters = [p for step in result.emitted.steps for p in step.parameters]
+    assert not any(p.id.startswith("global:") for p in parameters)
+    assert all(not p.editable and p.source_range is None for p in parameters if p.name == "sql")
+    recipients = [p for p in parameters if p.name == "to"]
+    assert len(recipients) == 2 and recipients[0].id != recipients[1].id
+    projection = project_changes(result, [SemanticChange(recipients[0].id, "changed@example.test")])
+    assert projection.valid
+    assert projection.source.count("changed@example.test") == 1
+    assert projection.source.count("person@example.com") == 1
+    for parameter in parameters:
+        if span := parameter.source_range:
+            assert result.emitted.source[span.start_offset:span.end_offset] == parameter.source
+    assert _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'") * 2 + _mail_block() * 2).emitted == result.emitted
 
 
-def test_generated_steps_execute_shared_sql_without_external_services(tmp_path):
-    result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'") * 2)
-    tree = ast.parse(result.emitted.source)
-    # Execute only assignments and step functions, with a capturing context.
-    names = {step.function_name for step in result.emitted.steps}
-    selected = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name in names
-        or isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "LOT" for t in node.targets)
-    ]
-    namespace = {"SqliteEngine": SqliteEngine, "SqliteReader": lambda **kw: None}
-    exec(
-        compile(ast.Module(body=selected, type_ignores=[]), "<steps>", "exec"),
-        namespace,
-    )
+def test_generated_queries_keep_independent_execution_boundaries(tmp_path):
+    result = _compile(tmp_path, _sql_block("SELECT 1 AS value") * 2)
+    project = tmp_path / "project"
+    project.mkdir()
+    for name, content in result.emitted.assets:
+        path = project / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(content)
+    namespace = {"__file__": str(project / "main.py"), "__name__": "job"}
+    exec(result.emitted.source, namespace)
     calls = []
-    context = SimpleNamespace(run_query=lambda **kwargs: calls.append(kwargs["sql"]))
-    namespace["LOT"] = "2"
-    for step in result.emitted.steps:
-        namespace[step.function_name](context)
-    assert len(calls) == 2 and all("lot = '2'" in sql for sql in calls)
+    def capture(path, **kwargs):
+        calls.append(Path(path).read_text())
+    namespace["execute_sql"] = capture
+    first = project / result.emitted.assets[0][0]
+    first.write_text("SELECT 2 AS value")
+    namespace["run"](workdir=tmp_path / "work")
+    assert calls[0] == "SELECT 2 AS value"
+    assert calls[1].strip() == "SELECT 1 AS value"
 
 
 def test_email_long_form_and_dynamic_values(tmp_path):
-    long_form = (
-        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
-        '"file.csv" "self" "Long report" "Body" "person@example.com"\n</OPTIONS>\n'
-        "<---- New Query ---->\n"
-    )
+    long_form = ('<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+                 '"file.csv" "self" "Long report" "Body" "person@example.com"\n</OPTIONS>\n'
+                 '<---- New Query ---->\n')
     result = _compile(tmp_path, long_form + _mail_block(subject="<<<SUBJECT>>>"))
     parameters = [p for step in result.emitted.steps for p in step.parameters]
-    assert [p.value for p in parameters if p.id == "global:EMAIL_SUBJECT"] == [
-        "Long report"
-    ]
-    assert [p.value for p in parameters if p.id == "global:EMAIL_TO"] == [
-        "person@example.com"
-    ] * 2
+    assert [p.value for p in parameters if p.name == "to"] == ["person@example.com"] * 2
+    assert next(p for p in parameters if p.name == "subject").value == "Long report"
     assert any(p.name == "subject" and not p.editable for p in parameters)
 
 
@@ -248,38 +200,18 @@ def test_legacy_macro_wrapper_and_clause_boundaries():
     }
 
 
-def test_generated_conflicts_reuse_the_disambiguated_global(tmp_path):
-    result = _compile(
-        tmp_path,
-        "".join(
-            _sql_block(f"SELECT * FROM t WHERE lot = '{value}'")
-            for value in ("1", "2", "2")
-        ),
-    )
-    ids = [
-        [p.id for p in s.parameters if p.id.startswith("global:")]
-        for s in result.emitted.steps
-    ]
-    assert ids == [["global:LOT"], ["global:STEP_0001_LOT"], ["global:STEP_0001_LOT"]]
+def test_generated_sql_literals_remain_in_their_own_assets(tmp_path):
+    result = _compile(tmp_path, "".join(_sql_block(f"SELECT * FROM t WHERE lot = '{value}'") for value in ("1", "2", "2")))
+    assert [body.strip() for _, body in result.emitted.assets] == [f"SELECT * FROM t WHERE lot = '{value}'" for value in ("1", "2", "2")]
+    assert len({name for name, _ in result.emitted.assets}) == 3
 
 
-def test_imported_or_embedded_names_are_reserved(tmp_path, monkeypatch):
+def test_production_emitter_does_not_assemble_embedded_runtime(tmp_path, monkeypatch):
     import vg2c.embedding
-
-    assemble = vg2c.embedding.assemble_utilities
-
-    def with_runtime_constant(**kwargs):
-        embedded = assemble(**kwargs)
-        return replace(
-            embedded, sources=(*embedded.sources, "LOT = 'runtime constant'")
-        )
-
-    monkeypatch.setattr(vg2c.embedding, "assemble_utilities", with_runtime_constant)
+    def forbidden(**kwargs):
+        pytest.fail("Native projects must not assemble an embedded runtime")
+    monkeypatch.setattr(vg2c.embedding, "assemble_utilities", forbidden)
     result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'"))
-    assert "STEP_0000_LOT = '1'" in result.emitted.source
-    parameter = next(
-        p for p in result.emitted.steps[0].parameters if p.id.startswith("global:")
-    )
-    assert parameter.id == "global:STEP_0000_LOT"
-    span = parameter.source_range
-    assert result.emitted.source[span.start_offset : span.end_offset] == "'1'"
+    assert "from vg2c.runtime import" in result.emitted.source
+    assert "LOT =" not in result.emitted.source
+    assert "lot = '1'" in result.emitted.assets[0][1]

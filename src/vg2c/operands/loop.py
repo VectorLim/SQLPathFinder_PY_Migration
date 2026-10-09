@@ -128,3 +128,29 @@ class RunLoop:
 @dataclass(frozen=True, slots=True)
 class EndLoop:
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ForLoop:
+    args: tuple[str, ...]
+    build_scope = RunLoop.build_scope
+
+    @classmethod
+    def from_block(cls, block):
+        args = tuple(_quoted_args(block.options.lookup.get("UTILITIES", "")))
+        if len(args) < 4 or len(args) > 6:
+            raise ValueError(f"{block.span.file}:{block.span.start_line}: FOR requires 4-6 arguments")
+        return cls(args)
+
+
+@dataclass(frozen=True, slots=True)
+class SiteLoop:
+    nodes: str
+    build_scope = RunLoop.build_scope
+
+    @classmethod
+    def from_block(cls, block):
+        args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
+        if len(args) != 1 or not args[0]:
+            raise ValueError(f"{block.span.file}:{block.span.start_line}: SITE requires a node list")
+        return cls(args[0])

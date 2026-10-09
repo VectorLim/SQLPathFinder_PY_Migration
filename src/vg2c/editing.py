@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from vg2c.compilation import CompilationResult
+from vg2c.project_paths import project_main_path
 from vg2c.emitter.models import (
     CodeExpr,
     EmittableOperation,
@@ -257,8 +258,8 @@ def project_changes(
         candidate = f"{candidate[:start]}{replacement}{candidate[end:]}"
 
     try:
-        tree = ast.parse(candidate, filename=str(result.input_path.with_suffix(".py")))
-        compile(tree, str(result.input_path.with_suffix(".py")), "exec")
+        tree = ast.parse(candidate, filename=str(project_main_path(result.input_path)))
+        compile(tree, str(project_main_path(result.input_path)), "exec")
     except SyntaxError as exc:
         issues.append(ValidationIssue(code="invalid-python", message=str(exc)))
 
@@ -278,8 +279,8 @@ def preview_changes(
         difflib.unified_diff(
             result.emitted.source.splitlines(keepends=True),
             projection.source.splitlines(keepends=True),
-            fromfile=str(result.input_path.with_suffix(".py")),
-            tofile=str(result.input_path.with_suffix(".py")),
+            fromfile=str(project_main_path(result.input_path)),
+            tofile=str(project_main_path(result.input_path)),
         )
     )
     return ChangePreview(projection=projection, diff=diff)
@@ -364,11 +365,15 @@ def _project_omitted_parameters(
             }
             replacements.clear()
             replacements.update(replacements_copy)
-            replacements[(span.start_offset, span.end_offset)] = str(
-                EmittableOperation.render_method_call(
-                    invocation.operation, args=tuple(args), kwargs=kwargs
-                )
-            )
+            statement = ast.parse(result.emitted.source[span.start_offset:span.end_offset]).body[0]
+            if invocation.operation.id == "macro.set_named" and isinstance(statement, ast.Assign):
+                replacement = f"{ast.unparse(statement.targets[0].value)}[{args[0].source}] = {args[1].source}"
+            else:
+                replacement = str(EmittableOperation.render_method_call(
+                    invocation.operation, function=ast.unparse(statement.value.func), args=tuple(args), kwargs=kwargs))
+                if isinstance(statement, ast.Assign):
+                    replacement = ast.unparse(statement.targets[0]) + " = " + replacement
+            replacements[(span.start_offset, span.end_offset)] = replacement
 
 
 def _project_control_replacements(
@@ -377,7 +382,15 @@ def _project_control_replacements(
     values: dict[str, Any],
     replacements: dict[tuple[int, int], str],
 ) -> None:
+    from vg2c.emitter.project import control_header
     blocks = {block.index: block for block in result.resolved.blocks}
+    contexts = {}
+    def visit(node, macros="macro_values"):
+        contexts[node.start_index] = (node.scope_id, macros)
+        active = f"macro_values_{node.scope_id}" if node.kind in {"macro", "loop"} else macros
+        for child in node.children:
+            visit(child, active)
+    visit(result.resolved.scope_tree)
     for operation in operations:
         if operation.kind not in {"condition", "macro-loop", "chunk-loop"}:
             continue
@@ -399,7 +412,7 @@ def _project_control_replacements(
             continue
         replacements[
             (operation.source_range.start_offset, operation.source_range.end_offset)
-        ] = payload.render_header()
+        ] = control_header(payload, *contexts[operation.block_index])
 
 
 def _project_embedded_python(
@@ -421,12 +434,8 @@ def _project_embedded_python(
         step = steps.get(operation.block_index)
         if step is None:
             continue
-        rebuilt = build_step_emission(
-            function_name=step.function_name,
-            block_index=step.block_index,
-            functional_kind=step.functional_kind,
-            body_lines=[source] if source.strip() else [],
-        ).source
+        indent = step.source[:len(step.source) - len(step.source.lstrip())]
+        rebuilt = "\n".join(indent + line if line.strip() else "" for line in (source or "pass").splitlines())
         replacements[
             (operation.source_range.start_offset, operation.source_range.end_offset)
         ] = rebuilt
@@ -478,6 +487,10 @@ def _validate_changed_controls(
                             binding_id=binding.id,
                         )
                     )
+        if operation.kind == "macro-loop":
+            binding = operation.bindings[0]
+            if bool(values.get(binding.id, binding.value)) != bool(binding.default):
+                issues.append(ValidationIssue(code="macro-shape-change", message="Changing between static and CSV macro scopes requires regeneration from source.", binding_id=binding.id))
 
 
 def _validate_binding(

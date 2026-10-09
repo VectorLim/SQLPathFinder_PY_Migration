@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from vg2c.project_paths import project_main_path
 from typing import Literal
 
 from vg2c.compilation import CompilationResult
@@ -345,9 +346,9 @@ def project_document(
     ordered = order_file_effects(
         tuple(effects),
         result.resolved.scope_tree,
-        output_path or result.input_path.with_suffix(".py"),
+        output_path or project_main_path(result.input_path),
     )
-    output = output_path or result.input_path.with_suffix(".py")
+    output = output_path or project_main_path(result.input_path)
     safe_outputs = _reorder_safe_outputs(result, operations, ordered, output)
     reorder_targets = _legal_reorder_targets(result, safe_outputs)
     operations = tuple(

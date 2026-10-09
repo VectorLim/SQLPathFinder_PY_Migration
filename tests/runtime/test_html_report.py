@@ -266,17 +266,14 @@ def test_html_report_layout_ignores_unknown_directives(tmp_path, monkeypatch):
 
 
 def test_html_report_fixture_flow_parity_order():
-    fixture = Path(__file__).parent.parent / "fixtures" / "html_test.txt"
-    text = fixture.read_text(encoding="utf-8", errors="replace")
-    parsed = parse(text, source=fixture)
-    classified = classify(parsed)
-    resolved = resolve(classified)
-    dispatched = dispatch(resolved)
-    source = emit(dispatched).source
-
-    methods = re.findall(r"ctx\.html_report\.(defer|run|layout|delete)\(", source)
-    assert methods == ["defer", "defer", "run", "layout", "delete"]
-    assert "ctx.html_report.layout(ctx," in source
+    from vg2c.compilation import compile_document
+    fixture = Path(__file__).parents[1] / "fixtures/actual_script.txt"
+    emitted = compile_document(fixture).emitted
+    ids = [invocation.operation.id for step in emitted.steps for invocation in step.invocations if invocation.operation.id.startswith("html_report.")]
+    assert ids[0] == "html_report.run"
+    assert ids == ["html_report.run", "html_report.layout", "html_report.delete"]
+    assert ids[-2:] == ["html_report.layout", "html_report.delete"]
+    assert "ctx" not in emitted.source
 
 
 def test_html_report_render_layout_is_pure_when_writes_disabled(tmp_path):

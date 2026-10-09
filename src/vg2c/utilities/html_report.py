@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.runtime.html_format import build_css, format_cell, parse_alignment
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import to_code_expr
@@ -54,44 +55,6 @@ tr th {{ background-color:#f5f5f5; }}
 </html>
 """
 
-    _CSS_RULES: list[dict[str, Any]] = [
-        {
-            "name": "COLUMN-BORDER",
-            "template": "table.tblin, td.tblin, th, td.alt \n{{\n{decls}\n}}",
-            "extras": [
-                "td.tblin,th,td.alt\n{\n      padding:5px;\n}",
-                "  table.tblin \n{\n     caption-side:top;\n}",
-            ],
-            "tail_template": "tr.at-bot-of-report, td.at-bot-of-report {{\n{decls}\n\n}}",
-        },
-        {
-            "name": "Column-Headers",
-            "template": "th, #colhdr\n{{\n{decls}\n}}",
-            "defaults": [
-                ("padding-top", "     padding-top:5px;"),
-                ("padding-bottom", "     padding-bottom:4px;"),
-            ],
-        },
-        {
-            "name": "Column-Data",
-            "template": "td.tblin, caption, table.tblin \n{{\n{decls}\n}}",
-            "extras": ["  caption {padding-top:5px;}"],
-        },
-        {"name": "Column-Alt-Row", "template": "td.alt\n{{\n{decls}\n}}"},
-        {"name": "At-Top-of-Report", "template": "p.at-top-of-report\n{{\n{decls}\n}}"},
-        {
-            "name": "JQX-All-IChart-Text",
-            "template": (
-                ".jqx-chart-axis-text, .jqx-chart-label-text, .jqx-chart-legend-text,"
-                " .jqx-chart-axis-description, .jqx-chart-title-text,"
-                " .jqx-chart-title-description {{\n{decls}\n}}"
-            ),
-            "defaults": [("fill", "     fill:black;")],
-        },
-        {"name": "At-Top-of-Col1", "template": "p.at-top-of-col1\n{{\n{decls}\n}}"},
-        {"name": "At-Top-of-Col2", "template": "p.at-top-of-col2\n{{\n{decls}\n}}"},
-        {"name": "At-Top-of-Col3", "template": "p.at-top-of-col3\n{{\n{decls}\n}}"},
-    ]
 
     # Emit-time dispatch: report-type -> (method, option-keys, needs-template)
     _EMIT_DISPATCH: dict[str, tuple[str, list[str], bool]] = {
@@ -334,36 +297,7 @@ tr th {{ background-color:#f5f5f5; }}
         return ""
 
     def _build_css(self) -> str:
-        def get_decls(name: str) -> list[str]:
-            decls: list[str] = []
-            for d in self.styles.get(name, []):
-                d = d.strip()
-                if not d:
-                    continue
-                if ":" in d:
-                    key, val = (s.strip() for s in d.split(":", 1))
-                    if key == "font-size" and val.isdigit():
-                        val += "px"
-                    decls.append(f"     {key}:{val};")
-                else:
-                    decls.append(f"     {d};")
-            return decls
-
-        blocks: list[str] = []
-        for rule in self._CSS_RULES:
-            decls = get_decls(rule["name"])
-            if not decls:
-                continue
-            extras = list(decls)
-            for token, default_decl in rule.get("defaults", []):
-                if not any(token in d for d in extras):
-                    extras.append(default_decl)
-            blocks.append(rule["template"].format(decls="\n".join(extras)))
-            blocks.extend(rule.get("extras", []))
-            tail = rule.get("tail_template")
-            if tail:
-                blocks.append(tail.format(decls="\n".join(decls)))
-        return "\n\n".join(blocks)
+        return build_css(self.styles)
 
     # ------------------------------------------------------------------
     # Deferred report rendering
@@ -427,27 +361,11 @@ tr th {{ background-color:#f5f5f5; }}
 
     @staticmethod
     def _parse_alignment(align: str) -> tuple[str, str]:
-        parts = align.split("-")
-        if len(parts) >= 2:
-            return parts[0], parts[1]
-        return "middle", parts[0] if parts else "left"
+        return parse_alignment(align)
 
     @staticmethod
     def _format_cell(col_name: str, val: Any) -> str:
-        if val is None:
-            return "&nbsp;"
-        s = str(val).strip()
-        if s == "" or s.lower() == "nan":
-            return "&nbsp;"
-        if s.endswith("%"):
-            return s
-        low = col_name.lower()
-        if "ce%" in low or "percent" in low:
-            try:
-                return f"{float(s) * 100:.2f}%"
-            except ValueError:
-                pass
-        return s
+        return format_cell(col_name, val)
 
     @staticmethod
     def _load_csv_rows(raw_path: str, ctx: Any) -> list[dict[str, Any]]:

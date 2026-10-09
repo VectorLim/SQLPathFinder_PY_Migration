@@ -30,47 +30,31 @@ def test_compile_document_exposes_metadata_without_writing(tmp_path):
 
 def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     source = tmp_path / "script.txt"
-    source.write_text((FIXTURES / "script_short.txt").read_text(encoding="utf-8"))
-
+    source.write_text((FIXTURES / "script_short.txt").read_text())
     output = translate(source)
-    generated = output.read_text(encoding="utf-8")
-
-    offsets = [
-        generated.index(marker)
-        for marker in (
-            DEPENDENCIES_END,
-            STEPS_START,
-            STEPS_END,
-            WORKFLOW_START,
-            WORKFLOW_END,
-        )
-    ]
-    assert offsets == sorted(offsets)
-    assert output == source.with_suffix(".py")
+    generated = output.read_text()
+    assert output == tmp_path / "script/main.py"
+    assert "def run(workdir=WORK_DIR):" in generated
+    assert "def step_" not in generated
+    assert "PipelineContext" not in generated
+    assert list(output.parent.glob("sql/*.sql"))
 
 
 def test_generated_script_settings_follow_imports_and_precede_dependencies(tmp_path):
     source = tmp_path / "script.txt"
-    source.write_text((FIXTURES / "script_short.txt").read_text(encoding="utf-8"))
-
-    generated = translate(source).read_text(encoding="utf-8")
-
-    settings = generated.index("# VG2C generated-script settings")
-    chunk_size = generated.index("VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE = 1000")
-    dependencies = generated.index(DEPENDENCIES_END)
-    assert settings < chunk_size < dependencies
+    source.write_text((FIXTURES / "script_short.txt").read_text())
+    generated = translate(source).read_text()
+    assert generated.index("from vg2c.runtime import") < generated.index("BASE_DIR =") < generated.index("def run(")
+    assert "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE" not in generated
 
 
 def test_emitted_script_seeds_node_default_from_literal_site(tmp_path):
     source = tmp_path / "script.txt"
-    source.write_text((FIXTURES / "reflow.txt").read_text(encoding="utf-8"))
-
-    output = translate(source)
-    generated = output.read_text(encoding="utf-8")
-
-    ctx_line = generated.index("ctx = PipelineContext({")
-    node_line = generated.index('ctx.macro.set_named("NODE", \'PG\')')
-    assert node_line > ctx_line
+    source.write_text((FIXTURES / "reflow.txt").read_text())
+    generated = translate(source).read_text()
+    assert "node='PG.[A12_PROD_0.].MARS'" in generated
+    assert "VG2C_DEFAULT_NODE" not in generated
+    assert "ctx" not in generated
 
 
 def test_emitted_script_omits_node_default_when_no_literal_site(tmp_path):
@@ -84,15 +68,11 @@ def test_emitted_script_omits_node_default_when_no_literal_site(tmp_path):
 
 
 def test_every_emitted_if_logs_its_source_prompt_and_result(tmp_path):
+    import ast
     source = tmp_path / "script.txt"
-    source.write_text((FIXTURES / "actual_script.txt").read_text(encoding="utf-8"))
-
-    generated = translate(source).read_text(encoding="utf-8")
-    workflow = generated.split(WORKFLOW_START, 1)[1].split(WORKFLOW_END, 1)[0]
-
-    assert "Logger.basicConfig(level=Logger.INFO)" in workflow
-    assert "def condition(cls," in generated
-    assert "/PROMPT-TEXT=Step 1-11. TRUE if config file not found" in workflow
-    assert "_if_result" not in workflow
-    assert 'Logger.getLogger("vg2c.workflow").info(' not in workflow
-    assert workflow.count("if Logger.condition(") == 7
+    source.write_text((FIXTURES / "actual_script.txt").read_text())
+    generated = translate(source).read_text()
+    run = next(node for node in ast.parse(generated).body if isinstance(node, ast.FunctionDef) and node.name == "run")
+    assert sum(isinstance(node, ast.If) for node in ast.walk(run)) == 11
+    assert "ctx" not in generated
+    assert "Logger.condition" not in generated

@@ -21,7 +21,7 @@ def test_instant_client_is_selected_before_datasyncx_initialization(monkeypatch,
     (client_dir / "oci.dll").touch()
     network_dir = tmp_path / "network"
     network_dir.mkdir()
-    monkeypatch.setattr("vg2c.utilities.oracle_client.sys.platform", "win32")
+    monkeypatch.setattr("vg2c.runtime.oracle_client.sys.platform", "win32")
     monkeypatch.setenv("DATASYNCX_ORACLE_CLIENT", "instant")
     monkeypatch.setenv("DATASYNCX_INSTANT_CLIENT_DIR", str(client_dir))
     monkeypatch.setenv("DATASYNCX_ORACLE_NET_CONFIG_DIR", str(network_dir))
@@ -35,7 +35,7 @@ def test_instant_client_is_selected_before_datasyncx_initialization(monkeypatch,
 
 
 def test_instant_client_reports_missing_library(monkeypatch, tmp_path):
-    monkeypatch.setattr("vg2c.utilities.oracle_client.sys.platform", "win32")
+    monkeypatch.setattr("vg2c.runtime.oracle_client.sys.platform", "win32")
     monkeypatch.setenv("DATASYNCX_ORACLE_CLIENT", "instant")
     monkeypatch.setenv("DATASYNCX_INSTANT_CLIENT_DIR", str(tmp_path))
 

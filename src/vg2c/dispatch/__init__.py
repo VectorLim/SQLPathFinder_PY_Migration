@@ -8,6 +8,7 @@ from vg2c.dispatch.models import (
     ReaderTarget,
 )
 from vg2c.kind import Kind
+from vg2c.frontend.parser import source_body
 from vg2c.resolver.models import ResolvedProgram
 
 __all__ = [
@@ -48,7 +49,7 @@ def dispatch(
         if handler is None:
             continue
 
-        rewritten_sql = handler.substitute(body=block.resolved_body)
+        rewritten_sql = handler.substitute(body=source_body(block))
         reader_target = handler.build_reader_target(block)
 
         sqlite = block.kind is Kind.SQLITE_QUERY

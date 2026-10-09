@@ -40,6 +40,9 @@ def classify(
 
 
 def _classify_one(options: BlockOptions) -> tuple[Kind, str] | None:
+    command = options.lookup.get("UTILITIES", "").strip().split(maxsplit=1)
+    if command and command[0].upper() == "{AED}":
+        return Kind.AED, "/UTILITIES is {AED}"
     for utility_cls in EmitterUtility.iter_checks():
         outcome = utility_cls.check(options)
         if outcome is not None:

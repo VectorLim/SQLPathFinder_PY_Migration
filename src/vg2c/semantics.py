@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from vg2c.emitter.models import SourceRange
 from vg2c.kind import Kind
-from vg2c.operands import IfThen, RunLoop, ScopeNode, StartMacro
+from vg2c.operands import IfThen, RunLoop, ForLoop, SiteLoop, ScopeNode, StartMacro
 from vg2c.operands.base import _OPERATOR_TABLE
 from vg2c.utilities._emit_helpers import split_utility_command
 from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
@@ -283,7 +283,7 @@ def _control_operation(
         return WorkflowOperation(
             id=operation_id,
             kind="macro-loop",
-            display_name="For Each Macro Row",
+            display_name="Use First Macro Row",
             parent_operation_id=parent_operation_id,
             branch=branch,
             source_span=block.span,
@@ -327,6 +327,19 @@ def _control_operation(
             block_index=block.index,
             source_range=source_range,
         )
+
+    if isinstance(payload, (ForLoop, SiteLoop)):
+        name = "args" if isinstance(payload, ForLoop) else "nodes"
+        value = list(payload.args) if isinstance(payload, ForLoop) else payload.nodes
+        binding = EditableBinding(
+            id=f"{operation_id}:{name}", owner_operation_id=operation_id, name=name, display_label="Loop values",
+            schema=ValueSchema("list", items=ValueSchema("string")) if isinstance(payload, ForLoop) else ValueSchema("string"),
+            value=value, default=value, editable=False,
+            read_only_reason="Regenerate from source to change the native FOR/SITE loop contract.", source_kind="loop")
+        return WorkflowOperation(
+            id=operation_id, kind="for-loop" if isinstance(payload, ForLoop) else "site-loop",
+            display_name="FOR" if isinstance(payload, ForLoop) else "SITE", parent_operation_id=parent_operation_id,
+            branch=branch, source_span=block.span, bindings=(binding,), block_index=block.index, source_range=source_range)
 
     return WorkflowOperation(
         id=operation_id,
@@ -730,6 +743,14 @@ def _build_symbols(
                         "runtime",
                         introduction=OperationReference(operation.id, path_binding.id),
                     )
+        if operation.kind == "site-loop":
+            for name in ("SPF-SITE", "SPF-SITE-FOR-FILE-NAME"):
+                add(name, "macro", "runtime", introduction=OperationReference(operation.id, operation.bindings[0].id))
+        if operation.kind == "for-loop":
+            suffix = operation.bindings[0].value[3]
+            for prefix, postfix in (("SPF-START-", ""), ("SPF-END-", ""), ("SPF-STEP-", ""),
+                                    ("SPF-STEP-", "-INT"), ("SPF-LOOP-CTR-", ""), ("SPF-LOOP-CTR-", "-INT")):
+                add(prefix + suffix + postfix, "macro", "runtime", introduction=OperationReference(operation.id, operation.bindings[0].id))
 
     references: dict[str, list[SymbolReference]] = {}
     operation_by_binding = {
@@ -907,16 +928,19 @@ def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
     cursor = marker if marker >= 0 else 0
     ranges: dict[int, SourceRange] = {}
 
-    def visit(node: ScopeNode) -> None:
+    from vg2c.emitter.project import control_header
+    def visit(node: ScopeNode, macros="macro_values") -> None:
         nonlocal cursor
         if node.kind in {"if", "macro", "loop"} and node.control_payload is not None:
-            header = node.control_payload.render_header()
+            header = control_header(node.control_payload, node.scope_id, macros)
             start = source.find(header, cursor)
             if start >= 0:
                 ranges[node.scope_id] = SourceRange(start, start + len(header))
                 cursor = start + len(header)
+            if node.kind in {"macro", "loop"}:
+                macros = f"macro_values_{node.scope_id}"
         for child in node.children:
-            visit(child)
+            visit(child, macros)
 
     visit(result.resolved.scope_tree)
     return ranges
@@ -928,7 +952,7 @@ def _row_count_path_range(
     if step_range is None:
         return None
     segment = source[step_range.start_offset : step_range.end_offset]
-    marker = "ctx.csv_io.row_count("
+    marker = "row_count("
     call = segment.find(marker)
     if call < 0:
         return None

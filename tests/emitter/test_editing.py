@@ -92,14 +92,14 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
         item
         for item in tree.body
         if isinstance(item, ast.FunctionDef)
-        and item.name == result.emitted.steps[0].function_name
+        and item.name == "run"
     )
     call = next(
         item
         for item in ast.walk(step)
         if isinstance(item, ast.Call)
-        and isinstance(item.func, ast.Attribute)
-        and item.func.attr == "run_query"
+        and isinstance(item.func, ast.Name)
+        and item.func.id == "execute_sql"
     )
     keywords = {item.arg: item.value for item in call.keywords}
     assert ast.literal_eval(keywords["node"]) == "TEST"

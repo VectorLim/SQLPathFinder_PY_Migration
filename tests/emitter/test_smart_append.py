@@ -71,5 +71,5 @@ def test_hamizah_smartappend_blocks_are_classified_and_emitted(FIXTURES: Path) -
     assert all(block.kind is Kind.SMART_APPEND for block in smart_blocks)
 
     generated = compile_document(source).emitted.source
-    assert generated.count("ctx.smart_append.append(") == 2
+    assert generated.count("smart_append(") == 2
     assert "pass  # TODO: utility command not classified" not in generated

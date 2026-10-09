@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 from vg2c.compilation import CompilationResult
+from vg2c.project_paths import project_main_path
 from vg2c.editing import SemanticChange
 from vg2c.emitter import emit
 from vg2c.operands import ScopeNode
@@ -30,7 +31,7 @@ def _safe_leaf_ids(
         result,
         document.operations,
         document.effects,
-        result.input_path.with_suffix(".py"),
+        project_main_path(result.input_path),
     )
 
 

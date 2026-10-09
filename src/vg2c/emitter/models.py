@@ -198,6 +198,7 @@ class EmittedScript:
     source: str
     imports: tuple[str, ...]
     steps: tuple[EmittedStep, ...] = ()
+    assets: tuple[tuple[str, str], ...] = ()
 
     def step_for_block(self, block_index: int) -> EmittedStep | None:
         return next(
@@ -281,13 +282,14 @@ class EmittableOperation(Generic[P, R]):
         *,
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
+        function: str | None = None,
     ) -> RenderedCall:
         receiver = (
             "ctx"
             if definition.utility_name == "ctx"
             else f"ctx.{definition.utility_name}"
         )
-        prefix = f"{receiver}.{definition.method}("
+        prefix = f"{function or receiver + '.' + definition.method}("
         parts: list[str] = []
         rendered_arguments: list[RenderedArgument] = []
         cursor = len(prefix)

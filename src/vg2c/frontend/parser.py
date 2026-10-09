@@ -35,6 +35,8 @@ def _log_msg(
 
 def parse(text: str | bytes, source: Path | None = None) -> list[ParsedBlock]:
     normalized = _normalize_input(text)
+    original = text.decode("utf-8", errors="replace") if isinstance(text, bytes) else text
+    original_lines = original.removeprefix("\ufeff").splitlines(keepends=True)
 
     blocks: list[ParsedBlock] = []
     for segment, start_line, end_line in _split_segments(normalized):
@@ -66,12 +68,26 @@ def parse(text: str | bytes, source: Path | None = None) -> list[ParsedBlock]:
                 index=block_index,
                 options=options,
                 body=_trim_outer_blank_line(body_region),
-                raw=segment,
+                raw="".join(original_lines[start_line - 1:start_line - 1 + len(segment.splitlines(keepends=True))]),
                 span=span,
             )
         )
 
     return blocks
+
+
+def source_body(block: ParsedBlock) -> str:
+    """Extract asset text from the existing raw source snapshot without normalizing it."""
+    lines = block.raw.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if line.strip() == "</OPTIONS>":
+            return "".join(lines[index + 1:])
+    if any(line.strip() == "<OPTIONS>" for line in lines):
+        return ""
+    index = 0
+    while index < len(lines) and lines[index].startswith("/"):
+        index += 1
+    return "".join(lines[index:])
 
 
 def _normalize_input(text: str | bytes) -> str:

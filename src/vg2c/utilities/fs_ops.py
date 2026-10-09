@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.runtime.files import copy_file, delete_files, rename_file, write_file
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
@@ -132,12 +132,7 @@ class FileSystemOps(EmitterUtility):
         ),
     )
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
-        src, dst = Path(src), Path(dst)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-        else:
-            shutil.copy2(src, dst)
+        return copy_file(src, dst, workdir=Path.cwd(), recurse=recurse)
 
     @emittable(
         display_name="Rename File",
@@ -153,7 +148,7 @@ class FileSystemOps(EmitterUtility):
         )
     )
     def rename(self, src: str | Path, dst: str | Path) -> None:
-        Path(src).replace(Path(dst))
+        return rename_file(src, dst, workdir=Path.cwd())
 
     @emittable(
         display_name="Delete File",
@@ -168,19 +163,11 @@ class FileSystemOps(EmitterUtility):
         )
     )
     def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
-        for p in paths:
-            path = Path(p)
-            if path.is_dir():
-                if recurse:
-                    shutil.rmtree(path, ignore_errors=True)
-            else:
-                path.unlink(missing_ok=True)
+        return delete_files(paths, workdir=Path.cwd(), recurse=recurse)
 
     @emittable(
         display_name="Write File",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
     )
     def write_file(self, path: str | Path, content: str) -> None:
-        out = resolve_path(path, for_write=True)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(content, encoding="utf-8")
+        return write_file(path, content, workdir=resolve_path(".", for_write=True))

@@ -9,16 +9,18 @@ import sys
 from pathlib import Path
 
 from vg2c.compilation import compile_document
+from vg2c import translate
+import pytest
 from vg2c.embedding import assemble_utilities
 
 RUNNER = """
 import importlib.abc, runpy, sys
 class NoCompiler(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == 'vg2c' or fullname.startswith('vg2c.'):
+        if fullname.startswith('vg2c.') and not (fullname.startswith('vg2c.runtime') or fullname in {'vg2c.utilities', 'vg2c.utilities._runtime_helpers'}):
             raise AssertionError('Generated script imported compiler: ' + fullname)
 sys.meta_path.insert(0, NoCompiler())
-runpy.run_path(sys.argv[1], run_name='__main__')
+runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
 """
 
 
@@ -26,14 +28,16 @@ def run_generated(tmp_path, text, *, runner=RUNNER):
     path = tmp_path / "workflow.txt"
     path.write_text(text, encoding="utf-8")
     result = compile_document(path)
-    output = path.with_suffix(".py")
-    output.write_text(result.emitted.source, encoding="utf-8")
+    output = translate(path)
+    path.unlink()
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     env["DATASYNCX_ORACLE_CLIENT"] = "home"
     process = subprocess.run(
-        [sys.executable, "-I", "-c", runner, str(output)],
-        cwd=tmp_path,
+        [sys.executable, "-I", "-c", runner, str(output), str(tmp_path)],
+        cwd=unrelated,
         env=env,
         capture_output=True,
         text=True,
@@ -59,26 +63,30 @@ def test_smart_append_generated_workflow_executes_twice_without_duplicate_header
     result = run_generated(tmp_path, block + "<---- New Query ---->\n" + block)
     with (tmp_path / "dest.csv").open(newline="", encoding="utf-8") as stream:
         assert list(csv.reader(stream)) == [["id", "value"], ["1", "first"], ["1", "first"]]
-    assert result.emitted.source.count("class SmartAppend:") == 1
+    assert "class SmartAppend:" not in result.emitted.source
+    assert result.emitted.source.count("smart_append(") == 2
 
 
-def test_embedded_python_uses_transitive_macro_filesystem_and_report_methods(tmp_path):
+def test_embedded_python_uses_explicit_runtime_and_local_values(tmp_path):
     text = """<OPTIONS>
 /WRITE-FILE=Y
 /CSV=code.py
 </OPTIONS>
-ctx.macro.set_named('NAME', 'Ada')
-with ctx.macro.scope({'NAME': 'Bob'}):
-    ctx.write_file('hello.txt', 'Hello <<<NAME>>>')
-ctx.fs_ops.copy('hello.txt', 'copied.txt')
-ctx.html_report.delete('missing')
-assert ctx.macro.named('NAME') == 'Ada'
+from vg2c.runtime import write_file, copy_file
+macros = {'NAME': 'Bob'}
+write_file('hello.txt', 'Hello <<<NAME>>>', workdir=workdir, macros=macros)
+copy_file('hello.txt', 'copied.txt', workdir=workdir)
 """
     result = run_generated(tmp_path, text)
-    assert (tmp_path / "hello.txt").read_text() == "Hello Bob"
     assert (tmp_path / "copied.txt").read_text() == "Hello Bob"
-    assert "def pop_frame" in result.emitted.source
-    assert "def emit_block" not in result.emitted.source
+    assert "ctx" not in result.emitted.source
+
+
+def test_retired_context_in_embedded_python_has_explicit_diagnostic(tmp_path):
+    path = tmp_path / "legacy.txt"
+    path.write_text("<OPTIONS>\n/WRITE-FILE=Y\n/CSV=code.py\n</OPTIONS>\nctx.write_file('x', 'y')\n")
+    with pytest.raises(ValueError, match="retired ctx API"):
+        compile_document(path)
 
 
 def test_repeat_compilation_is_identical_and_metadata_slices_match(tmp_path):
@@ -96,7 +104,7 @@ def test_repeat_compilation_is_identical_and_metadata_slices_match(tmp_path):
                 span = parameter.source_range
                 if span is None:
                     assert parameter.definition is not None
-                    assert not parameter.definition.required
+                    assert not parameter.definition.required or not parameter.editable
                     continue
                 assert first.source[span.start_offset : span.end_offset] == parameter.source
 
@@ -110,23 +118,22 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
         f"COLUMN-HEADERS{delimiter}{delimiter}Name{delimiter}Yield\n"
     )
     layout = ":FILE:report.html\n:TITLE:Generated report\nHTM:REPORT1\n"
-    text = (
-        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=code.py\n</OPTIONS>\n"
-        f"ctx.html_report.defer('REPORT1', template={report!r})\n"
-        f"ctx.html_report.layout(ctx, {layout!r})\n"
-    )
+    text = ("<OPTIONS>\n/REPORT=HTML-DEFER\n/ID=REPORT1\n</OPTIONS>\n"
+            + report + "<---- New Query ---->\n"
+            + "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n" + layout)
     result = run_generated(tmp_path, text)
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "Ada" in content and "85.00%" in content
     assert "<title>Generated report</title>" in content
-    assert "def _render_report" in result.emitted.source
+    assert "render_html(" in result.emitted.source
+    assert "ctx" not in result.emitted.source
     assert "def emit_block" not in result.emitted.source
 
 
 def test_generated_datasyncx_reader_with_controlled_double(tmp_path):
     # The generated source uses its normal DataSyncX import and runtime reader path.
     runner = RUNNER.replace(
-        "runpy.run_path(sys.argv[1], run_name='__main__')",
+        "runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])",
         """
 import types, pandas
 for name in ('datasyncx', 'datasyncx.readers', 'datasyncx.readers.mars_reader'):
@@ -142,7 +149,7 @@ sys.modules['datasyncx'].MarsReader = MarsReader
 driver = types.ModuleType('oracledb')
 driver.is_thin_mode = lambda: True
 sys.modules['oracledb'] = driver
-runpy.run_path(sys.argv[1], run_name='__main__')
+runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
 """,
     )
     text = (
@@ -193,7 +200,7 @@ assert chunks == ['name\\nAda\\n', 'name\\nBob\\n']
         "\n\n".join([*embedded.imports, *embedded.sources, assertions]), encoding="utf-8"
     )
     process = subprocess.run(
-        [sys.executable, "-I", "-c", RUNNER, str(output)],
+        [sys.executable, "-I", "-c", RUNNER.replace("runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])", "runpy.run_path(sys.argv[1], run_name='legacy_runtime')"), str(output)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
