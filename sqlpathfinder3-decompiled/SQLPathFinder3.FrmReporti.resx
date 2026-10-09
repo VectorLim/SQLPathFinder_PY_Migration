@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+<resheader name="resmimetype"><value>text/microsoft-resx</value></resheader><resheader name="version"><value>1.3</value></resheader><resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader><resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader><data name="LblRuleColHdr.Text" xml:space="preserve"><value>Specify Column Rules that affect the format of a display column based on a Test column value. Use % wildcard to reference columns that start or end with characters. Separate BT(S) values with commas. You may also use EQS NULL or NES NULL.</value></data>
+  <data name="mnuNew.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAAjwAAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAAAMUlEQVQ4T2NgoDL4TwATBP9xAWINQdcHBzA5Qoag64MDYr2Drg8rGDVg+BtAAqYOAACX
+Bph2/9JFCQAAAABJRU5ErkJgggs=</value></data><data name="mnuSave.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAAngAAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAAAQElEQVQ4T2NgoBL4TyZGGNDQABEkBGBqKDKAYhfA1A5HA5AkcGI0dZgGEItxGoBuIzZM
+lgEUhwHNDQAbQgZmAACXJIyo+sqhCgAAAABJRU5ErkJgggs=</value></data><data name="lblTopof.Text" xml:space="preserve"><value>Optionally select a Sort Column Value as a top level report drilldown. One report grid will be generated per unique column value. The Sort Column must exist in all report tables and be the first sort column specified for each table </value></data>
+  <data name="LblColSpan.ToolTip" xml:space="preserve"><value>Column spanning generally occurs with pivoted data. E.g., Week1@Day1, Week1@Day2 are columns with two levels separated by character @ for Weeks and Days. The 2nd level header will be merged by Week Name</value></data>
+  <data name="LblHeader.Text" xml:space="preserve"><value>Enter Report Header lines. You can reference columns in 1st row of report (File 1) by bounding column names using {  and }. E.g., {StartDate}. Use tokens &lt;DAY&gt; to display today's date, &lt;WW&gt; to display current Intel work week, &lt;DOW&gt; for Day of Week, &lt;TS&gt; for current timestamp, &lt;DOF&gt; for 1st CSV File Date and &lt;SP&gt; to force a space. Opt. specify CSS Styling</value></data>
+  <data name="mnuRun.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAAugIAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAACXElEQVQ4T22S3UuTURzHz828EPHPKciwvFCQGVmYlmaTklAvDGVJ2iZJL1KmvZCKExXM
+IZQXkUX4VilYiQRGJEszNzfb3Nycz7bcps/ziT3LmbbP5eF8vuf3coQ4QOdUNyW9ZRT36Cg3V3F5
+oIr8jkJqntfRMtrGwfv7yHmopffzACG2OMh6yE/7ZDfa9lPJQ053ncUaXEkIUlhCQdkXEmPJbSXv
+YEhxbxmxgAQKmGZMNE82I0Uk9UiWZWRFBhm+/bBQ0H1uL+TY/WwC0VBCjlH9qprUulSMY0YiciQR
+IkkSBKHy6ZV4gHH4FsbhG3FX2SvZMGFA1ArSrqbR9L6JqBJVz6WgRNAX4MOXGTLbshBnes5j88V7
+j72wi/GtkRRDCkIvSL+ejmHcgPe3l/BWmHW3B/uygyLTBUS+qYiNLf//ARNGNAYNolEg6gSiQWD+
+amY7so3L6cJjdVPZr0dcNFfw0TarSoq814JaQUOKKop6Qa45F8u6hXAwjMvh5Pv8IoUmHaJl/AGl
+/eUJcZfGd41o6jVqC9pBLRafBWVHwe3x4HF4eDH5kpzHJ+KDPNJ6nPm1xbj5twj9iF4dYmZfpiqz
+A/5NP8s2G16bh9Iu3d4a74zcI+dJHjvR+J7ZhoaxBrRmLXPOOeSojNfr5ad1iYAjwOD4M7Jas/d/
+puqhWk62FxD0hdQ9L9gXsP6ysuHZwLXqwmlzItk3eTM1yuGbR5N/Z11/ORl3s3j9aZSVZTtuxxqr
+NgcWi4Xp2Wlq+uo4dDsjufwvtUPXKOzUUdJxibKuCvLaCtE+Kkgq/gHEJmO+HRJY1QAAAABJRU5E
+rkJgggs=</value></data></root>

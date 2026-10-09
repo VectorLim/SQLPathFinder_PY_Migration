@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+<resheader name="resmimetype"><value>text/microsoft-resx</value></resheader><resheader name="version"><value>1.3</value></resheader><resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader><resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader><data name="mnuNew.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAApgAAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAAASElEQVQ4T62PMQoAMAjE/P+nWzp0CeR0MHBTgmDVMqdZS4pGR1LwXWqiHL2jAminAmin
+AminAminAminAminAminAmj3xHQ7XLHZLdNyzpMHAAAAAElFTkSuQmCCCw==</value></data><data name="mnuSave.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAAngAAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAAAQElEQVQ4T2NgoBL4TyZGGNDQABEkBGBqKDKAYhfA1A5HA5AkcGI0dZgGEItxGoBuIzZM
+lgEUhwHNDQAbQgZmAACXJIyo+sqhCgAAAABJRU5ErkJgggs=</value></data><data name="mnuRun.Image" mimetype="application/x-microsoft.net.object.binary.base64"><value>AAEAAAD/////AQAAAAAAAAAMAgAAAFFTeXN0ZW0uRHJhd2luZywgVmVyc2lvbj00LjAuMC4wLCBD
+dWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2EFAQAAABVTeXN0
+ZW0uRHJhd2luZy5CaXRtYXABAAAABERhdGEHAgIAAAAJAwAAAA8DAAAAwAIAAAKJUE5HDQoaCgAA
+AA1JSERSAAAAEAAAAA8IBgAAAO1zTy8AAAAEZ0FNQQAAsY8L/GEFAAAACXBIWXMAABJ0AAASdAHe
+Zh94AAACYklEQVQ4T22R30uTcRTGvzfzQsQ/pyDD8kJBZmRhWppNSkK9MJQlaZsk/ZAy7QepOFHB
+HEJ5EVmEvyoFK5HAiGRp5uZmm5ub892W2/R9P7F35dL53Hz5nnOe55znHCH2oXOqm5LeMop7dJSb
+q7g8UEV+RyE1z+toGW1jf/0e5DzU0vt5gBBbSYXrIT/tk91o208l5VSc7jqLNbiym5TCEgpKUvGS
+20refpHi3jJiAv/+KGCaMdE82YwUkdS4LMvIigwyfPthoaD7XELk2P1sAtGQGoiRY2/1q2pS61Ix
+jhmJyJFdEUmSIAiVT6/EBYzDtzAO31A/ipIY2TBhQNQK0q6m0fS+iagSVXNSUCLoC/DhywyZbVmI
+Mz3nsfni3mMd/gkY3xpJMaQg9IL06+kYxg14f3sJb4VZd3uwLzsoMl1A5JuK2NjyJwtMGNEYNIhG
+gagTiAaB+auZ7cg2LqcLj9VNZb8ecdFcwUfbbNyCnLCgTtCQohJFvSDXnItl3UI4GMblcPJ9fpFC
+kw7RMv6A0v7yxEb/ovFdI5p6jWpBO6jF4rOg7Ci4PR48Dg8vJl+S8/hEnHek9Tjza4t7rqAf0atL
+zOzLVMnsgH/Tz7LNhtfmobRLl2h6Z+QeOU/y2InG78w2NIw1oDVrmXPOIUdlvF4vP61LBBwBBsef
+kdWavXfq6qFaTrYXEPSF1Dsv2Bew/rKy4dnAterCaXMi2Td5MzXK4ZtHkyyr0PWXk3E3i9efRllZ
+tuN2rLFqc2CxWJienaamr45DtzMOJv+P2qFrFHbqKOm4RFlXBXlthWgfFRxI/AOvkNg7o0/94AAA
+AABJRU5ErkJgggs=</value></data></root>
