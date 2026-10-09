@@ -52,7 +52,7 @@ def test_worker_uses_one_fresh_process_per_job(tmp_path: Path) -> None:
 def test_worker_accepts_generated_python_path_and_keeps_child_isolation(tmp_path: Path) -> None:
     source = tmp_path / "query.txt"
     source.write_text(
-        '<OPTIONS>\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
+        '<OPTIONS>\n/NODE=.\\\n/UN=\n/PW=\n/OLEDB=SQLite\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
         '</OPTIONS>\nSELECT value FROM measurements',
         encoding="utf-8",
     )

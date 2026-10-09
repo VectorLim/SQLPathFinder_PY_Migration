@@ -41,7 +41,7 @@ def test_handle_runs_uppercase_python_script_through_isolated_worker(
 ) -> None:
     job = tmp_path / "job.txt"
     job.write_text(
-        '<OPTIONS>\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
+        '<OPTIONS>\n/NODE=.\\\n/UN=\n/PW=\n/OLEDB=SQLite\n/ENGINE=SQLite\n/TABLE=measurements.csv\n/CSV=result.csv\n/QUOTECSV=Y\n'
         '</OPTIONS>\nSELECT value FROM measurements',
         encoding="utf-8",
     )

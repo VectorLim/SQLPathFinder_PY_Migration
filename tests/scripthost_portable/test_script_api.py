@@ -1,6 +1,4 @@
-"""Characterize clean Python calls against the original runtime, offline."""
-
-from __future__ import annotations
+"""Generic script/controls API against the original ScriptHost execution of the same program."""
 
 import os
 from pathlib import Path
@@ -8,162 +6,444 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripthost_portable import PortableScriptHostRuntime, use_reader_factory
-from scripthost_portable import aed_api, runtime, script_api
-from scripthost_portable.script_api import aed, macros, query, reports, utilities
+from scripthost_portable import aed_api, runtime, script_api, use_reader_factory
+from scripthost_portable.runtime import PortableScriptHostRuntime, _spf_manager_type
+from scripthost_portable.script_api import controls, script
 from scripthost_portable.worker import ScriptHostJob, run_job
+
+DELIMITER = "<---- New Query ---->"
 
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     monkeypatch.setenv("SCRIPTHOST_FORCE_PORTABLE_QUERY_TRANSPORT", "1")
-    for name in ("STAGE1_SIGNAL", "STAGE1_VALUE"):
-        monkeypatch.setenv(name, "0")
 
 
-def test_plain_run_shares_one_original_manager_and_query_path(tmp_path, monkeypatch):
-    (tmp_path / "config.csv").write_text("SOURCE\nmeasurements.csv:measurements\nignored.csv\n")
-    (tmp_path / "measurements.csv").write_text("lot,value\nA,1\nB,0\n")
-    original = runtime._spf_manager_type()
-    managers, tasks = [], []
+def _legacy():
+    _spf_manager_type()
+    import SPFLib.SPFSQL3 as legacy
 
-    def create_manager():
-        manager = original()
-        managers.append(manager)
-        get_query = manager.GetQuery
+    return legacy
 
-        def traced(*args):
-            assert script_api._manager() is manager
-            task = get_query(*args)
-            tasks.append(task)
-            return task
 
-        manager.GetQuery = traced
-        return manager
+def block(options, command=""):
+    return f"\n<OPTIONS>\n{options}\n</OPTIONS>\n{command}\n"
 
-    monkeypatch.setattr(runtime, "_spf_manager_type", lambda: create_manager)
-    before = Path.cwd()
+
+def util(value, options=""):
+    return block(f"/UTILITIES={value}" + (f"\n{options}" if options else ""))
+
+
+def write(target, text):
+    return block(f"/WRITE-FILE=Y\n/CSV={target}", text)
+
+
+def vg2(*blocks):
+    return DELIMITER.join(["\n", *blocks])
+
+
+def put(target, text):
+    script.invoke(options={"WRITE-FILE": "Y", "CSV": target}, command=text)
+
+
+@pytest.fixture
+def trace(monkeypatch):
+    """WRITE-FILE records (target, text) instead of writing; FAIL/SKIP texts raise; 'READ name' records a file."""
+    legacy = _legacy()
+    events = []
+
+    def record(task):
+        text = task.SPFTaskCommand.strip()
+        if text.startswith("FAIL"):
+            raise RuntimeError(text)
+        if text.startswith("SKIP"):
+            raise legacy.SPFNothingToProcessException(text)
+        if text.startswith("READ "):
+            text = Path(text[5:]).read_text()
+        events.append((Path(task.OutExcel).name, text))
+
+    monkeypatch.setattr(legacy.WriteFileTask, "executeTaskCommand", record)
+    monkeypatch.setenv("FLAG", "1")
+    return events
+
+
+def _outcome(trace, action, workdir):
+    trace.clear()
+    try:
+        action()
+        error = None
+    except Exception as failure:
+        error = (type(failure).__name__, str(failure).replace(str(workdir), "<workdir>"))
+    return list(trace), error
+
+
+def assert_parity(tmp_path, trace, text, run, files=None):
+    runtime = PortableScriptHostRuntime()
+    outcomes = []
+    for name, action in (("original", runtime.run_text), ("python", runtime.run_python)):
+        workdir = tmp_path / name
+        workdir.mkdir()
+        for file_name, content in (files or {}).items():
+            (workdir / file_name).write_text(content, encoding="utf-8")
+        program = text if name == "original" else run
+        outcomes.append(_outcome(trace, lambda: action(program, workdir), workdir))
+    assert outcomes[1] == outcomes[0]
+    return outcomes[0]
+
+
+@pytest.mark.parametrize("value", ["1", "2"])
+def test_if_then(tmp_path, trace, value):
+    text = vg2(
+        write("a", "before"), util(f'{{IF-THEN}} "FLAG" "EQ" "{value}"'), write("b", "then"),
+        util("{END-IF}"), write("c", "after"),
+    )
 
     def run():
-        assert Path.cwd() == tmp_path
-        if macros.load_csv("config.csv"):
-            query.run(
-                sql="SELECT lot AS LOT FROM measurements WHERE value > 0",
-                tables=macros["SOURCE"], output="candidates.csv", quote_csv=True,
-            )
-            assert utilities.rows_in_file("candidates.csv", "STAGE1_SIGNAL") == 1
-            assert macros.compare("STAGE1_SIGNAL", "GT", "0")
+        put("a", "before")
+        with controls.if_then("FLAG", "EQ", value) as condition:
+            if condition.matched:
+                put("b", "then")
+        put("c", "after")
 
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
-    assert len(managers) == 1
-    assert [type(task).__name__ for task in tasks] == [
-        "StartMacroTask", "nqSQLiteTask", "RowsInFileTask", "IfThenTask",
+    events, error = assert_parity(tmp_path, trace, text, run)
+    assert error is None and len(events) == (3 if value == "1" else 2)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("FLAG", "EQ", "1"),
+        ("FLAG", "EQ", "2"),
+        ("FLAG", "EQ", "1", "AND", "VAR(a)", "EQS", "B"),
+        ("FLAG", "GT", "5", "OR", "VAR(a)", "EQS", "A"),
+    ],
+)
+def test_if_else(tmp_path, trace, arguments):
+    quoted = " ".join(f'"{argument}"' for argument in arguments)
+    text = vg2(
+        util(f"{{IF-THEN}} {quoted}"), write("then", "then"), util("{ELSE}"), write("else", "else"),
+        util("{END-IF}"), write("after", "after"),
+    )
+
+    def run():
+        with controls.if_else(*arguments) as condition:
+            if condition.matched:
+                put("then", "then")
+            else:
+                put("else", "else")
+        put("after", "after")
+
+    events, error = assert_parity(tmp_path, trace, text, run)
+    assert error is None and len(events) == 2
+
+
+@pytest.mark.parametrize(
+    ("files", "continue_on_error"),
+    [
+        ({"macro.csv": "NAME,DIR\nalpha,out\nbeta,x\n"}, "N"),
+        ({"macro.csv": "NAME,DIR\n"}, "N"),
+        ({}, "Y"),
+        ({}, "N"),
+    ],
+)
+def test_macro(tmp_path, trace, files, continue_on_error):
+    text = vg2(
+        util(f'{{START-MACRO}} "macro.csv" "{continue_on_error}"'), write("<<<DIR>>>.txt", "hello <<<NAME>>>"),
+        util("{END-MACRO}"), write("after", "after <<<NAME>>>"),
+    )
+
+    def run():
+        with controls.macro("macro.csv", continue_on_error) as macro:
+            if macro.active:
+                put("<<<DIR>>>.txt", "hello <<<NAME>>>")
+        put("after", "after <<<NAME>>>")
+
+    assert_parity(tmp_path, trace, text, run, files)
+
+
+def test_nested_macro_precedence_and_barrier(tmp_path, trace):
+    files = {"outer.csv": "X,A,INNER\nouter,1,inner.csv\n", "inner.csv": "X,B\ninner,2\n"}
+    text = vg2(
+        util('{START-MACRO} "outer.csv" "N"', "/PROMPT-TEXT=outer"),
+        write("o1", "<<<X>>> <<<A>>>"),
+        util('{START-MACRO} "<<<INNER>>>" "N"', "/PROMPT-TEXT=inner"),
+        write("i1", "<<<X>>> <<<A>>> <<<B>>>"),
+        util("{END-MACRO}"),
+        write("o2", "<<<X>>>"),
+        util("{END-MACRO}"),
+    )
+
+    def run():
+        with controls.macro("outer.csv", "N", options={"PROMPT-TEXT": "outer"}) as outer:
+            if outer.active:
+                put("o1", "<<<X>>> <<<A>>>")
+                with controls.macro("<<<INNER>>>", "N", options={"PROMPT-TEXT": "inner"}) as inner:
+                    if inner.active:
+                        put("i1", "<<<X>>> <<<A>>> <<<B>>>")
+                put("o2", "<<<X>>>")
+
+    events, error = assert_parity(tmp_path, trace, text, run, files)
+    assert error is None
+    assert events == [("o1", "outer 1"), ("i1", "inner 1 2"), ("o2", "outer")]
+
+
+@pytest.mark.parametrize("arguments", [("1", "5", "2", "1", "N"), ("1", "5", "2", "1", "Y"), ("0", "3", "1.5", "1", "N")])
+def test_for_loop(tmp_path, trace, arguments):
+    quoted = " ".join(f'"{argument}"' for argument in arguments)
+    body = "<<<spf-loop-ctr-1>>> <<<spf-step-1>>> <<<spf-start-1>>>"
+    text = vg2(util(f"{{FOR-LOOP}} {quoted}"), write("f<<<spf-loop-ctr-1-int>>>", body), util("{END-LOOP}"))
+
+    def run():
+        with controls.for_loop(*arguments) as loop:
+            for iteration in loop:
+                with iteration:
+                    put("f<<<spf-loop-ctr-1-int>>>", body)
+
+    events, error = assert_parity(tmp_path, trace, text, run)
+    assert error is None and len(events) >= 2
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_site_loop_and_its_break_on_error(tmp_path, trace, fail):
+    body = [write("<<<spf-site-for-file-name>>>", "<<<spf-site>>>")] + ([write("x", "FAIL")] if fail else [])
+    text = vg2(util('{SITE-LOOP} "A.X,B.Y"'), *body, util("{END-LOOP}"), write("after", "after"))
+
+    def run():
+        with controls.site_loop("A.X,B.Y") as loop:
+            for iteration in loop:
+                with iteration:
+                    put("<<<spf-site-for-file-name>>>", "<<<spf-site>>>")
+                    if fail:
+                        put("x", "FAIL")
+        put("after", "after")
+
+    events, error = assert_parity(tmp_path, trace, text, run)
+    assert error is None and len(events) == (2 if fail else 3)
+
+
+@pytest.mark.parametrize(("error_trap", "fail"), [("N", False), ("Y", True), ("N", True)])
+def test_run_loop(tmp_path, trace, error_trap, fail):
+    files = {"in.csv": "ID\n1\n2\n3\n4\n5\n"}
+    body = [write("read", "READ chunk.csv")] + ([write("x", "FAIL")] if fail else [])
+    text = vg2(util(f'{{RUN-LOOP}} "in.csv" "chunk.csv" "2" "{error_trap}"'), *body, util("{END-LOOP}"))
+
+    def run():
+        with controls.run_loop("in.csv", "chunk.csv", "2", error_trap) as loop:
+            for iteration in loop:
+                with iteration:
+                    put("read", "READ chunk.csv")
+                    if fail:
+                        put("x", "FAIL")
+
+    events, error = assert_parity(tmp_path, trace, text, run, files)
+    assert len(events) == (1 if fail and error_trap == "N" else 3)
+    assert sorted(path.name for path in (tmp_path / "python").iterdir()) == ["chunk.csv", "in.csv"]
+
+
+def test_macro_inside_loop_and_loop_inside_macro(tmp_path, trace):
+    files = {"m1.csv": "V\none\n", "m3.csv": "V\nthree\n", "n.csv": "N,LABEL\n3,lbl\n"}
+    text = vg2(
+        util('{FOR-LOOP} "1" "3" "2" "1" "N"'),
+        util('{START-MACRO} "m<<<spf-loop-ctr-1-int>>>.csv" "N"'),
+        write("x", "<<<V>>> <<<spf-loop-ctr-1-int>>>"),
+        util("{END-MACRO}"),
+        util("{END-LOOP}"),
+        util('{START-MACRO} "n.csv" "N"'),
+        util('{FOR-LOOP} "1" "<<<N>>>" "1" "2" "N"'),
+        write("y", "<<<LABEL>>> <<<spf-loop-ctr-2-int>>>"),
+        util("{END-LOOP}"),
+        util("{END-MACRO}"),
+    )
+
+    def run():
+        with controls.for_loop("1", "3", "2", "1", "N") as loop:
+            for iteration in loop:
+                with iteration:
+                    with controls.macro("m<<<spf-loop-ctr-1-int>>>.csv", "N") as macro:
+                        if macro.active:
+                            put("x", "<<<V>>> <<<spf-loop-ctr-1-int>>>")
+        with controls.macro("n.csv", "N") as macro:
+            if macro.active:
+                with controls.for_loop("1", "<<<N>>>", "1", "2", "N") as inner:
+                    for iteration in inner:
+                        with iteration:
+                            put("y", "<<<LABEL>>> <<<spf-loop-ctr-2-int>>>")
+
+    events, error = assert_parity(tmp_path, trace, text, run, files)
+    assert error is None
+    assert events == [("x", "one 1"), ("x", "three 3"), ("y", "lbl 1"), ("y", "lbl 2"), ("y", "lbl 3")]
+
+
+@pytest.mark.parametrize("where", ["root", "if", "macro"])
+@pytest.mark.parametrize("text_value", ["SKIP", "FAIL"])
+def test_child_error_policy(tmp_path, trace, where, text_value):
+    files = {"macro.csv": "A\n1\n"}
+    inner = [write("a", text_value), write("b", "next")]
+    opener, closer = {
+        "root": ([], []),
+        "if": ([util('{IF-THEN} "FLAG" "EQ" "1"')], [util("{END-IF}")]),
+        "macro": ([util('{START-MACRO} "macro.csv" "N"')], [util("{END-MACRO}")]),
+    }[where]
+    text = vg2(*opener, *inner, *closer, write("c", "after"))
+
+    def body():
+        put("a", text_value)
+        put("b", "next")
+
+    def run():
+        if where == "root":
+            body()
+        elif where == "if":
+            with controls.if_then("FLAG", "EQ", "1") as condition:
+                if condition.matched:
+                    body()
+        else:
+            with controls.macro("macro.csv", "N") as macro:
+                if macro.active:
+                    body()
+        put("c", "after")
+
+    events, error = assert_parity(tmp_path, trace, text, run, files)
+    assert (error is None) == (text_value == "SKIP")
+
+
+def test_missing_macro_value_fails_only_when_reached(tmp_path, trace):
+    (tmp_path / "macro.csv").write_text("A\n1\n", encoding="utf-8")
+
+    def run(flag):
+        def program():
+            with controls.macro("macro.csv", "N") as macro:
+                if macro.active:
+                    with controls.if_then("FLAG", "EQ", flag) as condition:
+                        if condition.matched:
+                            put("x", "<<<MISSING>>>")
+                    put("y", "<<<A>>>")
+
+        return program
+
+    runtime = PortableScriptHostRuntime()
+    runtime.run_python(run("2"), tmp_path)
+    assert trace == [("y", "1")]
+    with pytest.raises(Exception, match="MISSING"):
+        runtime.run_python(run("1"), tmp_path)
+
+
+def test_leaving_a_run_loop_early_runs_its_cleanup(tmp_path, trace):
+    (tmp_path / "in.csv").write_text("ID\n1\n2\n3\n", encoding="utf-8")
+
+    def run():
+        with controls.run_loop("in.csv", "chunk.csv", "1", "N") as loop:
+            for iteration in loop:
+                with iteration:
+                    put("read", "READ chunk.csv")
+                    break
+        put("after", "after")
+
+    PortableScriptHostRuntime().run_python(run, tmp_path)
+    assert trace == [("read", "ID\n1\n"), ("after", "after")]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["chunk.csv", "in.csv"]
+    assert _legacy().SPFTaskBase().gAnyLoopCtr == 0
+
+
+def test_leaf_forms_reach_the_original_routes(tmp_path, monkeypatch):
+    legacy = _legacy()
+    reached = []
+
+    def spy(task):
+        reached.append((type(task).__name__, task.MyUtilitiesValue, task.SPFTaskCommand))
+
+    for cls in (legacy.DOSCmdTask, legacy.SPFDeleteTask, legacy.AEDTask, legacy.RowsInFileTask, legacy.PyScriptTask):
+        monkeypatch.setattr(cls, "executeTaskCommand", spy)
+
+    def run():
+        script.command('dir /b | find "x"  >  out.txt', options={"WORKDIR": ".\\"})
+        script.utility(r"@EXEDIR@\SPFDelete.bat", "a.csv,b.csv", "N", external=True)
+        script.utility("AED", "AED_CANDIDATES.csv")
+        script.utility("ROWS-IN-FILE", "data file.csv", "ROWS", "N", options=[("WORKDIR", ".\\")])
+        script.utility("PYSCRIPT:CHECK", command="print('x')")
+
+    PortableScriptHostRuntime().run_python(run, tmp_path)
+    assert reached == [
+        ("DOSCmdTask", 'dir /b | find "x"  >  out.txt', ""),
+        ("SPFDeleteTask", r'@EXEDIR@\SPFDelete.bat "a.csv,b.csv" "N"', ""),
+        ("AEDTask", '{AED} "AED_CANDIDATES.csv"', ""),
+        ("RowsInFileTask", '{ROWS-IN-FILE} "data file.csv" "ROWS" "N"', ""),
+        ("PyScriptTask", "{PYSCRIPT:CHECK}", "print('x')"),
     ]
-    assert tasks[1].ll_QuoteCSV
-    assert (tmp_path / "candidates.csv").read_text(encoding="utf-8-sig").splitlines() == [
-        'LOT', 'A',
-    ]
-    assert Path.cwd() == before
-    assert not managers[0]._script_macro_tables
-    with pytest.raises(RuntimeError, match="requires a job"):
-        macros.get("SOURCE")
 
 
-def test_macro_row_lookup_substitution_and_separate_env_namespace(tmp_path):
-    (tmp_path / "config.csv").write_text("SITE,EMPTY\nKM,\nPG,second\n")
+def test_query_options_route_through_the_original_router(tmp_path, monkeypatch):
+    legacy = _legacy()
+    reached = []
+    monkeypatch.setattr(legacy.SPFTaskBase, "execute", lambda task: reached.append(type(task).__name__))
 
     def run():
-        assert macros.load_csv("config.csv")
-        manager = script_api._manager()
-        assert macros["site"] == "KM"
-        assert macros.get("EMPTY") == ""
-        text = "site=<<<SITE>>> empty=<<<EMPTY>>>"
-        assert macros.substitute(text) == manager.Substitute_Macro(
-            text, manager._script_macro_tables, 1, 0
-        )
-        assert macros["spf-job-start-day"] == manager.gMySPFJobDay
-        macros.set("STAGE1_VALUE", "7")
-        assert macros["%STAGE1_VALUE%"] == "7"
-        with pytest.raises(Exception, match="Macro translation"):
-            macros["STAGE1_VALUE"]
-        with pytest.raises(Exception, match="Macro translation"):
-            macros["MISSING"]
-        with pytest.raises(NotImplementedError, match="one CSV macro scope"):
-            macros.load_csv("config.csv")
+        for node, engine, oledb in (("local", "SQLite", "SQLite"), ("KM.MARS", "VA", "SQLPlus"), ("x@uber@y", "VA", "SQLPlus")):
+            script.invoke(options={"NODE": node, "UN": "", "OLEDB": oledb, "ENGINE": engine, "CSV": "r.csv"},
+                          command="SELECT 1")
 
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
+    PortableScriptHostRuntime().run_python(run, tmp_path)
+    assert reached == ["nqSQLiteTask", "nqOracleTask", "nqUberTask"]
 
 
-def test_bracketed_csv_header_keeps_original_import_and_lookup_behavior(tmp_path):
-    (tmp_path / "config.csv").write_text("[SITE]\nKM\n")
+@pytest.mark.parametrize("environment", ["LOCAL", "SQLPFSVC_TEST"])
+def test_hpc_declares_steps_for_the_original_begin_hpc(tmp_path, trace, monkeypatch, environment):
+    from scripthost_portable.task_inputs import TaskInput
 
-    def run():
-        assert macros.load_csv("config.csv")
-        manager = script_api._manager()
-        # The original importer normalizes square brackets to parentheses.
-        table = next(iter(manager._script_macro_tables.values()))
-        assert table.GetColumnNamesForTable() == ["(SITE)"]
-        with pytest.raises(Exception, match="Macro translation") as original:
-            manager.Substitute_Macro("<<<SITE>>>", manager._script_macro_tables, 1, 0)
-        with pytest.raises(type(original.value), match="Macro translation"):
-            macros["SITE"]
+    legacy = _legacy()
 
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
+    def shape(tasks):
+        return [(type(task).__name__, TaskInput.parse(task.SPFTaskItem).options,
+                 TaskInput.parse(task.SPFTaskItem).command.strip(), shape(task.childTasksList)) for task in tasks]
 
-
-@pytest.mark.parametrize("contents", ["SITE\n", None])
-def test_empty_and_missing_macro_scope(tmp_path, contents):
-    if contents is not None:
-        (tmp_path / "config.csv").write_text(contents)
+    monkeypatch.setattr(legacy.BeginHPCTask, "Record_SPF", lambda *args: None)
+    monkeypatch.setattr(legacy.BeginHPCTask, "executeChildTasksSvc",
+                        lambda task: trace.append(("service", shape(task.childTasksList))))
+    files = {"in.txt": "", "out.txt": "", "optional.txt": ""}
+    arguments = (environment, "in.txt", "out.txt", "optional.txt", "N", "N", "N")
+    quoted = " ".join(f'"{argument}"' for argument in arguments)
+    text = vg2(
+        util(f"{{BEGIN-HPC}} {quoted}"),
+        write("a", "a"),
+        util('{IF-THEN} "FLAG" "EQ" "1"'), write("b", "b"), util("{ELSE}", "/WORKDIR=.\\"), write("c", "c"),
+        util("{END-IF}"),
+        util("{END-HPC}"),
+        write("after", "after"),
+    )
 
     def run():
-        assert macros.load_csv("config.csv", continue_on_error=True) is False
-        if contents is None:
-            with pytest.raises(FileNotFoundError):
-                macros.load_csv("config.csv")
+        with controls.hpc(*arguments) as remote:
+            remote.invoke(options={"WRITE-FILE": "Y", "CSV": "a"}, command="a")
+            with remote.if_then("FLAG", "EQ", "1"):
+                remote.invoke(options={"WRITE-FILE": "Y", "CSV": "b"}, command="b")
+                remote.else_branch(options={"WORKDIR": ".\\"})
+                remote.invoke(options={"WRITE-FILE": "Y", "CSV": "c"}, command="c")
+        put("after", "after")
 
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
-
-
-def test_zero_byte_macro_preserves_original_failure(tmp_path):
-    (tmp_path / "empty.csv").write_text("")
-    text = '<OPTIONS>\n/UTILITIES={START-MACRO} "empty.csv" "N"\n</OPTIONS>'
-    with pytest.raises(IndexError):
-        PortableScriptHostRuntime().run_text(text, tmp_path)
-    with pytest.raises(IndexError):
-        PortableScriptHostRuntime().run_python(lambda: macros.load_csv("empty.csv"), tmp_path)
-    assert script_api._current_manager is None
+    events, error = assert_parity(tmp_path, trace, text, run, files)
+    assert error is None
+    if environment == "LOCAL":
+        assert events == [("a", "a"), ("b", "b"), ("after", "after")]
+    else:
+        assert [name for name, *_ in events[0][1]] == ["WriteFileTask", "IfThenTask"]
 
 
-@pytest.mark.parametrize("operator,rhs", [("GT", "0"), ("EQ", "2"), ("LT", "1")])
-def test_comparison_uses_original_resolution_and_comparevars(tmp_path, operator, rhs):
-    def run():
-        macros.set("STAGE1_VALUE", "2")
-        manager = script_api._manager()
-        assert macros.compare("STAGE1_VALUE", operator, rhs) == manager.CompareVars(
-            os.environ["STAGE1_VALUE"], rhs, operator
-        )
-        assert macros.compare("VAR(2)", operator, rhs) == manager.CompareVars("2", rhs, operator)
-
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
+def test_api_requires_a_running_job():
+    with pytest.raises(RuntimeError, match="ScriptHost runtime"):
+        script.invoke(options={"WRITE-FILE": "Y"}, command="x")
+    with pytest.raises(RuntimeError, match="ScriptHost runtime"):
+        with controls.if_then("FLAG", "EQ", "1"):
+            pass
 
 
-def test_rows_in_file_preserves_original_error_value(tmp_path):
-    (tmp_path / "rows.csv").write_text("LOT\nA\nB\n")
-
-    def run():
-        manager = script_api._manager()
-        assert utilities.rows_in_file("rows.csv", "STAGE1_SIGNAL") == (
-            manager.getRowCountFromFile("rows.csv")
-        )
-        assert os.environ["STAGE1_SIGNAL"] == "2"
-        assert utilities.rows_in_file("missing.csv", "STAGE1_SIGNAL") == -1
-        assert not macros.compare("STAGE1_SIGNAL", "GT", "0")
-
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
+def test_aed_runs_through_the_original_aed_task(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(aed_api, "process_candidates", lambda path, logger=None: calls.append(path))
+    assert PortableScriptHostRuntime().run_python(lambda: script.utility("AED", "candidates.csv"), tmp_path)
+    assert calls == ["candidates.csv"]
 
 
-def test_oracle_facade_reaches_portability_override_and_transport(tmp_path):
+def test_oracle_query_reaches_portability_override_and_transport(tmp_path):
     calls = []
 
     class Reader:
@@ -177,198 +457,60 @@ def test_oracle_facade_reaches_portability_override_and_transport(tmp_path):
             return Reader()
 
     def run():
-        query.run(
-            sql="/*BEGIN SQL*/ SELECT 'A' AS LOT FROM dual /*END SQL*/", engine="VA",
-            node="KM.[A15_PROD_21.].MARS", output="mars.csv", headers="LOT",
-            record="Stage1", quote_csv=True,
+        script.invoke(
+            options={"NODE": "KM.[A15_PROD_21.].MARS", "UN": "", "PW": "", "OLEDB": "SQLPlus", "ENGINE": "VA",
+                     "WORKDIR": ".\\", "CSV": "mars.csv", "HEADERS": "LOT", "RECORD": "Stage1", "QUOTECSV": "Y"},
+            command="/*BEGIN SQL*/ SELECT 'A' AS LOT FROM dual /*END SQL*/",
         )
 
     with use_reader_factory(Factory()):
         assert PortableScriptHostRuntime().run_python(run, tmp_path)
-    assert len(calls) == 1
-    assert "SELECT 'A' AS LOT FROM dual" in calls[0][1]
+    assert len(calls) == 1 and "SELECT 'A' AS LOT FROM dual" in calls[0][1]
     assert "A" in (tmp_path / "mars.csv").read_text(encoding="utf-8-sig")
-
-
-@pytest.mark.parametrize("source", ["ICMPCS.txt", "output/aed-migration/CSR_IAM_v2.aed.txt"])
-def test_all_current_job_query_options_reach_original_parser(tmp_path, monkeypatch, source):
-    root = Path(__file__).resolve().parents[2]
-    blocks = (root / source).read_text(encoding="utf-8-sig").split("<---- New Query ---->")
-    # Explicit source-to-public spelling: any newly encountered option fails this
-    # scoped characterization instead of being silently dropped.
-    names = {
-        "NODE": "node", "OLEDB": "oledb", "ENGINE": "engine", "UN": "username",
-        "PW": "password", "WORKDIR": "workdir", "T": "show_result", "TS": "timestamp",
-        "CSV": "output", "TABLE": "tables", "HEADERS": "headers", "RECORD": "record",
-        "CTROW": "ct_rows", "CTVALUE": "ct_value", "CTHEADER": "ct_header",
-        "CTARRAY": "ct_array", "RESET": "reset", "DELETE": "delete", "SQLITE_DT": "sqlite_types",
-        "QUOTECSV": "quote_csv", "HEADERS_UNIQUE": "unique_headers", "INSTANCE": "instance",
-        "PROMPT-TEXT": "prompt", "HADOOP_SERVER_DEFAULT": "hadoop_server",
-    }
-    parsed = []
-
-    def run():
-        manager = script_api._manager()
-        original = manager.GetQuery
-
-        def parse_only(*args):
-            task = original(*args)
-            task.parseTaskCommandDone = True
-
-            def capture_options():
-                parsed.append(task.taskOptionsDict)
-
-            # Keep original execute()/parseTaskOptions() on the call stack;
-            # native Windows node metadata validates its original invoker.
-            # SQL execution is outside this option-preservation check.
-            monkeypatch.setattr(task, "executeTaskCommand", capture_options)
-            return task
-
-        monkeypatch.setattr(manager, "GetQuery", parse_only)
-        for block in blocks:
-            options = block.partition("</OPTIONS>")[0]
-            if "/ENGINE=" not in options:
-                continue
-            values = dict(line[1:].split("=", 1) for line in options.splitlines() if line.startswith("/"))
-            expected = {"/" + name: value for name, value in values.items()}
-            arguments = {names[name]: value for name, value in values.items()}
-            # Prepared job macros are external inputs. Substitute only those
-            # fixture placeholders so original option parsing can run offline.
-            arguments["node"] = (
-                ".\\" if values["ENGINE"] == "SQLite" else "KM.[A15_PROD_21.].MARS"
-            )
-            expected["/NODE"] = arguments["node"]
-            query.run(sql="SELECT 1", **arguments)
-            assert expected.items() <= parsed[-1].items()
-
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
-    assert len(parsed) == 5
-
-
-def test_reports_keep_original_lifecycle_and_same_manager(tmp_path, monkeypatch):
-    (tmp_path / "schema").mkdir()
-    (tmp_path / "report.csv").write_text("total_pcg,total_flag,ce%\n10,2,80%\n")
-    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "html_test.txt"
-    blocks = fixture.read_text(encoding="utf-8-sig").split("<---- New Query ---->")
-    css = next(b for b in blocks if "/REPORT=HTML-RUN" in b).split("</OPTIONS>", 1)[1]
-    css = css.replace("sqlpathfinder_style_1.css", "report.css")
-    deferred = next(b for b in blocks if "/REPORT=HTML-DEFER" in b and "/ID=MYREPORT5" in b)
-    deferred = deferred.split("</OPTIONS>", 1)[1]
-    source = next(line for line in deferred.splitlines() if line.startswith("INPUT-FILE"))
-    fields = source.split(r"<\\>")
-    fields[1] = "report.csv"
-    deferred = deferred.replace(source, r"<\\>".join(fields))
-    deferred = deferred.replace("sqlpathfinder_style_1.css", "report.css")
-    layout = "\n".join([
-        '<table class="tblout"><tr class="tblout"><td class="tblout">',
-        ":FILE:report.htm", ":CSS:report.css", ":CSSEMBED:N", ":RR:NO", ":B:Y",
-        ":TITLE:Stage 1 report", '<table class="tblout">', '<tr class="tblout">',
-        '<td class="tblout">', "HTM:MYREPORT5", '</td>', '</tr>', '</table>',
-        '</td></tr></table>',
-    ])
-    seen = []
-    original = script_api._manager
-
-    def traced():
-        manager = original()
-        seen.append(manager)
-        return manager
-
-    monkeypatch.setattr(script_api, "_manager", traced)
-
-    def run():
-        reports.run(css, instance="STAGE1")
-        reports.defer(deferred, report_id="MYREPORT5", instance="STAGE1")
-        assert (tmp_path / "STAGE1_MYREPORT5_tmp_.ini").exists()
-        reports.layout(layout, instance="STAGE1", outlook=False, json_only=False)
-        assert script_api._manager().gHTMDelete
-        reports.delete(instance="STAGE1")
-        assert not script_api._manager().gHTMDelete
-
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
-    assert len({id(manager) for manager in seen}) == 1
-    html = (tmp_path / "report.htm").read_text(encoding="utf-8-sig")
-    assert "Stage 1 report" in html and "80%" in html
-    assert "table.tblin" in (tmp_path / "report.css").read_text()
-    assert not list(tmp_path.glob("*_MYREPORT5_tmp_.ini"))
-
-
-def test_aed_calls_existing_implementation(tmp_path, monkeypatch):
-    calls = []
-    monkeypatch.setattr(aed_api, "process_candidates", calls.append)
-    assert PortableScriptHostRuntime().run_python(lambda: aed.process("candidates.csv"), tmp_path)
-    assert calls == ["candidates.csv"]
 
 
 def test_failure_and_nested_execution_restore_binding_and_cwd(tmp_path):
     previous = Path.cwd()
 
     def run():
-        manager = script_api._manager()
+        session = runtime._session()
         with pytest.raises(RuntimeError, match="already running"):
             PortableScriptHostRuntime().run_python(lambda: None, tmp_path / "nested")
-        assert script_api._manager() is manager
+        assert runtime._session() is session
         raise ValueError("user failure")
 
     with pytest.raises(ValueError, match="user failure"):
         PortableScriptHostRuntime().run_python(run, tmp_path)
     assert Path.cwd() == previous
-    assert script_api._current_manager is None
+    assert runtime._current_session is None
 
 
-@pytest.mark.parametrize("call", [
-    lambda: macros.load_csv("x.csv"), lambda: macros["X"], lambda: macros.set("X", "1"),
-    lambda: macros.compare("X", "GT", "0"), lambda: utilities.rows_in_file("x.csv", "X"),
-    lambda: query.run(sql="SELECT 1", output="x.csv"), lambda: reports.run("template"),
-    lambda: reports.defer("template", report_id="X"), lambda: reports.layout("template"),
-    lambda: reports.delete(), lambda: aed.process("x.csv"),
-])
-def test_facades_fail_outside_runtime(call):
-    with pytest.raises(RuntimeError, match="requires a job"):
-        call()
-
-
-def test_unsupported_options_and_legacy_blocks_fail_clearly(tmp_path):
-    def run():
-        with pytest.raises(TypeError, match="unsupported_option"):
-            query.run(sql="SELECT 1", output="x.csv", unsupported_option=True)
-        with pytest.raises(ValueError, match="Unsupported Stage 1 query engine"):
-            query.run(sql="SELECT 1", output="x.csv", engine="DuckDB")
-        with pytest.raises(ValueError, match="Unsupported Stage 1 oledb"):
-            query.run(sql="SELECT 1", output="x.csv", oledb="SQLPlus")
-        with pytest.raises(ValueError, match="multiline"):
-            query.run(sql="SELECT 1", output="x.csv\n/WRITE-FILE=Y")
-        with pytest.raises(ValueError, match="without legacy task blocks"):
-            reports.run("<OPTIONS>\n/REPORT=HTML-DELETE\n</OPTIONS>")
-
-    assert PortableScriptHostRuntime().run_python(run, tmp_path)
-
-
-def test_python_file_runs_in_fresh_worker_without_public_session(tmp_path):
+def test_python_file_runs_in_fresh_worker(tmp_path):
     (tmp_path / "source.csv").write_text("LOT\nA\n")
-    script = tmp_path / "job.py"
-    script.write_text(
-        "from scripthost_portable.script_api import macros, query, utilities\n"
+    job = tmp_path / "job.py"
+    job.write_text(
+        "from scripthost_portable.script_api import controls, script\n"
         "def run():\n"
-        "    query.run(sql='SELECT LOT FROM source', tables='source.csv', "
-        "output='result.csv', quote_csv=True)\n"
-        "    utilities.rows_in_file('result.csv', 'STAGE1_SIGNAL')\n"
-        "    assert macros.compare('STAGE1_SIGNAL', 'GT', '0')\n"
+        "    script.invoke(options={'NODE': '.\\\\', 'UN': '', 'PW': '', 'OLEDB': 'SQLite', 'ENGINE': 'SQLite',\n"
+        "                          'CSV': 'result.csv', 'TABLE': 'source.csv'}, command='SELECT LOT FROM source')\n"
+        "    script.utility('ROWS-IN-FILE', 'result.csv', 'API_SIGNAL', 'N')\n"
+        "    with controls.if_then('API_SIGNAL', 'GT', '0') as condition:\n"
+        "        if condition.matched:\n"
+        "            script.invoke(options={'WRITE-FILE': 'Y', 'CSV': 'flag.txt'}, command='rows')\n"
     )
-    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(script)), timeout=30)
+    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=60)
     assert result.success, result.message + result.stderr
     assert result.child_pid != os.getpid()
-    assert "result.csv" in result.generated_outputs
-    assert os.environ["STAGE1_SIGNAL"] == "0"
-    assert script_api.__all__ == ["aed", "controls", "macros", "query", "reports", "script", "utilities"]
-    assert not hasattr(script_api, "script_session")
+    assert {"result.csv", "flag.txt"} <= set(result.generated_outputs)
+    assert "API_SIGNAL" not in os.environ
+    assert script_api.__all__ == ["controls", "script"]
 
 
 def test_python_worker_requires_run_and_validates_one_input(tmp_path):
-    script = tmp_path / "bad.py"
-    script.write_text("value = 1\n")
-    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(script)), timeout=30)
+    job = tmp_path / "bad.py"
+    job.write_text("value = 1\n")
+    result = run_job(ScriptHostJob(working_directory=str(tmp_path), python_path=str(job)), timeout=30)
     assert not result.success
     assert "must define a callable run()" in result.message
     with pytest.raises(ValueError, match="Exactly one"):
-        ScriptHostJob(working_directory=str(tmp_path), python_path=str(script), script_text="x").validate()
+        ScriptHostJob(working_directory=str(tmp_path), python_path=str(job), script_text="x").validate()

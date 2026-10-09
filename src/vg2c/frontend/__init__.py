@@ -1,4 +1,3 @@
-from vg2c.frontend.classifier import classify
-from vg2c.frontend.parser import parse
+from vg2c.frontend.parser import read_source
 
-__all__ = ["classify", "parse"]
+__all__ = ["read_source"]

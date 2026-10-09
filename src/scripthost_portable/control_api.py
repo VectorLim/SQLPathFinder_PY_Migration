@@ -8,6 +8,7 @@ iteration. Statements in that body get the slot's substitutions and child-error 
 from __future__ import annotations
 
 from .deferred_task import DeferredChildTask, MacroLayer, legacy
+from .hpc_api import RemoteScope
 from .runtime import _session
 from .task_inputs import Options, utility_input
 
@@ -189,6 +190,10 @@ class _Controls:
 
     def run_loop(self, *arguments, options: Options = None, end_options: Options = None) -> _Loop:
         return _Loop("{RUN-LOOP}", arguments, options, end_options)
+
+    def hpc(self, *arguments, options: Options = None, end_options: Options = None) -> RemoteScope:
+        """BEGIN-HPC: statements on the returned scope are declared for remote execution."""
+        return RemoteScope(arguments, options, end_options)
 
 
 controls = _Controls()

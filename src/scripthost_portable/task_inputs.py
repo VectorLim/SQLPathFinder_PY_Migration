@@ -17,6 +17,11 @@ def _codec():
     return SPFTaskInput
 
 
+def task_delimiter() -> str:
+    """Text between task items in a ScriptHost job (SPFManager.SQLFILE_DELIM)."""
+    return _codec().TASK_DELIMITER
+
+
 def option_pairs(options: Options) -> tuple[tuple[str, str], ...]:
     """Ordered (token, value) pairs; a sequence of pairs keeps duplicate tokens."""
     items = options.items() if isinstance(options, Mapping) else options or ()

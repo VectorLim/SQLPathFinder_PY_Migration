@@ -78,32 +78,41 @@ Linux email recipient/role policy is preserved; no replacement sender is provide
 
 See [runtime container instructions](docs/runtime-container.md) for the prototype image.
 
-## Clean Python compiler (Stage 2)
-
-Compile the two current targets against the installed Stage 1 API:
+## VG2 to Python compiler
 
 ```sh
 python -m vg2c ICMPCS.txt output/aed-migration/CSR_IAM_v2.aed.txt --out-dir output/clean-python
 python -m scripthost_portable.launcher output/clean-python/ICMPCS.py --workdir <prepared-job-directory>
 ```
 
-The compiler restores parsing, classification, scope/source identity and direct
-emission from the useful `main` architecture. It emits one ordinary `run()` with
-calls to `macros`, `query`, `utilities`, `reports` and `aed`. `OPERATION` and
-simple `out_date >= SYSDATE - N` / `TRUNC(SYSDATE) - N` filters become editable
-constants; all other SQL/report content and query options reach the original API.
-The launcher owns runtime initialization. Generated files need the installed
-`scripthost_portable` package and do not import the compiler or embed runtime code.
+The compiler asks ScriptHost for the job's task tree (original `Process_Query`, run in a
+scratch child process; nothing is parsed or executed) and writes one editable `run()`:
 
-Only the two target jobs' operation surface is supported. Unsupported options,
-utilities, malformed scopes, multiple/nested macro scopes, positional macros and
-multi-clause conditions fail compilation. Utility prompt labels affect logging
-only and are omitted because Stage 1's utility facade has no prompt argument.
-Query/report prompts are retained. Macro references after `END-MACRO` are rejected
-because the API retains its loaded table until job cleanup.
+```python
+from scripthost_portable.script_api import controls, script
 
-Stage 2 tests compilation, output structure and a small offline API smoke test.
-Full differential parity, deployment bootstrap and production cutover remain Stage 3.
+def run():
+    script.utility("ROWS-IN-FILE", "results.csv", "SIGNAL", "N")
+    with controls.if_else("SIGNAL", "GT", "0") as condition:
+        if condition.matched:
+            script.utility("AED", "AED_CANDIDATES.csv")
+        else:
+            script.invoke(options={"WRITE-FILE": "Y", "CSV": "status.txt"}, command="No candidates")
+```
+
+- `script.invoke(options=, command=)`, `script.utility(name, *args, options=, external=)` and
+  `script.command(line, options=)` all run one original task through the original router.
+  Options are a dict, or a list of pairs when a token repeats.
+- `controls.if_then/if_else/macro/for_loop/site_loop/run_loop` drive the original controllers;
+  loops are `for iteration in loop:` + `with iteration:`. `end_options`/`else_options` keep
+  the closing blocks' options. `controls.hpc(...)` declares remote steps for BEGIN-HPC.
+- Macro/loop substitution happens when a call is reached, so a missing macro value in a
+  branch that never runs does not fail (ScriptHost checks the whole macro scope up front).
+- Shapes without a faithful Python form (unquoted controller arguments, unclosed or
+  mismatched END blocks, ELSE outside IF) fail compilation with the block location.
+
+Generated files import only `scripthost_portable.script_api`. Parity with the original
+runtime is tested in `tests/scripthost_portable/test_clean_python_parity.py`.
 
 ## AED IAM jobs
 

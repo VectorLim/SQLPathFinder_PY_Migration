@@ -149,6 +149,9 @@ def _child(argv: list[str]) -> int:
     instrumented_classes = query_classes | report_classes | control_classes
     manager_ids: dict[int, str] = {}
     original_get_query = manager_type.GetQuery
+    from SPFLib.SPFSQL3 import SPFTaskBase
+
+    base_steps = SPFTaskBase.executeTaskCommandSteps
 
     def report_files():
         return {
@@ -166,7 +169,7 @@ def _child(argv: list[str]) -> int:
         manager_ids.setdefault(id(manager), f"manager-{len(manager_ids)}")
         original_execute = task.executeTaskCommand
 
-        def instrument_execute():
+        def before():
             name = type(task).__name__
             files_before = {path.name for path in workdir.iterdir() if path.is_file()}
             event = {
@@ -194,23 +197,43 @@ def _child(argv: list[str]) -> int:
             if name in report_classes:
                 event["report_before"] = report_files()
             events.append(event)
+            return name, event, files_before
+
+        def after(name, event, files_before):
+            files_after = {path.name for path in workdir.iterdir() if path.is_file()}
+            event["created"] = sorted(files_after - files_before)
+            event["deleted"] = sorted(files_before - files_after)
+            if name in query_classes:
+                event["query_after"] = task.SPFTaskCommand
+            if name in control_classes:
+                event["execute_child_tasks"] = getattr(task, "shouldExecuteChildTasks", None)
+                event["environment"] = {
+                    key: os.environ.get(key) for key in ("RowsInFile", "SIGNAL")
+                }
+            if name in report_classes:
+                event["report_after"] = report_files()
+
+        def instrument_execute():
+            state = before()
             try:
                 return original_execute()
             finally:
-                files_after = {path.name for path in workdir.iterdir() if path.is_file()}
-                event["created"] = sorted(files_after - files_before)
-                event["deleted"] = sorted(files_before - files_after)
-                if name in query_classes:
-                    event["query_after"] = task.SPFTaskCommand
-                if name in control_classes:
-                    event["execute_child_tasks"] = getattr(task, "shouldExecuteChildTasks", None)
-                    event["environment"] = {
-                        key: os.environ.get(key) for key in ("RowsInFile", "SIGNAL")
-                    }
-                if name in report_classes:
-                    event["report_after"] = report_files()
+                after(*state)
 
-        task.executeTaskCommand = instrument_execute
+        def instrument_steps():
+            state = before()
+            try:
+                yield from original_steps()
+            finally:
+                after(*state)
+
+        # Controllers with a generator seam run their command through executeTaskCommandSteps,
+        # both from the original executeTaskCommand and from generated controls.
+        if type(task).executeTaskCommandSteps is base_steps:
+            task.executeTaskCommand = instrument_execute
+        else:
+            original_steps = task.executeTaskCommandSteps
+            task.executeTaskCommandSteps = instrument_steps
         return task
 
     manager_type.GetQuery = instrument_get_query

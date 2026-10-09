@@ -1,30 +1,38 @@
-from scripthost_portable.script_api import aed, macros, query, reports, utilities
-
-OPERATION = '2303'
-DURATION = 'SYSDATE - 1'
+from scripthost_portable.script_api import controls, script
 
 
 def run():
-    reports.run(
-        """Type<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8
-TYPE<\\\\>CSS<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-CSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-FORMAT<\\\\>Column-Headers<\\\\>background-color:#dbd9c0<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>text-decoration:normal<\\\\>vertical-align:middle
-FORMAT<\\\\>Column-Data<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>
-FORMAT<\\\\>Column-Alt-Row<\\\\>background-color:#f7f5dc<\\\\>color:#333<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>text-align:left<\\\\>vertical-align:middle<\\\\>
-FORMAT<\\\\>At-Top-of-Report<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:15<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:center<\\\\>vertical-align:middle
-FORMAT<\\\\>At-Top-of-Col1<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle
-FORMAT<\\\\>At-Top-of-Col2<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle
-FORMAT<\\\\>At-Top-of-Col3<\\\\>background-color:white<\\\\>color:#444<\\\\>font-family:Arial<\\\\>font-size:12<\\\\>font-style:normal<\\\\>font-weight:bold<\\\\>text-align:left<\\\\>vertical-align:middle
-FORMAT<\\\\>JQX-All-IChart-Text<\\\\>background-color:white<\\\\>color:black<\\\\>font-family:Verdana<\\\\>font-size:11<\\\\>font-style:normal<\\\\>font-weight:normal<\\\\>text-align:left<\\\\>vertical-align:middle
-FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\\\\>border-style:solid<\\\\>border-width:1px<\\\\>border-spacing:4px<\\\\><\\\\><\\\\>
+    script.invoke(
+        options={
+            "REPORT": "HTML-RUN",
+            "INSTANCE": "28702",
+            "PROMPT-TEXT": "Step 1-1. create revision footer",
+            "APP_SERVER_DEFAULT": "atd_atm.hadoop",
+        },
+        command=r"""Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8
+TYPE<\\>CSS<\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\>
+FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>text-decoration:normal<\\>vertical-align:middle
+FORMAT<\\>Column-Data<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>Column-Alt-Row<\\>background-color:#f7f5dc<\\>color:#333<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>At-Top-of-Report<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:15<\\>font-style:normal<\\>font-weight:bold<\\>text-align:center<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col1<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col2<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col3<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>JQX-All-IChart-Text<\\>background-color:white<\\>color:black<\\>font-family:Verdana<\\>font-size:11<\\>font-style:normal<\\>font-weight:normal<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>border-style:solid<\\>border-width:1px<\\>border-spacing:4px<\\><\\><\\>
 """,
-        instance='28702',
-        prompt='Step 1-1. create revision footer',
-        app_server='atd_atm.hadoop',
     )
-    reports.layout(
-        """<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+    script.invoke(
+        options={
+            "REPORT": "HTML-LAYOUT",
+            "OUTLOOK": "N",
+            "INSTANCE": "28702",
+            "JSON-ONLY": "N",
+            "CHART-INSTANCE": "3450",
+            "APP_SERVER_DEFAULT": "atd_atm.hadoop",
+        },
+        command="""<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
 :FILE:revision.htm
 :CSS:sqlpathfinder_style_1.css
 :CSSEMBED:Y
@@ -47,18 +55,43 @@ FORMAT<\\\\>COLUMN-BORDER<\\\\>border-color:#cc9<\\\\>border-collapse:collapse<\
 </table>
 </td></tr></table>
 """,
-        outlook='N',
-        instance='28702',
-        json_only='N',
-        chart_instance='3450',
-        app_server='atd_atm.hadoop',
     )
-    reports.delete(
-        instance='28702',
+    script.invoke(
+        options={"REPORT": "HTML-DELETE", "INSTANCE": "28702"},
+        command="""N/A
+
+
+""",
     )
-    if macros.load_csv('configsets.csv'):
-        query.run(
-            sql=f"""/*BEGIN SQL*/
+    with controls.macro(
+        "configsets.csv", "N",
+        options={
+            "WORKDIR": ".\\",
+            "INSTANCE": "28702",
+            "OUTLOOK": "N",
+            "PROMPT-TEXT": "Step 2. Apply variables from config file",
+        },
+        end_options={"WORKDIR": ".\\", "INSTANCE": "28702", "OUTLOOK": "N"},
+    ) as macro:
+        if macro.active:
+            script.invoke(
+                options={
+                    "NODE": "<<<MARS>>>",
+                    "UN": "",
+                    "PW": "",
+                    "OLEDB": "SQLPlus",
+                    "ENGINE": "VA",
+                    "WORKDIR": ".\\",
+                    "T": "",
+                    "TS": "_20261006134326",
+                    "CSV": "yeuchuan_a1_28702.tab",
+                    "HEADERS": "lot_1,operation_1,out_date,oldqty1,newqty1,Interposer_SLI,Patch_SLI,prodgroup3_1,entity,transaction",
+                    "INSTANCE": "28702",
+                    "PROMPT-TEXT": "Step 3-1.1-a1. Fetching MARS Data",
+                    "RECORD": "WIP_Lot_History_v2@1.0.0.0",
+                    "HADOOP_SERVER_DEFAULT": "ATD_ATM.HADOOP",
+                },
+                command="""/*BEGIN SQL*/
 SELECT 
           lot_1 AS lot_1
          ,operation_1 AS operation_1
@@ -95,8 +128,8 @@ LEFT JOIN @[]@F_LotTxnHist f5 ON f5.lot = f0.lot AND f5.operation = f0.operation
 WHERE
 NVL(f0.history_deleted_flag,'N') = 'N'
 AND      f0.owner <> 'EMPTYFOUP'
- AND      f0.operation = '{OPERATION.replace("'", "''")}' 
- AND      f0.out_date >= {DURATION} 
+ AND      f0.operation = '2303' 
+ AND      f0.out_date >= SYSDATE - 1 
  AND      p.prodgroup3 Like 'CWF%' 
 -- Tail A
 )
@@ -106,23 +139,29 @@ WHERE
 
 
 """,
-            engine='VA',
-            node=macros['MARS'],
-            username='',
-            password='',
-            oledb='SQLPlus',
-            workdir='.\\',
-            show_result='',
-            timestamp='_20261006134326',
-            output='yeuchuan_a1_28702.tab',
-            headers='lot_1,operation_1,out_date,oldqty1,newqty1,Interposer_SLI,Patch_SLI,prodgroup3_1,entity,transaction',
-            instance='28702',
-            prompt='Step 3-1.1-a1. Fetching MARS Data',
-            record='WIP_Lot_History_v2@1.0.0.0',
-            hadoop_server='ATD_ATM.HADOOP',
-        )
-        query.run(
-            sql=f"""/*BEGIN SQL*/
+            )
+            script.invoke(
+                options={
+                    "NODE": "<<<ARIES>>>",
+                    "UN": "",
+                    "PW": "",
+                    "OLEDB": "SQLPlus",
+                    "ENGINE": "VA",
+                    "WORKDIR": ".\\",
+                    "T": "",
+                    "TS": "_20261006134326",
+                    "CSV": "yeuchuan_a0_28702.tab",
+                    "CTROW": "facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y",
+                    "CTVALUE": "numeric_value",
+                    "CTHEADER": "parameter",
+                    "CTARRAY": "a0,28702",
+                    "HEADERS": "facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y,parameter,numeric_value",
+                    "INSTANCE": "28702",
+                    "PROMPT-TEXT": "Step 3-1.1-a0. Fetching ARIES Data",
+                    "RECORD": "AT_TDX_BAMS@1.0.0.0",
+                    "HADOOP_SERVER_DEFAULT": "ATD_ATM.HADOOP",
+                },
+                command=r"""/*BEGIN SQL*/
 SELECT 
           facility AS facility
          ,operation AS operation
@@ -172,8 +211,8 @@ INNER JOIN ARIES_Views.AV_BAMS_UNIT_TESTING bams2 ON bams2.lao_start_ww = bams1.
 LEFT JOIN ARIES_Views.AV_BAMS_DEVICE_RESULTS bams3 ON bams3.lao_start_ww = bams2.lao_start_ww AND bams3.obj_s_id = bams2.obj_s_id AND bams3.obj_mt_id = bams2.obj_mt_id AND bams3.obj_ut_id = bams2.obj_ut_id
 WHERE
               (bams0.lot In 
-SQL_Get_CSV_List(".\\yeuchuan_a1_28702.tab", lot_1, "bams0.lot In") 
- AND      bams0.operation = '{OPERATION.replace("'", "''")}' 
+SQL_Get_CSV_List(".\yeuchuan_a1_28702.tab", lot_1, "bams0.lot In") 
+ AND      bams0.operation = '2303' 
 )
 GROUP BY 
           facility
@@ -197,27 +236,28 @@ GROUP BY
 
 
 """,
-            engine='VA',
-            node=macros['ARIES'],
-            username='',
-            password='',
-            oledb='SQLPlus',
-            workdir='.\\',
-            show_result='',
-            timestamp='_20261006134326',
-            output='yeuchuan_a0_28702.tab',
-            ct_rows='facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y',
-            ct_value='numeric_value',
-            ct_header='parameter',
-            ct_array='a0,28702',
-            headers='facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y,parameter,numeric_value',
-            instance='28702',
-            prompt='Step 3-1.1-a0. Fetching ARIES Data',
-            record='AT_TDX_BAMS@1.0.0.0',
-            hadoop_server='ATD_ATM.HADOOP',
-        )
-        query.run(
-            sql="""DROP INDEX IF EXISTS IdxA0;
+            )
+            script.invoke(
+                options={
+                    "RESET": "Y",
+                    "NODE": ".\\",
+                    "OLEDB": "SQLite",
+                    "ENGINE": "SQLite",
+                    "UN": "",
+                    "PW": "",
+                    "WORKDIR": ".\\",
+                    "T": "No",
+                    "TS": "_20261006134326",
+                    "CSV": "PARMI_IPM_RAW.csv",
+                    "TABLE": "yeuchuan_a1_28702.tab,yeuchuan_a0_28702.tab",
+                    "HEADERS": "lot_1,operation_1,out_date,oldqty1,newqty1,facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y,CrossTab->[[a0,28702;:N]],Interposer_SLI,Patch_SLI,prodgroup3_1,entity,transaction",
+                    "DELETE": "*Instance*",
+                    "INSTANCE": "28702",
+                    "SQLITE_DT": ",lot_1(c),operation_1(c),out_date(d),oldqty1(n),newqty1(n),facility(c),operation(c),module_name(c),tool_entity(c),primary_entity(c),processing_start_date(d),processing_end_date(d),lot(c),product(c),prodgroup3(c),product_desc(x),owner(c),visual_id(c),ws_loss_code(c),media_in_x(n),media_in_y(n),Interposer_SLI(x),Patch_SLI(x),prodgroup3_1(c),entity(c),transaction(c)",
+                    "QUOTECSV": "Y",
+                    "HADOOP_SERVER_DEFAULT": "ATD_ATM.HADOOP",
+                },
+                command="""DROP INDEX IF EXISTS IdxA0;
 Create Index IF NOT EXISTS IdxA0 ON [yeuchuan_a0_28702] ([lot],[operation]);
 
 SELECT /*L0*/  DISTINCT 
@@ -255,28 +295,47 @@ FROM
  AND a1.[operation_1] = a0.[operation]
 
 """,
-            engine='SQLite',
-            reset='Y',
-            node='.\\',
-            oledb='SQLite',
-            username='',
-            password='',
-            workdir='.\\',
-            show_result='No',
-            timestamp='_20261006134326',
-            output='PARMI_IPM_RAW.csv',
-            tables='yeuchuan_a1_28702.tab,yeuchuan_a0_28702.tab',
-            headers='lot_1,operation_1,out_date,oldqty1,newqty1,facility,operation,module_name,tool_entity,primary_entity,processing_start_date,processing_end_date,lot,product,prodgroup3,product_desc,owner,visual_id,ws_loss_code,media_in_x,media_in_y,CrossTab->[[a0,28702;:N]],Interposer_SLI,Patch_SLI,prodgroup3_1,entity,transaction',
-            delete='*Instance*',
-            instance='28702',
-            sqlite_types=',lot_1(c),operation_1(c),out_date(d),oldqty1(n),newqty1(n),facility(c),operation(c),module_name(c),tool_entity(c),primary_entity(c),processing_start_date(d),processing_end_date(d),lot(c),product(c),prodgroup3(c),product_desc(x),owner(c),visual_id(c),ws_loss_code(c),media_in_x(n),media_in_y(n),Interposer_SLI(x),Patch_SLI(x),prodgroup3_1(c),entity(c),transaction(c)',
-            quote_csv='Y',
-            hadoop_server='ATD_ATM.HADOOP',
-        )
-        utilities.rows_in_file('PARMI_IPM_RAW.csv', 'RowsInFile')
-        if macros.compare('RowsInFile', 'GT', '0'):
-            query.run(
-                sql="""DROP TABLE IF EXISTS T_L0_Init;
+            )
+            script.utility(
+                "ROWS-IN-FILE", "PARMI_IPM_RAW.csv", "RowsInFile", "N", "",
+                options={
+                    "WORKDIR": ".\\",
+                    "INSTANCE": "28702",
+                    "OUTLOOK": "N",
+                    "PROMPT-TEXT": "Step 4. Count Rows in a File",
+                },
+            )
+            with controls.if_then(
+                "RowsInFile", "GT", "0", "", "", "", "",
+                options={
+                    "WORKDIR": ".\\",
+                    "INSTANCE": "28702",
+                    "OUTLOOK": "N",
+                    "PROMPT-TEXT": "Step 5. Apply Conditional Logic",
+                },
+                end_options={"WORKDIR": ".\\", "INSTANCE": "28702", "OUTLOOK": "N"},
+            ) as condition:
+                if condition.matched:
+                    script.invoke(
+                        options={
+                            "NODE": ".\\",
+                            "OLEDB": "SQLite",
+                            "ENGINE": "SQLite",
+                            "UN": "",
+                            "PW": "",
+                            "WORKDIR": ".\\",
+                            "T": "Yes",
+                            "TS": "_20261006134326",
+                            "CSV": "IPM_Data.csv",
+                            "TABLE": "PARMI_IPM_RAW.csv",
+                            "HEADERS": "lot_1,newqty1,facility,operation,tool_entity,primary_entity,processing_end_date,lot,prodgroup3,product,visual_id,ws_loss_code,media_in_x,media_in_y,height,patch_lift_roi1,patch_lift_roi2,patch_lift_roi3,patch_lift_roi4,patch_lift_roi5,patch_lift_roi6,patch_lift_roi7,patch_lift_roi8,patch_lift_roi_max,patch_sli,interposer_sli,NCO_Risk,VIDCount,FlagLot",
+                            "INSTANCE": "28702",
+                            "PROMPT-TEXT": "Step 6-1.1. Fetching Text (SQLite) Data",
+                            "HEADERS_UNIQUE": "Y",
+                            "QUOTECSV": "Y",
+                            "HADOOP_SERVER_DEFAULT": "ATD_ATM.HADOOP",
+                        },
+                        command="""DROP TABLE IF EXISTS T_L0_Init;
 CREATE TABLE T_L0_Init AS
 SELECT /*L0*/  
           a0.[lot_1] AS [lot_1]
@@ -471,68 +530,91 @@ WHERE
 ;
 
 """,
-                engine='SQLite',
-                node='.\\',
-                oledb='SQLite',
-                username='',
-                password='',
-                workdir='.\\',
-                show_result='Yes',
-                timestamp='_20261006134326',
-                output='IPM_Data.csv',
-                tables='PARMI_IPM_RAW.csv',
-                headers='lot_1,newqty1,facility,operation,tool_entity,primary_entity,processing_end_date,lot,prodgroup3,product,visual_id,ws_loss_code,media_in_x,media_in_y,height,patch_lift_roi1,patch_lift_roi2,patch_lift_roi3,patch_lift_roi4,patch_lift_roi5,patch_lift_roi6,patch_lift_roi7,patch_lift_roi8,patch_lift_roi_max,patch_sli,interposer_sli,NCO_Risk,VIDCount,FlagLot',
-                instance='28702',
-                prompt='Step 6-1.1. Fetching Text (SQLite) Data',
-                unique_headers='Y',
-                quote_csv='Y',
-                hadoop_server='ATD_ATM.HADOOP',
-            )
-            query.run(
-                sql="""SELECT DISTINCT '<<<AED_FACILITY>>>' AS [FACILITY], a0.[lot] AS [LOT]
+                    )
+                    script.invoke(
+                        options={
+                            "NODE": ".\\",
+                            "OLEDB": "SQLite",
+                            "ENGINE": "SQLite",
+                            "UN": "",
+                            "PW": "",
+                            "WORKDIR": ".\\",
+                            "CSV": "AED_CANDIDATES.csv",
+                            "TABLE": "IPM_Data.csv",
+                            "HEADERS": "FACILITY,LOT",
+                            "QUOTECSV": "Y",
+                            "INSTANCE": "28702",
+                            "PROMPT-TEXT": "Select distinct flagged lots for AED",
+                        },
+                        command="""SELECT DISTINCT '<<<AED_FACILITY>>>' AS [FACILITY], a0.[lot] AS [LOT]
 FROM [IPM_Data] a0;
 """,
-                engine='SQLite',
-                node='.\\',
-                oledb='SQLite',
-                username='',
-                password='',
-                workdir='.\\',
-                output='AED_CANDIDATES.csv',
-                tables='IPM_Data.csv',
-                headers='FACILITY,LOT',
-                quote_csv='Y',
-                instance='28702',
-                prompt='Select distinct flagged lots for AED',
+                    )
+                    script.utility(
+                        "AED", "AED_CANDIDATES.csv",
+                        options={
+                            "WORKDIR": ".\\",
+                            "INSTANCE": "28702",
+                            "OUTLOOK": "N",
+                            "PROMPT-TEXT": "Apply and verify AED lot attributes",
+                        },
+                    )
+            script.utility(
+                "ROWS-IN-FILE", "AED_CANDIDATES.csv", "SIGNAL", "N", "",
+                options={
+                    "WORKDIR": ".\\",
+                    "INSTANCE": "28702",
+                    "OUTLOOK": "N",
+                    "PROMPT-TEXT": "Step 8-1. check if got signal",
+                },
             )
-            aed.process('AED_CANDIDATES.csv')
-        utilities.rows_in_file('AED_CANDIDATES.csv', 'SIGNAL')
-        if macros.compare('SIGNAL', 'GT', '0'):
-            reports.defer(
-                """Type<\\\\>Key<\\\\>COL1<\\\\>COL2<\\\\>COL3<\\\\>COL4<\\\\>COL5<\\\\>COL6<\\\\>COL7<\\\\>COL8<\\\\>COL9<\\\\>COL10<\\\\>COL11<\\\\>COL12<\\\\>COL13<\\\\>COL14<\\\\>COL15<\\\\>COL16<\\\\>COL17<\\\\>COL18<\\\\>COL19<\\\\>COL20<\\\\>COL21<\\\\>COL22<\\\\>COL23<\\\\>COL24<\\\\>COL25<\\\\>COL26
-TYPE<\\\\>HTML<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-INPUT-FILE<\\\\>IPM_Data.csv<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-OUTPUT-FILE<\\\\>SQLPathFinder.htm<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-CSS<\\\\>sqlpathfinder_style_1.css<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-COLSPAN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-DRILLDOWN<\\\\>N<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-DYNAMICSORT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-DYNAMICFILTER<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-ATTOPDRILLDOWN<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-NOPREPROCESS<\\\\>Y<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-AT-TOP-OF-REPORT<\\\\><\\\\>CWF_MLINCO_LOTHOLD<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
-COLUMN-DATA<\\\\><\\\\>facility<\\\\>operation<\\\\>tool_entity<\\\\>primary_entity<\\\\>processing_end_date<\\\\>lot<\\\\>prodgroup3<\\\\>product<\\\\>visual_id<\\\\>ws_loss_code<\\\\>media_in_x<\\\\>media_in_y<\\\\>height<\\\\>patch_lift_roi1<\\\\>patch_lift_roi2<\\\\>patch_lift_roi3<\\\\>patch_lift_roi4<\\\\>patch_lift_roi5<\\\\>patch_lift_roi6<\\\\>patch_lift_roi7<\\\\>patch_lift_roi8<\\\\>patch_lift_roi_max<\\\\>lot_1<\\\\>patch_sli<\\\\>interposer_sli<\\\\>nco_risk
-COLUMN-HEADERS<\\\\><\\\\>Facility<\\\\>Operation<\\\\>Tool Entity<\\\\>Primary Entity<\\\\>Processing End Date<\\\\>Lot<\\\\>Prodgroup3<\\\\>Product<\\\\>Visual Id<\\\\>Ws Loss Code<\\\\>Media In X<\\\\>Media In Y<\\\\>Height<\\\\>Patch Lift Roi1<\\\\>Patch Lift Roi2<\\\\>Patch Lift Roi3<\\\\>Patch Lift Roi4<\\\\>Patch Lift Roi5<\\\\>Patch Lift Roi6<\\\\>Patch Lift Roi7<\\\\>Patch Lift Roi8<\\\\>Patch Lift Roi Max<\\\\>Lot 1<\\\\>Patch Sli<\\\\>Interposer Sli<\\\\>Nco Risk
-COLUMN-ALIGNMENT<\\\\><\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left<\\\\>middle-left
-COLUMN-FORMAT<\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\><\\\\>
+            with controls.if_then(
+                "SIGNAL", "GT", "0", "", "", "", "",
+                options={
+                    "WORKDIR": ".\\",
+                    "INSTANCE": "28702",
+                    "OUTLOOK": "N",
+                    "PROMPT-TEXT": "Step 8-2. TRUE if signal is found",
+                },
+                end_options={"WORKDIR": ".\\", "INSTANCE": "28702", "OUTLOOK": "N"},
+            ) as condition:
+                if condition.matched:
+                    script.invoke(
+                        options={
+                            "INSTANCE": "28702",
+                            "ID": "MYREPORT3",
+                            "REPORT": "HTML-DEFER",
+                            "PROMPT-TEXT": "Step 8-6. sending notification",
+                            "APP_SERVER_DEFAULT": "atd_atm.hadoop",
+                        },
+                        command=r"""Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12<\\>COL13<\\>COL14<\\>COL15<\\>COL16<\\>COL17<\\>COL18<\\>COL19<\\>COL20<\\>COL21<\\>COL22<\\>COL23<\\>COL24<\\>COL25<\\>COL26
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>IPM_Data.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+AT-TOP-OF-REPORT<\\><\\>CWF_MLINCO_LOTHOLD<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>facility<\\>operation<\\>tool_entity<\\>primary_entity<\\>processing_end_date<\\>lot<\\>prodgroup3<\\>product<\\>visual_id<\\>ws_loss_code<\\>media_in_x<\\>media_in_y<\\>height<\\>patch_lift_roi1<\\>patch_lift_roi2<\\>patch_lift_roi3<\\>patch_lift_roi4<\\>patch_lift_roi5<\\>patch_lift_roi6<\\>patch_lift_roi7<\\>patch_lift_roi8<\\>patch_lift_roi_max<\\>lot_1<\\>patch_sli<\\>interposer_sli<\\>nco_risk
+COLUMN-HEADERS<\\><\\>Facility<\\>Operation<\\>Tool Entity<\\>Primary Entity<\\>Processing End Date<\\>Lot<\\>Prodgroup3<\\>Product<\\>Visual Id<\\>Ws Loss Code<\\>Media In X<\\>Media In Y<\\>Height<\\>Patch Lift Roi1<\\>Patch Lift Roi2<\\>Patch Lift Roi3<\\>Patch Lift Roi4<\\>Patch Lift Roi5<\\>Patch Lift Roi6<\\>Patch Lift Roi7<\\>Patch Lift Roi8<\\>Patch Lift Roi Max<\\>Lot 1<\\>Patch Sli<\\>Interposer Sli<\\>Nco Risk
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
 """,
-                report_id='MYREPORT3',
-                instance='28702',
-                prompt='Step 8-6. sending notification',
-                app_server='atd_atm.hadoop',
-            )
-            reports.layout(
-                """<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+                    )
+                    script.invoke(
+                        options={
+                            "REPORT": "HTML-LAYOUT",
+                            "OUTLOOK": "N",
+                            "INSTANCE": "28702",
+                            "JSON-ONLY": "N",
+                            "CHART-INSTANCE": "30819",
+                            "APP_SERVER_DEFAULT": "atd_atm.hadoop",
+                        },
+                        command="""<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
 :FILE:EMAIL:<<<dEmail>>>
 :CSS:sqlpathfinder_style_1.css
 :CSSEMBED:Y
@@ -570,15 +652,14 @@ IHJ:revision.htm
 </table>
 </td></tr></table>
 """,
-                outlook='N',
-                instance='28702',
-                json_only='N',
-                chart_instance='30819',
-                app_server='atd_atm.hadoop',
-            )
-            reports.delete(
-                instance='28702',
-            )
+                    )
+                    script.invoke(
+                        options={"REPORT": "HTML-DELETE", "INSTANCE": "28702"},
+                        command="""N/A
+
+
+""",
+                    )
 
 
 if __name__ == "__main__":

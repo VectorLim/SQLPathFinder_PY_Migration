@@ -1,4 +1,4 @@
-"""Main's source-range and invocation identity concepts, without editor machinery."""
+"""Where each original block landed in the generated Python."""
 
 from __future__ import annotations
 
@@ -14,30 +14,13 @@ class SourceRange:
 
 
 @dataclass(frozen=True, slots=True)
-class EmittedParameter:
-    id: str
-    name: str
-    position: int | None
-    source: str
-    value: object
-    source_range: SourceRange
-
-
-@dataclass(frozen=True, slots=True)
-class EmittedInvocation:
-    id: str
-    operation: str
-    source_range: SourceRange
-    parameters: tuple[EmittedParameter, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class EmittedBlock:
+    """One original block and the Python call carrying it (a controller's call also carries its ELSE/END)."""
+
     block_index: int
-    functional_kind: str
+    class_name: str
     source: str
     source_range: SourceRange
-    invocations: tuple[EmittedInvocation, ...]
     input_span: SourceSpan
 
 

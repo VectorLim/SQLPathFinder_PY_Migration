@@ -1,259 +1,142 @@
-"""One direct emission path targeting the five Stage 1 facade objects."""
+"""Emit one plain run() from the original ScriptHost task tree."""
 
 from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Sequence
+from contextlib import contextmanager
+from typing import NoReturn
 
-from scripthost_portable.api_contract import QUERY_OPTIONS, REPORT_OPTIONS
-from vg2c.diagnostics import fail
-from vg2c.emitter.globals import render_sql
+from scripthost_portable.task_introspection import ProgramDescriptor, TaskDescriptor
+from vg2c.diagnostics import CompileError
+from vg2c.emitter.controls import emit_control
 from vg2c.emitter.indent_writer import IndentWriter
-from vg2c.emitter.literals import string_literal
-from vg2c.emitter.models import (
-    EmittedBlock,
-    EmittedInvocation,
-    EmittedParameter,
-    EmittedScript,
-    SourceRange,
+from vg2c.emitter.models import EmittedBlock, EmittedScript, SourceRange
+from vg2c.emitter.tasks import Argument, leaf_call
+from vg2c.frontend.models import SourceSpan
+
+_LINE_LIMIT = 100
+_KEYWORD = re.compile(r"[A-Za-z_]\w*=")
+_MAIN_GUARD = (
+    '\n\nif __name__ == "__main__":\n'
+    '    raise SystemExit("Use python -m scripthost_portable.launcher <job.py> --workdir <directory>.")\n'
 )
-from vg2c.frontend.models import ClassifiedBlock
-from vg2c.kind import Kind
-from vg2c.operands import IfThen, ScopeNode, StartMacro, utility_arguments
-from vg2c.resolver.models import ResolvedProgram
-
-_POSITIONAL_NAMES = {
-    "macros.load_csv": ("path",),
-    "macros.compare": ("lhs", "operator", "rhs"),
-    "utilities.rows_in_file": ("path", "variable"),
-    "aed.process": ("path",),
-    "reports.run": ("template",),
-    "reports.defer": ("template",),
-    "reports.layout": ("template",),
-}
-_MACRO_VALUE = re.compile(r"<<<([^<>]+)>>>")
-_API_IMPORT = "from scripthost_portable.script_api import aed, macros, query, reports, utilities"
 
 
-def emit(program: ResolvedProgram) -> EmittedScript:
-    if not program.blocks:
-        raise ValueError("Cannot compile an empty job.")
-    # Validate every block, including structural end tokens, before writing source.
-    for block in program.blocks:
-        _validate_options(block)
-    writer = IndentWriter()
-    writer.write("def run():")
-    writer.push_indent()
-    records: dict[int, ClassifiedBlock] = {}
-    constants: dict[str, str] = {}
-    blocks = {block.index: block for block in program.blocks}
+class Emitter:
+    def __init__(self, spans: Sequence[SourceSpan]):
+        self.spans = spans
+        self.writer = IndentWriter()
+        self.records: dict[int, tuple[TaskDescriptor, ...]] = {}  # first line of a call -> its blocks
+        self.uses_controls = False
+        self._names: list[str] = []
 
-    def call(block, operation, positional=(), keywords=(), *, condition=False):
-        records[writer.line_number] = block
-        if condition:
-            args = [*positional, *(f"{key}={value}" for key, value in keywords)]
-            writer.write(f"if {operation}({', '.join(args)}):")
-        elif not keywords and all("\n" not in value for value in positional):
-            writer.write(f"{operation}({', '.join(positional)})")
-        else:
-            writer.write(f"{operation}(")
-            writer.push_indent()
-            for value in positional:
-                writer.write(value + ",")
-            for key, value in keywords:
-                writer.write(f"{key}={value},")
-            writer.pop_indent()
-            writer.write(")")
+    def fail(self, code: str, message: str, task: TaskDescriptor) -> NoReturn:
+        raise CompileError(code, message, self.spans[task.block_index], task.block_index)
 
-    def walk(node: ScopeNode):
-        if node.kind == "program":
-            for child in node.children:
-                walk(child)
+    def write(self, line: str) -> None:
+        self.writer.write(line)
+
+    def push(self) -> None:
+        self.writer.push_indent()
+
+    def pop(self) -> None:
+        self.writer.pop_indent()
+
+    @contextmanager
+    def scope(self, base: str):
+        """A scope variable name unique among the enclosing scopes."""
+        depth = sum(1 for name in self._names if name.rstrip("_0123456789") == base)
+        name = base if depth == 0 else f"{base}_{depth + 1}"
+        self._names.append(name)
+        try:
+            yield name
+        finally:
+            self._names.pop()
+
+    def call(self, head: str, arguments: list[Argument], blocks: Sequence[TaskDescriptor], suffix: str = "") -> None:
+        self.uses_controls |= head.startswith("with controls.")
+        self.records[self.writer.line_number] = tuple(blocks)
+        flat = f"{head}({', '.join(argument[0] for argument in arguments)}){suffix}"
+        if all(len(argument) == 1 for argument in arguments) and "\n" not in flat \
+                and self.writer.indent_depth * 4 + len(flat) <= _LINE_LIMIT:
+            self.write(flat)
             return
-        block = blocks[node.start_index]
-        payload = node.control_payload
-        if isinstance(payload, StartMacro):
-            keywords = (("continue_on_error", "True"),) if payload.continue_on_error else ()
-            call(block, "macros.load_csv", (_value(payload.csv_path),), keywords, condition=True)
-        elif isinstance(payload, IfThen):
-            # The original IF task resolves these arguments; do not pre-evaluate them.
-            call(
-                block,
-                "macros.compare",
-                tuple(repr(v) for v in (payload.lhs, payload.op, payload.rhs)),
-                condition=True,
-            )
-        elif block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
-            options = block.options.lookup
-            if not options.get("CSV") or not block.body.strip():
-                fail("query-arguments", "A query needs /CSV and a nonempty SQL body.", block)
-            keywords = [("sql", render_sql(block.body, constants))]
-            keywords.append(("engine", repr("VA" if block.kind is Kind.SQL_QUERY else "SQLite")))
-            keywords.extend(
-                (QUERY_OPTIONS[key], _value(value))
-                for key, value in options.items()
-                if key != "ENGINE"
-            )
-            call(block, "query.run", keywords=keywords)
-        elif block.kind is Kind.HTML_REPORT:
-            options = block.options.lookup
-            report = options["REPORT"].upper().removeprefix("HTML-").lower()
-            keywords = [
-                (REPORT_OPTIONS[key], _value(value))
-                for key, value in options.items()
-                if key not in {"REPORT", "ID"}
-            ]
-            if report == "delete":
-                if block.body.strip() not in {"", "N/A"}:
-                    fail("report-body", "HTML-DELETE has no report template.", block)
-                call(block, "reports.delete", keywords=keywords)
-            else:
-                if not block.body.strip():
-                    fail("report-body", "A report needs a nonempty template.", block)
-                if report == "defer":
-                    if not options.get("ID"):
-                        fail("report-id", "HTML-DEFER needs /ID.", block)
-                    keywords.insert(0, ("report_id", _value(options["ID"])))
-                call(block, f"reports.{report}", (string_literal(block.body),), keywords)
-        elif block.kind is Kind.ROWS_IN_FILE:
-            args = utility_arguments(block)
-            if len(args) not in {2, 3, 4} or not all(args[:2]):
-                fail("row-count-arguments", "ROWS-IN-FILE needs a path and variable.", block)
-            if (len(args) > 2 and args[2].upper() != "N") or (len(args) > 3 and args[3]):
-                fail(
-                    "row-count-options",
-                    "Count limits and archive names are unsupported by Stage 1.",
-                    block,
-                )
-            call(block, "utilities.rows_in_file", (_value(args[0]), repr(args[1])))
-        elif block.kind is Kind.AED:
-            args = utility_arguments(block)
-            if len(args) != 1 or not args[0]:
-                fail("aed-arguments", "AED needs exactly one CSV path.", block)
-            call(block, "aed.process", (_value(args[0]),))
+        self.write(head + "(")
+        self.push()
+        positional = [argument[0] for argument in arguments if len(argument) == 1 and not _KEYWORD.match(argument[0])]
+        joined = ", ".join(positional) + ","
+        if len(positional) > 1 and "\n" not in joined and self.writer.indent_depth * 4 + len(joined) <= _LINE_LIMIT:
+            self.write(joined)
+            arguments = arguments[len(positional):]
+        for argument in arguments:
+            for line in argument[:-1]:
+                self.write(line)
+            self.write(argument[-1] + ",")
+        self.pop()
+        self.write(")" + suffix)
+
+    def statements(self, tasks: Sequence[TaskDescriptor], target: str) -> None:
+        index = 0
+        while index < len(tasks):
+            task = tasks[index]
+            following = tasks[index + 1] if index + 1 < len(tasks) else None
+            if task.is_control_start:
+                index += 1 + emit_control(self, task, following, target)
+                continue
+            method, arguments = leaf_call(task)
+            self.call(f"{target}.{method}", arguments, (task,))
+            index += 1
+
+    def body(self, tasks: Sequence[TaskDescriptor], target: str) -> None:
+        if tasks:
+            self.statements(tasks, target)
         else:
-            fail("unsupported-block", "No direct API mapping for this block.", block)
-        if node.children:
-            writer.push_indent()
-            for child in node.children:
-                walk(child)
-            writer.pop_indent()
+            self.write("pass")
 
-    walk(program.scope_tree)
-    writer.pop_indent()
-    header = _API_IMPORT + "\n\n"
-    if constants:
-        header += "".join(f"{name} = {value!r}\n" for name, value in constants.items()) + "\n\n"
-    source = header + writer.source() + (
-        '\n\nif __name__ == "__main__":\n'
-        '    raise SystemExit("Use python -m scripthost_portable.launcher '
-        '<job.py> --workdir <directory>.")\n'
-    )
+    def block(self, tasks: Sequence[TaskDescriptor], target: str) -> None:
+        self.push()
+        self.body(tasks, target)
+        self.pop()
+
+
+def emit(program: ProgramDescriptor, spans: Sequence[SourceSpan]) -> EmittedScript:
+    if not program.tasks:
+        raise ValueError("Cannot compile an empty job.")
+    emitter = Emitter(spans)
+    emitter.write("def run():")
+    emitter.block(program.tasks, "script")
+    names = "controls, script" if emitter.uses_controls else "script"
+    api_import = f"from scripthost_portable.script_api import {names}"
+    header = api_import + "\n\n\n"
+    source = header + emitter.writer.source() + _MAIN_GUARD
     shift = header.count("\n")
-    records = {line + shift: block for line, block in records.items()}
-    return EmittedScript(source, (_API_IMPORT,), _metadata(source, records))
+    records = {line + shift: blocks for line, blocks in emitter.records.items()}
+    return EmittedScript(source, (api_import,), _metadata(source, records, spans))
 
 
-def _value(value: str) -> str:
-    match = _MACRO_VALUE.fullmatch(value)
-    return f"macros[{match.group(1)!r}]" if match else repr(value)
-
-
-def _validate_options(block: ClassifiedBlock) -> None:
-    options = block.options.lookup
-    if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
-        allowed = QUERY_OPTIONS.keys()
-    elif block.kind is Kind.HTML_REPORT:
-        report = options["REPORT"].upper()
-        allowed = (
-            {"REPORT", "INSTANCE"} if report == "HTML-DELETE" else {"REPORT", *REPORT_OPTIONS}
-        )
-        if report == "HTML-DEFER":
-            allowed.add("ID")
-    else:
-        # These task wrappers are unused by the selected original utility commands,
-        # except PROMPT-TEXT, which changes console logging only. Stage 1 has no prompt.
-        allowed = {"UTILITIES", "WORKDIR", "INSTANCE", "OUTLOOK", "PROMPT-TEXT"}
-        if options.get("WORKDIR", ".\\") not in {".\\", "./", "."}:
-            fail("utility-workdir", "Only the job's current directory is supported.", block)
-        if options.get("OUTLOOK", "N").upper() != "N":
-            fail(
-                "utility-outlook",
-                "Only the current utility /OUTLOOK=N wrapper is supported.",
-                block,
-            )
-        if block.body.strip():
-            fail("utility-body", "Utility/control blocks cannot carry an ignored body.", block)
-    unknown = options.keys() - allowed
-    if unknown:
-        fail(
-            "unsupported-option",
-            "Unsupported options: " + ", ".join("/" + k for k in sorted(unknown)),
-            block,
-        )
-    for value in options.values():
-        if "<OPTIONS>" in value or "</OPTIONS>" in value:
-            fail("option-block-token", "Option values cannot contain legacy block tokens.", block)
-    if "<OPTIONS>" in block.body or "</OPTIONS>" in block.body:
-        fail("body-block-token", "Bodies cannot contain legacy options blocks.", block)
-
-
-def _metadata(source: str, records: dict[int, ClassifiedBlock]) -> tuple[EmittedBlock, ...]:
-    tree = ast.parse(source)
+def _metadata(source: str, records: dict[int, tuple[TaskDescriptor, ...]],
+              spans: Sequence[SourceSpan]) -> tuple[EmittedBlock, ...]:
     lines = source.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
         offsets.append(offsets[-1] + len(line))
 
-    def source_range(node):
-        # AST columns count UTF-8 bytes; metadata ranges count Python characters.
-        start = len(lines[node.lineno - 1].encode("utf-8")[: node.col_offset].decode("utf-8"))
-        end = len(lines[node.end_lineno - 1].encode("utf-8")[: node.end_col_offset].decode("utf-8"))
-        return SourceRange(offsets[node.lineno - 1] + start, offsets[node.end_lineno - 1] + end)
+    def offset(line: int, column: int) -> int:
+        # AST columns count UTF-8 bytes; ranges count Python characters.
+        return offsets[line - 1] + len(lines[line - 1].encode("utf-8")[:column].decode("utf-8"))
 
+    first_calls: dict[int, ast.Call] = {}
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and node.lineno in records:
+            known = first_calls.get(node.lineno)
+            if known is None or node.col_offset < known.col_offset:
+                first_calls[node.lineno] = node
     emitted = []
-    calls = sorted(
-        (n for n in ast.walk(tree) if isinstance(n, ast.Call)),
-        key=lambda n: (n.lineno, n.col_offset),
-    )
-    for node in calls:
-        if node.lineno not in records or not isinstance(node.func, ast.Attribute):
-            continue
-        if not isinstance(node.func.value, ast.Name):
-            continue
-        operation = f"{node.func.value.id}.{node.func.attr}"
-        if node.func.value.id not in {"macros", "query", "reports", "utilities", "aed"}:
-            continue
-        block = records[node.lineno]
-        invocation_id = f"block-{block.index}:{operation}"
-        parameters = []
-        arguments = [
-            (name, position, value)
-            for position, (name, value) in enumerate(
-                zip(_POSITIONAL_NAMES.get(operation, ()), node.args)
-            )
-        ]
-        arguments += [(arg.arg, None, arg.value) for arg in node.keywords]
-        for name, position, value in arguments:
-            span = source_range(value)
-            text = source[span.start_offset : span.end_offset]
-            try:
-                literal = ast.literal_eval(value)
-            except (ValueError, TypeError):
-                literal = None
-            parameters.append(
-                EmittedParameter(f"{invocation_id}:{name}", name, position, text, literal, span)
-            )
-        span = source_range(node)
-        invocation = EmittedInvocation(invocation_id, operation, span, tuple(parameters))
-        emitted.append(
-            EmittedBlock(
-                block.index,
-                block.kind.value,
-                source[span.start_offset : span.end_offset],
-                span,
-                (invocation,),
-                block.span,
-            )
-        )
-    return tuple(emitted)
+    for line, node in sorted(first_calls.items()):
+        source_range = SourceRange(offset(node.lineno, node.col_offset), offset(node.end_lineno, node.end_col_offset))
+        text = source[source_range.start_offset:source_range.end_offset]
+        for task in records[line]:
+            emitted.append(EmittedBlock(task.block_index, task.class_name, text, source_range, spans[task.block_index]))
+    return tuple(sorted(emitted, key=lambda block: block.block_index))

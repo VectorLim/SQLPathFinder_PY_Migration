@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from vg2c.frontend.models import ParsedBlock, SourceSpan
+    from vg2c.frontend.models import SourceSpan
 
 
 class CompileError(ValueError):
@@ -15,7 +15,3 @@ class CompileError(ValueError):
         self.block_index = block_index
         location = f"{span.file or '<input>'}:{span.start_line}:1"
         super().__init__(f"[{code}] {location} (block {block_index}): {message}")
-
-
-def fail(code: str, message: str, block: ParsedBlock) -> NoReturn:
-    raise CompileError(code, message, block.span, block.index)

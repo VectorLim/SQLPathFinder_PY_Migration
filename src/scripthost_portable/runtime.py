@@ -139,14 +139,9 @@ class PortableScriptHostRuntime:
         Like run_text(), this in-process entry is not thread-safe or a job
         isolation mechanism. Use worker.run_job for fresh-process execution.
         """
-        from .script_api import _bind as _bind_stage1, _check_unbound
-
-        _check_unbound()
-        with (
-            _execution(working_directory, execution_options) as manager,
-            _bind(manager),
-            _bind_stage1(manager),
-        ):
+        if _current_session is not None:
+            raise RuntimeError("A Python ScriptHost job is already running in this process.")
+        with _execution(working_directory, execution_options) as manager, _bind(manager):
             try:
                 run()
                 return True

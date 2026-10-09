@@ -1,31 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
-
-from scripthost_portable.task_introspection import TaskDescriptor
-from vg2c.kind import Kind
-
-
-def copy_dataclass_fields(source: object, target: object, base: type) -> None:
-    for field in fields(base):
-        object.__setattr__(target, field.name, getattr(source, field.name))
-
-
-@dataclass(frozen=True, slots=True)
-class BlockOptions:
-    pairs: tuple[tuple[str, str], ...]
-    lookup: Mapping[str, str]
-
-    @classmethod
-    def from_pairs(cls, pairs: Iterable[tuple[str, str]]) -> BlockOptions:
-        ordered_pairs: tuple[tuple[str, str], ...] = tuple((k.upper(), v) for k, v in pairs)
-        lookup_dict: dict[str, str] = {}
-        for key, value in ordered_pairs:
-            lookup_dict[key] = value
-        return cls(pairs=ordered_pairs, lookup=MappingProxyType(lookup_dict))
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,23 +9,3 @@ class SourceSpan:
     file: Path | None
     start_line: int
     end_line: int
-
-
-@dataclass(frozen=True, slots=True)
-class ParsedBlock:
-    index: int
-    options: BlockOptions
-    body: str
-    raw: str
-    span: SourceSpan
-
-
-@dataclass(frozen=True, slots=True)
-class ClassifiedBlock(ParsedBlock):
-    kind: Kind
-    task: TaskDescriptor
-
-    def __init__(self, parsed: ParsedBlock, kind: Kind, task: TaskDescriptor) -> None:
-        copy_dataclass_fields(parsed, self, ParsedBlock)
-        object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "task", task)
