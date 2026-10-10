@@ -32,7 +32,8 @@ class _Expressions(ast.NodeTransformer):
         name = ast.unparse(node.func)
         if name == "ctx.macro.named":
             key = ast.literal_eval(node.args[0])
-            return ast.parse(f"substitute({'<<<' + key + '>>>'!r}, values=job_values, macros={self.macros})", mode="eval").body
+            return ast.Subscript(value=ast.Name(id=self.macros, ctx=ast.Load()),
+                                 slice=ast.Constant(value=key), ctx=ast.Load())
         if name == "ctx.macro.positional":
             raise ValueError("Positional macro <<>> has no supported source cursor")
         if name == "ctx.csv_io.row_count":
@@ -45,19 +46,19 @@ def _expression(source, macros):
     return ast.unparse(_Expressions(macros).visit(ast.parse(source, mode="eval").body))
 
 
-def control_header(payload, scope_id, macros="macro_values"):
+def control_header(payload, scope_id, macros="macros"):
     """One native header renderer shared by emission and semantic edits."""
     if isinstance(payload, IfThen):
         return "if " + _expression(payload._build_condition_expr(), macros) + ":"
     if isinstance(payload, StartMacro):
         if not payload.csv_path:
-            return f"macro_values_{scope_id} = {macros}.copy()"
-        return f"macro_row_{scope_id} = read_macro_row(substitute({payload.csv_path!r}, values=job_values, macros={macros}), workdir=workdir)"
+            return f"with {macros}.scope():"
+        return f"macro_row_{scope_id} = read_macro_row({macros}.substitute({payload.csv_path!r}), workdir=workdir)"
     if isinstance(payload, RunLoop):
-        return f"with closing(csv_chunks(substitute({payload.input_csv_path!r}, values=job_values, macros={macros}), substitute({payload.chunk_csv_path!r}, values=job_values, macros={macros}), {payload.chunk_size}, workdir=workdir)) as chunks_{scope_id}:"
+        return f"with closing(csv_chunks({macros}.substitute({payload.input_csv_path!r}), {macros}.substitute({payload.chunk_csv_path!r}), {payload.chunk_size}, workdir=workdir)) as chunks_{scope_id}:"
     function = "for_values" if isinstance(payload, ForLoop) else "site_values"
     args = payload.args if isinstance(payload, ForLoop) else (payload.nodes,)
-    expr = ", ".join(f"substitute({arg!r}, values=job_values, macros={macros})" for arg in args)
+    expr = ", ".join(f"{macros}.substitute({arg!r})" for arg in args)
     return f"for loop_values_{scope_id} in {function}({expr}):"
 
 
@@ -189,7 +190,7 @@ def emit_project(dispatched):
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
                     for block in blocks.values())
-    runtime_imports = {"snapshot_values", "substitute"} if has_state else set()
+    runtime_imports = {"snapshot_values", "MacroStore"} if has_state else set()
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
     writer.write("def run(workdir=WORK_DIR" + (", *, aed_service_factory=None" if has_aed else "") + "):")
@@ -201,7 +202,7 @@ def emit_project(dispatched):
         writer.write(f"aed_config = bootstrap_aed(workdir=workdir, source_name={source_name!r})")
     if has_state:
         writer.write("job_values = snapshot_values(workdir" + (", values=aed_config" if has_aed else "") + ")")
-        writer.write("macro_values = aed_config.copy()" if has_aed else "macro_values = {}")
+        writer.write("macros = MacroStore(values=job_values" + (", initial=aed_config" if has_aed else "") + ")")
     has_reports = any(block.kind is Kind.HTML_REPORT for block in blocks.values())
     if has_reports:
         writer.write("reports = {}")
@@ -211,24 +212,32 @@ def emit_project(dispatched):
     def fail(block, error):
         raise ValueError(f"{block.span.file or '<input>'}:{block.span.start_line}:1 (block {block.index}): {error}")
 
-    def walk(node, macros="macro_values"):
+    def walk(node, macros="macros"):
         payload = node.control_payload
         if isinstance(payload, StartMacro):
             if not payload.csv_path:
-                active = f"macro_values_{node.scope_id}"
                 writer.write(control_header(payload, node.scope_id, macros))
+                writer.push_indent()
+                before = len(writer.lines)
                 for child in node.children:
-                    walk(child, active)
+                    walk(child, macros)
+                if len(writer.lines) == before:
+                    writer.write("pass")
+                writer.pop_indent()
                 return
             runtime_imports.add("read_macro_row")
             row = f"macro_row_{node.scope_id}"
-            active = f"macro_values_{node.scope_id}"
             writer.write(control_header(payload, node.scope_id, macros))
             writer.write(f"if {row} is not None:")
             writer.push_indent()
-            writer.write(f"{active} = {{**{macros}, **{{key.upper(): value for key, value in {row}.items()}}}}")
+            writer.write(f"with {macros}.scope({row}):")
+            writer.push_indent()
+            before = len(writer.lines)
             for child in node.children:
-                walk(child, active)
+                walk(child, macros)
+            if len(writer.lines) == before:
+                writer.write("pass")
+            writer.pop_indent()
             writer.pop_indent()
         elif isinstance(payload, IfThen):
             writer.write(control_header(payload, node.scope_id, macros))
@@ -249,7 +258,6 @@ def emit_project(dispatched):
                     writer.write("pass")
                 writer.pop_indent()
         elif isinstance(payload, (RunLoop, ForLoop, SiteLoop)):
-            active = f"macro_values_{node.scope_id}"
             if isinstance(payload, RunLoop):
                 runtime_imports.add("csv_chunks")
                 imports.add("from contextlib import closing")
@@ -262,14 +270,15 @@ def emit_project(dispatched):
                 writer.write(control_header(payload, node.scope_id, macros))
             writer.push_indent()
             overlay = "{}" if isinstance(payload, RunLoop) else f"loop_values_{node.scope_id}"
-            writer.write(f"{active} = {{**{macros}, **{overlay}}}")
+            writer.write(f"with {macros}.scope({'' if isinstance(payload, RunLoop) else overlay}):")
+            writer.push_indent()
             trapped = isinstance(payload, SiteLoop) or isinstance(payload, RunLoop) and payload.prompt_off
             if trapped:
                 writer.write("try:")
                 writer.push_indent()
             before = len(writer.lines)
             for child in node.children:
-                walk(child, active)
+                walk(child, macros)
             if len(writer.lines) == before:
                 writer.write("pass")
             if trapped:
@@ -278,6 +287,7 @@ def emit_project(dispatched):
                 writer.push_indent()
                 writer.write("break" if isinstance(payload, SiteLoop) else "continue")
                 writer.pop_indent()
+            writer.pop_indent()
             writer.pop_indent()
             if isinstance(payload, RunLoop):
                 writer.pop_indent()
@@ -333,8 +343,7 @@ def emit_project(dispatched):
                 raise ValueError("AED requires exactly one candidate CSV path")
             path = strip_quotes(argv[1])
             if "<<<" in path:
-                path = CodeExpr(f"substitute({path!r}, values=job_values, macros={macros})")
-                runtime_imports.add("substitute")
+                path = CodeExpr(f"{macros}.substitute({path!r})")
             _inline(writer, block, [f"process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, workdir=workdir, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
@@ -428,7 +437,7 @@ def emit_project(dispatched):
             output = directives.get("FILE", "report.html")
             instance = block.resolved_options.lookup.get("INSTANCE")
             css = directives.get("CSS")
-            html_values = "job_values" if not slots else "{**job_values, " + ", ".join(f"{key!r}: substitute({value!r}, values=job_values, macros={macros})" for key, value in slots.items()) + "}"
+            html_values = "job_values" if not slots else "{**job_values, " + ", ".join(f"{key!r}: {macros}.substitute({value!r})" for key, value in slots.items()) + "}"
             kwargs = {"output": output, "workdir": CodeExpr("workdir"), "reports": CodeExpr("reports"),
                       "values": CodeExpr(html_values), "macros": CodeExpr(macros), "styles": CodeExpr("styles"),
                       "instance": instance,

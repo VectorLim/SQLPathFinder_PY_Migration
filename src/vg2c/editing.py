@@ -385,11 +385,10 @@ def _project_control_replacements(
     from vg2c.emitter.project import control_header
     blocks = {block.index: block for block in result.resolved.blocks}
     contexts = {}
-    def visit(node, macros="macro_values"):
+    def visit(node, macros="macros"):
         contexts[node.start_index] = (node.scope_id, macros)
-        active = f"macro_values_{node.scope_id}" if node.kind in {"macro", "loop"} else macros
         for child in node.children:
-            visit(child, active)
+            visit(child, macros)
     visit(result.resolved.scope_tree)
     for operation in operations:
         if operation.kind not in {"condition", "macro-loop", "chunk-loop"}:

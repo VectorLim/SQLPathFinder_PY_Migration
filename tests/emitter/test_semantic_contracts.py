@@ -102,8 +102,8 @@ def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
     )
     assert projected.valid
     assert (
-        "int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) <= int('0') and "
-        "int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) != int('10')"
+        "int(macros['COUNT']) <= int('0') and "
+        "int(macros['COUNT']) != int('10')"
         in projected.source
     )
 
@@ -177,7 +177,7 @@ inside
     projected = project_changes(result, [SemanticChange(binding.id, "after.csv")])
 
     assert projected.valid
-    assert "read_macro_row(substitute('after.csv'" in projected.source
+    assert "read_macro_row(macros.substitute('after.csv'" in projected.source
 
 
 def test_embedded_python_is_a_focused_validated_binding(tmp_path):
@@ -305,7 +305,7 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
         ])
         assert projection.valid
         assert projection.effective_values[bindings["rhs"].id] == token
-        assert "substitute('<<<COUNT>>>', values=job_values, macros=macro_values)" in projection.source
+        assert "macros['COUNT']" in projection.source
 
     assert not project_changes(result, [
         SemanticChange(bindings["rhs"].id, "literal", symbol_id=count.id)
@@ -316,7 +316,7 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
 
     operator_only = project_changes(result, [SemanticChange(bindings["op"].id, "EQS")])
     assert operator_only.valid
-    assert "substitute('<<<COUNT>>>', values=job_values, macros=macro_values) == '0'" in operator_only.source
+    assert "macros['COUNT'] == '0'" in operator_only.source
 
 
 def test_rows_in_file_target_macro_is_editable(tmp_path):
@@ -329,7 +329,7 @@ def test_rows_in_file_target_macro_is_editable(tmp_path):
     projected = project_changes(result, [SemanticChange(target.id, "TOTAL")])
 
     assert projected.valid
-    assert "macro_values['TOTAL'] = str(row_count('input.csv', workdir=workdir))" in projected.source
+    assert "macros['TOTAL'] = str(row_count('input.csv', workdir=workdir))" in projected.source
 
 
 def test_repeated_identical_condition_headers_keep_distinct_edit_ranges(tmp_path):
@@ -381,8 +381,8 @@ second
     projected = project_changes(result, [SemanticChange(rhs.id, "1")])
 
     assert projected.valid
-    assert projected.source.count("int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) > int('0')") == 1
-    assert projected.source.count("int(substitute('<<<COUNT>>>', values=job_values, macros=macro_values)) > int('1')") == 1
+    assert projected.source.count("int(macros['COUNT']) > int('0')") == 1
+    assert projected.source.count("int(macros['COUNT']) > int('1')") == 1
 
 
 def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_path):

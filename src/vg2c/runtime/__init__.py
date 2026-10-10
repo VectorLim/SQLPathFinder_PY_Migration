@@ -10,8 +10,9 @@ from vg2c.runtime.html import csv_report, render_html
 from vg2c.runtime.files import copy_file, delete_files, rename_file, row_count, run_program, wait_file, write_file
 from vg2c.runtime.sqlite_reader import _SqliteReader as SqliteReader
 from vg2c.runtime.values import read_macro_row, snapshot_values, substitute
+from vg2c.runtime.macros import MacroStore
 
-__all__ = ["SqliteReader", "csv_chunks", "csv_report", "execute_sql", "for_values", "read_macro_row",
+__all__ = ["MacroStore", "SqliteReader", "csv_chunks", "csv_report", "execute_sql", "for_values", "read_macro_row",
            "render_html", "site_values", "snapshot_values", "substitute", "smart_append",
            "copy_file", "delete_files", "rename_file", "row_count", "run_program", "wait_file", "write_file", "send_mail",
            "OracleClient", "bootstrap_aed", "process_candidates"]
