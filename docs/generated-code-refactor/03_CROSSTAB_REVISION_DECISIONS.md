@@ -80,9 +80,9 @@ Source root: `scripthost-utilities-decompiled/SPSQL3_py/SPFLib/`.
 
 ## 5. Verification and Session 04 constraints
 
-**Source-oriented implementation checkpoint:** `968463135ddbee7178d10000b6e8d6c3e7b4c396`  
-**CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071387334  
-**On clean Linux, Python 3.12 / pandas 3.0.3:** compile and focused Ruff passed, **135 focused passed; 605 full-suite passed, six inherited UI/JMP failed** (zero new failures). The workflow also executes generated Python and benchmarks 10k/75k row pivots and SQLite joins. The full workflow is **failed**, not green.
+**Final tested semantic-authority checkpoint:** `5323b232ba887b552bfa1cc30f050eaec8537649`  
+**CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071668466  
+**On clean Linux, Python 3.12 / pandas 3.0.3:** compile and focused Ruff passed, **136 focused passed; 606 full-suite passed, six inherited UI/JMP failed** (zero new failures). The workflow also executes generated Python and benchmarks 10k/75k row pivots and SQLite joins. The full workflow is **failed**, not green.
 
 Exact commands:
 

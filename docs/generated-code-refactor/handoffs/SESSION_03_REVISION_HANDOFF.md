@@ -71,10 +71,10 @@ Historical tests were **updated** because they encoded old vg2c quirks, not beca
 
 ## 4. Verification
 
-**Clean Linux implementation checkpoint:** `968463135ddbee7178d10000b6e8d6c3e7b4c396`  
-**CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071387334  
+**Final tested semantic-authority checkpoint:** `5323b232ba887b552bfa1cc30f050eaec8537649`  
+**CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071668466  
 **Python/pandas:** 3.12 / 3.0.3  
-**Results:** compile passed, focused Ruff passed, **135 focused tests passed; full suite 605 passed, six inherited UI/JMP failed**. No unexpected new failures. This is **not** a green full suite.
+**Results:** compile passed, focused Ruff passed, **136 focused tests passed; full suite 606 passed, six inherited UI/JMP failed**. No unexpected new failures. This is **not** a green full suite.
 
 Exact commands, including checks for emitted executable Python and downstream SQL in focused cases:
 
@@ -94,7 +94,7 @@ Known inherited six (unchanged; out of scope):
 5. `tests/ui/test_workspace_sessions.py::test_sql_column_choices_read_uploaded_server_csv_headers`
 6. `tests/ui/test_workspace_sessions.py::test_file_backed_sql_filter_uses_workspace_choices_through_save_and_generate`
 
-Synthetic checkpoint diagnostics, not engine parity/performance evidence: 10k pivot 0.086s / 1.6 MiB, 75k pivot 0.569s / 11.9 MiB. No production sample/credential access or original proprietary engine execution. Remote commits and ancestry verified with GitHub API and clean GitHub Actions checkout; local git working-tree state unavailable in this session.
+Synthetic checkpoint diagnostics, not engine parity/performance evidence: 10k pivot 0.074s / 1.6 MiB, 75k pivot 0.483s / 11.9 MiB. No production sample/credential access or original proprietary engine execution. Remote commits and ancestry verified with GitHub API and clean GitHub Actions checkout; local git working-tree state unavailable in this session.
 
 ## 5. Remaining WIP and Session 04 gate
 
