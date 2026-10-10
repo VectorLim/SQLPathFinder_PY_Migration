@@ -1,6 +1,6 @@
 # SQLPathFinder generated-code refactor — master plan
 
-**Status:** Approved for planning publication on `html-and-sql-rework`; implementation is performed only in separate temporary session branches when each agent is launched.  
+**Status:** Planning published; Session 01 already started on its original branch. Sessions 02–05 run sequentially on one shared implementation branch. No merge authorized.
 **Repository:** `VectorLim/SQLPathFinder_PY_Migration`  
 **Verified branch:** `html-and-sql-rework`  
 **Immutable inspection baseline:** `afb701c2013537ffbf3c1e1b86e147ad0c900d1d`  
@@ -12,7 +12,7 @@
 
 Make translated `main.py` ordinary, readable Python primarily describing the job's control flow. Preserve supported semantics for VG2 macros and scopes, SQL readers and bindings, file outputs, data transformations, HTML rendering, exceptions, and Linux paths. Runtime library `vg2c` is installed in the target container; generated code must need neither the VG2 source nor ScriptHost. The UI/frontend, HPC, JMP/JSL, unproven ScriptHost-wide feature expansion, and unrelated AED deployment work are out of scope. Existing unsupported behavior remains explicitly diagnosed, not silently treated as supported.
 
-This is a **sequential five-session implementation on five separate, cumulative temporary branches**, not five parallel implementations and not a single shared working branch. The published plan and agent prompts live on `html-and-sql-rework`. The Session 01 branch starts from that plan commit; each subsequent branch starts from the immediately preceding session branch's tested commit. Each agent uses a fresh checkout/worktree, never silently overwrites a dirty one, and never merges to `main` or to the plan branch.
+This is a **sequential five-session implementation with two branches total**: Session 01 retains its already-started `refactor/generated-code/s01-macros`; Session 02 creates `refactor/generated-code/implementation` at the exact completed and tested Session 01 SHA, and Sessions 03–05 continue that **same implementation branch**. Agents run as separate sessions, never concurrently editing the branch. The planning branch `html-and-sql-rework` remains documentation-only; no merge into `main` or planning branches is authorized.
 
 ## 2. Inspected architecture: facts, not assumptions
 
@@ -79,7 +79,7 @@ Use runtime operations named clearly (`job.sql`, `job.html`, `job.write_file`, e
 | **04** SQL/HTML/CSS assets | Emit static styles and report assets, improve template structure; retain existing SQL external files | `runtime/{html,html_format}.py`, `utilities/html_report.py`, `emitter/project.py`, relevant tests | Commit from 03 | HTML/style/editability/relocation/Linux paths pass |
 | **05** Convergence | Re-run all regressions, audit and remove dead paths, readibility and installed Linux probe | All touched modules + tests/docs, only proven removals | Commit from 04 | End-to-end approval checklist passes |
 
-These sessions must be **serial**, not parallel; `emitter/project.py` is shared by all. Each session commits to its **own** temporary branch and writes a versioned `docs/generated-code-refactor/handoffs/SESSION_0N_HANDOFF.md` recording local/remote parent and resulting SHA, commands/results, files changed, decisions and unresolved limitations. Agents must stop if the expected predecessor commit in the handoff differs from fetched remote or the working tree cannot be safely isolated; no `git reset --hard`, force push, or implicit merge. The next session starts from the actual prior session commit, **not** the planning-time SHA. Branch chain: `html-and-sql-rework` (plan only) → `refactor/generated-code/s01-macros` → `refactor/generated-code/s02-runtime` → `refactor/generated-code/s03-tables` → `refactor/generated-code/s04-assets` → `refactor/generated-code/s05-integration`. Read [agent prompts](agent-prompts/README.md) before starting.
+These sessions must be **serial**, not parallel; the emitter is a shared hot spot. Each agent writes `docs/generated-code-refactor/handoffs/SESSION_0N_HANDOFF.md` with its full parent SHA, test commands/results, changed files and relevant contracts, then reports the **final pushed commit SHA in its final message**, since a tracked handoff cannot include its own resulting SHA. Before coding, the next agent verifies that exact final SHA against the remote implementation-branch HEAD and reads the committed handoff. **Branch flow:** `refactor/generated-code/s01-macros` (01 only) → `refactor/generated-code/implementation` (02 → 03 → 04 → 05, one branch, distinct commits/handoffs). Session 02 reviews and copies only revised Markdown docs/prompts from `origin/html-and-sql-rework` into its implementation branch; do not merge that planning branch or disturb Session 01's changes. Never reset/force-push or overwrite a dirty tree. See [agent prompts](agent-prompts/README.md).
 
 ## 6. Shared baseline and regression harness (all sessions)
 
@@ -95,7 +95,7 @@ These sessions must be **serial**, not parallel; `emitter/project.py` is shared 
 
 ## 7. Execution, publishing and approval workflow
 
-**Planning publication approved (2026-10-10).** Commit/push these Markdown plans and the agent prompts to `html-and-sql-rework`, with no source-code changes and no merge to `main`. The plan branch remains documentation-only during the five implementation sessions. Agents create the five dedicated temporary branches in sequence as specified above; each parent must be the prior session's exact pushed HEAD and tested handoff. No implementation or creation of temporary implementation branches is part of the planning publication. The integration agent must not be asked to reconcile unresolved fundamental architecture decisions: Sessions 01–04 settle them with source-supported tests. Any future merge into a long-lived branch requires separate explicit approval.
+**Planning published; workflow updated after Session 01 started on 2026-10-10.** Leave the Session 01 branch, prompt, and running agent untouched. Session 02 creates one shared implementation branch from Session 01's verified result, importing only updated planning Markdown from `html-and-sql-rework` after review. Sessions 03–05 continue that same branch, gated by handoffs and exact pushed SHAs. Never merge into a long-lived branch without explicit approval; the final session verifies earlier architecture and regression tests instead of redesigning them.
 
 ## 8. Iterative plan review (planning pass)
 
@@ -113,4 +113,4 @@ These sessions must be **serial**, not parallel; `emitter/project.py` is shared 
 - [03 — CSV, table and pandas](03_CSV_TABLE_PANDAS.md)
 - [04 — HTML, CSS and SQL output](04_HTML_CSS_SQL_OUTPUT.md)
 - [05 — Final integration](05_FINAL_INTEGRATION.md)
-- [Session agent prompts and temporary branch workflow](agent-prompts/README.md)
+- [Session agent prompts and shared implementation branch workflow](agent-prompts/README.md)

@@ -1,6 +1,6 @@
 # Session 04 — HTML/CSS/SQL asset separation and report readability
 
-**Status:** Plan only. **Parent:** Session 03 verified commit. **Next:** Session 05 starts from this session's tested HEAD. This session must **not** undo SQL/table semantics established in Session 03.
+**Status:** Plan only. **Parent:** tested final Session 03 SHA on `origin/refactor/generated-code/implementation`. Continue that same branch without creating an `s04` branch. Session 05 inherits this session's tested HEAD. Preserve Session 03 SQL/table semantics.
 
 ## Objective / scope
 

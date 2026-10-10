@@ -1,6 +1,6 @@
 # Session 02 — one runtime object and concise generated operations
 
-**Status:** Plan only. **Parent:** verified successful Session 01 commit, not the original baseline. Agent must obtain the SHA from Session 01 handoff and reconcile against `origin/html-and-sql-rework`. **Next:** Session 03 starts from this session's tested HEAD.
+**Status:** Plan only. **Parent:** tested final Session 01 SHA on `origin/refactor/generated-code/s01-macros`, verified against its handoff and final response. **Own branch:** create `refactor/generated-code/implementation` once at that SHA. Session 03 continues this same shared branch.
 
 ## Objective / scope
 
