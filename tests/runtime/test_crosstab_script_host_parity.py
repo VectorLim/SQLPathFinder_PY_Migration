@@ -120,7 +120,7 @@ def test_ctarray_then_downstream_sql_expands_previous_headers(tmp_path):
     )
     execute_sql(b, reader=SqliteReader(), workdir=tmp_path, output="selected.csv",
                 inputs=["wide.csv"])
-    assert (tmp_path / "selected.csv").read_text().splitlines()[0] == "lot,X,Y"
+    assert (tmp_path / "selected.csv").read_text().splitlines()[0] == "LOT,X,Y"
 
 
 def test_ctarray_expression_mode_a_and_missing_file(tmp_path):

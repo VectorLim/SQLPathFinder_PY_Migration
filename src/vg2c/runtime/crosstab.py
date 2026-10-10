@@ -203,8 +203,8 @@ class _CrosstabUtility:
         group_cols = [name.upper() for name in inferred]
         pivot_field = header_field.upper()
         value_fields = [name.upper() for name in value_names]
-        output_groups = [name.lower() if legacy else name.lower() if dot else name
-                         for name in group_cols]
+        output_groups = ([*row_keys] if legacy
+                         else [name.lower() if dot else name for name in group_cols])
 
         if frame.empty:
             return pd.DataFrame(columns=output_groups)
