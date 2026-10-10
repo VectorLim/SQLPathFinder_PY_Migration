@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 from dataclasses import replace
 from html import escape
@@ -147,6 +148,16 @@ def _lower_lines(lines, macros):
         result.append(EmittableOperation.render_method_call(operation, function=target,
                                                            args=tuple(arguments), kwargs=kwargs))
     return result
+
+
+def _table_option(value, kind, sql_asset, assets):
+    """Externalize long static schema options into one editable JSON asset."""
+    size = len(value["row_keys"]) if kind == "crosstab" else len(value)
+    if size < 8:
+        return value
+    path = sql_asset.removesuffix(".sql") + f".{kind}.json"
+    assets[path] = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    return CodeExpr(f"job.table_spec({path!r})")
 
 
 def _list(value):
@@ -308,9 +319,11 @@ def emit_project(dispatched):
                 kwargs["node"] = block.reader_target.node
             crosstab = extract_crosstab_options(block)
             if crosstab:
-                kwargs["crosstab"] = crosstab
-            elif SqliteEngine._extract_header(block):
-                kwargs["header"] = SqliteEngine._extract_header(block)
+                kwargs["crosstab"] = _table_option(crosstab, "crosstab", name, assets)
+            else:
+                header = SqliteEngine._extract_header(block)
+                if header:
+                    kwargs["header"] = _table_option(header, "header", name, assets)
             definition = UtilitySpec.operation_definition("ctx", "run_query")
             sql_definition = definition.parameter("sql")
             sql_parameters[block.index] = (sql_definition, assets[name])
