@@ -27,6 +27,43 @@ jobs:
           PYTHONPATH: src:.
         run: |
           python -m pytest -q tests/runtime/test_table_semantics_session03.py tests/runtime/test_csv_io.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_job_runtime.py tests/emitter/test_generated_project.py tests/emitter/test_sqlite_table_bindings.py
+      - name: Representative table call and synthetic join benchmark
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tempfile, time, tracemalloc
+          from vg2c import compile_document
+          from vg2c.runtime import SqliteReader
+          with tempfile.TemporaryDirectory() as td:
+              root = Path(td)
+              keys = [f'k{i}' for i in range(28)]
+              body = 'SELECT ' + ', '.join(f"'{i}' AS {key}" for i, key in enumerate(keys)) + ", 'A' AS metric, 'v' AS value"
+              source = root / 'pivot.txt'
+              source.write_text('<OPTIONS>\n/ENGINE=SQLite\n/CSV=out.csv\n/CTROW=' + ','.join(keys) + '\n/CTHEADER=metric\n/CTVALUE=value\n</OPTIONS>\n' + body)
+              emitted = compile_document(source).emitted
+              line = next(line.strip() for line in emitted.source.splitlines() if 'crosstab=' in line)
+              spec = next((name, data) for name, data in emitted.assets if name.endswith('.crosstab.json'))
+              print('TABLE_SOURCE_CALL:', line)
+              print('TABLE_OPTION_BYTES:', len(spec[1].encode('utf-8')), 'ASSET:', spec[0])
+              print('TABLE_INLINE_EQUIVALENT_CHARS:', len('crosstab=' + repr({'row_keys': keys, 'header_key': 'metric', 'value_key': 'value'})))
+              for n in (10000, 75000):
+                  left = root / 'left.csv'
+                  right = root / 'right.csv'
+                  left.write_text('id,code\n' + ''.join(f'{i:06d},x\n' for i in range(n)))
+                  right.write_text('id,label\n' + ''.join(f'{i:06d},y\n' for i in range(n)))
+                  tracemalloc.start()
+                  tick = time.perf_counter()
+                  data = SqliteReader().execute(
+                      'SELECT a.id, b.label FROM [L] a JOIN [R] b ON a.id = b.id',
+                      [(str(left), 'L'), (str(right), 'R')],
+                  )
+                  elapsed = time.perf_counter() - tick
+                  peak = tracemalloc.get_traced_memory()[1]
+                  tracemalloc.stop()
+                  print(f'JOIN_BENCH: rows={n}, result_rows={len(data)}, elapsed_s={elapsed:.3f}, peak_alloc_mb={peak/1048576:.1f}')
+          PY
       - name: Entire test suite
         if: always()
         env:
