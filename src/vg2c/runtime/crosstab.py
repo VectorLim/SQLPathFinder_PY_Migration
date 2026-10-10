@@ -153,6 +153,11 @@ class _CrosstabUtility:
         if legacy:
             if pivot_columns is not None or pivot_values is not None:
                 raise ValueError("Cannot mix legacy crosstab and new pivot configuration")
+            # The pre-revision vg2c API returned the requested row schema
+            # unchanged when there is no pivotable data or grouping keys.
+            # See crosstab.py at 3e9def7a1b066e5007c9284510b242cbf611c7e2.
+            if rows.empty or not row_keys or not header_key or not value_key:
+                return pd.DataFrame(columns=row_keys)
             pivot_columns, pivot_values = header_key, value_key
         if not isinstance(pivot_columns, str) or not pivot_columns.strip():
             raise ValueError("Pivot requires pivot_columns")
@@ -165,6 +170,8 @@ class _CrosstabUtility:
         if not value_names or any(not isinstance(v, str) or not v.strip()
                                   for v in value_names):
             raise ValueError("Pivot value column names must be nonempty strings")
+        if legacy and len(value_names) != 1:
+            raise ValueError("Legacy crosstab requires a single value_key")
         if "," in pivot_columns:
             # Original getUniqueValuesInColumn() reads usecols=[CTHeader] even
             # though an earlier expression splits CTHeader. Not proven supported.
@@ -192,6 +199,8 @@ class _CrosstabUtility:
             raise ValueError("Pivot requires at least one row identifier column")
         if len(set(name.casefold() for name in [*inferred, *names])) != len(inferred) + len(names):
             raise ValueError("Crosstab row, header and value keys must be distinct")
+        if legacy:
+            return self._apply_legacy(rows, row_keys, header_field, value_names[0], lookup)
 
         # The original normal path reads a CSV intermediate with dtype=object
         # and na_filter=False. Do not coerce source identifiers to numbers.
@@ -203,11 +212,17 @@ class _CrosstabUtility:
         group_cols = [name.upper() for name in inferred]
         pivot_field = header_field.upper()
         value_fields = [name.upper() for name in value_names]
-        output_groups = ([*row_keys] if legacy
-                         else [name.lower() if dot else name for name in group_cols])
+        output_groups = [name.lower() if dot else name for name in group_cols]
 
         if frame.empty:
             return pd.DataFrame(columns=output_groups)
+
+        # Original ScriptHost uppercases pivot identities only when its final
+        # header collision flag is set (utils.py:4304-4346). That flag can
+        # remain false for 'a'/'A' even though both labels render as 'A'.
+        # Normalize in the new normal-query mode *before* duplicate selection,
+        # explicitly repairing that source defect without changing legacy mode.
+        frame[pivot_field] = frame[pivot_field].str.upper()
 
         # The source uses positional duplicated(keep=first|last) before unstack.
         # Its cross-chunk combine_first behavior is a distinct parity gate.
@@ -241,12 +256,42 @@ class _CrosstabUtility:
         wide = wide.where(pd.notna(wide), missing)
         if dot:
             wide.columns = [str(name).lower() for name in wide.columns]
-        elif legacy:
-            wide.columns = [str(name).lower() for name in wide.columns]
         if sort:
             wide = self._sort_result(wide, sort)
         wide.attrs["pivot_headers"] = [name.lower() if dot else name for name in pivot_cols]
         return wide
+
+    @staticmethod
+    def _apply_legacy(
+        rows: pd.DataFrame,
+        row_keys: list[str],
+        header_key: str,
+        value_key: str,
+        lookup: dict[str, str],
+    ) -> pd.DataFrame:
+        """Preserve the pre-Option-C vg2c crosstab's aggregation semantics.
+
+        Legacy `groupby.first()` returns the first *non-null* value,
+        whereas a ScriptHost-normal pivot keeps the first physical row.
+        The earlier vg2c contract also omitted null/blank pivot headers.
+        """
+        fields = [*row_keys, header_key, value_key]
+        rename_map = {lookup[field.casefold()]: field for field in fields}
+        df = rows.rename(columns=rename_map)
+        df = df[df[header_key].notna() & (df[header_key].astype(str) != "")]
+        if df.empty:
+            return pd.DataFrame(columns=row_keys)
+        result = (
+            df.groupby([*row_keys, header_key], dropna=False)[value_key]
+            .first()
+            .unstack(header_key, fill_value="")
+            .reset_index()
+            .rename_axis(columns=None)
+        )
+        result.columns = [str(column).lower() for column in result.columns]
+        if result.columns.has_duplicates:
+            raise ValueError("Crosstab pivot headers collide with row or other headers")
+        return result
 
     @staticmethod
     def write_header_list(workdir, reference: str, headers: list[str]) -> None:
