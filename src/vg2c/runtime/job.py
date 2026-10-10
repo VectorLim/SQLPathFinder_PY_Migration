@@ -48,6 +48,15 @@ class JobRuntime:
             raise ValueError("Asset path must remain inside the generated project")
         return resolved
 
+    def table_spec(self, path):
+        """Load an editable static CSV/SQL option on each invocation."""
+        import json
+
+        value = json.loads(self.asset_path(path).read_text(encoding="utf-8"))
+        if not isinstance(value, (list, dict)):
+            raise ValueError(f"Table option asset must hold a mapping or list: {path}")
+        return value
+
     def sql(self, path, *, reader, output, inputs=None, header=None,
             crosstab=None, node=None, params=None):
         return execute_sql(self.asset_path(path), reader=reader, output=output,
