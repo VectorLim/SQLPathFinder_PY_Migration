@@ -322,14 +322,13 @@ def emit_project(dispatched):
         elif block.kind is Kind.HTML_REPORT:
             html(block, macros)
         elif block.kind is Kind.AED:
-            runtime_imports.add("process_candidates")
             argv = split_utility_command(block.resolved_options.lookup["UTILITIES"])
             if len(argv) != 2:
                 raise ValueError("AED requires exactly one candidate CSV path")
             path = strip_quotes(argv[1])
             if "<<<" in path:
                 path = CodeExpr(f"{macros}.substitute({path!r})")
-            _inline(writer, block, [f"process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, workdir=workdir, service_factory=aed_service_factory)"], steps)
+            _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
                 raise ValueError("JMP/JSL blocks are outside the supported core")

@@ -112,7 +112,7 @@ def test_authored_python_top_level_return_has_explicit_diagnostic(tmp_path):
         compile_document(source)
 
 
-def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tmp_path):
+def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tmp_path, monkeypatch):
     source = tmp_path / "aed.txt"
     source.write_text(block('/WRITE-FILE=Y\n/CSV=node.txt', '<<<MARS>>>')
                       + block('/UTILITIES={AED} "candidates.csv"'))
@@ -122,7 +122,8 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
     namespace["bootstrap_aed"] = lambda **kwargs: config.copy()
     calls = []
-    namespace["process_candidates"] = lambda path, **kwargs: calls.append((path, kwargs))
+    monkeypatch.setattr("vg2c.runtime.job.process_candidates",
+                        lambda path, **kwargs: calls.append((path, kwargs)))
     factory = object()
     namespace["run"](tmp_path / "work", aed_service_factory=factory)
     assert (tmp_path / "work/node.txt").read_text().strip() == config["MARS"]
