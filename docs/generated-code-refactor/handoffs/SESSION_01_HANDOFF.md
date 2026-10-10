@@ -86,6 +86,10 @@ The parent has one additional stale UI assertion expecting a legacy `ctx.macro.n
 
 **Verification limits:** the execution container's direct Git network checkout was unavailable, so local `git remote -v`, `git fetch --prune`, `git status --porcelain`, or existing worktrees could not be inspected; GitHub API instead verified the published parent and target branch ancestry. GitHub Actions checked out the exact SHAs in clean runners. There was no unsafe checkout overwrite, reset, force push or merge. Private ICMPCS production resources were not run; broad ScriptHost differential execution, non-synthetic installed-Linux system integration, complete Ruff over the entire pre-existing tree, and complete original binary/output parity are **not claimed**. These limitations keep the session labeled WIP rather than full acceptance.
 
+## Parent-branch movement after Session 01 started
+
+At the final GitHub verification, `html-and-sql-rework` had moved to `01d25269a56771bbae8f4c59a576cfd6d2c7ca41` with a separate docs-only commit (`docs: use one shared implementation branch for sessions 02–05`) whose parent is `d9211c81c4f72651329611aabfb2bc5c6abba504`. The Session 01 starting SHA was verified **before** work began; the Session 01 branch continues to descend exactly from `d9211c81...`. Thus a moving-branch GitHub compare reports one commit behind even though Session 01 was created correctly. No parent changes were merged or replayed. Consult the separate branch-planning change before launching Session 02, and defer to the user's current explicit instructions. For a stable Session 01 diff use the immutable baseline `d9211c81...` as the compare base.
+
 ## Required next-session conditions
 
 1. Fetch current remote `refactor/generated-code/s01-macros` and verify its SHA against the final report; do **not** branch Session 02 from the old planning/inspection SHA.
