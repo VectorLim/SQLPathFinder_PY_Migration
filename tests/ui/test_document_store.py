@@ -654,7 +654,7 @@ def test_symbol_selection_persists_as_identity_and_core_renders_condition(tmp_pa
     assert selected.symbol_id == count.id
     assert selected.value is None
     generated = store.generate(DocumentSnapshot.model_validate(reopened.model_dump())).document
-    assert "ctx.macro.named('COUNT')" in Path(generated.output_path).read_text(encoding="utf-8")
+    assert "macros['COUNT']" in Path(generated.output_path).read_text(encoding="utf-8")
 
 
 def test_reorder_persists_execution_order_and_generation_state(tmp_path):
