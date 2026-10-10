@@ -182,7 +182,8 @@ def test_legacy_json_read_after_edit_keeps_nonnull_contract(tmp_path):
                 pivot_columns="metric", pivot_values="reading")
 
 
-def test_normal_chunk_boundary_reference_discrepancy_is_explicit():
+@pytest.mark.parametrize("keep,expected_global", [("first", "first"), ("last", "last")])
+def test_normal_chunk_boundary_reference_discrepancy_is_explicit(keep, expected_global):
     """Source-derived 50k boundary: combine_first can conflict with global LAST.
 
     This constructs the cross-chunk reconciliation using the same pandas
@@ -197,11 +198,15 @@ def test_normal_chunk_boundary_reference_discrepancy_is_explicit():
     original_style = []
     for piece in (df.iloc[:chunk_size], df.iloc[chunk_size:]):
         indexed = piece.set_index(["lot", "metric"])[["reading"]]
-        indexed = indexed[~indexed.index.duplicated(keep="last")]
+        indexed = indexed[~indexed.index.duplicated(keep=keep)]
         original_style.append(indexed.unstack("metric"))
     combined = original_style[0].combine_first(original_style[1])
     expected_from_original_primitives = combined.loc["001", ("reading", "A")]
     assert expected_from_original_primitives == "first"
-    current_last = normal(df, duplicate="last")
-    assert current_last.loc[current_last["LOT"] == "001", "A"].iloc[0] == "last"
-    assert expected_from_original_primitives != "last"
+    current = normal(df, duplicate=keep)
+    actual = current.loc[current["LOT"] == "001", "A"].iloc[0]
+    assert actual == expected_global
+    if keep == "last":
+        assert actual != expected_from_original_primitives
+    else:
+        assert actual == expected_from_original_primitives

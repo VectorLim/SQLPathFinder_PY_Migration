@@ -173,3 +173,37 @@ only. No changes to UI, frontend, HTML/CSS, Hadoop/HPC, JMP/JSL, AED,
 main, or planning branches. No secrets or production sample rows in
 fixtures. Workdir and assets remain explicit. Any unexpected shared
 branch movement must stop work rather than override another writer.
+
+## Corrective pass — mixed-case identities and pre-revision JSON compatibility
+
+**Checkpoint predecessor:** `1ae547e4b6f8cc70e875a2881dc5f4482c06f43b`. Test-first regression checkpoint: `25ebfa84aa1b1decb6956b8a2580cfe32d34d7a6`.
+The clean CI on regression-only code reproduced 18 new corrective failures (24 total, including six inherited) before runtime modification. Corrective implementation checkpoint: `fbff792ee4cf3a70e51e2c5e687455ea999ac3d5`. The source-only runtime correction was deliberately confined to `runtime/crosstab.py` and the focused workflow includes the new regression file.
+
+### What the original source actually does
+
+- `SPFUtilities/utils.py:4137-4218` uppercases *output labels*, computes an uppercased/sorted header shell and contains the defective `len(list) != set(list)` condition. The deduplication block is therefore entered regardless of duplicate status.
+- `utils.py:4304-4346` uppercases source pivot *values* **conditionally** when `foudnDuplicatesInPivotHeaders` was set after composing the uppercase grouping+header list. Case variants `a` and `A` can generate the same output label without setting this flag (the shell has already been deduplicated). Original normal-query behavior for these inputs is therefore not a reliable unconditional case-insensitive aggregation contract.
+- The Option C correction **intentionally normalizes the pivot-header identity to uppercase before physical FIRST/LAST deduplication and unstack**, avoiding duplicate output names and data loss. This repairs an apparent source defect; the affected behavior is labeled **INTENTIONAL-CHANGE / SOURCE-DERIVED**, not independently proven byte-for-byte original parity.
+- The pre-revision `src/vg2c/runtime/crosstab.py` at `3e9def7a1b066e5007c9284510b242cbf611c7e2` is a distinct historical API contract: it does `groupby([...], dropna=False)[value_key].first().unstack(..., fill_value="")`, **first non-null** (not physical first), filters null/empty pivot headers before grouping, returns requested `row_keys` unchanged for empty/nonpivotable data, and lowercases nonempty output column names. These behaviors remain mandatory for old `crosstab={...}` or JSON loading.
+
+### Old vs corrected behavior
+
+| Input or invariant | Old Option C revision | Corrected Option C | Legacy JSON after correction |
+|---|---|---|---|
+| Same lot with `a` then `A` | Two internal labels both become `A` and raise collision | One normalized `A`; FIRST chooses first physical row and LAST chooses last | Historical grouping and lowercase header policy retained |
+| `Voltage` / `VOLTAGE` | Potential duplicate-normalized-header exception | One `VOLTAGE` identity before unstack | Historical behavior retained |
+| First reading null, second non-null | Physical first produces empty | Remains physical-first (normal-mode contract) | **First non-null** selected as in old vg2c |
+| Pivot header null or empty | Converted to text/unknown in revised pivot | Remains current normal-mode contract | **Filtered out**, including all-empty/header-only result |
+| Empty DataFrame or explicit `row_keys=[]` | Empty keys could raise | Normal mode unchanged | Original empty output schema / keys accepted |
+| Columns/order | Normal uppercase, optional DOT lower and multi-value @ or . | Unchanged except resolving case-variant labels | Original lowercase and groupby sorting/order |
+| New emitted project | `pivot_columns`, `pivot_values`, no JSON | **Unchanged** | Prior `crosstab=job.table_spec(...)` still supported |
+
+The subsystem still uses one `_CrosstabUtility` and common schema resolution; the historical pandas grouping operation is a compact internal `_apply_legacy` branch, not a second public pivot engine, strategy hierarchy or framework. No new generated kwargs or assets.
+
+### Additional corrective goldens and decisions
+
+New `tests/runtime/test_crosstab_corrective_pass.py` covers mixed-case a/A, Voltage/VOLTAGE, FIRST/LAST selection, multiple-value @ and . names, sanitized Unicode/punctuation and row-key collision, original legacy first-non-null/null handling, blank/null pivot-header filtering, empty row keys/schema, case-insensitive source field lookup, lowercased output/order, JSON read-after-edit and mixed old/new error. The deterministic 50,000-record chunk-boundary test independently reconstructs *documented pandas primitives* with two chunks, not the proprietary engine. FIRST returns the earlier row in both paths. For LAST, original-style `combine_first` retains the first chunk's non-null value whereas global positional LAST retains the second chunk's last record.
+
+**Cross-chunk policy remains WIP.** Reproducing the original chunk reconciliation algorithm completely would enlarge this correction and potentially reproduce additional historical defects; no streaming framework was added. Tests explicitly demonstrate the discrepancy without pretending equivalent behavior. Original proprietary execution, Oracle/other backends, complex CrossTab expressions, exact CTARRAY filename/delimiter and other previously documented corner cases remain UNVERIFIED.
+
+No unrelated UI/JMP/AED/HTML files were modified and there is no new crosstab JSON. Semantic editing source ranges, dynamic SQL token flow, quoted SQLite INSERT, `/HEADERS`, joins, binds and isolated workdir behavior are protected by the existing focused and full suites. See the revision handoff for exact current CI results and final SHA (final handoff commit cannot contain its own hash).

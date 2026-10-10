@@ -123,3 +123,37 @@ Source files were read from remote. Local Git DNS blocked clone/dirty state insp
 - Do not start Session 04 or merge to main during this revision. Next agent must fetch exact final handoff SHA in the final response, verify remote equality and stop on competing branch movement.
 
 Security and data review: synthetic fixtures only, no production customer/site inputs, no credentials, no original proprietary code modified, no network shares or production ICMPCS scripts executed.
+
+## Final corrective pass — mixed-case normal pivots / legacy aggregation
+
+**Starting verified handoff:** `1ae547e4b6f8cc70e875a2881dc5f4482c06f43b` (no remote movement before first edit).
+**Test-first reproduction SHA:** `25ebfa84aa1b1decb6956b8a2580cfe32d34d7a6`.
+**Implementation SHA:** `fbff792ee4cf3a70e51e2c5e687455ea999ac3d5`.
+**Final tested SHA / final handoff commit:** reported by the agent in the final response, as this file cannot self-reference.
+**Scope:** Only `src/vg2c/runtime/crosstab.py`, new `tests/runtime/test_crosstab_corrective_pass.py`, focused workflow selection and these two documentation files. No emitter/API/JSON format changes, no other branch.
+
+### Root causes and exact correction
+
+1. **Normal case-variant pivot values:** output header uppercasing was performed after indexing physical `a`/`A` values independently, causing a normalized output label collision. Source `utils.py:4137-4218,4304-4346` only uppercases pivot identities in a conditional final-header-collision branch, and the original header shell has a defective unconditional dedup check. We intentionally normalize normal-query header **identities** before duplicated-index selection and `unstack`. For two source rows `001,a,first` and `001,A,second`, normal FIRST yields `LOT,A\n001,first`; normal LAST yields `LOT,A\n001,second`. Multiple value fields, @/. separators, PIVOTDOT and legacy header sanitization retain deterministic output. This is a source-informed **repair**, not independently proven complete original executable parity.
+2. **Legacy JSON first-non-null and header filtering:** prior Option C mistakenly passed legacy explicit row keys through physical `drop_duplicates`, changing the pre-revision vg2c contract. The exact old `crosstab.py` at `3e9def7a1b066e5007c9284510b242cbf611c7e2` uses `groupby(..., dropna=False)[value_key].first().unstack(..., fill_value="")`, filters null/empty header values, retains empty-row-key and empty-frame schemas and lowercases normal nonempty output. A private `_apply_legacy` uses that old pandas operation after shared field resolution/validation; normal Option C still uses physical-row FIRST/LAST and inferred runtime keys. For legacy rows `001,A,NULL`; `001,A,later`, output remains `lot,a\n001,later`. Old JSON/long `/HEADERS` assets and run-after-edit work unchanged.
+
+### Red-green proof and regression commands
+
+Initial handoff baseline (commit 1ae547...): 107 focused passed; full 577 passed and six inherited UI/JMP failures. Regression-only test commit `25ebfa84...` demonstrated **18 new corrective failing tests** and six inherited failures: 24 failed, 583 passed. The correction `fbff792...` was checked in clean Linux Actions: **131 focused passed**, full **601 passed, six failed** (all six inherited, no new failures). Compilation and focused Ruff passed.
+
+Exact commands in `.github/workflows/session03-validation.yml`:
+
+    python -m compileall -q src
+    ruff check --select F821,F823 src/vg2c/runtime/csv_io.py src/vg2c/runtime/crosstab.py
+    PYTHONPATH=src:. python -m pytest -q tests/runtime/test_table_semantics_session03.py tests/runtime/test_crosstab_script_host_parity.py tests/runtime/test_crosstab_corrective_pass.py tests/runtime/test_csv_io.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_job_runtime.py tests/emitter/test_generated_project.py tests/emitter/test_sqlite_table_bindings.py
+    PYTHONPATH=src:. python -m pytest -q
+
+Final workflow URL and figures must be checked at the final pushed handoff SHA; this narrative records already-observed checkpoints.
+
+### Cross-chunk bounded review
+
+With one `lot=001,metric=A,reading=first` at row 0 and `lot=001,metric=A,reading=last` at row 50000, using a 50,000-record boundary, reconstructed original per-chunk `unstack` and `combine_first` retain `first` for LAST, while the normal runtime's global physical LAST retains `last`. FIRST agrees. This is a **source-derived isolated primitive reconstruction**, not proprietary ScriptHost execution, and stays WIP (no speculative streaming rewrite).
+
+### Session 04 gate
+
+Preserve new `pivot_columns`/`pivot_values` emission with runtime-inferred row columns and zero newly generated crosstab JSON; old JSON explicit row keys plus first-non-null and null-header filter; `JobRuntime.table_spec()`, `/HEADERS`, source editing metadata, CTARRAY -> dynamic SQL scoped workdir, SQL reader/binds/alias and SQLite identifier safety. Leave original-engine cross-chunk parity, full dynamic token expressions and external backend differences visible as WIP. Do not treat the full suite as green (six inherited UI/JMP failures) and do not start Session 04 automatically.
