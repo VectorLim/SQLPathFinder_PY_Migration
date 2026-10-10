@@ -157,3 +157,13 @@ With one `lot=001,metric=A,reading=first` at row 0 and `lot=001,metric=A,reading
 ### Session 04 gate
 
 Preserve new `pivot_columns`/`pivot_values` emission with runtime-inferred row columns and zero newly generated crosstab JSON; old JSON explicit row keys plus first-non-null and null-header filter; `JobRuntime.table_spec()`, `/HEADERS`, source editing metadata, CTARRAY -> dynamic SQL scoped workdir, SQL reader/binds/alias and SQLite identifier safety. Leave original-engine cross-chunk parity, full dynamic token expressions and external backend differences visible as WIP. Do not treat the full suite as green (six inherited UI/JMP failures) and do not start Session 04 automatically.
+
+## Final corrective implementation CI checkpoint
+
+**Checked-out implementation and current handoff SHA before this verification addendum:** `0386732e036c7503d824e04cdf09b098e6008e01`. **Run:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38070233355
+
+Clean Linux GitHub Actions verified `python -m compileall -q src` and focused Ruff `--select F821,F823` as passing. The focused command (including `tests/runtime/test_crosstab_corrective_pass.py`) passed **132 tests**. The full `PYTHONPATH=src:. python -m pytest -q` returned **602 passed, six failed**. The failed test IDs are exactly the inherited six UI/JMP cases recorded above, with **zero new failures**. The full-suite result is *failed*, not green.
+
+The additional corrective case explicitly checks both FIRST and LAST at the source's default 50,000-record chunk boundary. FIRST agrees between globally deduplicated and source-primitives reconstruction; LAST differs, as documented. This remains a **source-derived primitive comparison**, not an executed original proprietary engine oracle. It does not justify claiming complete ScriptHost compatibility.
+
+Synthetic diagnostic timings on this runner (not performance comparisons to the original engine): SQLite JOIN 10k **0.209s / 3.3 MiB**, 75k **1.738s / 24.6 MiB**; pandas PIVOT 10k **0.043s / 1.6 MiB**, 75k **0.270s / 11.5 MiB**. Final handoff's full commit SHA is reported in the agent response because this document cannot self-reference its own commit.

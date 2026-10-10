@@ -207,3 +207,13 @@ New `tests/runtime/test_crosstab_corrective_pass.py` covers mixed-case a/A, Volt
 **Cross-chunk policy remains WIP.** Reproducing the original chunk reconciliation algorithm completely would enlarge this correction and potentially reproduce additional historical defects; no streaming framework was added. Tests explicitly demonstrate the discrepancy without pretending equivalent behavior. Original proprietary execution, Oracle/other backends, complex CrossTab expressions, exact CTARRAY filename/delimiter and other previously documented corner cases remain UNVERIFIED.
 
 No unrelated UI/JMP/AED/HTML files were modified and there is no new crosstab JSON. Semantic editing source ranges, dynamic SQL token flow, quoted SQLite INSERT, `/HEADERS`, joins, binds and isolated workdir behavior are protected by the existing focused and full suites. See the revision handoff for exact current CI results and final SHA (final handoff commit cannot contain its own hash).
+
+## Final corrective implementation CI checkpoint
+
+**Checked-out implementation and current handoff SHA before this verification addendum:** `0386732e036c7503d824e04cdf09b098e6008e01`. **Run:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38070233355
+
+Clean Linux GitHub Actions verified `python -m compileall -q src` and focused Ruff `--select F821,F823` as passing. The focused command (including `tests/runtime/test_crosstab_corrective_pass.py`) passed **132 tests**. The full `PYTHONPATH=src:. python -m pytest -q` returned **602 passed, six failed**. The failed test IDs are exactly the inherited six UI/JMP cases recorded above, with **zero new failures**. The full-suite result is *failed*, not green.
+
+The additional corrective case explicitly checks both FIRST and LAST at the source's default 50,000-record chunk boundary. FIRST agrees between globally deduplicated and source-primitives reconstruction; LAST differs, as documented. This remains a **source-derived primitive comparison**, not an executed original proprietary engine oracle. It does not justify claiming complete ScriptHost compatibility.
+
+Synthetic diagnostic timings on this runner (not performance comparisons to the original engine): SQLite JOIN 10k **0.209s / 3.3 MiB**, 75k **1.738s / 24.6 MiB**; pandas PIVOT 10k **0.043s / 1.6 MiB**, 75k **0.270s / 11.5 MiB**. Final handoff's full commit SHA is reported in the agent response because this document cannot self-reference its own commit.
