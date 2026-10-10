@@ -130,5 +130,6 @@ class _SqliteReader:
         if not rows:
             return pd.DataFrame(columns=col_names)
 
-        data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
-        return pd.DataFrame(data)
+        # Retain positional values even if SQL returns repeated column labels.
+        # Constructing dicts here would silently discard duplicate-name values.
+        return pd.DataFrame([tuple(row) for row in rows], columns=col_names)
