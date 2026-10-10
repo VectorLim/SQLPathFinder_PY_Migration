@@ -144,3 +144,13 @@ def test_query_sql_get_csv_list_quotes_and_deduplicates(tmp_path):
     execute_sql(sql, reader=SqliteReader(), output="matched.csv",
                 workdir=tmp_path)
     assert (tmp_path / "matched.csv").read_text() == "lot\n001\n"
+
+
+def test_quoted_sqlite_identifiers_are_not_truncated(tmp_path):
+    path = tmp_path / "strange.csv"
+    path.write_text('weird"name,lot\nvalue,001\n')
+    result = SqliteReader().execute(
+        'SELECT "weird""name", lot FROM strange', [str(path)]
+    )
+    assert result.columns.tolist() == ['weird"name', "lot"]
+    assert result.iloc[0].tolist() == ["value", "001"]
