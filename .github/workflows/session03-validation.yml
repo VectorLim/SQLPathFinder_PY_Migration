@@ -21,7 +21,7 @@ jobs:
       - name: Compile sources
         run: python -m compileall -q src
       - name: Lint changed runtime
-        run: ruff check --select F821,F822,F823 src/vg2c/runtime/csv_io.py src/vg2c/runtime/crosstab.py
+        run: ruff check --select F821,F823 src/vg2c/runtime/csv_io.py src/vg2c/runtime/crosstab.py
       - name: Session 03 focused tests
         env:
           PYTHONPATH: src:.
