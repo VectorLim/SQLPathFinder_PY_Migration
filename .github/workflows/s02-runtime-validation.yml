@@ -55,7 +55,7 @@ jobs:
                 ' values_kwargs=', code.count('values=job_values'),
                 ' numbered_macro_mentions=', len(re.findall(r'macro_values_\d+', code)),
                 ' job_calls=', len(re.findall(r'job\.\w+\(', code)),
-                ' bracket_reads=', len(re.findall(r"macros\[['\\"]COUNT['\\"]\]", code)))
+                ' bracket_reads=', code.count("macros['COUNT']"))
           print('GENERATED_SOURCE_BEGIN')
           print(code)
           print('GENERATED_SOURCE_END')
