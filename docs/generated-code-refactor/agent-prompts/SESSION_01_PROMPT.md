@@ -1,0 +1,37 @@
+# Session 01 agent prompt — Macro state and substitution
+
+## Role and fixed constraints
+
+You are a fresh coding agent working on `VectorLim/SQLPathFinder_PY_Migration`. Implement **only Session 01** from the approved, committed plans. Read `docs/generated-code-refactor/00_MASTER_PLAN.md`, `docs/generated-code-refactor/01_MACRO_SIMPLIFICATION.md`, and `docs/generated-code-refactor/agent-prompts/README.md` in full. Treat plans as inspected design guidance, not permission to contradict actual source. The primary objective is readable user-editable generated Python, with no behavioral regressions or needless framework complexity. Do not change the UI/frontend or implement unsupported HPC/JMP/JSL and unrelated AED infrastructure. Do not merge into `main`, `html-and-sql-rework` or another session branch.
+
+## Exact branch workflow — this session owns a fresh temporary branch
+
+- Parent remote ref: `origin/html-and-sql-rework`.
+- New temporary branch: `refactor/generated-code/s01-macros`.
+- No prior implementation handoff is needed. Read the published plan commit on origin/html-and-sql-rework, not the original inspection SHA.
+- Start by verifying `git remote -v`, `git fetch origin --prune`, the remote parent commit and ancestry, `git status --porcelain`, and existing local branches/worktrees. If the checkout is dirty, **preserve all user edits**: use a safe additional worktree/clone, or stop with an explanation; never `git reset --hard`, `git clean -fd`, overwrite a branch, or force push.
+- Create/checkout the new branch **at the exact verified parent SHA**. Do not base it on local `main`, the old inspection SHA, or an arbitrary latest commit. If this temporary branch already exists remotely, inspect its history/status and do not overwrite it.
+- Record the full parent commit hash before touching files. Run the available baseline tests before changing code. If the environment cannot run a test, record the dependency/blocker; do not claim success.
+
+## Scoped implementation mandate
+
+Implement the scoped, dictionary-like macro store and simplify emitted macro expressions. First compare `src/vg2c/utilities/macro_state.py` with `src/vg2c/runtime/values.py`; do not assume existing missing-value, reserved-token, global/env or newline behavior matches. Inspect `src/vg2c/emitter/project.py` (`_Expressions`, `control_header`, `walk`, `_lower_lines`), operands/macro/conditional/loop, and macro/control tests. Establish a documented contract for `macros["NAME"]`, assignment, `macros.scope(row)`, `macros.substitute(...)`, scope restoration, row-only conditional execution, and per-run ownership. Preserve nested shadowing, loop isolation, missing-token diagnostics, runtime values and source/edit metadata; keep emitted `if`/`else`/`for` native. Do not broaden runtime-call APIs yet. Reject extra macro registries or duplicated substitution evaluators.
+
+Work bottom-up from tests and authoritative runtime semantics to emission. Reuse existing code before adding helpers. Preserve `EmittedScript.assets`, `StepEmission`, editable parameters, source offsets and source-location errors. Preserve direct execution without VG2 input or ScriptHost imports. Use AST/source inspection and representative generated output to catch noise, not cosmetic line-count tricks. Keep public API compact, state explicit, source comments factual and file paths safe across Linux/container deployments.
+
+## Verification and change discipline
+
+Focus on `tests/runtime/test_macro_state.py`, `test_control_parity.py`, `test_placeholder_substitution.py`, `tests/emitter/test_generated_project.py`, `test_semantic_contracts.py`, and full suite. Include zero-row/nested START-MACRO, blank/None/unknown/reserved tokens, native branch/loop execution and restoration after exceptions.
+
+Compare old vs new behavior using deterministic sanitized fixtures and stubs for unavailable external dependencies; `ICMPCS/main.py` is a readability reference, **not** safe for unmocked execution. Run focused tests repeatedly and the complete baseline suite before declaring this session done. Never remove or soften a behavioral assertion merely to make the new design pass. Include representative generated-code before/after excerpts and readability measures; identify any moved complexity rather than calling it removed.
+
+## Commit, push and handoff
+
+1. Before completion, review the diff for scope creep, semantic duplication, dead code, formatting, and accidental secrets or private production output.
+2. Create `docs/generated-code-refactor/handoffs/SESSION_01_HANDOFF.md` **on your temporary branch** with: repository + branch; exact parent SHA; exact committed result SHA (if recording the commit SHA in-file would require self-reference, store the final SHA in your final response and record the prior implementation SHA in-file); implementation summary/files; public runtime and emitter contract; measured generated examples; precise executed test commands and results; limitations and required next-session constraints. Keep it versioned along with the work.
+3. Commit and push **only `refactor/generated-code/s01-macros`**. If a test remains failing, label the branch/handoff WIP and report it clearly rather than claiming acceptance. Verify fetched remote HEAD equals the push result, and provide GitHub compare/diff link against `origin/html-and-sql-rework`.
+4. Report the exact final commit SHA and give the next agent its parent branch + SHA. Never automatically start Session 02 or merge anything.
+
+## Acceptance gate
+
+The concrete acceptance criteria in `01_MACRO_SIMPLIFICATION.md` and the shared master regression contract must be met or explicitly marked incomplete. Prior session behavior must continue to pass. Finish with a concise outcome: changes, results, generated-code example, risks, branch, full SHA and next-step handoff.
