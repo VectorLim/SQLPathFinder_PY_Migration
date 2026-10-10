@@ -242,3 +242,19 @@ def test_source_empty_header_becomes_unknown_and_downstream_ctarray(tmp_path):
     execute_sql(follow, reader=SqliteReader(), workdir=tmp_path,
                 output="downstream.csv", inputs=["pivot.csv"])
     assert (tmp_path / "downstream.csv").read_text().splitlines()[0] == "LOT,A,_UNKNOWN_"
+
+def test_old_json_unknown_fields_are_rejected_not_ignored(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    (root / "query.sql").write_text(
+        "SELECT '001' AS lot, 'A' AS metric, 'value' AS reading"
+    )
+    path = root / "pivot.crosstab.json"
+    path.write_text(json.dumps({
+        "row_keys": ["lot"], "header_key": "metric", "value_key": "reading",
+        "pivot_function": "last",
+    }))
+    job = JobRuntime(root, tmp_path / "work")
+    with pytest.raises(ValueError, match="Unsupported legacy crosstab configuration fields"):
+        job.sql("query.sql", reader=SqliteReader(), output="out.csv",
+                crosstab=job.table_spec("pivot.crosstab.json"))

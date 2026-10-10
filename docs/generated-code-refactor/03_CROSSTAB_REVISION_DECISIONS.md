@@ -1,19 +1,17 @@
-# Session 03 revised crosstab — source-grounded decisions and residual implementation plan
+# Session 03 crosstab — ScriptHost semantic authority
 
-**Repository/branch:** `VectorLim/SQLPathFinder_PY_Migration` / `refactor/generated-code/implementation` only.
-**Revision status:** **WIP: source-grounded and focused-tested, but not exact original-engine parity.**
-**Starting full SHA:** `3e9def7a1b066e5007c9284510b242cbf611c7e2`.
-**Original tested Session 03 SHA:** `e1ac1185dfc27e617d6a6e884ea270b8635d28bd`.
-**No merge into main; Session 04 not started.**
+**Repository:** `VectorLim/SQLPathFinder_PY_Migration`  
+**Only implementation branch:** `refactor/generated-code/implementation`  
+**Current pass starts at:** `32f4fd4d420bf8c69aac32d95ee4b5b27bc7a39f`  
+**Implementation checkpoint:** `968463135ddbee7178d10000b6e8d6c3e7b4c396`  
+**Original pre-Option-C source for historical comparison:** `3e9def7a1b066e5007c9284510b242cbf611c7e2`  
+**Parity status:** **WIP; source-audited and tested, not independently executed against proprietary ScriptHost.**
 
-This document reconciles the user-approved Option C revision plan with actual
-code, testing, and the audited original decompiled implementation. The original
-prompt/plan were provided out-of-band. Evidence strength matters: passing
-source-derived fixtures is not the same as executing ScriptHost.
+## 1. Authority and design
 
-## 1. Core design and ownership
+The original **Python ScriptHost** is the sole authority for expected VG2 crosstab semantics. An old vg2c implementation is *not* a competing behavioral contract. Preserve previously generated JSON **input formats** only when they map unambiguously to ScriptHost semantics; reject misleading or contradictory old options with an actionable diagnostic.
 
-A normal query emits one editable Python call, for example:
+Normal generated Python remains concise; no row-key lists, Python pandas internals or new `.crosstab.json` assets are emitted:
 
 ```python
 job.sql(
@@ -26,194 +24,73 @@ job.sql(
 )
 ```
 
-Only `pivot_columns`/`pivot_values` are required for normal pivots. Extra
-arguments only appear when source options require them; SQL remains a separate
-editable file. `JobRuntime.sql -> execute_sql/run_query ->
-_CrosstabUtility.apply -> _CsvIO.write` retains one canonical pivot algorithm.
-The runtime infers grouping fields *after* the SQL query returns. It excludes
-the pivot-header and value fields from the actual result-column sequence. It
-never serializes 28 inferred keys or emits new `.crosstab.json` assets.
+The SQL is edited separately. `JobRuntime.sql -> run_query -> _CrosstabUtility.apply -> CsvIO.write` owns one pivot algorithm. `/CTROW` participates in original QType=3 classification but does **not** supply emitted row identifiers for normal SQL. Row identifiers are inferred from actual SQL result fields excluding CTHEADER and CTVAL.
 
-Keep existing `job.sql(..., crosstab=job.table_spec(...))` readable for
-deployed projects; its user-authored `row_keys` have different explicit
-grouping semantics and remain explicitly applied. Mixed old/new settings
-raise instead of arbitrarily taking precedence. Keep `.header.json` and
-`JobRuntime.table_spec()`; validate edited assets at consumption. Do not
-turn SQL `/HEADERS` into HTML column labels.
+For an older generated project, `crosstab=job.table_spec("...crosstab.json")` still loads and rereads the JSON. The known `row_keys`, `header_key`, `value_key` shape is accepted. `row_keys` is now a **schema assertion**, not a grouping override: it must match the inferred post-query grouping names and order (case-insensitive), otherwise the runtime raises an error explaining how to update the JSON or switch to Option C. Unsupported JSON fields and mixed old/new pivot APIs are rejected. No public migration parameters or legacy engine were added.
 
-Distinct runtime metadata flow:
+## 2. Original source citations and evidence tiers
 
-```text
-Query A SQL -> query-result pivot -> pivoted CSV
-                           |-> optional CTARRAY <instance>_<alias>.ini
-Query B editable SQL with CrossTab->[[...]]
-           -> read exactly that workdir's header INI
-           -> expand SQL expressions -> SQL execution
+Source root: `scripthost-utilities-decompiled/SPSQL3_py/SPFLib/`.
+
+**Confirmed by inspected original source (not proprietary execution):**
+
+- `SPFSQL3.py:1609-1614`: `CTVAL` and `CTVALUE` parsing; `CTHEADER`/`CTROW` parsed separately.
+- `SPFSQL3.py:2442-2447,2492-2504,2583-2587,2604-2611`: QType pivot classification, SQL before pivot, and normal-query dispatch without explicit CTROW grouping. Hadoop/alternate pivot route is not equivalent.
+- `SPFUtilities/utils.py:4070-4088`: grouping keys = intermediate CSV headers excluding pivot/value fields, matching column names case-insensitively.
+- `utils.py:4118-4122`: ScriptHost-entry default pivot read chunk size **50,000**, standalone/non-SH default **1,000,000**; explicit original `pivotReadChunkSize` may override. The present vg2c API has no equivalent runtime-mode or override signal and uses 50,000; standalone/overridden chunk parity is **WIP**.
+- `utils.py:4137-4218,4239-4278`: intermediate CSV values, value-column lists, sorted uppercase pivot headers, blank names `_UNKNOWN_`, sanitization, `PIVOTDOT`, `:M=` and sort option handling.
+- `utils.py:4304-4389`: chunk-local positional index duplicate selection (FIRST/LAST), followed by `unstack()`.
+- `utils.py:4408-4482`: overlap is reconciled using `combine_first()`, which keeps an earlier chunk's non-null cell even for LAST duplicates across chunk boundaries.
+- `utils.py:4514-4549` and `SPFSQL3.py:4509-4777`: CTARRAY creates numbered alias INI metadata, consumed by downstream SQL `CrossTab->[[...]]` substitution.
+
+**Source-derived and covered by clean Linux regression tests, not original differential:** runtime inferred keys, FIRST/LAST physical selection inside 50,000-row chunks, `combine_first` for overlapping pivots, fill of disjoint pivot columns, uppercase output ordering, multiple values with @ or ., `_UNKNOWN_` for blank pivot identities, CTARRAY file and downstream SQLite expansion, case-insensitive field matching, and JSON input adaptation.
+
+**Intentional ScriptHost bug fixes / divergences:**
+
+1. `utils.py:4199-4212` contains `len(pivotedHeaderNamesList) != set(pivotedHeaderNamesList)`, comparing an integer to a set; the condition does not correctly test duplicate labels. `utils.py:4304-4346` uppercases source pivot identities only when another collision flag is set. For `a` and `A`, two distinct pivot indices can be emitted with the same uppercase output name. vg2c **always uppercases pivot identities before physical FIRST/LAST selection** and raises on still-ambiguous sanitized/output collisions. This is a documented modern correctness repair, not claimed exact original bug reproduction.
+2. Original CTARRAY writes its list using the target CSV delimiter while a downstream consumer expects TAB (`utils.py:4214-4218`, `SPFSQL3.py:4554,4666`). vg2c writes TAB-delimited, workdir-scoped metadata to keep the documented downstream SQL pattern functional and isolated.
+3. Original headers may silently collapse in some collision branches. vg2c rejects ambiguous row/output identifiers rather than silently lose data. Exact exceptional-case equivalence remains unverified.
+
+**Optional old-vg2c format compatibility:** `JobRuntime.table_spec()`, JSON shape reloading, case-insensitive legacy field names, numeric CTARRAY tokens and separately existing alias-schema fallback. These interfaces are **not** licenses to preserve old computational semantics.
+
+**Removed vg2c-only behavior:** `_apply_legacy()`, `groupby(...).first()` (first non-null), old filtering of null/blank pivot header records, lowercase legacy output headers, empty `row_keys=[]` silently disabling pivot, explicit user row keys changing grouping, and alternative legacy-only output ordering. Historical assertions enforcing these were intentionally updated to source-backed results.
+
+## 3. Semantic comparison
+
+| Input / policy | Pre-Option-C vg2c | Current ScriptHost-grounded vg2c | Confidence |
+|---|---|---|---|
+| Duplicate A: first value NULL, next later | `later` via first non-null | Empty first physical value (`na_filter=False` semantics) | SOURCE-DERIVED / tested |
+| Pivot header NULL or empty | Drop affected rows | Materialize blank string and `_UNKNOWN_` header | SOURCE-DERIVED / tested |
+| Explicit JSON `row_keys` smaller/reordered | Changes selected grouping | Reject mismatch; infer grouping from result | SOURCE-DERIVED / tested |
+| Output header `a` from JSON | Lowercase | Uppercase `A` | SOURCE-DERIVED / tested |
+| Pivot values `a`, `A` | Separate/conditional quirks | Single `A` identity, physical FIRST/LAST | INTENTIONAL BUG FIX / tested |
+| Duplicate row/pivot straddles SH 50k boundary, LAST | vg2c global LAST chose later row | Earlier chunk non-null wins by `combine_first` | SOURCE-DERIVED; exact original multi-chunk executor WIP |
+| New generated SQL call | Legacy JSON asset | Concise `pivot_columns/pivot_values` | CODE-GENERATION TESTED |
+| Old JSON schema with unknown keys | Inconsistent handling | Explicit diagnostic | INPUT VALIDATION / tested |
+| CTARRAY mixed case / blank header downstream | No complete source parity | Sorted header INI, numeric token expansion | SOURCE-DERIVED / tested subset |
+
+## 4. Remaining parity limitations
+
+- **No independent proprietary engine execution.** Old source inspection and independently authored fixtures do not prove byte-identical behavior.
+- **Cross-chunk:** 50k models ScriptHost-entry defaults, not standalone 1m or custom chunk size. The source has a more elaborate multi-DataFrame merging/writing loop; additional 3+ chunk and original-engine byte-level comparisons remain WIP, including output ordering and memory behavior. The implementation uses incremental `combine_first` rather than reproducing questionable original control flow.
+- **Null/missing:** Source read uses `na_filter=False`; pandas/SQLite output string conversion, `:M=` and writer formatting need additional original differential, especially external-backend NULL representation.
+- **CTARRAY:** Alias casing, delimiters, Y/N/A and basic `|<>|` expressions have source-derived integration tests; full dynamic SQL token syntax, advanced expressions, metadata encoding, and cross-backend behavior remain WIP.
+- **Header/collisions:** uppercase normalization is an intentional fix. Unusual whitespace, invalid/sanitized labels, `PIVOTDOT` details and multi-value header collision cases require independent engine comparisons. Multiple CTHEADER entries remain explicitly unsupported.
+- **Classification and SQL:** missing-versus-blank CTROW, duplicated CTVAL options, STACK precedence edge cases, external Oracle quoting, advanced sort syntax and zero-byte/header-only input differences are not certified.
+
+## 5. Verification and Session 04 constraints
+
+**Source-oriented implementation checkpoint:** `968463135ddbee7178d10000b6e8d6c3e7b4c396`  
+**CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071387334  
+**On clean Linux, Python 3.12 / pandas 3.0.3:** compile and focused Ruff passed, **135 focused passed; 605 full-suite passed, six inherited UI/JMP failed** (zero new failures). The workflow also executes generated Python and benchmarks 10k/75k row pivots and SQLite joins. The full workflow is **failed**, not green.
+
+Exact commands:
+
+```sh
+python -m compileall -q src
+ruff check --select F821,F823 src/vg2c/runtime/csv_io.py src/vg2c/runtime/crosstab.py
+PYTHONPATH=src:. python -m pytest -q tests/runtime/test_table_semantics_session03.py tests/runtime/test_crosstab_script_host_parity.py tests/runtime/test_crosstab_corrective_pass.py tests/runtime/test_csv_io.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_job_runtime.py tests/emitter/test_generated_project.py tests/emitter/test_sqlite_table_bindings.py
+PYTHONPATH=src:. python -m pytest -q
 ```
 
-No ambient registry/CWD and no duplicate pivot implementation. Retain the
-older SQLite schema-based token expansion as a separate *legacy* compatibility
-path, not as evidence of ScriptHost CTARRAY equivalence.
-
-## 2. Audited original call chain
-
-All pointers are to `scripthost-utilities-decompiled/SPSQL3_py/SPFLib/`
-at the original checked-out source. File/line references are source-audit
-locations, not claims of proprietary execution.
-
-1. `SPFSQL3.py:1609-1614`: `CTVAL` and `CTVALUE` both assign CTVal;
-   `CTHEADER`, `CTROW` are separate.
-2. `SPFSQL3.py:2442-2447`: QType=3 when CTVal, CTHeader, CTRow are
-   non-None and STACK doesn't supersede; empty option handling needs
-   additional exact-parser verification.
-3. `SPFSQL3.py:2492-2504,2583-2587`: execute SQL first, pivot
-   intermediate query result only for QType=3.
-4. `SPFSQL3.py:2604-2611`: normal `pivotTable()` does **not** forward
-   CTRow as group keys to `utils.PivotTable`; Hadoop `pivotTable4`
-   differs and is out of scope.
-5. `SPFUtilities/utils.py:4070-4088`: `getMyRowListFrmSourceFile()`
-   subtracts pivot header/value identities from CSV headers.
-6. `utils.py:4088-4218,4239-4278`: reads CSV values as strings,
-   derives uppercase, sorted pivot header names, supports multiple
-   value columns, `:M=`, `PIVOTDOT`, legacy sanitized headers,
-   and optional `SORT`.
-7. `utils.py:4280-4512`: pandas read with `dtype=object`,
-   `na_filter=False`, physical duplicated-index keep=first/last
-   before unstack; chunk outputs reconciled by `combine_first()`.
-8. `utils.py:4514-4549`: `Save_CT_Header` writes
-   `<instance>_<alias>.ini`; `SPFSQL3.py:4509-4777` expands
-   later SQL `CrossTab->[[...]]` tokens with Y/N/A alias modes
-   and optional `|<>|` SQL expression.
-9. `SPFSQL3.py:4554,4666` splits CTARRAY metadata on TAB, while
-   `utils.py:4214-4218` writes using target CSV delimiter, so
-   `.csv` target can trigger a source-consumer delimiter mismatch.
-
-The old source has defects (e.g. comparing list length to a `set` in
-header de-duplication). Preserve externally observable policy only
-where evidenced; do not copy broken conditionals uncritically.
-
-## 3. Behavioral inventory (evidence status)
-
-| Behavior | Audited original | Current revision / gate | Evidence level |
-|---|---|---|---|
-| CTVAL/CTVALUE | Both accepted, SPFSQL3:1609 | Both emitted, test parametrized | SOURCE-DERIVED |
-| QType /CTROW | Required gate, not runtime row list | Emit only when parsed CTROW present, no pivot_rows | SOURCE-DERIVED; blank ambiguity WIP |
-| STACK precedence | STACK may win over pivot | Extractor checks presence | SOURCE-DERIVED; extra gate fixtures WIP |
-| Runtime row keys | All query-result CSV fields except pivot/value | Infer at runtime preserving column position | SOURCE-DERIVED |
-| SQL first | Intermediate result materialized | Query execute precedes pivot | SOURCE-DERIVED; exact serialization WIP |
-| Legacy row keys | Old vg2c crosstab explicit group list | Dedicated adapter keeps them | CURRENT-VG2C-ONLY |
-| Default first/last | Positional index dedup | Physical `drop_duplicates`, first/last | SOURCE-DERIVED for single in-memory batch |
-| Cross-chunk first/last | `combine_first` per chunk | Global dedup, no source-compatible chunk strategy yet | **UNVERIFIED/WIP** |
-| Missing/null | `na_filter=False`, `:M=` | Coerce normal intermediate values to strings; missing filling | SOURCE-DERIVED; writer specifics WIP |
-| Multi-value | CTVal comma list, @/. labels | One or many pivot values, header formats | SOURCE-DERIVED |
-| Header case/order | Uppercase, sorted, optional sanitization | Deterministic uppercase header policy | SOURCE-DERIVED; collisions WIP |
-| Multi CTHEADER | Partial split but single usecols lookup | Explicit diagnostic | UNVERIFIED, not implemented |
-| Sort | ASC/DESC/DESC-1 | Narrow list parser, stable sort & numeric shadow | SOURCE-DERIVED; complete original syntax WIP |
-| Empty/header-only | Original zero-byte vs no data distinction | New/legacy modes have explicit schema paths | UNVERIFIED exact outputs |
-| CTARRAY persistence | Numbered alias INI in CWD | Scoped workdir INI, TAB-separated | INTENTIONAL-CHANGE; needs differential |
-| SQL CrossTab token | Read INI, Y/N/A and optional SQL function placeholders | Scoped expansion for numeric tokens | SOURCE-DERIVED subset; expressions WIP |
-| Old alias token | Existing vg2c introspects table aliases | Preserved in distinct fallback | CURRENT-VG2C-ONLY |
-| SQL /HEADERS | Actual output CSV/schema | Existing header-json by-name behavior retained | CURRENT-VG2C-ONLY |
-| SQLite identifiers | Quote CREATE/DROP, INSERT inconsistent | INSERT now shares `_quote_identifier` | Verified by focused regression |
-| Repeated result labels | Positional results preserved | Keep; later CSV reload diagnoses collisions | CURRENT-VG2C-ONLY |
-| Editing contract | Emitter metadata references arguments | New pivot argument editing/ranges tested | VG2C integration test |
-| Python runtime | Needs no VG2 original | Generated project executed in offline Linux CI | VG2C integration test |
-| Oracle/Hadoop/production | Different execution branches | Not executed or supported by this revision | UNVERIFIED/out of scope |
-
-**No row marked SOURCE-DERIVED is certified exact original executable parity.**
-A true differential requires independently executing a compatible original
-isolated method or proprietary test oracle; neither was used here.
-
-## 4. Implementation checkpoints
-
-- Phase 0: GitHub API verified exact implementation branch HEAD and ancestry.
-  GitHub Actions clean checkout used because local Git DNS blocks checkout;
-  local dirty-tree verification unavailable.
-- Phase 1: Parser/QType -> SQL result -> PivotTable -> pivotDF -> CTARRAY ->
-  SubStitute_CT audited, and source/exception notes recorded above.
-- Phase 2: Independently authored goldens and executable test corpus under
-  `tests/fixtures/crosstab_parity/` and
-  `tests/runtime/test_crosstab_script_host_parity.py`.
-- Phase 3: Canonical runtime pivot and compatibility adapter implemented.
-  **WIP** for chunk merging, unknown original data-type anomalies.
-- Phase 4: Concise emitter/API and editability tests; no new pivot JSON.
-- Phase 5: Old JSON asset loading retained; enhanced diagnostics,
-  SQLite INSERT quoting repair, duplicate schema contract kept.
-- Phase 6: File-backed CTARRAY and downstream numeric header SQL token
-  support implemented, including Y/N/A and optional expression. **WIP**
-  for full source syntax, cross-backend quoting, delimiter differences.
-- Phase 7: Source/workflow checks run in clean CI, performance diagnostic
-  logged; no original ScriptHost oracle; six inherited full-suite failures.
-  The revision is **WIP**, not an acceptance-certified source-parity release.
-
-## 5. Must-complete before claiming ScriptHost parity
-
-1. Build a bounded independently executed original `PivotTable`/`pivotDF`
-   differential on synthetic text with pinned older pandas (if runnable)
-   and compare byte output, original csv/tab split, and 50k-row chunk
-   boundaries for first/last.
-2. Resolve `/CTROW` blank vs missing, duplicate `CTVAL` aliases,
-   multi-value/missing-value edge cases, header collisions, zero-byte/
-   header-only output behavior from executable reference.
-3. Reconcile actual source CTARRAY filename casing, alias/instance naming,
-   newline/delimiter behavior and optional aggregate expressions in
-   SQLite versus Oracle. Add separate unsupported-engine diagnostics.
-4. Add full writable/editable semantic parameters for any future
-   verified advanced options; preserve current `EmittedScript.assets`,
-   `StepEmission`, source offsets, and legacy project data.
-5. Re-run full suite, classify all failures exactly; no UI/JMP changes
-   as part of Session 03, and don't treat six inherited failures as green.
-6. Keep the shared branch serial: Session 04 must not start until a
-   deliberate handoff accepts these bounded WIP items.
-
-## 6. Scope, security and precedence
-
-No production/network-share ICMPCS execution; reference ICMPCS was read
-only. No changes to UI, frontend, HTML/CSS, Hadoop/HPC, JMP/JSL, AED,
-main, or planning branches. No secrets or production sample rows in
-fixtures. Workdir and assets remain explicit. Any unexpected shared
-branch movement must stop work rather than override another writer.
-
-## Corrective pass — mixed-case identities and pre-revision JSON compatibility
-
-**Checkpoint predecessor:** `1ae547e4b6f8cc70e875a2881dc5f4482c06f43b`. Test-first regression checkpoint: `25ebfa84aa1b1decb6956b8a2580cfe32d34d7a6`.
-The clean CI on regression-only code reproduced 18 new corrective failures (24 total, including six inherited) before runtime modification. Corrective implementation checkpoint: `fbff792ee4cf3a70e51e2c5e687455ea999ac3d5`. The source-only runtime correction was deliberately confined to `runtime/crosstab.py` and the focused workflow includes the new regression file.
-
-### What the original source actually does
-
-- `SPFUtilities/utils.py:4137-4218` uppercases *output labels*, computes an uppercased/sorted header shell and contains the defective `len(list) != set(list)` condition. The deduplication block is therefore entered regardless of duplicate status.
-- `utils.py:4304-4346` uppercases source pivot *values* **conditionally** when `foudnDuplicatesInPivotHeaders` was set after composing the uppercase grouping+header list. Case variants `a` and `A` can generate the same output label without setting this flag (the shell has already been deduplicated). Original normal-query behavior for these inputs is therefore not a reliable unconditional case-insensitive aggregation contract.
-- The Option C correction **intentionally normalizes the pivot-header identity to uppercase before physical FIRST/LAST deduplication and unstack**, avoiding duplicate output names and data loss. This repairs an apparent source defect; the affected behavior is labeled **INTENTIONAL-CHANGE / SOURCE-DERIVED**, not independently proven byte-for-byte original parity.
-- The pre-revision `src/vg2c/runtime/crosstab.py` at `3e9def7a1b066e5007c9284510b242cbf611c7e2` is a distinct historical API contract: it does `groupby([...], dropna=False)[value_key].first().unstack(..., fill_value="")`, **first non-null** (not physical first), filters null/empty pivot headers before grouping, returns requested `row_keys` unchanged for empty/nonpivotable data, and lowercases nonempty output column names. These behaviors remain mandatory for old `crosstab={...}` or JSON loading.
-
-### Old vs corrected behavior
-
-| Input or invariant | Old Option C revision | Corrected Option C | Legacy JSON after correction |
-|---|---|---|---|
-| Same lot with `a` then `A` | Two internal labels both become `A` and raise collision | One normalized `A`; FIRST chooses first physical row and LAST chooses last | Historical grouping and lowercase header policy retained |
-| `Voltage` / `VOLTAGE` | Potential duplicate-normalized-header exception | One `VOLTAGE` identity before unstack | Historical behavior retained |
-| First reading null, second non-null | Physical first produces empty | Remains physical-first (normal-mode contract) | **First non-null** selected as in old vg2c |
-| Pivot header null or empty | Converted to text/unknown in revised pivot | Remains current normal-mode contract | **Filtered out**, including all-empty/header-only result |
-| Empty DataFrame or explicit `row_keys=[]` | Empty keys could raise | Normal mode unchanged | Original empty output schema / keys accepted |
-| Columns/order | Normal uppercase, optional DOT lower and multi-value @ or . | Unchanged except resolving case-variant labels | Original lowercase and groupby sorting/order |
-| New emitted project | `pivot_columns`, `pivot_values`, no JSON | **Unchanged** | Prior `crosstab=job.table_spec(...)` still supported |
-
-The subsystem still uses one `_CrosstabUtility` and common schema resolution; the historical pandas grouping operation is a compact internal `_apply_legacy` branch, not a second public pivot engine, strategy hierarchy or framework. No new generated kwargs or assets.
-
-### Additional corrective goldens and decisions
-
-New `tests/runtime/test_crosstab_corrective_pass.py` covers mixed-case a/A, Voltage/VOLTAGE, FIRST/LAST selection, multiple-value @ and . names, sanitized Unicode/punctuation and row-key collision, original legacy first-non-null/null handling, blank/null pivot-header filtering, empty row keys/schema, case-insensitive source field lookup, lowercased output/order, JSON read-after-edit and mixed old/new error. The deterministic 50,000-record chunk-boundary test independently reconstructs *documented pandas primitives* with two chunks, not the proprietary engine. FIRST returns the earlier row in both paths. For LAST, original-style `combine_first` retains the first chunk's non-null value whereas global positional LAST retains the second chunk's last record.
-
-**Cross-chunk policy remains WIP.** Reproducing the original chunk reconciliation algorithm completely would enlarge this correction and potentially reproduce additional historical defects; no streaming framework was added. Tests explicitly demonstrate the discrepancy without pretending equivalent behavior. Original proprietary execution, Oracle/other backends, complex CrossTab expressions, exact CTARRAY filename/delimiter and other previously documented corner cases remain UNVERIFIED.
-
-No unrelated UI/JMP/AED/HTML files were modified and there is no new crosstab JSON. Semantic editing source ranges, dynamic SQL token flow, quoted SQLite INSERT, `/HEADERS`, joins, binds and isolated workdir behavior are protected by the existing focused and full suites. See the revision handoff for exact current CI results and final SHA (final handoff commit cannot contain its own hash).
-
-## Final corrective implementation CI checkpoint
-
-**Checked-out implementation and current handoff SHA before this verification addendum:** `0386732e036c7503d824e04cdf09b098e6008e01`. **Run:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38070233355
-
-Clean Linux GitHub Actions verified `python -m compileall -q src` and focused Ruff `--select F821,F823` as passing. The focused command (including `tests/runtime/test_crosstab_corrective_pass.py`) passed **132 tests**. The full `PYTHONPATH=src:. python -m pytest -q` returned **602 passed, six failed**. The failed test IDs are exactly the inherited six UI/JMP cases recorded above, with **zero new failures**. The full-suite result is *failed*, not green.
-
-The additional corrective case explicitly checks both FIRST and LAST at the source's default 50,000-record chunk boundary. FIRST agrees between globally deduplicated and source-primitives reconstruction; LAST differs, as documented. This remains a **source-derived primitive comparison**, not an executed original proprietary engine oracle. It does not justify claiming complete ScriptHost compatibility.
-
-Synthetic diagnostic timings on this runner (not performance comparisons to the original engine): SQLite JOIN 10k **0.209s / 3.3 MiB**, 75k **1.738s / 24.6 MiB**; pandas PIVOT 10k **0.043s / 1.6 MiB**, 75k **0.270s / 11.5 MiB**. Final handoff's full commit SHA is reported in the agent response because this document cannot self-reference its own commit.
+Do not change `EmittedScript.assets`, `StepEmission`, `EmittedParameter`, semantic editing ranges, editable SQL assets, workdir isolation, SQLite joins/bind parameters, quoted identifiers, duplicate CSV header diagnostics or `/HEADERS` behavior without their focused tests. Keep original source unmodified. No Session 04, main merge or unrelated UI/AED/HTML/HPC/JMP work in this pass. Original historical docs on the prior handoff commits remain in Git history; **this document supersedes their legacy-only requirements**. The final handoff commit SHA is provided in the agent's final response, as a commit cannot contain its own SHA.
