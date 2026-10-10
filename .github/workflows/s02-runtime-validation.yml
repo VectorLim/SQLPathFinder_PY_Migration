@@ -1,0 +1,35 @@
+name: Session 02 Runtime Validation
+on:
+  push:
+    branches:
+      - refactor/generated-code/implementation
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest "pandas==3.0.3" "keyring==25.7.0" oracledb fastapi pydantic uvicorn python-multipart httpx2 ruff
+          python -m pip install --no-deps -e .
+      - name: Compile sources
+        run: python -m compileall -q src
+      - name: Ruff runtime context
+        run: ruff check src/vg2c/runtime/job.py
+      - name: Focused runtime and emitter tests
+        env:
+          PYTHONPATH: src:.
+        run: python -m pytest -q tests/runtime/test_job_runtime.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_control_parity.py tests/runtime/test_generated_symbols.py tests/runtime/test_scoped_macros.py tests/emitter/test_generated_project.py tests/emitter/test_emission_metadata.py tests/emitter/test_editing.py tests/emitter/test_no_vg2c_leak.py tests/emitter/test_macro_store_project.py tests/emitter/test_semantic_contracts.py
+      - name: Full test suite
+        if: always()
+        env:
+          PYTHONPATH: src:.
+        run: python -m pytest -q
