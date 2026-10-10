@@ -178,7 +178,15 @@ class _CsvIO:
 
         if isinstance(content, pandas.DataFrame):
             if header is not None:
-                columns = {str(column).casefold(): column for column in content.columns}
+                keys = [str(name).casefold() for name in header]
+                if len(set(keys)) != len(keys):
+                    raise ValueError("CSV output header names collide case-insensitively")
+                columns = {}
+                for column in content.columns:
+                    key = str(column).casefold()
+                    if key in columns and key in keys:
+                        raise ValueError(f"Ambiguous CSV source columns for {column!r}")
+                    columns[key] = column
                 content = content.reindex(
                     columns=[
                         columns.get(column.casefold(), column) for column in header
