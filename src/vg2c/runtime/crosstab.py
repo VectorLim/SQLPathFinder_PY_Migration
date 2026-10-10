@@ -118,4 +118,6 @@ class _CrosstabUtility:
             .rename_axis(columns=None)
         )
         result.columns = [str(col).lower() for col in result.columns]
+        if result.columns.has_duplicates:
+            raise ValueError("Crosstab pivot headers collide with row or other headers")
         return result
