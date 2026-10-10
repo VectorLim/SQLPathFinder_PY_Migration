@@ -65,6 +65,12 @@ def run_query(sql, *, reader, output, workdir, values=None, macros=None,
         keys = ("row_keys", "header_key", "value_key")
         if any(key not in crosstab for key in keys):
             raise ValueError("Legacy crosstab requires row_keys, header_key, value_key")
+        unknown = sorted(set(crosstab) - set(keys))
+        if unknown:
+            raise ValueError(
+                f"Unsupported legacy crosstab configuration fields: {unknown}. "
+                "Use pivot_columns/pivot_values for ScriptHost-style options."
+            )
         if (not isinstance(crosstab["row_keys"], list)
                 or not all(isinstance(k, str) and k for k in crosstab["row_keys"])
                 or not all(isinstance(crosstab[k], str) and crosstab[k]

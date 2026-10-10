@@ -65,9 +65,9 @@ def test_crosstab_first_duplicate_and_string_identifier():
     })
     result = CrosstabUtility().apply(rows, row_keys=["lot"], header_key="metric",
                                     value_key="value")
-    assert result["lot"].tolist() == ["001", "002"]
-    assert result.loc[0, "a"] == "first"
-    assert result.loc[1, "b"] == "third"
+    assert result["LOT"].tolist() == ["001", "002"]
+    assert result.loc[0, "A"] == "first"
+    assert result.loc[1, "B"] == "third"
 
 
 def test_crosstab_diagnoses_ambiguous_schema():

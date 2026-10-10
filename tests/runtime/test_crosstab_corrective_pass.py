@@ -1,9 +1,9 @@
-"""Corrective-pass regression tests.
+"""ScriptHost-grounded crosstab regression and old-JSON adapter tests.
 
-Legacy expectations are from crosstab.py at 3e9def7a1b066e5007c9284510b242cbf611c7e2.
-Normal-query cases trace SPFUtilities/utils.py:4137-4218, 4304-4360;
-normalizing mixed-case *identities* is an intentional repair of an original
-conditional-normalization defect, not proven byte-identical ScriptHost output.
+SPFUtilities/utils.py:4070-4088, 4118-4122, 4137-4218, 4330-4361,
+4408-4427. The old vg2c behavior is not a semantic authority.
+Normalization of mixed-case pivot *identities* remains an intentional repair
+of an observable source bug (not a tested proprietary-engine oracle).
 """
 from __future__ import annotations
 
@@ -93,120 +93,152 @@ def test_normal_casefold_does_not_change_noncolliding_uppercase_headers():
     assert normal(df).iloc[0].tolist() == ["001", "one", "two"]
 
 
-@pytest.mark.parametrize("values,expected_legacy,expected_normal", [
-    ([None, "later"], "later", ""),
-    (["early", None], "early", "early"),
-    ([None, None], None, ""),
-    ([float("nan"), "later"], "later", ""),
+
+@pytest.mark.parametrize("values", [
+    [None, "later"], ["early", None], [None, None],
+    [float("nan"), "later"], ["", "later"],
 ])
-def test_legacy_first_nonnull_vs_normal_physical_first(values, expected_legacy, expected_normal):
+def test_deprecated_json_shape_uses_script_host_physical_first(values):
+    """Old vg2c groupby.first() was first-non-null; ScriptHost drops physical duplicates."""
     df = pd.DataFrame({
         "lot": ["001", "001"], "metric": ["A", "A"], "reading": values,
     })
-    old = legacy(df)
     current = normal(df)
-    assert old.columns.tolist() == ["lot", "a"]
-    value = old.iloc[0]["a"]
-    if expected_legacy is None:
-        assert pd.isna(value)
-    else:
-        assert value == expected_legacy
-    assert current.iloc[0]["A"] == expected_normal
+    adapter = legacy(df)
+    assert adapter.equals(current)
+    assert adapter.columns.tolist() == ["LOT", "A"]
+    assert adapter.iloc[0]["A"] == ("" if pd.isna(values[0]) else values[0])
 
 
 @pytest.mark.parametrize("headers", [
     [None, "", "A"], ["", "", None], [float("nan"), "A", "A"],
 ])
-def test_legacy_filters_null_and_empty_pivot_headers(headers):
+def test_old_json_shape_keeps_script_host_blank_pivot_identity(headers):
+    """na_filter=False produces an empty string and _UNKNOWN_ in ScriptHost."""
     df = pd.DataFrame({
         "lot": ["001", "001", "001"], "metric": headers,
-        "reading": ["bad_null", "bad_empty", "good"],
+        "reading": ["null", "empty", "good"],
     })
-    result = legacy(df)
-    remaining = [x for x in headers if pd.notna(x) and str(x) != ""]
-    assert result.columns.tolist() == (["lot", *sorted({str(x).lower() for x in remaining})]
-                                      if remaining else ["lot"])
-    assert "nan" not in result.columns
-    assert "" not in result.columns
+    adapter = legacy(df)
+    assert adapter.equals(normal(df))
+    assert "_UNKNOWN_" in adapter.columns
+    expected = ["LOT", "A", "_UNKNOWN_"] if "A" in adapter.columns else ["LOT", "_UNKNOWN_"]
+    assert adapter.columns.tolist() == expected
 
 
-def test_legacy_empty_rows_and_empty_keys_preserve_pre_revision_behavior():
+def test_old_json_empty_frames_and_row_key_mismatch_are_explicit():
     empty = pd.DataFrame(columns=["LOT", "Metric", "Reading"])
     assert legacy(empty, ["LOT"]).columns.tolist() == ["LOT"]
-    assert legacy(pd.DataFrame({"lot": ["001"], "metric": ["A"],
-                                "reading": ["x"]}), []).columns.tolist() == []
-    no_rows = pd.DataFrame({
-        "lot": ["001", "001"], "metric": [None, ""], "reading": ["n", "e"],
-    })
-    assert legacy(no_rows, ["lot"]).columns.tolist() == ["lot"]
+    sample = pd.DataFrame({"lot": ["001"], "metric": ["A"], "reading": ["x"]})
+    with pytest.raises(ValueError, match="row_keys do not match|Update the JSON"):
+        legacy(sample, [])
+    with pytest.raises(ValueError, match="row_keys do not match|Update the JSON"):
+        CrosstabUtility().apply(
+            pd.DataFrame({"lot": ["001"], "extra": ["x"],
+                          "metric": ["A"], "reading": ["v"]}),
+            row_keys=["lot"], header_key="metric", value_key="reading",
+        )
 
 
-def test_legacy_case_insensitive_fields_group_ids_and_header_order():
+def test_deprecated_adapter_casefolded_fields_and_script_host_order():
     df = pd.DataFrame({
         "Lot": ["002", "001", "001", "002"],
         "METRIC": ["z", "B", "A", "A"],
         "Reading": ["zval", "bval", "aval", "aval2"],
     })
     result = legacy(df)
-    assert result.columns.tolist() == ["lot", "a", "b", "z"]
-    assert result["lot"].tolist() == ["001", "002"]
+    assert result.equals(normal(df))
+    assert result.columns.tolist() == ["LOT", "A", "B", "Z"]
+    assert result["LOT"].tolist() == ["001", "002"]
     assert result.iloc[0].tolist() == ["001", "aval", "bval", ""]
 
 
-def test_legacy_json_read_after_edit_keeps_nonnull_contract(tmp_path):
+def test_old_json_is_reread_after_edit_but_is_not_a_second_pivot_engine(tmp_path):
     root = tmp_path / "assets"
     root.mkdir()
-    sql = root / "query.sql"
-    sql.write_text(
+    (root / "query.sql").write_text(
         "SELECT '001' AS lot, 'A' AS metric, NULL AS reading "
         "UNION ALL SELECT '001', 'A', 'later'"
     )
-    path = root / "sql" / "query.crosstab.json"
-    path.parent.mkdir()
-    path.write_text(json.dumps({
+    cfg = root / "sql" / "query.crosstab.json"
+    cfg.parent.mkdir()
+    cfg.write_text(json.dumps({
         "row_keys": ["lot"], "header_key": "metric", "value_key": "reading",
     }))
-    job = JobRuntime(root, tmp_path / "work")
+    job = JobRuntime(root, tmp_path / "run")
     job.sql("query.sql", reader=SqliteReader(), output="out.csv",
             crosstab=job.table_spec("sql/query.crosstab.json"))
-    assert (tmp_path / "work" / "out.csv").read_text() == "lot,a\n001,later\n"
-    path.write_text(json.dumps({
-        "row_keys": ["lot"], "header_key": "metric", "value_key": "reading",
+    assert (tmp_path / "run" / "out.csv").read_text() == "LOT,A\n001,\n"
+    # JSON is still an editable on-disk input; case spelling doesn't change meaning.
+    cfg.write_text(json.dumps({
+        "row_keys": ["LOT"], "header_key": "METRIC", "value_key": "READING",
     }, indent=2))
     job.sql("query.sql", reader=SqliteReader(), output="out.csv",
             crosstab=job.table_spec("sql/query.crosstab.json"))
-    assert (tmp_path / "work" / "out.csv").read_text() == "lot,a\n001,later\n"
+    assert (tmp_path / "run" / "out.csv").read_text() == "LOT,A\n001,\n"
+    cfg.write_text(json.dumps({
+        "row_keys": [], "header_key": "metric", "value_key": "reading",
+    }))
+    with pytest.raises(ValueError, match="row_keys do not match"):
+        job.sql("query.sql", reader=SqliteReader(), output="out.csv",
+                crosstab=job.table_spec("sql/query.crosstab.json"))
     with pytest.raises(ValueError, match="both|mixed|legacy"):
         job.sql("query.sql", reader=SqliteReader(), output="out.csv",
                 crosstab=job.table_spec("sql/query.crosstab.json"),
                 pivot_columns="metric", pivot_values="reading")
 
 
-@pytest.mark.parametrize("keep,expected_global", [("first", "first"), ("last", "last")])
-def test_normal_chunk_boundary_reference_discrepancy_is_explicit(keep, expected_global):
-    """Source-derived 50k boundary: combine_first can conflict with global LAST.
+@pytest.mark.parametrize("keep", ["first", "last"])
+def test_chunk_boundary_preserves_original_chunk_priority(keep):
+    """Source: per-chunk FIRST/LAST then combine_first() retaining earlier chunk.
 
-    This constructs the cross-chunk reconciliation using the same pandas
-    primitives visible in original utils.py:4280-4512, NOT an executed engine.
+    This reconstructs the original pandas behavior, not an engine differential.
+    ScriptHost-entry's default chunk size is 50k; standalone default is 1m.
     """
-    chunk_size = 50000
+    chunk_size = CrosstabUtility._CHUNK_ROWS
     df = pd.DataFrame({
         "lot": ["001", *[f"{i:06d}" for i in range(1, chunk_size)], "001"],
         "metric": ["A"] * (chunk_size + 1),
         "reading": ["first", *(["filler"] * (chunk_size - 1)), "last"],
     })
-    original_style = []
+    source_chunks = []
     for piece in (df.iloc[:chunk_size], df.iloc[chunk_size:]):
         indexed = piece.set_index(["lot", "metric"])[["reading"]]
         indexed = indexed[~indexed.index.duplicated(keep=keep)]
-        original_style.append(indexed.unstack("metric"))
-    combined = original_style[0].combine_first(original_style[1])
-    expected_from_original_primitives = combined.loc["001", ("reading", "A")]
-    assert expected_from_original_primitives == "first"
-    current = normal(df, duplicate=keep)
-    actual = current.loc[current["LOT"] == "001", "A"].iloc[0]
-    assert actual == expected_global
-    if keep == "last":
-        assert actual != expected_from_original_primitives
-    else:
-        assert actual == expected_from_original_primitives
+        source_chunks.append(indexed.unstack("metric"))
+    source_result = source_chunks[0].combine_first(source_chunks[1])
+    assert source_result.loc["001", ("reading", "A")] == "first"
+    pivoted = normal(df, duplicate=keep)
+    assert pivoted.loc[pivoted["LOT"] == "001", "A"].iloc[0] == "first"
+
+
+def test_chunk_boundary_fills_earlier_missing_pivot_cells():
+    size = CrosstabUtility._CHUNK_ROWS
+    source = pd.DataFrame({
+        "lot": ["001", *[f"{i:06d}" for i in range(1, size)], "001"],
+        "metric": ["A", *(["A"] * (size-1)), "B"],
+        "reading": ["early", *(["filler"] * (size-1)), "later"],
+    })
+    pivoted = normal(source, duplicate="last")
+    assert pivoted.columns.tolist() == ["LOT", "A", "B"]
+    assert pivoted.loc[pivoted["LOT"] == "001", ["A", "B"]].iloc[0].tolist() == ["early", "later"]
+
+
+def test_source_empty_header_becomes_unknown_and_downstream_ctarray(tmp_path):
+    sql = tmp_path / "source.sql"
+    sql.write_text(
+        "SELECT '001' AS lot, '' AS metric, 'empty' AS reading "
+        "UNION ALL SELECT '001', 'a', 'first' "
+        "UNION ALL SELECT '001', 'A', 'second'"
+    )
+    from vg2c.runtime import execute_sql
+    execute_sql(sql, reader=SqliteReader(), workdir=tmp_path,
+                output="pivot.csv", pivot_columns="metric", pivot_values="reading",
+                pivot_header_ref="a0,4253")
+    assert (tmp_path / "4253_A0.ini").read_text() == "A\t_UNKNOWN_"
+    assert (tmp_path / "pivot.csv").read_text() == "LOT,A,_UNKNOWN_\n001,first,empty\n"
+    follow = tmp_path / "follow.sql"
+    follow.write_text("SELECT a.LOT, CrossTab->[[a0,4253;:Y]] FROM pivot a0 JOIN pivot a ON a0.LOT = a.LOT")
+    execute_sql(follow, reader=SqliteReader(), workdir=tmp_path,
+                output="downstream.csv", inputs=["pivot.csv"])
+    assert (tmp_path / "downstream.csv").read_text().splitlines()[0] == "LOT,A,_UNKNOWN_"

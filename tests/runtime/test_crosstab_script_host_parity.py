@@ -149,7 +149,7 @@ def test_legacy_json_configuration_is_reloaded(tmp_path):
     job = JobRuntime(root, tmp_path / "run")
     job.sql("query.sql", reader=SqliteReader(), output="out.csv",
             crosstab=job.table_spec("legacy.crosstab.json"))
-    assert (tmp_path / "run" / "out.csv").read_text() == "lot,a\n001,first\n"
+    assert (tmp_path / "run" / "out.csv").read_text() == "LOT,A\n001,first\n"
     opt.write_text(json.dumps({"row_keys": ["missing"], "header_key": "metric",
                                "value_key": "reading"}))
     with pytest.raises(ValueError, match="missing"):
