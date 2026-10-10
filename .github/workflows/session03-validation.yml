@@ -63,6 +63,24 @@ jobs:
                   peak = tracemalloc.get_traced_memory()[1]
                   tracemalloc.stop()
                   print(f'JOIN_BENCH: rows={n}, result_rows={len(data)}, elapsed_s={elapsed:.3f}, peak_alloc_mb={peak/1048576:.1f}')
+              import pandas as pd
+              from vg2c.runtime.crosstab import _CrosstabUtility as CrosstabUtility
+              for n in (10000, 75000):
+                  pivot_source = pd.DataFrame({
+                      'id': [f'{i:06d}' for i in range(n)],
+                      'metric': ['A' if i % 2 else 'B' for i in range(n)],
+                      'value': [str(i) for i in range(n)],
+                  })
+                  tracemalloc.start()
+                  tick = time.perf_counter()
+                  pivoted = CrosstabUtility().apply(
+                      pivot_source, pivot_columns='metric', pivot_values='value'
+                  )
+                  elapsed = time.perf_counter() - tick
+                  peak = tracemalloc.get_traced_memory()[1]
+                  tracemalloc.stop()
+                  assert len(pivoted) == n
+                  print(f'PIVOT_BENCH: rows={n}, result_rows={len(pivoted)}, elapsed_s={elapsed:.3f}, peak_alloc_mb={peak/1048576:.1f}')
           PY
       - name: Entire test suite
         if: always()

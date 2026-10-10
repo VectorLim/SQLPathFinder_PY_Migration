@@ -213,3 +213,58 @@ def test_pivot_editing_binding_has_correct_range(tmp_path):
     assert edited.valid
     assert "pivot_columns='category'" in edited.source
     assert "pivot_values='reading'" in edited.source
+
+
+def test_checked_in_source_derived_basic_csv_fixture():
+    """SPFUtilities/utils.py:4070-4088, 4137-4218, 4280-4512.
+
+    Expected text is independently specified, not computed as an oracle.
+    """
+    from pathlib import Path
+
+    folder = Path(__file__).parents[1] / "fixtures" / "crosstab_parity"
+    frame = pd.read_csv(folder / "basic.csv", dtype=object, na_filter=False)
+    result = _CrosstabUtility().apply(
+        frame, pivot_columns="metric", pivot_values="value"
+    )
+    assert result.to_csv(index=False) == (folder / "expected_basic.csv").read_text()
+
+
+def test_numeric_pivot_sort_preserves_literal_identifier():
+    rows = pd.DataFrame({
+        "lot": ["2", "10", "001"],
+        "metric": ["A", "A", "A"],
+        "value": ["two", "ten", "one"],
+    })
+    result = _CrosstabUtility().apply(
+        rows, pivot_columns="metric", pivot_values="value",
+        sort="lot DESC-1"
+    )
+    assert result["LOT"].tolist() == ["10", "2", "001"]
+    assert result["A"].tolist() == ["ten", "two", "one"]
+
+
+def test_header_token_alias_modes_keep_source_style(tmp_path):
+    headers = _CrosstabUtility
+    headers.write_header_list(tmp_path, "a0,4253", ["X", "Y"])
+    n = headers.substitute_header_lists("CrossTab->[[a0,4253;:N]]", tmp_path)
+    y = headers.substitute_header_lists("CrossTab->[[a0,4253;:Y]]", tmp_path)
+    a = headers.substitute_header_lists("CrossTab->[[a0,4253;sum(|<>|):A]]", tmp_path)
+    assert n == "[X] AS [X], [Y] AS [Y]"
+    assert y == "a0.[X] AS [X], a0.[Y] AS [Y]"
+    assert a == "sum([X]), sum([Y])"
+
+
+def test_distinct_header_metadata_workdirs(tmp_path):
+    from pathlib import Path
+
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    pivot = _CrosstabUtility
+    pivot.write_header_list(first, "a0,4253", ["ONE"])
+    pivot.write_header_list(second, "a0,4253", ["TWO"])
+    token = "CrossTab->[[a0,4253;:N]]"
+    assert "[ONE]" in pivot.substitute_header_lists(token, first)
+    assert "[TWO]" in pivot.substitute_header_lists(token, second)
+    assert "[TWO]" not in pivot.substitute_header_lists(token, first)
