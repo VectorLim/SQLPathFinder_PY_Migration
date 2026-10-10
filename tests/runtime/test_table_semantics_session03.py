@@ -77,30 +77,38 @@ def test_crosstab_diagnoses_ambiguous_schema():
                                 value_key="value")
 
 
-def test_large_table_options_are_editable_assets(tmp_path):
+def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
+    """Normal ScriptHost pivots derive row fields from the SQL result at run time."""
     names = [f"k{i}" for i in range(8)]
     source = tmp_path / "pivot.txt"
-    opts = "/CTROW=" + ",".join(names) + "\n/CTHEADER=metric\n/CTVALUE=value"
+    opts = "/CTROW=classification_only\n/CTHEADER=metric\n/CTVALUE=value"
     query = "SELECT " + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names))
-    query += ", 'A' AS metric, 'first' AS value"
+    query += ", 'A' AS metric, 'first' AS value, 'second' AS alternate"
     source.write_text("<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n" + opts
                       + "\n</OPTIONS>\n" + query + "\n")
     compiled = compile_document(source)
-    assert "crosstab=job.table_spec(" in compiled.emitted.source
-    paths = dict(compiled.emitted.assets)
-    spec_name = next(name for name in paths if name.endswith(".crosstab.json"))
-    assert json.loads(paths[spec_name])["row_keys"] == names
+    assert "pivot_columns='metric'" in compiled.emitted.source
+    assert "pivot_values='value'" in compiled.emitted.source
+    assert "crosstab=job.table_spec(" not in compiled.emitted.source
+    assert not any(name.endswith(".crosstab.json")
+                   for name, _ in compiled.emitted.assets)
     main = translate(source)
     namespace = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
     namespace["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == ",".join(names) + ",a"
-    spec_path = main.parent / spec_name
-    edited = json.loads(spec_path.read_text())
-    edited["row_keys"] = list(reversed(names))
-    spec_path.write_text(json.dumps(edited))
-    namespace["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == ",".join(reversed(names)) + ",a"
+    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == (
+        ",".join(names).upper() + ",ALTERNATE,A"
+    )
+    # Edit generated Python, not a hidden JSON registry or the VG2 source.
+    text = main.read_text()
+    assert "pivot_values='value'" in text
+    main.write_text(text.replace("pivot_values='value'", "pivot_values='alternate'"))
+    edited_namespace = {"__file__": str(main), "__name__": "translated_job"}
+    exec(compile(main.read_text(), str(main), "exec"), edited_namespace)
+    edited_namespace["run"](workdir=tmp_path / "work")
+    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == (
+        ",".join(names).upper() + ",VALUE,A"
+    )
 
 
 def test_large_explicit_header_spec_remains_by_name(tmp_path):

@@ -52,17 +52,44 @@ class JobRuntime:
         """Load an editable static CSV/SQL option on each invocation."""
         import json
 
-        value = json.loads(self.asset_path(path).read_text(encoding="utf-8"))
+        asset = self.asset_path(path)
+        try:
+            value = json.loads(asset.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Cannot read SQL table option asset {asset}: {exc}") from exc
         if not isinstance(value, (list, dict)):
-            raise ValueError(f"Table option asset must hold a mapping or list: {path}")
+            raise ValueError(f"SQL table option asset must contain a list or mapping: {asset}")
+        if asset.name.endswith(".crosstab.json"):
+            if not isinstance(value, dict):
+                raise ValueError(f"SQL crosstab asset must be a mapping: {asset}")
+            if (not isinstance(value.get("row_keys"), list)
+                or not all(isinstance(v, str) and v for v in value["row_keys"])
+                or not all(isinstance(value.get(k), str) and value[k]
+                           for k in ("header_key", "value_key"))):
+                raise ValueError(
+                    f"SQL crosstab asset {asset} requires row_keys (string list), "
+                    "header_key (string), value_key (string)"
+                )
+        if asset.name.endswith(".header.json") and (
+            not isinstance(value, list)
+            or not all(isinstance(v, str) for v in value)
+        ):
+            raise ValueError(f"SQL header asset must be a list of strings: {asset}")
         return value
 
     def sql(self, path, *, reader, output, inputs=None, header=None,
-            crosstab=None, node=None, params=None):
+            crosstab=None, node=None, params=None,
+            pivot_columns=None, pivot_values=None, pivot_duplicate="first",
+            pivot_missing="", pivot_dot=False, pivot_sort=None,
+            pivot_header_ref=None, pivot_legacy_headers=False):
         return execute_sql(self.asset_path(path), reader=reader, output=output,
                            workdir=self.workdir, values=self.values, macros=self.macros,
                            inputs=inputs, header=header, crosstab=crosstab,
-                           node=node, params=params)
+                           node=node, params=params, pivot_columns=pivot_columns,
+                           pivot_values=pivot_values, pivot_duplicate=pivot_duplicate,
+                           pivot_missing=pivot_missing, pivot_dot=pivot_dot,
+                           pivot_sort=pivot_sort, pivot_header_ref=pivot_header_ref,
+                           pivot_legacy_headers=pivot_legacy_headers)
 
     def html(self, path, *, output, values=None, instance=None,
              css_file=None, embed_css=False):

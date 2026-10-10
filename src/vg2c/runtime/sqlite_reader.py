@@ -59,7 +59,7 @@ class _SqliteReader:
         if filtered_rows:
             placeholders = ", ".join("?" for _ in cols)
             conn.executemany(
-                f'INSERT INTO "{table_name}" VALUES ({placeholders})',
+                f"INSERT INTO {table_ident} VALUES ({placeholders})",
                 [[row.get(c, "") for c in cols] for row in filtered_rows],
             )
 

@@ -152,7 +152,9 @@ def _lower_lines(lines, macros):
 
 def _table_option(value, kind, sql_asset, assets):
     """Externalize long static schema options into one editable JSON asset."""
-    size = len(value["row_keys"]) if kind == "crosstab" else len(value)
+    if kind != "header":
+        raise ValueError("New pivots are emitted as concise parameters, not JSON")
+    size = len(value)
     if size < 8:
         return value
     path = sql_asset.removesuffix(".sql") + f".{kind}.json"
@@ -319,7 +321,7 @@ def emit_project(dispatched):
                 kwargs["node"] = block.reader_target.node
             crosstab = extract_crosstab_options(block)
             if crosstab:
-                kwargs["crosstab"] = _table_option(crosstab, "crosstab", name, assets)
+                kwargs.update(crosstab)
             else:
                 header = SqliteEngine._extract_header(block)
                 if header:

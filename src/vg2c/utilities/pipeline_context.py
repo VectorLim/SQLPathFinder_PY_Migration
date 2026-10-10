@@ -82,6 +82,14 @@ class PipelineContext(UtilitySpec):
         header: list[str] | None = None,
         crosstab: dict | None = None,
         node: str | None = None,
+        pivot_columns: str | None = None,
+        pivot_values: str | list[str] | None = None,
+        pivot_duplicate: str = "first",
+        pivot_missing: str = "",
+        pivot_dot: bool = False,
+        pivot_sort: str | None = None,
+        pivot_header_ref: str | None = None,
+        pivot_legacy_headers: bool = False,
     ):
         """Run a SQL query and save its result to the selected output file."""
         sql = self.macro.substitute(sql)
@@ -96,6 +104,8 @@ class PipelineContext(UtilitySpec):
         else:
             result = self._read_datasyncx(sql, reader, effective_node)
 
+        if crosstab is not None and pivot_columns is not None:
+            raise ValueError("Cannot combine legacy crosstab with pivot_columns")
         if crosstab:
             result = self.crosstab.apply(
                 result,
@@ -103,6 +113,21 @@ class PipelineContext(UtilitySpec):
                 header_key=crosstab["header_key"],
                 value_key=crosstab["value_key"],
             )
+        elif pivot_columns is not None:
+            result = self.crosstab.apply(
+                result,
+                pivot_columns=pivot_columns,
+                pivot_values=pivot_values,
+                duplicate=pivot_duplicate,
+                missing=pivot_missing,
+                dot=pivot_dot,
+                sort=pivot_sort,
+                legacy_headers=pivot_legacy_headers,
+            )
+            if pivot_header_ref is not None:
+                raise ValueError(
+                    "CTARRAY metadata writes require the direct JobRuntime.sql API"
+                )
 
         self.csv_io.write(output, result, header=header)
 

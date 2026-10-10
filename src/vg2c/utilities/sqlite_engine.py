@@ -187,7 +187,7 @@ class SqliteEngine(EmitterUtility):
         if header:
             kwargs["header"] = header
         if crosstab:
-            kwargs["crosstab"] = crosstab
+            kwargs.update(crosstab)
 
         from vg2c.utilities.pipeline_context import PipelineContext
 

@@ -26,7 +26,7 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: |
-          python -m pytest -q tests/runtime/test_table_semantics_session03.py tests/runtime/test_csv_io.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_job_runtime.py tests/emitter/test_generated_project.py tests/emitter/test_sqlite_table_bindings.py
+          python -m pytest -q tests/runtime/test_table_semantics_session03.py tests/runtime/test_crosstab_script_host_parity.py tests/runtime/test_csv_io.py tests/runtime/test_direct_runtime.py tests/runtime/test_e2e_fixtures.py tests/runtime/test_job_runtime.py tests/emitter/test_generated_project.py tests/emitter/test_sqlite_table_bindings.py
       - name: Representative table call and synthetic join benchmark
         env:
           PYTHONPATH: src:.
@@ -43,11 +43,11 @@ jobs:
               source = root / 'pivot.txt'
               source.write_text('<OPTIONS>\n/ENGINE=SQLite\n/CSV=out.csv\n/CTROW=' + ','.join(keys) + '\n/CTHEADER=metric\n/CTVALUE=value\n</OPTIONS>\n' + body)
               emitted = compile_document(source).emitted
-              line = next(line.strip() for line in emitted.source.splitlines() if 'crosstab=' in line)
-              spec = next((name, data) for name, data in emitted.assets if name.endswith('.crosstab.json'))
+              line = next(line.strip() for line in emitted.source.splitlines() if 'pivot_columns=' in line)
+              assert not any(name.endswith('.crosstab.json') for name, _ in emitted.assets)
               print('TABLE_SOURCE_CALL:', line)
-              print('TABLE_OPTION_BYTES:', len(spec[1].encode('utf-8')), 'ASSET:', spec[0])
-              print('TABLE_INLINE_EQUIVALENT_CHARS:', len('crosstab=' + repr({'row_keys': keys, 'header_key': 'metric', 'value_key': 'value'})))
+              print('TABLE_PIVOT_KWARG_CHARS:', len(line))
+              print('TABLE_STATIC_JSON_ASSETS:', sum(name.endswith('.crosstab.json') for name, _ in emitted.assets))
               for n in (10000, 75000):
                   left = root / 'left.csv'
                   right = root / 'right.csv'
