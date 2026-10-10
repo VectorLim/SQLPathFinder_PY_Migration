@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
-from vg2c.runtime.append import smart_append
 from vg2c.runtime.aed import process_candidates
+from vg2c.runtime.append import smart_append
 from vg2c.runtime.controls import csv_chunks
 from vg2c.runtime.files import (
     copy_file,
