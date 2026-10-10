@@ -67,5 +67,5 @@ def test_independent_jobs_loop_frames_and_failure_diagnostics():
         first.substitute("<<>>")
     with pytest.raises(ValueError, match="Missing closing"):
         first.substitute("<<<BROKEN")
-    with pytest.raises(ValueError, match="Malformed environment"):
+    with pytest.raises(ValueError, match="Unknown value"):
         first.substitute("<<<%BROKEN>>>")
