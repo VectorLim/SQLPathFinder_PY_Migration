@@ -929,7 +929,7 @@ def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
     ranges: dict[int, SourceRange] = {}
 
     from vg2c.emitter.project import control_header
-    def visit(node: ScopeNode, macros="macro_values") -> None:
+    def visit(node: ScopeNode, macros="macros") -> None:
         nonlocal cursor
         if node.kind in {"if", "macro", "loop"} and node.control_payload is not None:
             header = control_header(node.control_payload, node.scope_id, macros)
@@ -937,8 +937,6 @@ def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
             if start >= 0:
                 ranges[node.scope_id] = SourceRange(start, start + len(header))
                 cursor = start + len(header)
-            if node.kind in {"macro", "loop"}:
-                macros = f"macro_values_{node.scope_id}"
         for child in node.children:
             visit(child, macros)
 

@@ -56,8 +56,7 @@ def test_independent_jobs_loop_frames_and_failure_diagnostics():
         with first.scope(row):
             assert first["SPF-SITE"] in {"PG", "KM"}
             first["temporary"] = "loop-only"
-    with pytest.raises(ValueError, match="Unknown value"):
-        _ = first["SPF-SITE"]
+    assert first["SPF-SITE"] == "<<<SPF-SITE>>>"  # Reserved SPF tokens remain literal.
     with pytest.raises(ValueError, match="Unknown value"):
         _ = first["temporary"]
     rows = list(for_values("0", "2", "1", "A", "N"))

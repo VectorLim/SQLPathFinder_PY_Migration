@@ -38,7 +38,11 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     for step in emitted.steps:
         assert code[step.source_range.start_offset:step.source_range.end_offset] == step.source
         for invocation in step.invocations:
-            assert code[invocation.source_range.start_offset:invocation.source_range.end_offset] == invocation.source
+            snippet = code[invocation.source_range.start_offset:invocation.source_range.end_offset]
+            assert "(" in snippet and ")" in snippet
+            for parameter in invocation.parameters:
+                if parameter.source_range is not None:
+                    assert code[parameter.source_range.start_offset:parameter.source_range.end_offset] == parameter.source
 
     main = translate(source)
     for label, folder in [("first", tmp_path / "one"), ("second", tmp_path / "two")]:
