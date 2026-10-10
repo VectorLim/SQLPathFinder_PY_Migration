@@ -13,6 +13,10 @@ from vg2c.utilities._runtime_helpers import resolve_path
 from vg2c.runtime.crosstab import _CrosstabUtility
 
 
+def _quote_identifier(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
 class _SqliteReader:
     """Run SQL joins over CSV files using in-memory SQLite."""
 
@@ -23,28 +27,29 @@ class _SqliteReader:
     ) -> str:
         path = resolve_path(csv_path, workdir=workdir)
         table_name = table_name or path.stem
+        table_ident = _quote_identifier(table_name)
 
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh)
             rows = list(reader)
 
         if reader.fieldnames is None:
-            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-            conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
+            conn.execute(f"DROP TABLE IF EXISTS {table_ident}")
+            conn.execute(f'CREATE TABLE {table_ident} ("_empty" TEXT)')
             return table_name
 
         cols = list(reader.fieldnames)
         if not cols:
-            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-            conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
+            conn.execute(f"DROP TABLE IF EXISTS {table_ident}")
+            conn.execute(f'CREATE TABLE {table_ident} ("_empty" TEXT)')
             return table_name
 
         folded = [name.casefold() for name in cols]
         if any(not name for name in cols) or len(set(folded)) != len(folded):
             raise ValueError(f"CSV input has empty or duplicate column names: {path}")
-        col_defs = ", ".join(f'"{c.replace(chr(34), chr(34) * 2)}" TEXT' for c in cols)
-        conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-        conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
+        col_defs = ", ".join(f"{_quote_identifier(c)} TEXT" for c in cols)
+        conn.execute(f"DROP TABLE IF EXISTS {table_ident}")
+        conn.execute(f"CREATE TABLE {table_ident} ({col_defs})")
 
         header_str = [str(c) for c in cols]
         filtered_rows = [
