@@ -1,6 +1,6 @@
 # Session 03 — CSV/table semantics, minimal configuration and selective pandas
 
-**Status:** Plan only. **Parent:** tested commit from Session 02; do not begin from planning-time SHA. **Next:** 04 consumes this session's final emitter/runtime table API.
+**Status:** Plan only. **Parent:** tested final Session 02 SHA on `origin/refactor/generated-code/implementation`. Continue that same branch without creating an `s03` branch. Session 04 inherits this session's tested HEAD.
 
 ## Objective / boundary
 

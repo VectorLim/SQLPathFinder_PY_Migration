@@ -1,6 +1,6 @@
 # Session 05 — final convergence, deletion, regression and Linux deployment audit
 
-**Status:** Implementation instructions, not yet executed. **Parent:** tested, pushed commit from Session 04; **own branch:** `refactor/generated-code/s05-integration`. This is the release/maintenance gate, not a redesign of Sessions 01–04. Implementation is performed only when this prompt is launched as its own session.
+**Status:** Plan only. **Parent:** tested final Session 04 SHA on `origin/refactor/generated-code/implementation`; continue that branch without creating an `s05` branch. This session completes release validation, not a redesign.
 
 ## Objective
 

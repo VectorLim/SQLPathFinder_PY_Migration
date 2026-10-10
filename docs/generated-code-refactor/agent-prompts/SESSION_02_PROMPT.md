@@ -2,16 +2,15 @@
 
 ## Role and fixed constraints
 
-You are a fresh coding agent working on `VectorLim/SQLPathFinder_PY_Migration`. Implement **only Session 02** from the approved, committed plans. Read `docs/generated-code-refactor/00_MASTER_PLAN.md`, `docs/generated-code-refactor/02_RUNTIME_CONTEXT.md`, and `docs/generated-code-refactor/agent-prompts/README.md` in full. Treat plans as inspected design guidance, not permission to contradict actual source. The primary objective is readable user-editable generated Python, with no behavioral regressions or needless framework complexity. Do not change the UI/frontend or implement unsupported HPC/JMP/JSL and unrelated AED infrastructure. Do not merge into `main`, `html-and-sql-rework` or another session branch.
+You are a fresh coding agent working on `VectorLim/SQLPathFinder_PY_Migration`. Implement **only Session 02** from the approved, committed plans. Read `docs/generated-code-refactor/00_MASTER_PLAN.md`, `docs/generated-code-refactor/02_RUNTIME_CONTEXT.md`, and `docs/generated-code-refactor/agent-prompts/README.md` in full. Treat plans as inspected design guidance, not permission to contradict actual source. The primary objective is readable user-editable generated Python, with no behavioral regressions or needless framework complexity. Do not change the UI/frontend or implement unsupported HPC/JMP/JSL and unrelated AED infrastructure. Do not merge into `main`, `html-and-sql-rework` or other branches; Session 02 creates the shared branch and Sessions 03–05 continue it.
 
-## Exact branch workflow — this session owns a fresh temporary branch
+## Shared implementation branch workflow — Session 02
 
-- Parent remote ref: `origin/refactor/generated-code/s01-macros`.
-- New temporary branch: `refactor/generated-code/s02-runtime`.
-- Read `docs/generated-code-refactor/handoffs/SESSION_01_HANDOFF.md` from the predecessor. Its result SHA MUST equal the fetched `origin/refactor/generated-code/s01-macros` HEAD and its test status must be understood. If the handoff is absent, wrong or incomplete, do not guess a parent or start modifications.
-- Start by verifying `git remote -v`, `git fetch origin --prune`, the remote parent commit and ancestry, `git status --porcelain`, and existing local branches/worktrees. If the checkout is dirty, **preserve all user edits**: use a safe additional worktree/clone, or stop with an explanation; never `git reset --hard`, `git clean -fd`, overwrite a branch, or force push.
-- Create/checkout the new branch **at the exact verified parent SHA**. Do not base it on local `main`, the old inspection SHA, or an arbitrary latest commit. If this temporary branch already exists remotely, inspect its history/status and do not overwrite it.
-- Record the full parent commit hash before touching files. Run the available baseline tests before changing code. If the environment cannot run a test, record the dependency/blocker; do not claim success.
+- **Predecessor:** final pushed Session 01 commit on `origin/refactor/generated-code/s01-macros`. Read `docs/generated-code-refactor/handoffs/SESSION_01_HANDOFF.md` and the previous agent's final response for its full pushed SHA. This SHA may not be embedded in the handoff because of Git self-reference; verify it matches the fetched remote HEAD. If unverified, stop.
+- **Work branch:** `refactor/generated-code/implementation`; create it from Session 01 HEAD.
+- Verify `git remote -v`, `git fetch origin --prune`, current remote HEAD, ancestry, `git status --porcelain` and local branches/worktrees. Never reset hard, clean destructively, force-push, overwrite dirty changes, or merge implicitly.
+- **Create the shared branch exactly once** at Session 01's verified final SHA. If `refactor/generated-code/implementation` exists locally/remotely, inspect and stop instead of overwriting it. No Session 02-specific branch. **Critical docs:** revised plans/prompts were pushed to `origin/html-and-sql-rework` after Session 01 started. Before editing source, read the latest master/README/Session 02 prompt from that branch (`git show origin/html-and-sql-rework:docs/generated-code-refactor/agent-prompts/SESSION_02_PROMPT.md`). Compare and import **only** the revised master, Sessions 02–05 plan Markdown, README and Sessions 02–05 prompt Markdown into the new branch. Do not merge the planning branch or overwrite Session 01's work; commit this synchronization on the shared branch.
+- Record starting SHA, baseline focused/full tests and any environmental blockers **before** implementation. Preserve session scope.
 
 ## Scoped implementation mandate
 
@@ -28,9 +27,9 @@ Compare old vs new behavior using deterministic sanitized fixtures and stubs for
 ## Commit, push and handoff
 
 1. Before completion, review the diff for scope creep, semantic duplication, dead code, formatting, and accidental secrets or private production output.
-2. Create `docs/generated-code-refactor/handoffs/SESSION_02_HANDOFF.md` **on your temporary branch** with: repository + branch; exact parent SHA; exact committed result SHA (if recording the commit SHA in-file would require self-reference, store the final SHA in your final response and record the prior implementation SHA in-file); implementation summary/files; public runtime and emitter contract; measured generated examples; precise executed test commands and results; limitations and required next-session constraints. Keep it versioned along with the work.
-3. Commit and push **only `refactor/generated-code/s02-runtime`**. If a test remains failing, label the branch/handoff WIP and report it clearly rather than claiming acceptance. Verify fetched remote HEAD equals the push result, and provide GitHub compare/diff link against `origin/refactor/generated-code/s01-macros`.
-4. Report the exact final commit SHA and give the next agent its parent branch + SHA. Never automatically start Session 03 or merge anything.
+2. Create `docs/generated-code-refactor/handoffs/SESSION_02_HANDOFF.md` **on the shared implementation branch** with: repository + branch; exact parent SHA; exact committed result SHA (if recording the commit SHA in-file would require self-reference, store the final SHA in your final response and record the prior implementation SHA in-file); implementation summary/files; public runtime and emitter contract; measured generated examples; precise executed test commands and results; limitations and required next-session constraints. Keep it versioned along with the work.
+3. Commit and push **only `refactor/generated-code/implementation`**, with normal fast-forward and no force. Record failures as WIP. Verify fetched remote HEAD equals your final pushed SHA, and compare the **exact starting SHA** to the final SHA rather than comparing the shared branch ref to itself.
+4. Report the exact full final pushed SHA and hand off `refactor/generated-code/implementation` at that SHA. Do not automatically start another agent session or merge anything.
 
 ## Acceptance gate
 
