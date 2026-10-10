@@ -39,7 +39,10 @@ class _SqliteReader:
             conn.execute(f'CREATE TABLE "{table_name}" ("_empty" TEXT)')
             return table_name
 
-        col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
+        folded = [name.casefold() for name in cols]
+        if any(not name for name in cols) or len(set(folded)) != len(folded):
+            raise ValueError(f"CSV input has empty or duplicate column names: {path}")
+        col_defs = ", ".join(f'"{c.replace(chr(34), chr(34) * 2)}" TEXT' for c in cols)
         conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
         conn.execute(f'CREATE TABLE "{table_name}" ({col_defs})')
 
