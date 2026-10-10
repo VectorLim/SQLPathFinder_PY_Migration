@@ -1,0 +1,31 @@
+name: Session 01 Macro Validation
+on:
+  push:
+    branches:
+      - refactor/generated-code/s01-macros
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest "pandas==3.0.3" "keyring==25.7.0" oracledb fastapi pydantic uvicorn python-multipart ruff
+      - name: Compile sources
+        run: python -m compileall -q src
+      - name: Run focused macro tests
+        env:
+          PYTHONPATH: src:.
+        run: python -m pytest -q tests/runtime/test_scoped_macros.py tests/emitter/test_macro_store_project.py tests/runtime/test_macro_state.py tests/runtime/test_control_parity.py tests/runtime/test_placeholder_substitution.py tests/emitter/test_generated_project.py tests/emitter/test_semantic_contracts.py
+      - name: Run full test suite
+        env:
+          PYTHONPATH: src:.
+        run: python -m pytest -q
