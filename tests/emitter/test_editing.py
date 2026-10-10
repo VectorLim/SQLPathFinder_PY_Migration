@@ -98,8 +98,10 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
         item
         for item in ast.walk(step)
         if isinstance(item, ast.Call)
-        and isinstance(item.func, ast.Name)
-        and item.func.id == "execute_sql"
+        and isinstance(item.func, ast.Attribute)
+        and isinstance(item.func.value, ast.Name)
+        and item.func.value.id == "job"
+        and item.func.attr == "sql"
     )
     keywords = {item.arg: item.value for item in call.keywords}
     assert ast.literal_eval(keywords["node"]) == "TEST"

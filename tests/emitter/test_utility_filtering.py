@@ -29,7 +29,7 @@ def methods(source, name):
 def test_sqlite_workflow_embeds_runtime_reader_and_excludes_compiler():
     source = compile_document(Path(__file__).parents[1] / "fixtures/script_short.txt").emitted.source
     assert "SqliteReader(" in source
-    assert "execute_sql(" in source
+    assert "job.sql(" in source
     assert not any(isinstance(node, ast.ClassDef) for node in ast.parse(source).body)
     assert "def step_" not in source
     assert "ctx" not in source
@@ -165,7 +165,8 @@ def test_api_retention_preserves_workflow_utility_selection(fixture, context_key
     imports = {name.name for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime" for name in node.names}
     assert ("SqliteReader" in imports) == reader
     assert "ctx" not in emitted.source
+    assert "JobRuntime" in imports
     if "html_report" in context_keys:
-        assert "render_html" in imports
+        assert "job.html(" in emitted.source
     if "email" in context_keys:
-        assert "send_mail" in imports
+        assert "job.send_mail(" in emitted.source

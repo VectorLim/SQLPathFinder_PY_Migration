@@ -177,7 +177,7 @@ inside
     projected = project_changes(result, [SemanticChange(binding.id, "after.csv")])
 
     assert projected.valid
-    assert "read_macro_row(macros.substitute('after.csv'" in projected.source
+    assert "job.read_macro_row('after.csv'" in projected.source
 
 
 def test_embedded_python_is_a_focused_validated_binding(tmp_path):
@@ -329,7 +329,7 @@ def test_rows_in_file_target_macro_is_editable(tmp_path):
     projected = project_changes(result, [SemanticChange(target.id, "TOTAL")])
 
     assert projected.valid
-    assert "macros['TOTAL'] = str(row_count('input.csv', workdir=workdir))" in projected.source
+    assert "macros['TOTAL'] = str(job.row_count('input.csv'))" in projected.source
 
 
 def test_repeated_identical_condition_headers_keep_distinct_edit_ranges(tmp_path):

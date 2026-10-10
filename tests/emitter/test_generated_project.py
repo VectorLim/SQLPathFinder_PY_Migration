@@ -86,7 +86,7 @@ def test_direct_invocation_ranges(tmp_path):
         assert emitted.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
         for invocation in step.invocations:
             snippet = emitted.source[invocation.source_range.start_offset:invocation.source_range.end_offset]
-            assert snippet.startswith("execute_sql(")
+            assert snippet.startswith("job.sql(")
             for parameter in invocation.parameters:
                 if parameter.source_range:
                     assert emitted.source[parameter.source_range.start_offset:parameter.source_range.end_offset] == parameter.source

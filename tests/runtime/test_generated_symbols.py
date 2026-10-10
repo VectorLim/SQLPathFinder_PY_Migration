@@ -125,7 +125,7 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "Ada" in content and "85.00%" in content
     assert "<title>Generated report</title>" in content
-    assert "render_html(" in result.emitted.source
+    assert "job.html(" in result.emitted.source
     assert "ctx" not in result.emitted.source
     assert "def emit_block" not in result.emitted.source
 

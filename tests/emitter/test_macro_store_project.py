@@ -31,7 +31,8 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     tree = ast.parse(code)
     assert "macro_values_" not in code
     assert "macro_values =" not in code
-    assert "MacroStore(" in code
+    assert "job = JobRuntime(" in code
+    assert "macros = job.macros" in code
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
@@ -75,7 +76,7 @@ def test_native_numeric_branch_and_editable_macro_assignment(tmp_path):
     emitted = compile_document(source).emitted
     code = emitted.source
     ast.parse(code)
-    assert "macros['COUNT'] = str(row_count(" in code
+    assert "macros['COUNT'] = str(job.row_count(" in code
     assert "int(macros['COUNT']) > int('0')" in code
     assert "macro_values_" not in code
     main = translate(source)

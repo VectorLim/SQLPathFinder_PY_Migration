@@ -142,7 +142,7 @@ def test_generated_literals_and_invocation_edits_are_independent(tmp_path):
     assert _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'") * 2 + _mail_block() * 2).emitted == result.emitted
 
 
-def test_generated_queries_keep_independent_execution_boundaries(tmp_path):
+def test_generated_queries_keep_independent_execution_boundaries(tmp_path, monkeypatch):
     result = _compile(tmp_path, _sql_block("SELECT 1 AS value") * 2)
     project = tmp_path / "project"
     project.mkdir()
@@ -155,7 +155,7 @@ def test_generated_queries_keep_independent_execution_boundaries(tmp_path):
     calls = []
     def capture(path, **kwargs):
         calls.append(Path(path).read_text())
-    namespace["execute_sql"] = capture
+    monkeypatch.setattr("vg2c.runtime.job.execute_sql", capture)
     first = project / result.emitted.assets[0][0]
     first.write_text("SELECT 2 AS value")
     namespace["run"](workdir=tmp_path / "work")

@@ -9,7 +9,13 @@ from vg2c.runtime.append import smart_append
 from vg2c.runtime.aed import process_candidates
 from vg2c.runtime.controls import csv_chunks
 from vg2c.runtime.files import (
-    copy_file, delete_files, rename_file, row_count, run_program, wait_file, write_file,
+    copy_file,
+    delete_files,
+    rename_file,
+    row_count,
+    run_program,
+    wait_file,
+    write_file,
 )
 from vg2c.runtime.html import render_html
 from vg2c.runtime.macros import MacroStore
