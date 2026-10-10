@@ -113,3 +113,34 @@ def test_large_explicit_header_spec_remains_by_name(tmp_path):
     assert "header=job.table_spec(" in generated.source
     path, text = next((name, value) for name, value in generated.assets if name.endswith(".header.json"))
     assert json.loads(text) == names
+
+
+def test_multi_alias_join_and_dynamic_sql_projection(tmp_path):
+    (tmp_path / "left.csv").write_text("lot,code\n001,ABC\n002,DEF\n")
+    (tmp_path / "right.csv").write_text("lot,quantity\n001,5\n")
+    sql = ("SELECT a.lot, CrossTab->[[a,ignored;:Y]], b.quantity "
+           "FROM [T0] a LEFT JOIN [T1] b ON a.lot = b.lot")
+    frame = SqliteReader().execute(
+        sql, [("left.csv", "T0"), ("right.csv", "T1")], workdir=tmp_path
+    )
+    assert frame.columns.tolist() == ["lot", "code", "quantity"]
+    assert frame.iloc[0].tolist() == ["001", "ABC", "5"]
+    assert frame.iloc[1]["lot"] == "002"
+
+
+def test_empty_crosstab_keeps_ordered_row_schema():
+    frame = pd.DataFrame(columns=["ID", "Category", "Measure"])
+    result = CrosstabUtility().apply(frame, row_keys=["ID"],
+                                    header_key="Category", value_key="Measure")
+    assert result.columns.tolist() == ["ID"]
+    assert result.empty
+
+
+def test_query_sql_get_csv_list_quotes_and_deduplicates(tmp_path):
+    (tmp_path / "items.csv").write_text("lot\n001\nO'Neil\n001\n")
+    sql = tmp_path / "query.sql"
+    sql.write_text("SELECT '001' AS lot WHERE '001' IN "
+                   "SQL_Get_CSV_List('items.csv', 1, 'lot IN')")
+    execute_sql(sql, reader=SqliteReader(), output="matched.csv",
+                workdir=tmp_path)
+    assert (tmp_path / "matched.csv").read_text() == "lot\n001\n"
