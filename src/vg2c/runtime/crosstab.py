@@ -91,8 +91,19 @@ class _CrosstabUtility:
         if rows.empty or not row_keys or not header_key or not value_key:
             return pd.DataFrame(columns=row_keys)
 
-        ci_lookup = {str(c).casefold(): c for c in rows.columns}
-        rename_map = {ci_lookup[k.casefold()]: k for k in (*row_keys, header_key, value_key)}
+        fields = (*row_keys, header_key, value_key)
+        if len({name.casefold() for name in fields}) != len(fields):
+            raise ValueError("Crosstab row, header and value keys must be distinct")
+        ci_lookup = {}
+        for column in rows.columns:
+            key = str(column).casefold()
+            if key in ci_lookup:
+                raise ValueError(f"Ambiguous crosstab source column {column!r}")
+            ci_lookup[key] = column
+        missing = [name for name in fields if name.casefold() not in ci_lookup]
+        if missing:
+            raise ValueError(f"Crosstab is missing columns: {missing}")
+        rename_map = {ci_lookup[key.casefold()]: key for key in fields}
         df = rows.rename(columns=rename_map)
 
         df = df[df[header_key].notna() & (df[header_key].astype(str) != "")]
