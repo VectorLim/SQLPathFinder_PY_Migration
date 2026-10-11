@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import pandas
@@ -44,6 +44,13 @@ class _CsvIO:
     def _read_column(self, path: str, column_ref: int | str) -> list[str]:
         """Read a column from a legacy comma, tab, or pipe-delimited file."""
         rows: list[str] = []
+        # Original VG2 SQL_Get_CSV_List uses Windows-relative .\\file paths.
+        # Interpret only their path separators; do not map Windows drives/UNC.
+        if "\\" in path:
+            windows_path = PureWindowsPath(path)
+            if windows_path.drive or windows_path.root:
+                raise ValueError(f"Windows absolute CSV-list path is unsupported: {path!r}")
+            path = str(Path(*windows_path.parts))
         resolved_path = resolve_path(path, workdir=self.workdir)
 
         with resolved_path.open(newline="", encoding="utf-8", errors="replace") as fh:
