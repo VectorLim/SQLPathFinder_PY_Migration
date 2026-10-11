@@ -44,4 +44,4 @@ def test_valid_multi_statement_sqlite_setup_remains_supported(tmp_path):
     )
     job = JobRuntime(project, tmp_path / "work")
     job.sql("query.sql", reader=SqliteReader(), output="result.csv")
-    assert (tmp_path / "work" / "result.csv").read_text(encoding="utf-8") == "value\\nok\\n".replace("\\n", "\n")
+    assert (tmp_path / "work" / "result.csv").read_text(encoding="utf-8") == "value\nok\n"
