@@ -45,6 +45,7 @@ def scan():
     imports: dict[str, list[tuple[str, str]]] = defaultdict(list)
     dynamic: dict[str, list[str]] = defaultdict(list)
     definitions: list[dict[str, object]] = []
+    registrants: list[dict[str, object]] = []
     for module, tree in trees.items():
         names[module] = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
         attributes[module] = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
@@ -62,6 +63,32 @@ def scan():
                 if name in {"getattr", "setattr", "globals", "import_module", "__import__"}:
                     dynamic[module].append(name)
         for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                bases = {
+                    base.id if isinstance(base, ast.Name) else (
+                        base.attr if isinstance(base, ast.Attribute) else "")
+                    for base in node.bases
+                }
+                if bases & {"UtilitySpec", "EmitterUtility"}:
+                    registry_name = None
+                    handled = []
+                    for member in node.body:
+                        if not isinstance(member, ast.Assign):
+                            continue
+                        keys = [target.id for target in member.targets if isinstance(target, ast.Name)]
+                        if "utility_name" in keys:
+                            try:
+                                registry_name = ast.literal_eval(member.value)
+                            except (ValueError, TypeError):
+                                registry_name = "<dynamic>"
+                        if "handles" in keys and isinstance(member.value, (ast.Tuple, ast.List)):
+                            handled = [
+                                ast.unparse(value) for value in member.value.elts
+                            ]
+                    registrants.append({
+                        "module": module, "class": node.name,
+                        "registry_name": registry_name, "handles": handled,
+                    })
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 definitions.append({"module": module, "symbol": node.name,
                                     "kind": type(node).__name__, "line": node.lineno})
@@ -106,6 +133,7 @@ def scan():
         "core_modules": sum(m == "vg2c" or m.startswith("vg2c.") for m in trees),
         "ui_modules": sum(m == "vg2c_ui" or m.startswith("vg2c_ui.") for m in trees),
         "definitions": definitions,
+        "compiler_utility_registrants": registrants,
         "forbidden_runtime_imports": forbidden,
         "dynamic_modules": {m: sorted(set(x)) for m, x in dynamic.items()},
         "imports": {m: refs for m, refs in imports.items()},
@@ -120,7 +148,10 @@ def main():
         "ui": data["ui_modules"], "definitions": len(records),
         "forbidden_runtime_imports": data["forbidden_runtime_imports"],
         "dynamic_modules": len(data["dynamic_modules"]),
+        "utility_registrants": len(data["compiler_utility_registrants"]),
     }, sort_keys=True))
+    for registrant in data["compiler_utility_registrants"]:
+        print("STAGE2_COMPILER_REGISTRY", json.dumps(registrant, sort_keys=True))
     for module in TARGET_MODULES:
         definitions = [d for d in records if d["module"] == module]
         possible_unused = [
