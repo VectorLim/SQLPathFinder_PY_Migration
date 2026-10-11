@@ -74,7 +74,7 @@ class FileSystemOps(EmitterUtility):
         elif "spfrename" in basename:
             stmt = cls._emit_spf_rename(argv)
         else:
-            return "fs_copy", ["pass  # TODO: unsupported FS copy utility command"]
+            raise ValueError(f"Unsupported filesystem copy utility: {basename}")
         return "fs_copy", [stmt]
 
     @classmethod
@@ -82,7 +82,7 @@ class FileSystemOps(EmitterUtility):
         argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "spfdelete" not in basename:
-            return "fs_delete", ["pass  # TODO: unsupported FS delete utility command"]
+            raise ValueError(f"Unsupported filesystem delete utility: {basename}")
         stmt = cls._emit_spf_delete(argv)
         return "fs_delete", [stmt]
 
