@@ -16,7 +16,7 @@ from vg2c.runtime.csv_io import _CsvIO
 
 @pytest.mark.parametrize(
     ("suffix", "delimiter"),
-    [(".tab", "\t"), (".asc", "|"), (".csv", ",")],
+    [(".tab", "\t"), (".hive-tab", "\t"), (".hive-sequence", "\t"), (".asc", "|"), (".plus", "+"), (".csv", ",")],
 )
 def test_write_and_read_dataframe_respects_file_extension(tmp_path, suffix, delimiter):
     path = tmp_path / f"result{suffix}"
