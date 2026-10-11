@@ -19,7 +19,7 @@ jobs:
       - name: Build a distributable wheel
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build wheel setuptools "pandas==3.0.3"
+          python -m pip install build wheel setuptools "pandas==3.0.3" "keyring==25.7.0"
           python -m build --wheel --no-isolation --outdir "$RUNNER_TEMP/session05-dist"
       - name: Install wheel into clean venv (offline supported runtime path)
         run: |
