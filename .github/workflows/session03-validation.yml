@@ -20,6 +20,8 @@ jobs:
           python -m pip install --no-deps -e .
       - name: Compile sources
         run: python -m compileall -q src
+      - name: Stage 2 static symbol and dependency audit
+        run: python scripts/stage2_symbol_audit.py
       - name: Lint runtime, emitter and utilities
         run: ruff check --select F821,F823 src/vg2c/runtime src/vg2c/emitter src/vg2c/utilities
       - name: Session 03 focused tests
