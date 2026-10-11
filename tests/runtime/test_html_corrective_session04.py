@@ -207,9 +207,10 @@ def test_mixed_case_htm_directive_and_malformed_reference(tmp_path):
     exec(compile(main.read_text(), str(main), "exec"), scope)
     scope["run"](work)
     assert "Alpha</th>" in (work / "out.html").read_text()
-    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R extra"))
+    malformed = tmp_path / "malformed.txt"
+    malformed.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R extra"))
     with pytest.raises(ValueError, match="Malformed HTM:"):
-        translate(source)
+        translate(malformed)
 
 
 def test_explicit_literal_braced_text_uses_legacy_dollar_escape(tmp_path):
