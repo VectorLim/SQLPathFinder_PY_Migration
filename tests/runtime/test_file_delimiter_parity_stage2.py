@@ -61,3 +61,17 @@ def test_tab_chunks_keep_tab_delimiters_between_operations(tmp_path):
         [["id", "label"], ["01", "a,b"], ["02", "a\tb"]],
         [["id", "label"], ["03", "c"]],
     ]
+
+
+
+def test_csv_list_original_windows_relative_path_resolves_under_linux_workdir(tmp_path):
+    """ScriptHost's .\path.tab identifies the preceding step's local file."""
+    folder = tmp_path / "feeds"
+    folder.mkdir()
+    (folder / "upstream.tab").write_text(
+        "lot\tcode\nLOT-A\t1\nLOT-B\t2\n", encoding="utf-8"
+    )
+    io = _CsvIO(workdir=tmp_path)
+    assert io.sql_get_csv_list(r".\feeds\upstream.tab", "lot", "f0.lot In") == (
+        "('LOT-A', 'LOT-B')"
+    )
