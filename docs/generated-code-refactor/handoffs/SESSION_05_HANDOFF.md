@@ -152,3 +152,28 @@ The same six test IDs failed at the unchanged Session 04 parent. Their detailed 
 **Assessment:** The supported native compiler -> generated-project -> installed `vg2c.runtime` offline execution path is ready for core review and controlled testing, with no observed new backend test failure in the cited run. Do **not** present Session 05 as unconditional production-certified or as full ScriptHost parity. No merge to `main` or `html-and-sql-rework` was performed or authorized.
 
 **Final exact commit and CI:** The handoff commit cannot contain its own SHA. The final agent report must verify the remote branch HEAD against its pushed SHA and cite the final exact-commit test and Linux workflow results.
+
+---
+
+## 10. Final direct-runtime import ownership consolidation
+
+**Verified implementation parent:** `f449990e254d45d24eed2464882cd85b7f92cbd8`. **Tested update SHA:** `d84b9244f2824451dfffe831f84d2874204576b5`.
+
+The Session 05 review found a remaining backwards import edge: four runtime modules imported generic path/quote helpers from `vg2c.utilities._runtime_helpers`. That compiler-side module was not used to compile the generated project, but its presence in `sys.modules` contradicted the goal of a compiler-independent runtime.
+
+- Moved the exact `resolve_path` / `strip_quotes` behavior to `src/vg2c/runtime/values.py`. Removed the now-obsolete source-embedding file-location branch; with embedded runtime generation retired, the effective caller fallback is the current working directory. Explicit `workdir`, read-only fallback, and absolute/local-path behavior are tested.
+- `runtime/{append,csv_io,sqlite_reader,sql_text}.py` now directly imports runtime-owned helpers; there is no runtime source import of `vg2c.utilities`, compiler, frontend, emitter, or resolver modules.
+- The existing compiler helper re-exports the same function objects for existing compiler utility/classification callers, rather than retaining a second implementation.
+- Strengthened the `tests/runtime/test_generated_symbols.py` isolated-import guard, and the wheel probe, to reject *all* `vg2c.utilities` imports. Added `tests/runtime/test_runtime_path_ownership_session05.py` to test path/quote semantics and isolated import boundaries.
+- This is a runtime dependency-direction correction only. No generated API, HTML renderer, crosstab algorithm, UI feature, or ScriptHost utility support changed.
+
+**Exact SHA-specific GitHub Actions evidence:**
+
+- [Core validation 38129319995](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38129319995) (Ubuntu Python 3.12): source compilation PASS; scoped F821/F823 Ruff PASS; focused regression suite **172 passed**; runtime+emitter **401 passed**; deterministic join/pivot benchmark PASS; ICMPCS compile/readability PASS.
+- Full repository pytest: **579 passed, six inherited UI/JMP failures**. The complete test suite is **not green**, and the six failures remain visible/unmodified.
+- [Installed-wheel Linux probe 38129320034](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38129320034): **PASS**, including the strengthened no-compiler-utilities import guard, synthetic generated SQL/pivot/CTARRAY/HTML/CSS, asset rereads, alternate workdir/CWD, and missing-file negative path.
+- The existing 137-line emitted ICMPCS source and 8 SQL/2 HTML/1 CSS/0 report-JSON asset count remain unchanged. This cleanup affects only dependency ownership, not emitted business logic.
+
+**Explicit release boundary:** The user's updated instructions permit removing UI-only legacy behavior; they do not require deleting the current `vg2c_ui` application or altering UI tests. The core translator, runtime, metadata and generated-project tests remain the acceptance gates. Full UI acceptance, original proprietary ScriptHost differential tests, internal DataSyncX credentials/services and actual target-container certification remain outside the evidence above.
+
+**Final SHA:** Report the new documentation commit's SHA separately, because a tracked handoff cannot contain its own SHA.
