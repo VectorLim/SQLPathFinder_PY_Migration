@@ -58,48 +58,48 @@ Inspect source and emitter snapshots; run exact-SHA Linux CI and focused/full te
 ## Session 04 implementation results and provenance (2026-10-11)
 
 **Source parser correction:** SPF design rows begin with a schema header such as
-\`Type<delimiter>Key<delimiter>COL1...\`; the first such TYPE/KEY row is *not* the active
+`Type<delimiter>Key<delimiter>COL1...`; the first such TYPE/KEY row is *not* the active
 report type. The actual TYPE/CSS or TYPE/HTML row further down dispatches
-\`HTMLRunTask\`. The initial new emitter incorrectly treated KEY as semantic
-TYPE; regression \`test_type_key_header_precedes_actual_css_report_type\` caught
+`HTMLRunTask`. The initial new emitter incorrectly treated KEY as semantic
+TYPE; regression `test_type_key_header_precedes_actual_css_report_type` caught
 this. The corrected emitter skips TYPE/KEY while selecting active TYPE.
-Provenance: \`SPFSQL3.py:20083-20100\`; representative read-only
-\`ICMPCS.txt:55-66\`.
+Provenance: `SPFSQL3.py:20083-20100`; representative read-only
+`ICMPCS.txt:55-66`.
 
 ### Implemented and tested ownership
 
-* \`emitter/project.py\` stores immediate CSS in
-  \`styles/report_<block>.css\` and emits one
-  \`job.define_css(logical_output_path, asset_path)\` call at its original
+* `emitter/project.py` stores immediate CSS in
+  `styles/report_<block>.css` and emits one
+  `job.define_css(logical_output_path, asset_path)` call at its original
   source point. CSS FORMAT keys are case-insensitive, and
-  \`html_format.build_css\` remains the only stylesheet formatter.
+  `html_format.build_css` remains the only stylesheet formatter.
   Generated CSS source remains editable; only workdir CSS output is written
   on execution.
 * Immediate TYPE HTML emits one user-editable HTML source and performs
-  \`job.html(..., reports=...)\` at that source point.
-* HTML-DEFER captures a per-ID \`CSVReport\` object when executed and
+  `job.html(..., reports=...)` at that source point.
+* HTML-DEFER captures a per-ID `CSVReport` object when executed and
   defers CSV reads until layout execution. Large schema arguments are stored
-  in \`html/report_<block>.report.json\`, reread when the report is defined.
+  in `html/report_<block>.report.json`, reread when the report is defined.
   Keep COLUMN-DATA, COLUMN-HEADERS and COLUMN-ALIGNMENT separate.
-* HTML-LAYOUT uses the single \`render_html\` function and external HTML
+* HTML-LAYOUT uses the single `render_html` function and external HTML
   shell; output CSS may be linked or embedded and rereads the edited source.
   Required missing CSS now fails instead of silently synthesizing an unrelated
   stylesheet. Explicit relative CSS resolves against the workdir's earlier
   HTML-RUN result, then the generated project asset root, then the HTML
   template's sibling path.
-* HTML-DELETE uses \`job.delete_html()\` to remove only consumed reports;
+* HTML-DELETE uses `job.delete_html()` to remove only consumed reports;
   stylesheet selection and unconsumed reports persist. This is a corrected
   ScriptHost-grounded semantic deviation from old vg2c.
 * TYPE HTMLI5/chart/report distribution, unsafe arbitrary interpolation and
   unknown report modes remain unsupported. TYPE KEY is a CSV design-table
   header and **not** an executable report type.
 * Emitted script source offsets and editing metadata follow the preexisting
-  \`StepEmission\`/\`EmittedParameter\` flow; SQL/crosstab implementation was
+  `StepEmission`/`EmittedParameter` flow; SQL/crosstab implementation was
   untouched.
 
 ### Evidence and quantitative readability
 
-CI at \`59fed15c1fd5e44a3fbd45d052c53c924cbaaba6\`
+CI at `59fed15c1fd5e44a3fbd45d052c53c924cbaaba6`
 ([run 38106469080](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38106469080)):
 163 focused passed, 614 full-suite passed, the **same six inherited UI/JMP
 failures**. Compilation, scoped Ruff F821/F823, original Session 03 benchmarks,
@@ -124,7 +124,7 @@ source-engine parity evidence.
 
 ### Remaining source-grounded parity gaps
 
-1. \`Check_Column_Pattern\` supports runtime STARTS WITH, ENDS WITH, CONTAINS
+1. `Check_Column_Pattern` supports runtime STARTS WITH, ENDS WITH, CONTAINS
    and percent-pattern selection against *actual CSV headers*, including
    presentation-header and alignment expansion. The current direct emitter
    still emits a template with a fixed number of HTML header slots; dynamic
@@ -140,7 +140,7 @@ source-engine parity evidence.
 4. HTML-I5, interactive HTMLI/HTMIC, chart/JMP/JSL, distribution, JS and
    SharePoint/Outlook modes have no general stand-in here and must not be
    described as supported or differential-tested.
-5. The old \`utilities/html_report.py\` renderer still exists for historic
+5. The old `utilities/html_report.py` renderer still exists for historic
    and UI-preview callers. It must not become a second authority for
    generated project rendering. Session 05 may remove/bridge only after
    verifying all callers and inherited UI tests.
