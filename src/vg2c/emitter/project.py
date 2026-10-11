@@ -457,11 +457,11 @@ def emit_project(dispatched):
             if layout_references.get(report_id, 0) > 1:
                 fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
                 assets[fragment] = _table(report_id, options) + "\n"
-                definition = (f"job.report({fragment!r}, input_file={input_file!r}, "
+                report_ctor = (f"job.report({fragment!r}, input_file={input_file!r}, "
                               f"output_file={output_file!r})")
             else:
-                definition = f"csv_report({input_file!r}, output_file={output_file!r})"
-            call = f"job.reports[{report_id!r}] = {definition}"
+                report_ctor = f"csv_report({input_file!r}, output_file={output_file!r})"
+            call = f"job.reports[{report_id!r}] = {report_ctor}"
             _inline(writer, block, tracked([call]), steps)
         elif report_type == "HTML-LAYOUT":
             directives = {}

@@ -157,7 +157,7 @@ class _ReportTables(HTMLParser):
         self.pending_th = None
         self.tables = []
 
-    def offset(self):
+    def absolute_offset(self):
         line, column = self.getpos()
         return self.starts[line - 1] + column
 
@@ -178,12 +178,12 @@ class _ReportTables(HTMLParser):
             field = data.get("data-field")
             if not field:
                 raise ValueError("Each report <th> requires data-field")
-            self.pending_th = {"start": self.offset(), "attrs": data,
+            self.pending_th = {"start": self.absolute_offset(), "attrs": data,
                                "depth": len(self.stack) + 1}
         elif self.active is not None and tag == "tbody" and len(self.stack) >= self.active["depth"]:
             if self.active["tbody"] is not None:
                 raise ValueError("Report table must have exactly one tbody")
-            self.active["tbody"] = [self.offset() + len(self.get_starttag_text()), None]
+            self.active["tbody"] = [self.absolute_offset() + len(self.get_starttag_text()), None]
         if tag not in self._VOID:
             self.stack.append(tag)
 
@@ -192,7 +192,7 @@ class _ReportTables(HTMLParser):
             if self.active is not None:
                 raise ValueError(f"Malformed declarative report HTML near </{tag}>")
             return
-        position = self.offset()
+        position = self.absolute_offset()
         if tag == "th" and self.pending_th and len(self.stack) == self.pending_th["depth"]:
             column = self.pending_th
             column["end"] = self.source.find(">", position) + 1
