@@ -188,8 +188,10 @@ class _ReportTables(HTMLParser):
                 raise ValueError("Nested declarative report tables are unsupported")
             if not data["data-report"]:
                 raise ValueError("data-report requires a nonempty report ID")
+            start = self.absolute_offset()
             self.active = {"name": data["data-report"], "columns": [],
-                           "tbody": None, "depth": len(self.stack) + 1}
+                           "tbody": None, "depth": len(self.stack) + 1,
+                           "start": start, "open_end": start + len(self.get_starttag_text())}
         elif self.active is not None and tag == "th" and "thead" in self.stack:
             if self.pending_th is not None:
                 raise ValueError("Nested report column declarations are invalid")
@@ -198,8 +200,10 @@ class _ReportTables(HTMLParser):
             field = data.get("data-field")
             if not field:
                 raise ValueError("Each report <th> requires data-field")
-            self.pending_th = {"start": self.absolute_offset(), "attrs": data,
-                               "depth": len(self.stack) + 1}
+            start = self.absolute_offset()
+            self.pending_th = {"start": start, "attrs": data,
+                               "depth": len(self.stack) + 1,
+                               "open_end": start + len(self.get_starttag_text())}
         elif self.active is not None and tag == "tbody" and len(self.stack) >= self.active["depth"]:
             if self.active["tbody"] is not None:
                 raise ValueError("Report table must have exactly one tbody")
@@ -244,7 +248,7 @@ def _csv_headers(report, *, workdir, values, macros):
     return names
 
 
-def _columns_from_html(table, headers, *, values, macros):
+def _columns_from_html(table, headers, *, values, macros, source):
     fields = {name.casefold(): name for name in headers}
     selected = []
     alignments = []
@@ -282,12 +286,12 @@ def _columns_from_html(table, headers, *, values, macros):
             new_headers = []
             for actual in matches:
                 extras = "".join(
-                    f' {key}="{escape(str(value or ""), quote=True)}"'
+                    f' {key}="{_literal_dollars(escape(str(value or ""), quote=True), ())}"'
                     for key, value in attrs.items() if key not in {"data-field", "data-pattern"}
                 )
                 label = actual.capitalize().replace("_", " ")
                 new_headers.append(
-                    f'<th data-field="{escape(actual, quote=True).replace("$", "&#36;")}"{extras}>{escape(label).replace("$", "$$")}</th>'
+                    f'<th data-field="{escape(actual, quote=True).replace("$", "$$")}"{extras}>{escape(label).replace("$", "$$")}</th>'
                 )
             edits.append((column["start"], column["end"], "".join(new_headers)))
             selected.extend(matches)
@@ -301,6 +305,10 @@ def _columns_from_html(table, headers, *, values, macros):
                 )
             selected.append(actual)
             alignments.append(align)
+            # data-field and other authored declaration attributes are CSV metadata,
+            # not implicit bare Template slots. Keep original tag formatting.
+            start, end = column["start"], column["open_end"]
+            edits.append((start, end, _literal_dollars(source[start:end], ())))
     return selected, alignments, edits
 
 
@@ -320,9 +328,12 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         report = reports[name]
         headers = _csv_headers(report, workdir=workdir, values=values, macros=macros)
         columns, alignments, head_edits = _columns_from_html(
-            table, headers, values=values, macros=macros
+            table, headers, values=values, macros=macros, source=source
         )
         edits.extend(head_edits)
+        # Protect literal dollars in the table's own declaration as well.
+        start, end = table["start"], table["open_end"]
+        edits.append((start, end, _literal_dollars(source[start:end], ())))
         lines = _rows(replace(report, columns=tuple(columns),
                               alignment=tuple(alignments)),
                       workdir=workdir, values=values, macros=macros)
