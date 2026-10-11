@@ -411,8 +411,11 @@ def emit_project(dispatched):
                 _inline(writer, block, tracked([
                     f"job.html({name!r}, output={output!r}, reports={{{report_id!r}: {report}}})"
                 ]), steps)
+            elif kind == "KEY":
+                # SPFSQL3.py:20095-20109 dispatches only CSS/HTML/HTMLI5.
+                _inline(writer, block, tracked(["pass"]), steps)
             else:
-                raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS or HTML")
+                raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS, HTML or KEY")
         elif report_type == "HTML-DEFER":
             runtime_imports.add("csv_report")
             options = _report_options(block)

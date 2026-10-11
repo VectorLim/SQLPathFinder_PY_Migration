@@ -90,3 +90,61 @@ def test_explicit_missing_css_and_csv_raise_without_output(tmp_path):
     with pytest.raises(FileNotFoundError, match="Report input CSV"):
         job.html("shell.html", output="out.html")
     assert not (tmp_path / "work/out.html").exists()
+
+
+def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatch):
+    """Source-derived integration: editable SQL -> CTARRAY -> HTML, no retranslating."""
+    first = (
+        "SELECT 'L1' AS lot, 'A' AS metric, '1' AS reading "
+        "UNION ALL SELECT 'L1','B','2'"
+    )
+    pivot = "SELECT lot, metric, reading FROM [long]"
+    downstream = "SELECT a0.LOT, CrossTab->[[a0,42;:A]] FROM [wide] a0"
+    css_spec = "\n".join([
+        D.join(["TYPE", "CSS"]), D.join(["CSS", "report.css"]),
+        D.join(["FORMAT", "Column-Headers", "color:blue"]),
+    ])
+    report_spec = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "final.csv"]),
+        D.join(["COLUMN-DATA", "", "LOT", "A", "B"]),
+        D.join(["COLUMN-HEADERS", "", "Lot", "Alpha", "Beta"]),
+        D.join(["COLUMN-ALIGNMENT", "", "middle-left", "middle-center", "middle-right"]),
+    ])
+    source = tmp_path / "pipeline.txt"
+    source.write_text(
+        block("/ENGINE=SQLite\n/CSV=long.csv", first)
+        + block("/ENGINE=SQLite\n/TABLE=long.csv\n/CSV=wide.csv\n/CTROW=lot\n/CTHEADER=metric\n/CTVAL=reading\n/CTARRAY=a0,42", pivot)
+        + block("/ENGINE=SQLite\n/TABLE=wide.csv\n/CSV=final.csv", downstream)
+        + block("/REPORT=HTML-RUN", css_spec)
+        + block("/REPORT=HTML-DEFER\n/ID=R", report_spec)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:linked.html\n:CSS:report.css\n:CSSEMBED:N\n<h1>Original</h1>\nHTM:R")
+        + block("/REPORT=HTML-LAYOUT", ":FILE:embedded.html\n:CSS:report.css\n:CSSEMBED:Y\n<h1>Original</h1>\nHTM:R")
+    )
+    main = translate(source)
+    sql_files = sorted(main.parent.glob("sql/*.sql"))
+    assert len(sql_files) == 3
+    assert len(list(main.parent.glob("html/*.html"))) == 2
+    assert len(list(main.parent.glob("styles/*.css"))) == 1
+    monkeypatch.chdir(tmp_path)
+    run = load_job(main)
+    work = tmp_path / "work"
+    run(work)
+    assert (work / "wide.csv").read_text().splitlines()[0] == "LOT,A,B"
+    assert (work / "42_A0.ini").read_text() == "A\tB"
+    assert (work / "final.csv").read_text().splitlines()[0] == "LOT,A,B"
+    assert "Alpha" in (work / "linked.html").read_text()
+    assert 'href="report.css"' in (work / "linked.html").read_text()
+    assert "color:blue" in (work / "embedded.html").read_text()
+    assert 'href="report.css"' not in (work / "embedded.html").read_text()
+    # Reread independently edited generated source assets.
+    long_query = next(p for p in sql_files if "'L1'" in p.read_text())
+    long_query.write_text(long_query.read_text().replace("'1' AS reading", "'9' AS reading"))
+    shell = sorted(main.parent.glob("html/*.html"))[0]
+    shell.write_text(shell.read_text().replace("Original", "Edited"))
+    css_asset = next(main.parent.glob("styles/*.css"))
+    css_asset.write_text("th {color:purple;}\n")
+    run(work)
+    assert "9" in (work / "final.csv").read_text()
+    assert "Edited" in (work / "linked.html").read_text()
+    assert "color:purple" in (work / "embedded.html").read_text()
+    assert "color:purple" in (work / "report.css").read_text()
