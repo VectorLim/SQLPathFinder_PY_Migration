@@ -33,6 +33,37 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: python -m pytest -q tests/runtime tests/emitter
+      - name: Stage 2 source-preserved multistep translation walkthrough
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python - <<'PY'
+          import runpy
+          import tempfile
+          from pathlib import Path
+          from vg2c import translate
+          helpers = runpy.run_path("tests/runtime/test_fixture_multistep_hamizah_stage2.py")
+          original = Path("tests/fixtures/hamizah.txt").read_text(encoding="utf-8")
+          text = "<---- New Query ---->".join(original.split("<---- New Query ---->")[2:4])
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              main = helpers["_project"](root)
+              work = root / "work"
+              work.mkdir()
+              helpers["_seed"](work)
+              helpers["_run"](main, work)
+              for name, value in (
+                  ("SOURCE_PRESERVED_VG2", text),
+                  ("TRANSLATED_MAIN_PY", main.read_text(encoding="utf-8")),
+                  ("SYNTHETIC_INPUT_A0", (work / "yeuchuan_a0_5547.tab").read_text()),
+                  ("SYNTHETIC_INPUT_A1", (work / "yeuchuan_a1_5547.tab").read_text()),
+                  ("FIRST_OUTPUT_CSV", (work / "input.csv").read_text()),
+                  ("DOWNSTREAM_OUTPUT_TAB", (work / "yeuchuan_SQL_5547.tab").read_text()),
+              ):
+                  print(f"\n### {name} ###\n{value}")
+              for asset in sorted((main.parent / "sql").glob("*.sql")):
+                  print(f"\n### GENERATED_SQL_ASSET {asset.name} ###\n{asset.read_text()}")
+          PY
       - name: Representative table call and synthetic join benchmark
         env:
           PYTHONPATH: src:.
