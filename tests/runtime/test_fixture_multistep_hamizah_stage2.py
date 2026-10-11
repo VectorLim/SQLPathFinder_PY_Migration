@@ -120,3 +120,76 @@ def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
         ["entity", "prodgroup3"],
         ["PATCHED", "GROUP-A"],
     ]
+
+
+def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(tmp_path, monkeypatch):
+    """Preserve all four VG2 bodies; only the external MARS results are simulated.
+
+    A fake reader validates local cross-block SQL_Get_CSV_List expansion, not
+    Oracle SQL execution or original ScriptHost engine parity.
+    """
+    import sys
+    import types
+
+    import pandas as pd
+
+    blocks = FIXTURE.read_text(encoding="utf-8").split(SEPARATOR)
+    assert len(blocks) >= 4
+    assert "SQL_Get_CSV_List" in blocks[1]
+    assert all("/ENGINE=SQLite" in block for block in blocks[2:4])
+    source = tmp_path / "original_four_blocks.txt"
+    source.write_text(SEPARATOR.join(blocks[:4]), encoding="utf-8")
+
+    calls = []
+
+    class OfflineReader:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def read(self, *, site, query):
+            calls.append((site, query))
+            if len(calls) == 1:
+                return pd.DataFrame({
+                    "test_lot": ["TEST-1", "TEST-2"],
+                    "from_to": ["F", "F"],
+                    "tcb_lot": ["TCB-1", "TCB-2"],
+                })
+            if len(calls) == 2:
+                return pd.DataFrame({
+                    "lot_1": ["TCB-1", "OTHER"],
+                    "entity": ["ENTITY-A", "ENTITY-X"],
+                    "prodgroup3": ["GROUP-A", "GROUP-X"],
+                })
+            raise AssertionError("Unexpected external reader invocation")
+
+    fake_datasyncx = types.ModuleType("datasyncx")
+    fake_datasyncx.OracleReader = OfflineReader
+    monkeypatch.setitem(sys.modules, "datasyncx", fake_datasyncx)
+
+    main = translate(source, out_dir=tmp_path / "generated")
+    workdir = tmp_path / "work-all-four"
+    workdir.mkdir()
+    _run(main, workdir)
+
+    assert len(calls) == 2
+    assert [site for site, _ in calls] == ["KM", "KM"]
+    assert "SQL_Get_CSV_List" not in calls[1][1]
+    assert "TCB-1" in calls[1][1] and "TCB-2" in calls[1][1]
+    assert _read(workdir / "yeuchuan_a0_5547.tab", "\t") == [
+        ["test_lot", "from_to", "tcb_lot"],
+        ["TEST-1", "F", "TCB-1"],
+        ["TEST-2", "F", "TCB-2"],
+    ]
+    assert _read(workdir / "yeuchuan_a1_5547.tab", "\t") == [
+        ["lot_1", "entity", "prodgroup3"],
+        ["TCB-1", "ENTITY-A", "GROUP-A"],
+        ["OTHER", "ENTITY-X", "GROUP-X"],
+    ]
+    assert _read(workdir / "input.csv", ",") == [
+        ["test_lot", "tcb_lot", "entity", "prodgroup3"],
+        ["TEST-1", "TCB-1", "ENTITY-A", "GROUP-A"],
+    ]
+    assert _read(workdir / "yeuchuan_SQL_5547.tab", "\t") == [
+        ["entity", "prodgroup3"],
+        ["ENTITY-A", "GROUP-A"],
+    ]
