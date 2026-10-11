@@ -290,3 +290,21 @@ def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
     assert "¥ 5 &amp; &lt;other&gt;" in result
     job.html("legacy.html", output="old.html", css_file="style.css", embed_css=True)
     assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text()
+
+
+def test_csv_data_field_with_dollar_is_not_substituted_by_colliding_value(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="A$B">Exact</th>'
+        '</tr></thead><tbody></tbody></table>')
+    (work / "data.csv").write_text("A$B\ncorrect\n")
+    job = JobRuntime(root, work, values={"B": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert 'data-field="A$B"' in result
+    assert 'data-field="Achanged"' not in result
+    assert "correct</td>" in result
