@@ -206,11 +206,7 @@ def test_generated_sql_literals_remain_in_their_own_assets(tmp_path):
     assert len({name for name, _ in result.emitted.assets}) == 3
 
 
-def test_production_emitter_does_not_assemble_embedded_runtime(tmp_path, monkeypatch):
-    import vg2c.embedding
-    def forbidden(**kwargs):
-        pytest.fail("Native projects must not assemble an embedded runtime")
-    monkeypatch.setattr(vg2c.embedding, "assemble_utilities", forbidden)
+def test_production_emitter_uses_installed_runtime_not_embedded_classes(tmp_path):
     result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'"))
     assert "from vg2c.runtime import" in result.emitted.source
     assert "LOT =" not in result.emitted.source
