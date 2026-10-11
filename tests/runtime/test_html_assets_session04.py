@@ -184,3 +184,61 @@ def test_long_report_schema_externalizes_and_rereads_user_edits(tmp_path):
     definitions[0].write_text(json.dumps(config))
     run(work)
     assert "Second Label" in (work / "out.html").read_text()
+
+
+def test_relocated_project_relative_css_and_changed_cwd(tmp_path, monkeypatch):
+    """CSS paths beginning at the project root remain editable after relocation."""
+    import shutil
+    assets = tmp_path / "assets"
+    (assets / "html").mkdir(parents=True)
+    (assets / "styles").mkdir()
+    (assets / "html/report.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><i>Unchanged</i></body></html>')
+    (assets / "styles/custom.css").write_text("i {color:green;}\n")
+    moved = tmp_path / "moved"
+    shutil.move(assets, moved)
+    work = tmp_path / "work"
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    monkeypatch.chdir(unrelated)
+    job = JobRuntime(moved, work)
+    job.html("html/report.html", output="linked.html",
+             css_file="styles/custom.css", embed_css=False)
+    assert 'href="custom.css"' in (work / "linked.html").read_text()
+    assert (work / "custom.css").read_text() == "i {color:green;}\n"
+    (moved / "styles/custom.css").write_text("i {color:purple;}\n")
+    job.html("html/report.html", output="embedded.html",
+             css_file="styles/custom.css", embed_css=True)
+    assert "i {color:purple;}" in (work / "embedded.html").read_text()
+    assert '<link ' not in (work / "embedded.html").read_text()
+    (moved / "styles/custom.css").unlink()
+    with pytest.raises(FileNotFoundError, match="Required HTML stylesheet"):
+        job.html("html/report.html", output="failure.html",
+                 css_file="styles/custom.css")
+    assert not (work / "failure.html").exists()
+
+
+def test_native_conditional_and_loop_css_state_is_per_job(tmp_path):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / "a.css").write_text("p {color:red;}")
+    (assets / "b.css").write_text("p {color:blue;}")
+    (assets / "shell.html").write_text(
+        "<html><head>${VG2C_CSS}</head><body><p>Body</p></body></html>"
+    )
+    root = tmp_path / "output"
+    root.mkdir()
+    for selected in [False, True]:
+        job = JobRuntime(assets, root)
+        if selected:
+            job.define_css("active.css", "b.css")
+        else:
+            job.define_css("active.css", "a.css")
+        for iteration in range(2):
+            job.html("shell.html", output=f"{selected}_{iteration}.html",
+                     embed_css=True)
+        required = "color:blue" if selected else "color:red"
+        for iteration in range(2):
+            assert required in (root / f"{selected}_{iteration}.html").read_text()
+    assert (assets / "a.css").read_text() == "p {color:red;}"
+    assert (assets / "b.css").read_text() == "p {color:blue;}"

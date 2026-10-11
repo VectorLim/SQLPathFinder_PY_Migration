@@ -20,8 +20,8 @@ jobs:
           python -m pip install --no-deps -e .
       - name: Compile sources
         run: python -m compileall -q src
-      - name: Lint changed runtime
-        run: ruff check --select F821,F823 src/vg2c/runtime/csv_io.py src/vg2c/runtime/crosstab.py
+      - name: Lint runtime, emitter and utilities
+        run: ruff check --select F821,F823 src/vg2c/runtime src/vg2c/emitter src/vg2c/utilities
       - name: Session 03 focused tests
         env:
           PYTHONPATH: src:.

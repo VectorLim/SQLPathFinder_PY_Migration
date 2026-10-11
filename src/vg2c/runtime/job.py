@@ -141,10 +141,16 @@ class JobRuntime:
         slots = self.values if values is None else {**self.values, **values}
         selected = self.css_file if css_file is None else css_file
         if css_file is not None and not Path(str(css_file)).is_absolute():
-            candidate = job_path(substitute(str(css_file), values=slots, macros=self.macros),
-                                 self.workdir)
+            # Prefer an executed HTML-RUN output, then a project-relative
+            # editable asset; render_html still supports template siblings.
+            resolved = substitute(str(css_file), values=slots, macros=self.macros)
+            candidate = job_path(resolved, self.workdir)
             if candidate.is_file():
                 selected = str(candidate)
+            else:
+                asset = self.asset_path(resolved)
+                if asset.is_file():
+                    selected = str(asset)
         return render_html(self.asset_path(path), output=output,
                            workdir=self.workdir, reports=self.reports if reports is None else reports,
                            values=slots, macros=self.macros, styles=self.styles,
