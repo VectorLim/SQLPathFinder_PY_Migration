@@ -102,9 +102,10 @@ def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
 
     sql_assets = sorted((main.parent / "sql").glob("*.sql"))
     assert len(sql_assets) == 2
-    downstream = [asset for asset in sql_assets if "FROM \n[input] a0" in asset.read_text(encoding="utf-8")]
-    if not downstream:
-        downstream = [asset for asset in sql_assets if "[input] a0" in asset.read_text(encoding="utf-8")]
+    downstream = [
+        asset for asset in sql_assets
+        if "[input] a0" in asset.read_text(encoding="utf-8")
+    ]
     assert len(downstream) == 1
     source = downstream[0].read_text(encoding="utf-8")
     original = "a0.[entity] AS [entity]"
