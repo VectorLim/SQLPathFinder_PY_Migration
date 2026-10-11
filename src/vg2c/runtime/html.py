@@ -122,18 +122,6 @@ class _Slots(HTMLParser):
 
 
 def _validate_slots(source):
-    # Metadata in marked tables is literal, even if it contains a reserved
-    # legacy slot name. Use the existing table parser to shield only its
-    # declaration tags before applying the normal structural slot checks.
-    if "data-report" in source:
-        parser = _ReportTables(source)
-        parser.feed(source)
-        parser.close()
-        spans = [(table["start"], table["open_end"]) for table in parser.tables]
-        spans += [(column["start"], column["open_end"])
-                  for table in parser.tables for column in table["columns"]]
-        for start, end in sorted(spans, reverse=True):
-            source = source[:start] + _literal_dollars(source[start:end], ()) + source[end:]
     _identifiers(source)
     if re.search(r"<\s*/?\s*\$|\$\{[^}]+\}\s*=", source):
         raise ValueError("Dynamic tag or attribute names are unsupported")
@@ -244,6 +232,21 @@ class _ReportTables(HTMLParser):
             self.tables.append(self.active)
             self.active = None
         self.stack.pop()
+
+
+def _literal_declaration_attributes(source):
+    """Protect authored report identifiers for pre-render slot validation."""
+    if "data-report" not in source:
+        return source
+    parser = _ReportTables(source)
+    parser.feed(source)
+    parser.close()
+    spans = [(table["start"], table["open_end"]) for table in parser.tables]
+    spans += [(column["start"], column["open_end"])
+              for table in parser.tables for column in table["columns"]]
+    for start, end in sorted(spans, reverse=True):
+        source = source[:start] + _literal_dollars(source[start:end], ()) + source[end:]
+    return source
 
 
 def _csv_headers(report, *, workdir, values, macros):
@@ -418,9 +421,9 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
                     {f"{name}_HEADER_{index + 1}" for name, report in reports.items()
                      for index in range(len(report.headers))} |
                     {name for name in (values or {}) if re.fullmatch(r"VALUE_[1-9][0-9]*", name)})
-    _validate_slots(_literal_dollars(source, legacy_names))
+    _validate_slots(_literal_dollars(_literal_declaration_attributes(source), legacy_names))
     source = _include_report_fragments(source, reports)
-    _validate_slots(_literal_dollars(source, legacy_names))
+    _validate_slots(_literal_dollars(_literal_declaration_attributes(source), legacy_names))
     # Parse user-editable data-field/data-pattern attributes before escaping
     # template dollars, so CSV fields such as A$B retain their exact identity.
     source, declarative_used, generated_rows = _render_report_tables(
