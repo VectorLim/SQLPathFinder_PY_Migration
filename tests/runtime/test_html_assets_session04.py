@@ -143,7 +143,11 @@ def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatc
     shell.write_text(shell.read_text().replace("Original", "Edited"))
     css_asset = next(main.parent.glob("styles/*.css"))
     css_asset.write_text("th {color:purple;}\n")
+    fragment = next(main.parent.glob("html/reports/*.table.html"))
+    fragment.write_text(fragment.read_text().replace(">Beta</th>", ">Updated Beta</th>"))
     run(work)
+    assert "Updated Beta" in (work / "linked.html").read_text()
+    assert "Updated Beta" in (work / "embedded.html").read_text()
     assert "9" in (work / "final.csv").read_text()
     assert "Edited" in (work / "linked.html").read_text()
     assert "color:purple" in (work / "embedded.html").read_text()
@@ -355,3 +359,81 @@ def test_html_report_missing_field_empty_csv_and_unsafe_text(tmp_path):
     (work / "data.csv").write_text("")
     with pytest.raises(ValueError, match="no header row"):
         job.html("report.html", output="failure.html")
+
+
+def test_redefined_report_id_resolves_current_source_html_fragment(tmp_path):
+    first = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "rows.csv"]),
+        D.join(["COLUMN-DATA", "", "A"]), D.join(["COLUMN-HEADERS", "", "Alpha"]),
+    ])
+    second = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "rows.csv"]),
+        D.join(["COLUMN-DATA", "", "B"]), D.join(["COLUMN-HEADERS", "", "Beta"]),
+    ])
+    source = tmp_path / "redefined.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", first)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:first.html\nHTM:R")
+        + block("/REPORT=HTML-DEFER\n/ID=R", second)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:second.html\nHTM:R"))
+    main = translate(source)
+    fragments = sorted(main.parent.glob("html/reports/*.table.html"))
+    assert len(fragments) == 2
+    assert "job.report(" in main.read_text()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "rows.csv").write_text("A,B\n1,2\n")
+    run = load_job(main)
+    run(work)
+    a = (work / "first.html").read_text()
+    b = (work / "second.html").read_text()
+    assert "Alpha" in a and "1</td>" in a and "Beta" not in a
+    assert "Beta" in b and "2</td>" in b and "Alpha" not in b
+    fragments[0].write_text(fragments[0].read_text().replace(">Alpha</th>", ">Edited</th>"))
+    run(work)
+    assert "Edited" in (work / "first.html").read_text()
+    assert "Edited" not in (work / "second.html").read_text()
+
+
+@pytest.mark.parametrize("mode,pattern,expected", [
+    ("ENDS WITH:", "_MAX", "SITE_MAX"),
+    ("CONTAINS:", "OLT", "VOLTAGE"),
+    ("STARTS/ENDS WITH (%):", "V%GE", "VOLTAGE"),
+])
+def test_script_host_pattern_families_from_live_csv(tmp_path, mode, pattern, expected):
+    root = tmp_path / "assets"
+    root.mkdir()
+    (root / "report.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="' + mode +
+        '" data-pattern="' + pattern + '" data-align="right">Matching</th>'
+        '</tr></thead><tbody></tbody></table>')
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("SITE_MAX,VOLTAGE,OTHER\n1,2,3\n")
+    job = JobRuntime(root, work)
+    job.reports["R"] = csv_report("data.csv")
+    job.html("report.html", output="result.html")
+    html = (work / "result.html").read_text()
+    assert 'data-field="' + expected + '"' in html
+    assert html.count("<th ") == html.count("<td ") == 1
+
+
+def test_malformed_report_declaration_and_duplicate_csv_headers(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    (root / "report.html").write_text(
+        '<table data-report="R"><thead><tr><th>No data-field</th>'
+        '</tr></thead><tbody></tbody></table>')
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A\nx\n")
+    job = JobRuntime(root, work)
+    job.reports["R"] = csv_report("data.csv")
+    with pytest.raises(ValueError, match="data-field"):
+        job.html("report.html", output="out.html")
+    (root / "report.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="A">A</th>'
+        '</tr></thead><tbody></tbody></table>')
+    (work / "data.csv").write_text("A,a\nx,y\n")
+    with pytest.raises(ValueError, match="duplicate case-insensitive"):
+        job.html("report.html", output="out.html")
+    assert not (work / "out.html").exists()
