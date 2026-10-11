@@ -85,7 +85,7 @@ class _Slots(HTMLParser):
         for slot in _identifiers(data):
             if any(tag in {"script", "style"} for tag in self.stack):
                 raise ValueError(f"Unsupported dynamic {self.stack[-1]} content")
-            if slot.endswith("_ROWS") and (not self.stack or self.stack[-1] != "tbody"):
+            if (slot.endswith("_ROWS") or slot.startswith("VG2C_DYNAMIC_ROWS_")) and (not self.stack or self.stack[-1] != "tbody"):
                 raise ValueError(f"Rows slot {slot} must be direct tbody content")
             if slot == "VG2C_CSS" and (not self.stack or self.stack[-1] != "head"):
                 raise ValueError("CSS slot must be direct head content")
@@ -262,7 +262,7 @@ def _columns_from_html(table, headers, *, values, macros):
                 )
                 label = actual.capitalize().replace("_", " ")
                 new_headers.append(
-                    f'<th data-field="{escape(actual, quote=True)}"{extras}>{escape(label)}</th>'
+                    f'<th data-field="{escape(actual, quote=True)}"{extras}>{escape(label).replace("$", "$")}</th>'
                 )
             edits.append((column["start"], column["end"], "".join(new_headers)))
             selected.extend(matches)
@@ -287,6 +287,7 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         raise ValueError("Unclosed declarative report table")
     edits = []
     consumed = set()
+    generated_rows = {}
     for table in parser.tables:
         name = table["name"]
         if name not in reports:
@@ -300,11 +301,15 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         lines = _rows(replace(report, columns=tuple(columns),
                               alignment=tuple(alignments)),
                       workdir=workdir, values=values, macros=macros)
-        edits.append((*table["tbody"], lines))
+        slot = f"VG2C_DYNAMIC_ROWS_{len(generated_rows) + 1}"
+        while "${" + slot + "}" in source:
+            slot += "_NEXT"
+        generated_rows[slot] = lines
+        edits.append((*table["tbody"], "${" + slot + "}"))
         consumed.add(name)
     for start, end, content in sorted(edits, reverse=True):
         source = source[:start] + content + source[end:]
-    return source, consumed
+    return source, consumed, generated_rows
 
 
 def _include_report_fragments(source, reports):
@@ -344,14 +349,15 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     reports = reports or {}
     source = _include_report_fragments(source, reports)
     _validate_slots(source)
-    source, declarative_used = _render_report_tables(
+    source, declarative_used, generated_rows = _render_report_tables(
         source, reports, workdir=workdir, values=values, macros=macros
     )
+    _validate_slots(source)
     slots = _identifiers(source)
-    reserved = {f"{name}_ROWS" for name in reports} | {slot for slot in slots if slot.endswith("_ROWS")} | {"VG2C_CSS"}
+    reserved = {f"{name}_ROWS" for name in reports} | {slot for slot in slots if slot.endswith("_ROWS")} | {"VG2C_CSS"} | set(generated_rows)
     if reserved.intersection(values or {}):
         raise ValueError("Caller values collide with renderer-owned HTML slots")
-    replacements = {}
+    replacements = dict(generated_rows)
     mapping = dict(values or {})
     for name, report in reports.items():
         for index, header in enumerate(report.headers):
