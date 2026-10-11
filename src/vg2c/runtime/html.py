@@ -182,6 +182,8 @@ class _ReportTables(HTMLParser):
     def handle_starttag(self, tag, attrs):
         data = dict(attrs)
         if tag == "table" and "data-report" in data:
+            if len(data) != len(attrs):
+                raise ValueError("Duplicate declarative report table attributes")
             if self.active is not None:
                 raise ValueError("Nested declarative report tables are unsupported")
             if not data["data-report"]:

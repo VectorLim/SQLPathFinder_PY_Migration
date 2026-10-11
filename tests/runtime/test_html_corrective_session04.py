@@ -217,3 +217,12 @@ def test_explicit_literal_braced_text_uses_legacy_dollar_escape(tmp_path):
         tmp_path, "<html><head></head><body>" + "$" + "$" + "{NOT_A_SLOT}</body></html>")
     runtime.html("page.html", output="out.html")
     assert "$" + "{NOT_A_SLOT}" in (work / "out.html").read_text()
+
+
+def test_duplicate_data_report_attribute_is_not_silently_ambiguous(tmp_path):
+    table = ('<table data-report="R" data-report="S"><thead><tr>'
+             '<th data-field="A">Alpha</th></tr></thead><tbody></tbody></table>')
+    runtime, page, work = job(tmp_path, table)
+    with pytest.raises(ValueError, match="Duplicate declarative report table attributes"):
+        runtime.html("page.html", output="bad.html")
+    assert not (work / "bad.html").exists()
