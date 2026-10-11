@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas
 
-from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.runtime.values import resolve_path
 
 
 class _CsvIO:

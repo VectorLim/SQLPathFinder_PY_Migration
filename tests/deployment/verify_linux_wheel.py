@@ -107,7 +107,7 @@ def main(python: Path, wheel: Path) -> None:
             "p=pathlib.Path(runtime.__file__).resolve();"
             "assert 'site-packages' in str(p), p;"
             "assert not any(name.startswith(('vg2c.compilation','vg2c.emitter',"
-            "'vg2c.frontend','vg2c.resolver','vg2c.utilities._base'))"
+            "'vg2c.frontend','vg2c.resolver','vg2c.utilities'))"
             " for name in sys.modules), list(sys.modules);"
             "print('INSTALLED_RUNTIME_PATH',p)"
         )

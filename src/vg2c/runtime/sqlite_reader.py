@@ -9,7 +9,7 @@ import sqlite3
 
 import pandas as pd
 
-from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.runtime.values import resolve_path
 from vg2c.runtime.crosstab import _CrosstabUtility
 
 

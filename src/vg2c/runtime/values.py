@@ -12,6 +12,37 @@ from collections.abc import Mapping
 _TOKENS = re.compile(r"<<<([^>]+)>>>")
 
 
+def strip_quotes(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def resolve_path(name: str | Path, *, for_write: bool = False, workdir: str | Path | None = None) -> Path:
+    """Resolve runtime paths without loading compiler utilities."""
+    path = Path(name)
+    if workdir is not None:
+        return path if path.is_absolute() else Path(workdir).resolve() / path
+    base_dir = Path.cwd()
+
+    if path.is_absolute():
+        if for_write or path.exists():
+            return path
+        local_fallback = Path(path.name)
+        if local_fallback.exists():
+            return local_fallback
+        return path
+
+    base_path = base_dir / path
+    if for_write:
+        return base_path
+
+    if path.exists():
+        return path
+    return base_path
+
+
 def snapshot_values(workdir, *, values=None, environ=None) -> dict[str, str]:
     # Adapted from SPFLib/SPFGlobals.py:453-502 and utils.py:1606-1643; fresh per call.
     now = datetime.now()

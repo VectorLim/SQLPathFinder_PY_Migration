@@ -16,7 +16,7 @@ RUNNER = """
 import importlib.abc, runpy, sys
 class NoCompiler(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('vg2c.') and not (fullname.startswith('vg2c.runtime') or fullname in {'vg2c.utilities', 'vg2c.utilities._runtime_helpers'}):
+        if fullname.startswith('vg2c.') and not fullname.startswith('vg2c.runtime'):
             raise AssertionError('Generated script imported compiler: ' + fullname)
 sys.meta_path.insert(0, NoCompiler())
 runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
