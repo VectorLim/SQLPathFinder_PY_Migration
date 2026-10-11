@@ -337,3 +337,64 @@ def test_unrelated_runtime_keys_are_never_implicit_html_slots(tmp_path, key, rep
     assert f'data-field="{field}"' in result
     assert f'Label ${key}</th>' in result
     assert "correct</td>" in result
+
+
+@pytest.mark.parametrize("field", ["A$VALUE_1", "A$VALUE_12", "$VALUE_1"])
+def test_declared_csv_field_dollar_matches_output_not_legacy_slot(tmp_path, field):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text(field + "\ncell-value\n")
+    (root / "page.html").write_text(
+        '<html><body><p>Legacy $VALUE_1 / ${VALUE_1}</p>'
+        '<table data-report="R"><thead><tr>'
+        f'<th data-field="{field}">Original</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "VALUE_12": "wrong"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert f'data-field="{field}"' in content
+    assert "Legacy changed / changed" in content
+    assert "cell-value</td>" in content
+
+
+def test_declarative_pattern_and_metadata_dollars_remain_literal(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1_x,A$VALUE_1_y,OTHER\n1,2,3\n")
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="STARTS WITH:" data-pattern="A$VALUE_1" '
+        'data-note="literal $VALUE_1" data-dynamic="${VALUE_1}">Matches</th>'
+        '</tr></thead><tbody></tbody></table>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert content.count("<td ") == content.count("<th ") == 2
+    for field in ("A$VALUE_1_x", "A$VALUE_1_y"):
+        assert f'data-field="{field}"' in content or f'data-field="{field.replace("$", "&#36;")}"' in content
+    assert content.count('data-note="literal $VALUE_1"') == 2
+    assert content.count('data-dynamic="changed"') == 2
+
+
+def test_declared_report_id_is_not_replaced_by_legacy_value(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A\ncell-value\n")
+    (root / "page.html").write_text(
+        '<table data-report="R$VALUE_1"><thead><tr>'
+        '<th data-field="A">Value</th>'
+        '</tr></thead><tbody></tbody></table>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed"})
+    job.reports["R$VALUE_1"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert 'data-report="R$VALUE_1"' in content
+    assert "cell-value</td>" in content
