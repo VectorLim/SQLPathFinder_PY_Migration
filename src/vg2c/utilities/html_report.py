@@ -93,6 +93,20 @@ tr th {{ background-color:#f5f5f5; }}
         return options
 
 
+    @staticmethod
+    def _split_layout(template: str) -> tuple[dict[str, str], str]:
+        """Parse compiler-visible layout directives, without rendering HTML."""
+        directives: dict[str, str] = {}
+        body_lines: list[str] = []
+        for line in template.splitlines():
+            if line.startswith(":"):
+                head, sep, value = line[1:].partition(":")
+                if sep:
+                    directives[head.strip().upper()] = value.strip()
+                    continue
+            body_lines.append(line)
+        return directives, "\n".join(body_lines)
+
     @emittable(display_name="Start HTML Report", file_effects=())
     def run(
         self, instance: str | None = None, prompt_text: str | None = None,
