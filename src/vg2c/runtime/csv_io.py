@@ -27,7 +27,7 @@ class _CsvIO:
         """Yield each data row as a dict keyed by header names."""
         path = resolve_path(name, workdir=self.workdir)
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(fh, delimiter=self._delimiter_for(str(path)))
             yield from reader
 
     def single_row(self, name: str) -> dict[str, str]:
@@ -119,7 +119,7 @@ class _CsvIO:
         if not path.exists():
             return 0
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
+            reader = csv.reader(fh, delimiter=self._delimiter_for(str(path)))
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
@@ -137,7 +137,7 @@ class _CsvIO:
         out_path = resolve_path(chunk_name, for_write=True, workdir=self.workdir)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
+            reader = csv.reader(fh, delimiter=self._delimiter_for(str(in_path)))
             header = next(reader, None)
             batch: list[list[str]] = []
             for row in reader:
@@ -155,7 +155,7 @@ class _CsvIO:
         path: Path, header: list[str] | None, rows: list[list[str]]
     ) -> None:
         with path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
+            writer = csv.writer(fh, delimiter=_CsvIO._delimiter_for(str(path)))
             if header is not None:
                 writer.writerow(header)
             writer.writerows(rows)
@@ -175,6 +175,7 @@ class _CsvIO:
         """
         path = resolve_path(name, for_write=True, workdir=self.workdir)
         path.parent.mkdir(parents=True, exist_ok=True)
+        delimiter = self._delimiter_for(str(path))
 
         if isinstance(content, pandas.DataFrame):
             if header is not None:
@@ -193,7 +194,7 @@ class _CsvIO:
                     ]
                 )
                 content.columns = header
-            content.to_csv(path, index=False, encoding="utf-8")
+            content.to_csv(path, index=False, encoding="utf-8", sep=delimiter)
             return
 
         if isinstance(content, str):
@@ -210,7 +211,7 @@ class _CsvIO:
         if not rows:
             if header is not None:
                 with path.open("w", newline="", encoding="utf-8") as fh:
-                    writer = csv.writer(fh)
+                    writer = csv.writer(fh, delimiter=delimiter)
                     writer.writerow(header)
             else:
                 path.write_text("", encoding="utf-8")
@@ -220,12 +221,12 @@ class _CsvIO:
             if isinstance(rows[0], dict):
                 fieldnames = header if header is not None else list(rows[0].keys())
                 writer = csv.DictWriter(
-                    fh, fieldnames=fieldnames, extrasaction="ignore"
+                    fh, fieldnames=fieldnames, extrasaction="ignore", delimiter=delimiter
                 )
                 writer.writeheader()
                 writer.writerows(rows)
             else:
-                writer_plain = csv.writer(fh)
+                writer_plain = csv.writer(fh, delimiter=delimiter)
                 if header:
                     writer_plain.writerow(header)
                     if rows[0] == header:
