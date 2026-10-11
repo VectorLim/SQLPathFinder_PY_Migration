@@ -13,7 +13,7 @@ from vg2c.emitter.models import (
 )
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utilities.pipeline_context import PipelineContext
+from vg2c.utilities.direct_operations import DirectOperationMetadata
 from vg2c.utilities.wait_file import WaitFile
 from vg2c.utility_metadata import value_schema
 
@@ -138,7 +138,7 @@ def test_omitted_defaults_have_stable_bindings_without_fabricated_spans():
 
 def test_parameter_identity_ignores_unrelated_call_order():
     ensure_utility_checks_loaded()
-    target = PipelineContext.write_file.render("a.txt", "body")
+    target = DirectOperationMetadata.write_file.render("a.txt", "body")
     unrelated = WaitFile.poll.render("flag.txt", 10)
 
     base = build_step_emission(
@@ -177,8 +177,8 @@ def test_parameter_identity_ignores_unrelated_call_order():
 
 
 def test_same_operation_requires_distinct_semantic_keys_and_is_order_stable():
-    first = PipelineContext.write_file.render("a.txt", "first").with_key("primary")
-    second = PipelineContext.write_file.render("b.txt", "second").with_key("secondary")
+    first = DirectOperationMetadata.write_file.render("a.txt", "first").with_key("primary")
+    second = DirectOperationMetadata.write_file.render("b.txt", "second").with_key("secondary")
 
     forward = build_step_emission(
         function_name="step_0002_example",
@@ -214,8 +214,8 @@ def test_same_operation_requires_distinct_semantic_keys_and_is_order_stable():
         block_index=2,
         functional_kind="EXAMPLE",
         body_lines=[
-            PipelineContext.write_file.render("a.txt", "first"),
-            PipelineContext.write_file.render("b.txt", "second"),
+            DirectOperationMetadata.write_file.render("a.txt", "first"),
+            DirectOperationMetadata.write_file.render("b.txt", "second"),
         ],
     )
     with pytest.raises(ValueError, match="ambiguous emitted invocation identity"):
@@ -223,7 +223,7 @@ def test_same_operation_requires_distinct_semantic_keys_and_is_order_stable():
 
 
 def test_code_expr_is_explicit_and_never_reparsed_for_editability():
-    literal = PipelineContext.write_file.render("a.txt", "body")
+    literal = DirectOperationMetadata.write_file.render("a.txt", "body")
     literal_step = build_step_emission(
         function_name="step_0007_literal",
         block_index=7,
@@ -236,7 +236,7 @@ def test_code_expr_is_explicit_and_never_reparsed_for_editability():
     assert literal_parameter.value == "a.txt"
     assert literal_parameter.editable is True
 
-    dynamic = PipelineContext.write_file.render(
+    dynamic = DirectOperationMetadata.write_file.render(
         CodeExpr("ctx.macro.named('PATH')"), "body"
     )
     dynamic_step = build_step_emission(
@@ -257,7 +257,7 @@ def test_code_expr_is_explicit_and_never_reparsed_for_editability():
 
 def test_utility_catalog_is_derived_from_registered_emittable_methods():
     ensure_utility_checks_loaded()
-    definitions = {item.id: item for item in PipelineContext.operation_definitions()}
+    definitions = {item.id: item for item in DirectOperationMetadata.operation_definitions()}
 
     run_query = definitions["ctx.run_query"]
     assert [parameter.name for parameter in run_query.parameters][:4] == [
