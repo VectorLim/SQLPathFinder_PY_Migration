@@ -163,7 +163,7 @@ def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(tmp_path
             raise AssertionError("Unexpected external reader invocation")
 
     fake_datasyncx = types.ModuleType("datasyncx")
-    fake_datasyncx.OracleReader = OfflineReader
+    fake_datasyncx.MarsReader = OfflineReader
     monkeypatch.setitem(sys.modules, "datasyncx", fake_datasyncx)
 
     main = translate(source, out_dir=tmp_path / "generated")
