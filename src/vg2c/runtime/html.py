@@ -122,6 +122,18 @@ class _Slots(HTMLParser):
 
 
 def _validate_slots(source):
+    # Metadata in marked tables is literal, even if it contains a reserved
+    # legacy slot name. Use the existing table parser to shield only its
+    # declaration tags before applying the normal structural slot checks.
+    if "data-report" in source:
+        parser = _ReportTables(source)
+        parser.feed(source)
+        parser.close()
+        spans = [(table["start"], table["open_end"]) for table in parser.tables]
+        spans += [(column["start"], column["open_end"])
+                  for table in parser.tables for column in table["columns"]]
+        for start, end in sorted(spans, reverse=True):
+            source = source[:start] + _literal_dollars(source[start:end], ()) + source[end:]
     _identifiers(source)
     if re.search(r"<\s*/?\s*\$|\$\{[^}]+\}\s*=", source):
         raise ValueError("Dynamic tag or attribute names are unsupported")
