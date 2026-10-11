@@ -98,8 +98,10 @@ class _SqliteReader:
             for stmt in stmts[:-1]:
                 try:
                     conn.execute(stmt)
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as exc:
+                    raise RuntimeError(
+                        f"SQLite error in setup statement: {exc}\nSQL:\n{stmt}"
+                    ) from exc
 
             final_stmt = stmts[-1]
 
