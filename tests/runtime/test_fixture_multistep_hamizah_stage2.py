@@ -89,3 +89,33 @@ def test_consecutive_original_hamizah_sqlite_steps_fail_when_upstream_absent(tmp
     with pytest.raises(FileNotFoundError):
         _run(main, workdir)
     assert not (workdir / "yeuchuan_SQL_5547.tab").exists()
+
+
+def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
+    main = _project(tmp_path)
+    workdir = tmp_path / "work-edited"
+    workdir.mkdir()
+    _seed(workdir)
+    _run(main, workdir)
+    output = workdir / "yeuchuan_SQL_5547.tab"
+    assert _read(output, "\t")[1] == ["ENTITY-A", "GROUP-A"]
+
+    sql_assets = sorted((main.parent / "sql").glob("*.sql"))
+    assert len(sql_assets) == 2
+    downstream = [asset for asset in sql_assets if "FROM \n[input] a0" in asset.read_text(encoding="utf-8")]
+    if not downstream:
+        downstream = [asset for asset in sql_assets if "[input] a0" in asset.read_text(encoding="utf-8")]
+    assert len(downstream) == 1
+    source = downstream[0].read_text(encoding="utf-8")
+    original = "a0.[entity] AS [entity]"
+    assert original in source
+    downstream[0].write_text(
+        source.replace(original, "'PATCHED' AS [entity]"),
+        encoding="utf-8",
+    )
+
+    _run(main, workdir)
+    assert _read(output, "\t") == [
+        ["entity", "prodgroup3"],
+        ["PATCHED", "GROUP-A"],
+    ]
