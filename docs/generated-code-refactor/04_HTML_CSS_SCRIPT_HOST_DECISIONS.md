@@ -1,3 +1,124 @@
+# REVISION — HTML-first report definitions (authoritative)
+
+This revision supersedes the old large-report JSON sidecar design described below.
+The original Session 04 source audit and the earlier CI records remain as history.
+
+## Defect and ownership decision
+
+Original Session 04 used Python column lists for short reports but emitted
+html/report_N.report.json for longer reports (8 columns or 180 characters).
+Layout templates held numbered HEADER placeholders fixed at translation.
+Editing the JSON to add/remove/reorder columns changed body cells without
+changing the number or order of HTML headings. This was incompatible with
+runtime column patterns in the original ScriptHost.
+
+Approaches evaluated:
+
+| Alternative | Ordinary presentation edit | Extra file | Why selected/rejected |
+| --- | --- | --- | --- |
+| A: JSON sidecar plus dynamic headers | Edit JSON, inspect HTML | JSON | Reject: two confusing owners |
+| B: lists in main.py | Edit Python | None | Reject: verbose, not user-oriented |
+| C: declarative HTML table in the layout | Edit one HTML document | None | Adopt: one-use report |
+| D: reusable HTML table fragment | Edit one shared HTML fragment | Fragment when needed | Adopt: same report reused or redefined |
+
+One marked table uses HTML as the sole source of truth for fields, header
+display labels, column order and alignment. Input CSV path and execution
+sequence stay in concise native Python. SQL and CSS remain standalone.
+No new report JSON is generated for any report size.
+
+## HTML-first contract and a representative edit
+
+    <table class="tblin" data-report="R">
+      <thead><tr>
+        <th data-field="LOT" data-align="left">Lot</th>
+        <th data-field="A" data-align="center">Alpha</th>
+        <th data-field="B" data-align="right">Beta</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+
+To add a column, add one th with data-field equal to a CSV column; to
+remove/reorder columns, remove/reorder th elements. The th content is its
+display header; data-align governs generated TD alignment. No generated
+Python changes, header-slot maintenance, report JSON, or retranslating VG2.
+
+For one-use reports, this table is in html/report_N.html and Python registers
+the CSV path using csv_report. If a report is referenced by multiple layouts,
+or a named report is redefined, each HTML-DEFER definition owns one editable
+html/reports/ID_N.table.html fragment. The generated Python uses
+job.report(fragment_path, input_file=...) and each layout contains a TABLE
+slot for that ID. Layout-time resolution chooses the active per-job
+definition, so redefinition retains its execution-time meaning.
+Fragments are never duplicated between pages that use the same definition.
+
+## Dynamic CSV schema, security and source grounding
+
+- At HTML-LAYOUT time, existing runtime/html.py loads the actual CSV
+  header and marked table declaration; source columns resolve case-
+  insensitively, preserving the explicit visual order.
+- Original ScriptHost families from SPFUtilities/utils.py:9324-9539 are
+  recognized: STARTS WITH:, ENDS WITH:, CONTAINS: and
+  STARTS/ENDS WITH (%):. A source pattern becomes a th whose data-field
+  identifies the pattern type and data-pattern provides the original
+  matching header text; it expands into matched columns in CSV order,
+  with corresponding headings and aligned body cells.
+- Empty CSV header, missing input, duplicate case-insensitive headers,
+  missing requested columns and malformed table markup produce diagnostics.
+  Header-only CSV produces a valid zero-row table.
+- An HTMLParser locator records narrow element/body offsets rather than
+  parsing/serializing the entire document. Authored attributes, comments,
+  nested header markup, layout text and inline style are retained.
+  The existing Template substitution, slot validation and atomic output
+  writer remain the sole renderer. Dynamically produced row HTML enters
+  only through a late, renderer-owned substitution value, so untrusted CSV
+  strings containing dollar-brace syntax cannot be interpreted as
+  template variables. CSV text and pattern-generated headings are escaped.
+- HTML-RUN CSS publish-on-execution, immediate HTML-RUN, HTML-DEFER,
+  HTML-LAYOUT ordering, HTML-DELETE of consumed IDs, linked/embedded CSS,
+  asset rereads and independent workdir state are retained.
+- Source provenance: SPFSQL3.py:20048-20120 immediate run;
+  20123-20156 deferred named specs; 20159-20189 layout;
+  20224-20255 cleanup; SPFUtilities/utils.py:9092-9274 report generation;
+  9324-9539 dynamic column handling; 12000-12240 and 14003-14125 layout
+  assembly. These are source-observed, not independent engine executions.
+- Intentional source differences: bounded literal pattern matching instead
+  of unrestricted regex patterns, HTML/attribute escaping, safe required-
+  asset diagnostics, and no arbitrary user-to-CSS/JS interpolation.
+  COLUMN-FORMAT widths/type conversions/header case rules and interactive
+  HTMLI5/HTMI/JMP modes remain WIP or unsupported.
+- Existing generated .report.json is accepted via the old
+  JobRuntime.report_spec reader and existing numbered header/ROWS slots
+  remain readable. No second renderer is introduced. SQL .header.json
+  and old .crosstab.json readers are untouched.
+
+## Evidence and measurements
+
+Starting revision SHA: d7891f3cbf98d3257fad2b4cf044e5b165c77e18.
+Tested revision checkpoint: 34187cdd93af7613bce423cc112910d0d979562b.
+CI https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38109086822
+reported 171 focused and 444 runtime/emitter passes; full suite 622 passes,
+six inherited UI/JMP failures. Compilation, Ruff F821/F823 and synthetic
+SQL/pivot integration/benchmark passed. Final exact-SHA CI is required
+after any subsequent fixes or documentation.
+
+Representative read-only ICMPCS compile-only measurement: previous Session
+04 137 Python lines, 59 simple statements, longest 748 characters, one
+.report.json; HTML-first 137 lines, 59 statements, longest 748 characters,
+ZERO .report.json. Assets: 8 SQL, 2 HTML pages, 1 CSS; zero JSON report
+sidecars. One-use report editing requires one HTML file (short or long);
+reuse requires editing one shared HTML fragment, never copying a table into
+multiple page HTML files. No proprietary ICMPCS execution was attempted.
+
+## Session 05
+
+Keep Session 03 canonical SQL/pivot/CTARRAY contracts unchanged. Review the
+six inherited UI/JMP failures separately, legacy utilities/html_report.py
+preview-only call sites before deletion, unsupported ScriptHost formatting and
+interactive layout branches, and Linux wheel-installed offline release.
+No original-engine differential parity was established by these tests.
+
+---
+
 # Session 04 — ScriptHost HTML/CSS ownership decisions
 
 **Authority:** original Python ScriptHost, not existing vg2c convenience behavior.  
