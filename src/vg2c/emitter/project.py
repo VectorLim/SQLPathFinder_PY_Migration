@@ -495,7 +495,7 @@ def emit_project(dispatched):
                 logging.getLogger(__name__).warning(
                     "[local-html-only] %s:%s:1 (block %s): Local HTML output does not implement %s; delivery/browser/security/chart integration is outside this renderer.",
                     block.span.file or "<input>", block.span.start_line, block.index, ", ".join(unsupported))
-            source = "".join(body).replace("$", "$")
+            source = "".join(body).replace("$", "$$")
             if re.search(r"(?m)^[ \t]*HTMI(?:C)?:[^\r\n]*$", source, re.I):
                 raise ValueError("HTMI/HTMIC interactive layout references are unsupported")
             def insert_report(match):

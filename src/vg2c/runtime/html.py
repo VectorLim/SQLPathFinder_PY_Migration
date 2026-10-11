@@ -48,11 +48,11 @@ def _literal_dollars(source, legacy_names):
         token = match.group(0)
         if token == "$":
             if source[match.end():].startswith("{"):
-                raise ValueError("Malformed explicit HTML slot; use ${NAME} or $ for a literal $")
-            return "$"
-        if token.startswith("${") or token == "$" or token[1:] in legacy_names:
+                raise ValueError("Malformed explicit HTML slot; use ${NAME} or $$ for a literal $")
+            return "$$"
+        if token.startswith("${") or token == "$$" or token[1:] in legacy_names:
             return token
-        return "$" + token[1:]
+        return "$$" + token[1:]
     return _DOLLAR.sub(escape_literal, source)
 
 
@@ -393,14 +393,15 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
                     {f"{name}_TABLE" for name in reports} |
                     {f"{name}_HEADER_{index + 1}" for name, report in reports.items()
                      for index in range(len(report.headers))})
-    source = _literal_dollars(source, legacy_names)
-    _validate_slots(source)
+    _validate_slots(_literal_dollars(source, legacy_names))
     source = _include_report_fragments(source, reports)
-    source = _literal_dollars(source, legacy_names)
-    _validate_slots(source)
+    _validate_slots(_literal_dollars(source, legacy_names))
+    # Parse user-editable data-field/data-pattern attributes before escaping
+    # template dollars, so CSV fields such as A$B retain their exact identity.
     source, declarative_used, generated_rows = _render_report_tables(
         source, reports, workdir=workdir, values=values, macros=macros
     )
+    source = _literal_dollars(source, legacy_names)
     _validate_slots(source)
     slots = _identifiers(source)
     reserved = {f"{name}_ROWS" for name in reports} | {slot for slot in slots if slot.endswith("_ROWS")} | {"VG2C_CSS"} | set(generated_rows)
