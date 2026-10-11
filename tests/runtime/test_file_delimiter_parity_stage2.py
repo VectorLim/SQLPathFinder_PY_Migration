@@ -51,13 +51,13 @@ def test_tab_chunks_keep_tab_delimiters_between_operations(tmp_path):
     io = _CsvIO(workdir=tmp_path)
     with (tmp_path / "input.tab").open("w", encoding="utf-8", newline="") as stream:
         csv.writer(stream, delimiter="\t").writerows(
-            [["id", "label"], ["01", "a"], ["02", "b"], ["03", "c"]]
+            [["id", "label"], ["01", "a,b"], ["02", "a\tb"], ["03", "c"]]
         )
     seen: list[list[list[str]]] = []
     for chunk in io.iter_chunks("input.tab", "chunk.tab", 2):
         with chunk.open(encoding="utf-8", newline="") as stream:
             seen.append(list(csv.reader(stream, delimiter="\t")))
     assert seen == [
-        [["id", "label"], ["01", "a"], ["02", "b"]],
+        [["id", "label"], ["01", "a,b"], ["02", "a\tb"]],
         [["id", "label"], ["03", "c"]],
     ]
