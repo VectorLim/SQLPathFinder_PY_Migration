@@ -73,7 +73,10 @@ class MailService(EmitterUtility):
             return None
         kwargs = cls._send_kwargs(argv, block.resolved_body)
         if kwargs is None:
-            return ["pass  # TODO: unsupported email utility command"]
+            raise ValueError(
+                "Unsupported SQLPathFinder_Email.va arguments: "
+                "expected recipient, subject and message fields"
+            )
         for field in ("to", "subject"):
             key = f"EMAIL_{field.upper()}"
             if global_refs and key in global_refs:
