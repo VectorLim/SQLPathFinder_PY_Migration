@@ -177,4 +177,4 @@ if __name__ == "__main__":
     parser.add_argument("--python", required=True, type=Path)
     parser.add_argument("--wheel", required=True, type=Path)
     arguments = parser.parse_args()
-    main(arguments.python.resolve(), arguments.wheel.resolve())
+    main(arguments.python, arguments.wheel.resolve())
