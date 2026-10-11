@@ -14,12 +14,12 @@ A service stub is not equivalent to real Oracle/Windows behavior.
 | Script | Compile baseline | Runtime baseline | Feasibility / dependency |
 |---|---|---|---|
 | `tests/fixtures/TimeDelta.txt` | expected unsupported JMP/JSL | not executed | Oracle, external utility and unsupported JMP/JSL |
-| `tests/fixtures/actual_script.txt` | compiles | not executed | external utilities, Oracle and mail; unsafe to run unmodified |
+| `tests/fixtures/actual_script.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
 | `tests/fixtures/aries_simple.txt` | compiles | not executed | ARIES Oracle reader |
 | `tests/fixtures/hamizah.txt` | compiles | not executed | MARS/Oracle, downstream SQLite |
 | `tests/fixtures/html_test.txt` | expected unsupported JMP/JSL | not executed | unsupported JMP/JSL; local HTML portions need separate oracle |
-| `tests/fixtures/maxlidheight.txt` | compiles | not executed | external utilities, Oracle and mail |
-| `tests/fixtures/new_icmpcs.txt` | compiles | not executed | external utilities, Oracle and mail |
+| `tests/fixtures/maxlidheight.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
+| `tests/fixtures/new_icmpcs.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
 | `tests/fixtures/new_stuff.txt` | compiles | not executed | Oracle plus downstream SQLite |
 | `tests/fixtures/oasys.txt` | compiles | not executed | OASYS Oracle reader |
 | `tests/fixtures/oracle_datasyncx_smoke.txt` | compiles | not executed | real Oracle/DataSyncX connection unavailable |
@@ -64,10 +64,10 @@ No future metadata schema, decorator, API or registry is implemented here.
 ## Verified Stage 2 checkpoint (11 October 2026)
 
 - **Source baseline:** `b8fc52ff41569129959a37487f5417b0fd339527`; subsequent Stage 2 commits are on `refactor/generated-code/implementation`.
-- **Actual full offline fixture:** `script_short.txt` produced a DISTINCT `owner.csv` relation from deterministic `ww_yield.csv`. SQL-asset editing and missing-input failure propagation passed. The relocated generated project also ran using the installed Linux wheel in [workflow 38151049513](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38151049513).
-- **Partial source-preserved fixture segments:** The original first WRITE-FILE block from `vietnam_test_python.txt` created `path.csv` and preserved the source body (including its leading blank line). The original first HTML-RUN CSS block from each root `ICMPCS.txt` and `CSR_IAM_v2.txt` created the expected stylesheet. They are **partial**, not complete fixture successes.
+- **Actual full offline fixture:** `script_short.txt` produced a DISTINCT `owner.csv` relation from deterministic `ww_yield.csv`. SQL-asset editing and missing-input failure propagation passed. The relocated generated project also ran using the installed Linux wheel in [workflow 38151261330](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38151261330).
+- **Partial source-preserved fixture segments (six total):** The original first WRITE-FILE block from `vietnam_test_python.txt` created `path.csv` and preserved the source body (including its leading blank line). The original first HTML-RUN CSS block from each root `ICMPCS.txt` and `CSR_IAM_v2.txt`, and from `actual_script.txt`, `maxlidheight.txt` and `new_icmpcs.txt`, created the expected stylesheet. They are **partial**, not complete fixture successes.
 - **ScriptHost-derived P4 defect:** `SPFLib/SPFUtilities/utils.py::SPFCopy` (around line 7807) calls ordinary file-copy operations. In VG2C, `runtime/files.py::copy_file(..., recurse=False)` silently performed a recursive directory copy. [Red CI run 38150673222](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38150673222) reproduced `DID NOT RAISE IsADirectoryError`; commit `76220d1b35fbb37fb610cf0625840b4deb72e55e` now requires opt-in `recurse=True`. File-copy and explicit recursive-copy tests also pass. This source check does **not** establish exact behavior for an absent external `SPFCopy.bat` implementation.
-- **Core suite at checkpoint:** [workflow 38151049556](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38151049556): `417 passed` runtime/emitter, `595 passed / 6 failed` full suite. The six failures are the same inherited UI/document-store/JMP tests; do not claim a green entire suite.
+- **Core suite at checkpoint:** [workflow 38151261340](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38151261340): `420 passed` runtime/emitter, `598 passed / 6 failed` full suite. The six failures are the same inherited UI/document-store/JMP tests; do not claim a green entire suite.
 - **No future metadata implementation:** No runtime discovery API, metadata decorators, sidecars, manifests, descriptor schemas or metadata-specific tests were added.
 
 ### Phase status — truthful remaining scope
@@ -76,7 +76,7 @@ No future metadata schema, decorator, API or registry is implemented here.
 |---|---|---|
 | P0 | Branch ancestry and CI baseline rechecked; initial source consumers inspected | Complete exhaustive dynamic/static reference map and locally reproducible checkout where possible |
 | P1 | All 19 fixture scripts plus two root scripts individually logged | Enrich exact input/output and backend requirements for additional safe local segments |
-| P2 | One complete offline fixture and three real source-preserved local segments executed | Further partial/whole feasible fixture verification; external integration remains blocked |
+| P2 | One complete offline fixture and six real source-preserved local segments executed | Further partial/whole feasible fixture verification; external integration remains blocked |
 | P3 | Original ScriptHost sources examined for SQL/CSV/pivot/HTML/file cases; file-copy source traced | Complete source-derived oracle family coverage; original-engine runs unavailable |
 | P4 | Unsupported mail command diagnostics and directory-copy opt-in correction tested | Red-test-first review of remaining confirmed defects only |
 | P5 | Unreachable UNKNOWN no-op utility removed; incorrect embedding comments corrected; live UI/core boundaries identified | Full symbol-level consumer analysis, small measured consolidations where justified; do not retire supported UI endpoints without scope decision |
