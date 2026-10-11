@@ -98,3 +98,98 @@ def test_tbody_does_not_silently_delete_authored_rows(tmp_path):
                     "<table><tbody><tr><td>Untouched</td></tr></tbody></table>")
     runtime.html("page.html", output="out.html")
     assert "<td>Untouched</td>" in (work / "out.html").read_text()
+
+
+@pytest.mark.parametrize("mode,pattern,fields", [
+    ("STARTS WITH:", "a.", ["a.one", "A.two"]),
+    ("ENDS WITH:", "_x", ["a_x", "B_X"]),
+    ("CONTAINS:", "(z)", ["A(z)B"]),
+    ("STARTS/ENDS WITH (%):", "A%B%C", ["AXBYC", "A B C"]),
+    ("STARTS/ENDS WITH (%):", "A[1]", ["A[1]", "A[1]_X"]),
+    ("STARTS/ENDS WITH (%):", "nomatch", []),
+])
+def test_all_source_patterns_use_literal_fields_and_matching_cell_counts(tmp_path, mode, pattern, fields):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    names = ["a.one", "A.two", "a_x", "B_X", "A(z)B",
+             "AXBYC", "A B C", "A[1]", "A[1]_X", "OTHER"]
+    (work / "data.csv").write_text(",".join(names) + "\n" +
+                                   ",".join(str(i) for i in range(len(names))) + "\n")
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="' + mode +
+        '" data-pattern="' + pattern + '" data-align="center">Any</th>'
+        '</tr></thead><tbody></tbody></table>')
+    runtime = JobRuntime(root, work)
+    runtime.reports["R"] = csv_report("data.csv")
+    runtime.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert result.count("<th ") == result.count("<td ") == len(fields)
+    assert result.count("text-align:center") == len(fields)
+    for field in fields:
+        assert 'data-field="' + field + '"' in result
+
+
+def test_html_only_csv_field_dollar_and_unicode_data_are_not_templates(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<html><head></head><body><table data-report="R"><thead><tr>'
+        '<th data-field="A$B">Price $USD &amp; ¥</th></tr></thead>'
+        '<tbody></tbody></table></body></html>')
+    (work / "data.csv").write_text('A$B\n"€ 3.25 & <span> ${NOT_A_SLOT}"\n')
+    runtime = JobRuntime(root, work)
+    runtime.reports["R"] = csv_report("data.csv")
+    runtime.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert 'data-field="A$B"' in result
+    assert "Price $USD &amp; ¥" in result
+    assert "&lt;span&gt;" in result and "€ 3.25" in result
+    assert "${NOT_A_SLOT}" in result
+
+
+def test_unknown_and_interactive_layout_references_diagnosed(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:x.html\nHTM:UNKNOWN"))
+    with pytest.raises(ValueError, match="Unknown deferred report.*UNKNOWN"):
+        translate(source)
+    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:x.html\nHTMI:REPO"))
+    with pytest.raises(ValueError, match="HTMI/HTMIC"):
+        translate(source)
+
+
+def test_repeated_reference_and_report_prefixes(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=A", spec("F_A", "Header A"))
+                      + block("/REPORT=HTML-DEFER\n/ID=AB", spec("F_AB", "Header AB"))
+                      + block("/REPORT=HTML-LAYOUT",
+                              ":FILE:out.html\nHTM:AB\nHTM:A\nHTM:A\n"))
+    main = translate(source)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("F_A,F_AB\none,two\n")
+    scope = {"__file__": str(main), "__name__": "test_generated"}
+    exec(compile(main.read_text(), str(main), "exec"), scope)
+    scope["run"](work)
+    html = (work / "out.html").read_text()
+    assert html.count("Header A</th>") == 2
+    assert html.count("Header AB</th>") == 1
+    assert html.index("Header AB</th>") < html.index("Header A</th>")
+
+
+def test_tbody_single_legacy_row_slot_and_renderer_slot_collision(tmp_path):
+    runtime, page, work = job(tmp_path,
+        '<table data-report="R"><thead><tr><th data-field="A">A</th>'
+        '</tr></thead><tbody>$R_ROWS</tbody></table>')
+    runtime.html("page.html", output="out.html")
+    assert (work / "out.html").read_text().count("<td ") == 1
+    page.write_text(page.read_text().replace("$R_ROWS", "${R_ROWS} ${R_ROWS}"))
+    with pytest.raises(ValueError, match="tbody"):
+        runtime.html("page.html", output="bad.html")
+    page.write_text('<html><head>${VG2C_CSS}</head><body>ok</body></html>')
+    with pytest.raises(ValueError, match="renderer-owned"):
+        runtime.html("page.html", output="bad.html", values={"VG2C_CSS": "bad"})
+    assert not (work / "bad.html").exists()
