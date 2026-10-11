@@ -167,6 +167,31 @@ def main(python: Path, wheel: Path) -> None:
         assert "FileNotFoundError" in failed.stderr, failed.stderr
         missing.rename(sql_source)
 
+        # Unlike the synthetic probe above, this translates the *actual* fixture
+        # and runs the relocated output under the installed, isolated wheel.
+        real_fixture = Path(__file__).resolve().parents[1] / "fixtures" / "script_short.txt"
+        assert real_fixture.is_file(), real_fixture
+        fixture_root = root / "real-fixture-source"
+        fixture_root.mkdir()
+        real_source = fixture_root / real_fixture.name
+        shutil.copyfile(real_fixture, real_source)
+        real_main = translate(real_source)
+        real_project = root / "relocated VG2 fixture"
+        shutil.copytree(real_main.parent, real_project)
+        shutil.rmtree(fixture_root)
+        real_workdir = real_project / "output"
+        real_workdir.mkdir()
+        (real_workdir / "ww_yield.csv").write_text(
+            "owner\nALICE\nBOB\nALICE\n雪\n", encoding="utf-8"
+        )
+        run_python(python, [str(real_project / "main.py")], unrelated)
+        with (real_workdir / "owner.csv").open(encoding="utf-8", newline="") as stream:
+            import csv
+            actual = list(csv.reader(stream))
+        assert actual[0] == ["owner"], actual
+        assert sorted(actual[1:]) == [["ALICE"], ["BOB"], ["雪"]], actual
+        print("STAGE2_REAL_FIXTURE_INSTALLED_WHEEL_PASS: script_short.txt")
+
         print("SESSION05_INSTALLED_LINUX_PASS: wheel-only imports; moved project; "
               "SQL/pivot/CTARRAY; two HTML pages; CSS; edits; alternate CWD; "
               "custom workdir; Unicode; read-only source; missing-asset error")
