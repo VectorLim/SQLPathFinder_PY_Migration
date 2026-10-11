@@ -308,3 +308,29 @@ def test_csv_data_field_with_dollar_is_not_substituted_by_colliding_value(tmp_pa
     assert 'data-field="A$B"' in result
     assert 'data-field="Achanged"' not in result
     assert "correct</td>" in result
+
+
+@pytest.mark.parametrize("key,replacement", [
+    ("TITLE", "Changed"), ("C", "Overwritten"), ("REVENUE", "MYR"),
+])
+def test_unrelated_runtime_keys_are_never_implicit_html_slots(tmp_path, key, replacement):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    field = f"X${key}"
+    (work / "data.csv").write_text(field + "\ncorrect\n")
+    (root / "page.html").write_text(
+        f'<html><body><p title="Literal ${key}">Cost ${key}; '
+        f'explicit ${{{key}}}</p><table data-report="R"><thead><tr>'
+        f'<th data-field="{field}">Label ${key}</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={key: replacement})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert f'title="Literal ${key}"' in result
+    assert f'Cost ${key}; explicit {replacement}' in result
+    assert f'data-field="{field}"' in result
+    assert f'Label ${key}</th>' in result
+    assert "correct</td>" in result
