@@ -417,3 +417,65 @@ def test_declarative_field_is_literal_even_for_reserved_renderer_slots(tmp_path,
     content = (work / "out.html").read_text()
     assert 'data-field="' + field + '"' in content
     assert "cell-value</td>" in content
+
+
+@pytest.mark.parametrize("report_attr,field_attr", [
+    ("DATA-REPORT", "DATA-FIELD"),
+    ("DaTa-RePoRt", "DaTa-FiElD"),
+])
+def test_case_insensitive_report_and_field_declarations_preserve_literal_slots(
+    tmp_path, report_attr, field_attr,
+):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1\n<row&value>\n")
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><p>Legacy $VALUE_1</p>'
+        f'<table {report_attr}="R$VG2C_CSS"><thead><tr>'
+        f'<th {field_attr}="A$VALUE_1" data-note="Literal $VALUE_1" '
+        'data-dynamic="${TITLE}">Price $VALUE_1</th>'
+        '</tr></thead><tbody></tbody></table></body></html>'
+    )
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "TITLE": "<title&>"})
+    job.reports["R$VG2C_CSS"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert f'{report_attr}="R$VG2C_CSS"' in rendered
+    assert f'{field_attr}="A$VALUE_1"' in rendered
+    assert 'data-note="Literal $VALUE_1"' in rendered
+    assert 'data-dynamic="&lt;title&amp;&gt;"' in rendered
+    assert "Price changed</th>" in rendered
+    assert "Legacy changed</p>" in rendered
+    assert "&lt;row&amp;value&gt;</td>" in rendered
+
+
+@pytest.mark.parametrize("report_attr,field_attr,pattern_attr", [
+    ("DATA-REPORT", "DATA-FIELD", "DATA-PATTERN"),
+    ("DaTa-RePoRt", "DaTa-FiElD", "DaTa-PaTtErN"),
+])
+def test_case_insensitive_pattern_declarations_preserve_literal_legacy_dollars(
+    tmp_path, report_attr, field_attr, pattern_attr,
+):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1_x,A$VALUE_1_y,OTHER\n1,2,3\n")
+    (root / "page.html").write_text(
+        f'<table {report_attr}="R$VG2C_CSS"><thead><tr>'
+        f'<th {field_attr}="STARTS WITH:" {pattern_attr}="A$VALUE_1" '
+        'data-note="Cost $VALUE_1" data-dynamic="${TITLE}">Matches</th>'
+        '</tr></thead><tbody></tbody></table>'
+    )
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "TITLE": "<&>"})
+    job.reports["R$VG2C_CSS"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert f'{report_attr}="R$VG2C_CSS"' in rendered
+    assert rendered.count("<th ") == rendered.count("<td ") == 2
+    assert 'data-field="A$VALUE_1_x"' in rendered
+    assert 'data-field="A$VALUE_1_y"' in rendered
+    assert rendered.count('data-note="Cost $VALUE_1"') == 2
+    assert rendered.count('data-dynamic="&lt;&amp;&gt;"') == 2
