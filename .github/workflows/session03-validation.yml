@@ -82,6 +82,41 @@ jobs:
                   assert len(pivoted) == n
                   print(f'PIVOT_BENCH: rows={n}, result_rows={len(pivoted)}, elapsed_s={elapsed:.3f}, peak_alloc_mb={peak/1048576:.1f}')
           PY
+      - name: Generated project readability metrics (compile only)
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python - <<'PY'
+          import ast, re
+          from pathlib import Path
+          from vg2c import compile_document
+          original = Path("ICMPCS/main.py").read_text(encoding="utf-8")
+          emitted = compile_document(Path("ICMPCS.txt")).emitted
+          updated = emitted.source
+          def stats(source):
+              syntax = ast.parse(source)
+              relevant = (ast.Assign, ast.AnnAssign, ast.Expr, ast.AugAssign)
+              sizes = [len(ast.get_source_segment(source, node) or "") for node in ast.walk(syntax)
+                       if isinstance(node, relevant)]
+              return {
+                  "lines": len(source.splitlines()),
+                  "simple_statements": len(sizes),
+                  "max_simple_statement_chars": max(sizes, default=0),
+                  "styles_assignments": len(re.findall(r"(?m)^\\s*(?:job\\.)?styles\\[", source)),
+                  "css_file_assignments": len(re.findall(r"(?m)^\\s*(?:job\\.)?css_file\\s*=", source)),
+                  "csv_report_calls": source.count("csv_report("),
+                  "html_calls": source.count("job.html("),
+              }
+          names = [name for name, _ in emitted.assets]
+          print("LEGACY_ICMPCS_MAIN_METRICS", stats(original))
+          print("NEW_ICMPCS_MAIN_METRICS", stats(updated))
+          print("EDITABLE_ASSET_COUNTS", {
+              "sql": sum(name.endswith(".sql") for name in names),
+              "html": sum(name.endswith(".html") for name in names),
+              "css": sum(name.endswith(".css") for name in names),
+              "report_json": sum(name.endswith(".report.json") for name in names),
+          })
+          PY
       - name: Entire test suite
         if: always()
         env:
