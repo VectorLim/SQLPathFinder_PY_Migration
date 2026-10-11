@@ -16,7 +16,7 @@ A service stub is not equivalent to real Oracle/Windows behavior.
 | `tests/fixtures/TimeDelta.txt` | expected unsupported JMP/JSL | not executed | Oracle, external utility and unsupported JMP/JSL |
 | `tests/fixtures/actual_script.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
 | `tests/fixtures/aries_simple.txt` | compiles | not executed | ARIES Oracle reader |
-| `tests/fixtures/hamizah.txt` | compiles | not executed | MARS/Oracle, downstream SQLite |
+| `tests/fixtures/hamizah.txt` | compiles | **original consecutive third and fourth SQLite blocks executed together (PARTIAL)** | first two MARS/Oracle upstream operations unavailable; synthetic `.tab` inputs substituted; subsequent Oracle stages still blocked |
 | `tests/fixtures/html_test.txt` | expected unsupported JMP/JSL | not executed | unsupported JMP/JSL; local HTML portions need separate oracle |
 | `tests/fixtures/maxlidheight.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
 | `tests/fixtures/new_icmpcs.txt` | compiles | **first original HTML-RUN CSS block executed (PARTIAL)** | remaining external utilities, Oracle and mail blocked |
@@ -94,3 +94,14 @@ Do **not** promote source-derived, partial, stubbed or blocked fixture results t
 - Real Oracle/MARS/ARIES/OASYS, corporate network files, Windows utilities, live SMTP and the original ScriptHost engine were **not** accessed. No live-engine parity or production integration is claimed.
 - Do not make CI appear green by dropping inherited UI tests. The six failures are in the editor/UI surface; investigate editor retirement versus preservation as an isolated P5 decision with consumer proofs and regression gates.
 - Retain independent installed-wheel runtime execution, full fixture-status coverage, and source-derived error/format semantics when deciding further changes.
+
+
+## Continuation evidence — 12 October 2026
+
+- **WRITE-FILE test:** test_fixture_partial_local_write_stage2.py compares the complete output with the original payload after one outer structural newline is removed on each side by frontend/parser.py::_trim_outer_blank_line. The remaining leading blank line is asserted. This is an observed translator/parser framing rule, not an independently executed ScriptHost oracle. Previously .strip() erased that evidence.
+- **Strict .tab output test:** test_fixture_partial_sql_join_stage2.py now explicitly requires literal tabs and reads with tab delimiter, rejecting comma fallback. ScriptHost GetFileDLM is the source-derived authority.
+- **New meaningful local chain (PARTIAL):** test_fixture_multistep_hamizah_stage2.py executes the original consecutive third and fourth SQLite blocks from hamizah.txt. Synthetic upstream yeuchuan_a0_5547.tab and yeuchuan_a1_5547.tab feed the original INNER JOIN into input.csv; the next original SQLite SELECT consumes input.csv to produce yeuchuan_SQL_5547.tab. Assertions cover headers, complete row lists, required tab delimiter, missing-input FileNotFoundError and changes after editing the second generated SQL asset and rerunning. The first MARS stages and remaining external stages are not run. This adds one partial two-block chain to the previous nine partial blocks: one complete original offline fixture, eleven source-preserved partial blocks across ten partial scenarios.
+- **Verified implementation CI:** [workflow 38182606214](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38182606214) reported 435 passed runtime/emitter; 613 passed / six inherited UI/JMP failures in the full suite. [Wheel workflow 38182606154](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38182606154) passed. Later audit/demonstration workflow results are recorded in the continuation handoff.
+- **Other concurrent change:** f8d1414eb24feedc6503ee69c30206257296b4cb switched unmatched filesystem command emission from silent pass to explicit ValueError. This is fail-visible behavior, not original-engine verification.
+
+Fixture execution, compilation-only smoke, original-engine parity and external integration remain distinct evidence categories. Future optional runtime metadata remains out of scope.
