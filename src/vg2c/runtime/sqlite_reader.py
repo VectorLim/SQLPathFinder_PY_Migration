@@ -10,6 +10,7 @@ import sqlite3
 import pandas as pd
 
 from vg2c.runtime.values import resolve_path
+from vg2c.runtime.csv_io import _CsvIO
 from vg2c.runtime.crosstab import _CrosstabUtility
 
 
@@ -30,7 +31,7 @@ class _SqliteReader:
         table_ident = _quote_identifier(table_name)
 
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(fh, delimiter=_CsvIO._delimiter_for(str(path)))
             rows = list(reader)
 
         if reader.fieldnames is None:
