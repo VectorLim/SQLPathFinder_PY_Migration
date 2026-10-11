@@ -214,6 +214,12 @@ def emit_project(dispatched):
     report_options = {}
     # A fragment is useful only for an ID referenced by several layouts.
     layout_references = {}
+    report_definitions = {}
+    for candidate in blocks.values():
+        if (candidate.kind is Kind.HTML_REPORT
+                and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-DEFER"):
+            name = candidate.resolved_options.lookup.get("ID", "")
+            report_definitions[name] = report_definitions.get(name, 0) + 1
     for candidate in blocks.values():
         if (candidate.kind is Kind.HTML_REPORT
                 and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-LAYOUT"):
@@ -454,7 +460,7 @@ def emit_project(dispatched):
             report_options[report_id] = options
             input_file = options.get("INPUT-FILE", "")
             output_file = options.get("OUTPUT-FILE")
-            if layout_references.get(report_id, 0) > 1:
+            if (layout_references.get(report_id, 0) > 1 or report_definitions.get(report_id, 0) > 1):
                 fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
                 assets[fragment] = _table(report_id, options) + "\n"
                 report_ctor = (f"job.report({fragment!r}, input_file={input_file!r}, "
@@ -488,7 +494,7 @@ def emit_project(dispatched):
                 source = source.replace(
                     "HTM:" + report_id,
                     ("${" + report_id + "_TABLE}")
-                    if layout_references.get(report_id, 0) > 1
+                    if (layout_references.get(report_id, 0) > 1 or report_definitions.get(report_id, 0) > 1)
                     else _table(report_id, report_options[report_id]),
                 )
             if "<html" not in source.lower():
