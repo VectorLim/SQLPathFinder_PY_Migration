@@ -21,7 +21,7 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     assert first_block.startswith("<OPTIONS>\n/WRITE-FILE=Y\n")
     assert "/CSV=path.csv" in first_block
     assert "</OPTIONS>" in first_block
-    expected_file_contents = first_block.split("</OPTIONS>", maxsplit=1)[1].strip()
+    # Preserve the original payload exactly after the OPTIONS delimiter.\n    # Universal newline decoding is used for source and output consistently.\n    original_payload = first_block.split("</OPTIONS>", maxsplit=1)[1]\n    assert original_payload.startswith("\\n")
 
     source = tmp_path / "isolated_original_block.txt"
     source.write_text(first_block, encoding="utf-8")
