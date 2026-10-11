@@ -236,7 +236,7 @@ class _ReportTables(HTMLParser):
 
 def _literal_declaration_attributes(source):
     """Protect authored report identifiers for pre-render slot validation."""
-    if "data-report" not in source:
+    if "data-report" not in source.lower():
         return source
     parser = _ReportTables(source)
     parser.feed(source)
