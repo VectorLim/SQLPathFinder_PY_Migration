@@ -14,7 +14,6 @@ from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 
 class DirectOperationMetadata(UtilitySpec):
     utility_name = "ctx"
-    semantic_visibility = "internal"
 
     @emittable(
         display_name="Write File",
