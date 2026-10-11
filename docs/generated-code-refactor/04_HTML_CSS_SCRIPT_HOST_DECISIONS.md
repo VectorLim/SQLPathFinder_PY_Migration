@@ -1,3 +1,19 @@
+# Session 04 final correction — runtime value and authored dollar isolation
+
+**Starting branch SHA:** `0e420bc0b06823e7869d0465894ede0aff7b59dc`. **Source reviewed:** `src/vg2c/runtime/html.py`, `_literal_dollars()` and `render_html()`. This section supersedes the older policy below that allowed every runtime value name as an implicit bare HTML placeholder.
+
+**CONFIRMED DEFECT:** `legacy_names` included `set(values or {})`, which contains caller and job snapshot keys. Consequently ordinary `<h1>Price $USD</h1>` changed to `Price MYR` if runtime `USD="MYR"`, and `<th data-field="A$B">` rendered as `Achanged` if `B="changed"`, despite locating the correct CSV field before substitution. Tests were added before the correction and failed independently in clean GitHub Actions at commit `aba6c8bd5cbf99e20f6f542189b4fdb423c7c153` (run https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38112219856): three new failures, 463 preexisting runtime/emitter passes.
+
+**INTENTIONAL-FIX / final placeholder policy:** Arbitrary caller/job keys are **never** recognized as bare `$NAME` merely because they exist at runtime. User-authored dollars remain literal in ordinary text and attributes, including data fields such as `A$B`, even when keys `USD` or `B` exist. Dynamic caller values must use explicitly braced `${NAME}`. Missing explicit slots still raise; literal `${NAME}` text uses `$${NAME}`. Standard `$$` escaping and validation against script/style/URL/events and renderer-owned slot spoofing remain unchanged.
+
+**Narrow compatibility exceptions:** Unbraced `$VG2C_CSS`, `$ID_ROWS` for registered reports, `$ID_HEADER_n` for registered historical report headers and `$VALUE_n` for supplied numbered generated layout values remain recognized. The reusable-fragment slot is `${ID_TABLE}` (braced), not `$ID_TABLE`. The fixed `VALUE_n` family is the only subset of caller keys consulted when recognizing bare slots; arbitrary `$TITLE`, `$USD` or `$B` no longer interpolate. Existing projects depending on arbitrary bare names must change those names to `${NAME}`. A CSV attribute that literally includes a *reserved legacy* bare token (e.g. `data-field="A$VALUE_1"`) should encode its dollar as `&#36;` to avoid ambiguity; this is the documented narrow compatibility boundary, not permission for arbitrary implicit variables.
+
+**Preserved rendering:** Original HTML-first parser and single Template pass, HTML edit rereads, selected fragments, legacy row placeholders, dynamic generated rows, CSS embedded/linked assets, escaping of CSV text, and original source-order report semantics. No modifications to SQL, crosstab, CTARRAY, UI, original ScriptHost, emitted .report.json policy or any other branch.
+
+**Validation:** The above tests run with runtime keys `USD` and `B`, verified explicit `${USD}`, `$VALUE_1` and `${VALUE_1}`, `${R_TABLE}`, `$R_ROWS`, `${VG2C_CSS}`, Unicode and HTML-special CSV data, and post-generation HTML-only edits. Exact final CI and remote SHA are recorded in the agent's final response; the six previously inherited UI/JMP failures remain out of scope.
+
+---
+
 # Session 04 corrective pass — exact references and safe editable HTML
 
 **Authority:** Original Python ScriptHost where behavior is source-observed; safe and predictable generated HTML editing where ScriptHost has no declarative-table counterpart. This section supersedes conflicting earlier pattern/template statements below. **Starting remote SHA:** `b0d08e239a98690c2fff0734bf8ad73c84ede8aa`. The original revision parent `d7891f3cbf98d3257fad2b4cf044e5b165c77e18` is a verified ancestor. Work is scoped to Session 04 on `refactor/generated-code/implementation`.

@@ -388,13 +388,13 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     template_path = job_path(template_path, workdir)
     source = template_path.read_text(encoding="utf-8")
     reports = reports or {}
-    # Known preexisting $NAME placeholders remain compatible; ordinary $USD,
-    # $100 and similar authored currency text are never implicit variables.
-    legacy_names = (set(values or {}) | {"VG2C_CSS"} |
+    # Bare Template slots are retained only for known legacy generated forms,
+    # never for arbitrary runtime keys (e.g. USD or B in authored HTML).
+    legacy_names = ({"VG2C_CSS"} |
                     {f"{name}_ROWS" for name in reports} |
-                    {f"{name}_TABLE" for name in reports} |
                     {f"{name}_HEADER_{index + 1}" for name, report in reports.items()
-                     for index in range(len(report.headers))})
+                     for index in range(len(report.headers))} |
+                    {name for name in (values or {}) if re.fullmatch(r"VALUE_[1-9][0-9]*", name)})
     _validate_slots(_literal_dollars(source, legacy_names))
     source = _include_report_fragments(source, reports)
     _validate_slots(_literal_dollars(source, legacy_names))

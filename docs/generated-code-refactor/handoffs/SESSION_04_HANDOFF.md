@@ -1,3 +1,21 @@
+# Session 04 final corrective pass — dollar-sign collision handoff
+
+**Branch:** `refactor/generated-code/implementation`. **Verified start:** `0e420bc0b06823e7869d0465894ede0aff7b59dc` (remote matched before work); parent ancestry retained. Do not start Session 05 or merge.
+
+**Test-first evidence:** Corrective tests in `tests/runtime/test_html_corrective_session04.py` introduced distinct failures for currency `$USD` with runtime `USD=MYR`, CSV `data-field="A$B"` with runtime `B=changed`, and dollar-bearing shared fragments. Commit `aba6c8bd5cbf99e20f6f542189b4fdb423c7c153`: three new runtime/emitter failures, 463 existing passes; full suite 641 passed, nine failed (same six inherited and three new). CI https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38112219856 .
+
+**Root cause / minimal change:** `_literal_dollars()` was given all caller/runtime value keys as bare-placeholder candidates. `render_html()` now supplies only renderer-owned legacy `VG2C_CSS`, registered `ID_ROWS`, existing `ID_HEADER_n`, and supplied numbered `VALUE_n`; arbitrary `USD`, `B`, `TITLE` or other mapping keys are not implicit dollar slots. Explicit `${NAME}` resolves normally, including `${USD}`. Malformed explicit slots, dollar escaping, escaping/untrusted data safeguards, and one renderer remain unchanged.
+
+**Compatibility boundary:** Old projects that used an arbitrary bare `$NAME` for dynamic custom values must use `${NAME}` instead; this intentional behavior change prevents HTML edits from depending on incidental runtime keys. `$VALUE_n` is kept for emitted numbered value slots, `$ID_ROWS` and `$ID_HEADER_n` for historical report templates, `$VG2C_CSS` for renderer CSS; table fragments are referenced with `${ID_TABLE}`. Use `&#36;` in CSV field attributes to express a literal name containing a reserved legacy bare token such as `A$VALUE_1`. Ordinary `$USD` and `A$B` need no escape even when keys match.
+
+**Regression scope:** New tests cover direct runtime HTML, fragment inclusion, CSS embedding, legacy row slots, valid explicit slots, HTML source-only edits, exact data-field attributes, escaped Unicode/HTML-like data, and per-job values. The existing Session 04 integration exercises editable SQL -> pivot -> CTARRAY -> downstream SQL -> HTML -> CSS. No related runtime/parser redesign, SQL, crosstab or UI modifications.
+
+**Files this final pass touches:** `src/vg2c/runtime/html.py`, `tests/runtime/test_html_corrective_session04.py`, `docs/generated-code-refactor/04_HTML_CSS_SCRIPT_HOST_DECISIONS.md`, `docs/generated-code-refactor/handoffs/SESSION_04_HANDOFF.md`. Clean GitHub Actions is the executable test environment; no local repository working tree was available. Final exact pushed SHA and CI results belong in the final agent report.
+
+**Remaining WIP:** Six inherited UI/JMP failures, original ScriptHost execution differential, advanced COLUMN-FORMAT and HTMI/HTMLI5/HTMIC/report distribution. No Session 05 work authorized.
+
+---
+
 # Session 04 corrective pass — semantic and editing reliability handoff
 
 **Status:** Four issues corrected and source-based regressions implemented; no Session 05 authorization. This section is the latest handoff and supersedes any conflicting statements in the revision history below.
