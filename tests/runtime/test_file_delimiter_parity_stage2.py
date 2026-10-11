@@ -75,3 +75,13 @@ def test_csv_list_original_windows_relative_path_resolves_under_linux_workdir(tm
     assert io.sql_get_csv_list(r".\feeds\upstream.tab", "lot", "f0.lot In") == (
         "('LOT-A', 'LOT-B')"
     )
+
+
+
+@pytest.mark.parametrize("name", [
+    r"C:\internal\production.tab",
+    r"\\corporate\share\production.tab",
+])
+def test_csv_list_does_not_reinterpret_absolute_windows_paths_as_local(tmp_path, name):
+    with pytest.raises(ValueError, match="Windows absolute CSV-list path"):
+        _CsvIO(workdir=tmp_path).sql_get_csv_list(name, "lot", "t.lot In")
