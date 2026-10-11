@@ -177,36 +177,33 @@ def _report_options(block):
     return options
 
 
-def _report_call(block, options, assets):
-    """A compact call for short schemas; one editable asset for long schemas."""
-    columns = _list(options.get("COLUMN-DATA"))
-    headers = _list(options.get("COLUMN-HEADERS"))
-    alignment = _list(options.get("COLUMN-ALIGNMENT"))
-    input_file = options.get("INPUT-FILE", "")
-    output_file = options.get("OUTPUT-FILE")
-    if max(len(columns), len(headers), len(alignment)) >= 8 or (
-        len(repr((columns, headers, alignment))) > 180
-    ):
-        path = f"html/report_{block.index:03d}.report.json"
-        assets[path] = json.dumps({
-            "input_file": input_file,
-            "columns": columns,
-            "headers": headers,
-            "alignment": alignment,
-            "output_file": output_file,
-        }, ensure_ascii=False, indent=2) + "\n"
-        return f"job.report_spec({path!r})"
-    return (f"csv_report({input_file!r}, columns={columns!r}, "
-            f"headers={headers!r}, alignment={alignment!r}, output_file={output_file!r})")
-
-
 def _table(report_id, options):
-    headers = "".join('<th>${' + report_id + f'_HEADER_{index + 1}' + '}</th>'
-                      for index, _ in enumerate(_list(options.get("COLUMN-HEADERS"))))
+    """Editable HTML is the sole definition of report projection/presentation.
+
+    SPFUtilities/utils.py:9324-9539 distinguishes CSV selection, display
+    labels and alignment. The runtime resolves actual fields from current CSV.
+    """
+    columns = _list(options.get("COLUMN-DATA"))
+    labels = _list(options.get("COLUMN-HEADERS"))
+    alignment = _list(options.get("COLUMN-ALIGNMENT"))
+    if not columns:
+        raise ValueError(f"Report {report_id} requires COLUMN-DATA")
+    parts = []
+    for index, field in enumerate(columns):
+        label = labels[index] if index < len(labels) else field
+        align = alignment[index] if index < len(alignment) else "middle-left"
+        # Pattern SOURCE label is a column-name matcher, not a display title.
+        pattern = f' data-pattern="{escape(label, quote=True)}"' if field.upper() in (
+            "STARTS WITH:", "ENDS WITH:", "CONTAINS:", "STARTS/ENDS WITH (%):"
+        ) else ""
+        display = "Matching CSV columns" if pattern else label
+        parts.append(f'<th data-field="{escape(field, quote=True)}"{pattern} '
+                     f'data-align="{escape(align, quote=True)}">{escape(display)}</th>')
     top = options.get("AT-TOP-OF-REPORT")
-    heading = '<p class="at-top-of-report">' + " ".join(_list(top)).replace("$", "$$") + "</p>\n" if top else ""
-    return heading + '<table class="tblin"><thead><tr id="colhdr">' + headers + \
-        '</tr></thead><tbody>${' + report_id + '_ROWS}</tbody><tfoot></tfoot></table>'
+    heading = '<p class="at-top-of-report">' + escape(" ".join(_list(top))) + "</p>\n" if top else ""
+    return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}">'
+            '<thead><tr id="colhdr">' + "".join(parts) +
+            '</tr></thead><tbody></tbody><tfoot></tfoot></table>')
 
 
 def emit_project(dispatched):
@@ -215,6 +212,13 @@ def emit_project(dispatched):
     blocks.update({block.index: block for block in dispatched.dispatched})
     assets = {}
     report_options = {}
+    # A fragment is useful only for an ID referenced by several layouts.
+    layout_references = {}
+    for candidate in blocks.values():
+        if (candidate.kind is Kind.HTML_REPORT
+                and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-LAYOUT"):
+            for key in re.findall(r"HTM:([A-Za-z0-9_]+)", candidate.resolved_body):
+                layout_references[key] = layout_references.get(key, 0) + 1
     sql_parameters = {}
     html_parameters = {}
     steps = []
@@ -425,17 +429,16 @@ def emit_project(dispatched):
                 runtime_imports.add("csv_report")
                 options = _report_options(block)
                 report_id = f"RUN_{block.index:03d}"
-                names = _list(options.get("COLUMN-DATA"))
-                labels = _list(options.get("COLUMN-HEADERS")) or names
                 shell = HtmlReport._HTML_SCAFFOLD.format(
                     title="SQLPathFinder Report", css_decl="${VG2C_CSS}",
-                    body=_table(report_id, {**options, "COLUMN-HEADERS": labels}))
+                    body=_table(report_id, options))
                 name = f"html/report_{block.index:03d}.html"
                 assets[name] = shell
-                report = _report_call(block, {**options, "COLUMN-HEADERS": labels}, assets)
+                input_file = options.get("INPUT-FILE", "")
                 output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
                 _inline(writer, block, tracked([
-                    f"job.html({name!r}, output={output!r}, reports={{{report_id!r}: {report}}})"
+                    f"job.html({name!r}, output={output!r}, "
+                    f"reports={{{report_id!r}: csv_report({input_file!r})}})"
                 ]), steps)
             elif kind == "KEY":
                 # SPFSQL3.py:20095-20109 dispatches only CSS/HTML/HTMLI5.
@@ -449,7 +452,16 @@ def emit_project(dispatched):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", report_id):
                 raise ValueError(f"Invalid report ID {report_id!r}")
             report_options[report_id] = options
-            call = f"job.reports[{report_id!r}] = {_report_call(block, options, assets)}"
+            input_file = options.get("INPUT-FILE", "")
+            output_file = options.get("OUTPUT-FILE")
+            if layout_references.get(report_id, 0) > 1:
+                fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
+                assets[fragment] = _table(report_id, options) + "\n"
+                definition = (f"job.report({fragment!r}, input_file={input_file!r}, "
+                              f"output_file={output_file!r})")
+            else:
+                definition = f"csv_report({input_file!r}, output_file={output_file!r})"
+            call = f"job.reports[{report_id!r}] = {definition}"
             _inline(writer, block, tracked([call]), steps)
         elif report_type == "HTML-LAYOUT":
             directives = {}
@@ -473,7 +485,12 @@ def emit_project(dispatched):
             for report_id in re.findall(r"HTM:([A-Za-z0-9_]+)", source):
                 if report_id not in report_options:
                     raise ValueError(f"Unknown deferred report {report_id}")
-                source = source.replace("HTM:" + report_id, _table(report_id, report_options[report_id]))
+                source = source.replace(
+                    "HTM:" + report_id,
+                    ("${" + report_id + "_TABLE}")
+                    if layout_references.get(report_id, 0) > 1
+                    else _table(report_id, report_options[report_id]),
+                )
             if "<html" not in source.lower():
                 source = HtmlReport._HTML_SCAFFOLD.format(title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace("$", "$$"), css_decl="${VG2C_CSS}", body=source)
             slots = {}

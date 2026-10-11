@@ -79,6 +79,15 @@ class JobRuntime:
             raise ValueError(f"SQL header asset must be a list of strings: {asset}")
         return value
 
+    def report(self, template, *, input_file, output_file=None):
+        """Register one editable HTML table without a second report schema.
+
+        HTML-DEFER saves the file/spec at execution time (SPFSQL3.py:20129-20150).
+        CSV rows are read later, when HTML-LAYOUT renders it.
+        """
+        return csv_report(input_file, output_file=output_file,
+                          table_template=self.asset_path(template))
+
     def report_spec(self, path):
         """Read an editable long HTML column schema when the report is defined.
 
