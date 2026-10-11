@@ -51,7 +51,7 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
     """Render a single condition operand as a Python expression string."""
     # Local import to avoid circular dependency at module load time.
     from vg2c.utilities._runtime_helpers import normalize_macro_name
-    from vg2c.utilities.macro_state import MacroState
+    from vg2c.utilities.macro_control import MacroControl
 
     value = operand.strip()
 
@@ -59,15 +59,15 @@ def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
         return _int_expr("0") if numeric else repr("")
 
     if value.startswith("VAR(") and value.endswith(")"):
-        base = MacroState.named.render(normalize_macro_name(value[4:-1].strip()))
+        base = MacroControl.named.render(normalize_macro_name(value[4:-1].strip()))
         return _int_expr(base) if numeric else base
 
-    if MacroState.NAMED_PLACEHOLDER_RE.fullmatch(value):
-        base = MacroState.named.render(normalize_macro_name(value))
+    if MacroControl.NAMED_PLACEHOLDER_RE.fullmatch(value):
+        base = MacroControl.named.render(normalize_macro_name(value))
         return _int_expr(base) if numeric else base
 
     if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = MacroState.named.render(normalize_macro_name(value))
+        base = MacroControl.named.render(normalize_macro_name(value))
         return _int_expr(base) if numeric else base
 
     if numeric:
