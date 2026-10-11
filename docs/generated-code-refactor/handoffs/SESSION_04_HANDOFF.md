@@ -1,263 +1,209 @@
-# Session 04 handoff — ScriptHost-grounded editable HTML/CSS/SQL
+# Session 04 revised handoff — HTML-first report editing
 
-**Status:** Implemented and Linux-CI-tested for the documented supported subset; WIP for full original ScriptHost HTML/report parity. **Do not automatically start Session 05.**
+**Status:** Revision implemented and tested against source-derived fixtures; exact original Python ScriptHost differential parity remains WIP. Do NOT start Session 05 or merge branches.
 
-**Repository:** `VectorLim/SQLPathFinder_PY_Migration`  
-**Only branch:** `refactor/generated-code/implementation`  
-**Exact verified Session 03 parent at start:** `a1bc15fff6ba574c1f3361ab19ca4dec4f47e4ec`  
-**Tested implementation checkpoint (before this handoff commit):** `59fed15c1fd5e44a3fbd45d052c53c924cbaaba6`  
-**Last checkpoint CI:** https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38106469080  
-**Final handoff commit SHA:** In final agent response, since this file cannot contain its own SHA.
+Repository: VectorLim/SQLPathFinder_PY_Migration
 
-## Starting verification and restrictions
+Only implementation branch: refactor/generated-code/implementation
 
-GitHub remote branch and predecessor exact SHA were verified through the connected
-GitHub API before the first change. The earlier Session 03 CI at
-https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38071796475
-was overall red only because of the six inherited UI/JMP failures. Fresh
-pre-implementation Linux CI on the source-audit-only checkpoint
-`d2ef0c520b9b6a3e2f3da9c0fb426a23f45bb159`, run
-https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38105594249,
-was **606 passed, 6 failed**.
+- Verified original Session 03 parent: a1bc15fff6ba574c1f3361ab19ca4dec4f47e4ec
+- Verified prior Session 04 final SHA / revision parent: d7891f3cbf98d3257fad2b4cf044e5b165c77e18
+- Revision test implementation checkpoint: 34187cdd93af7613bce423cc112910d0d979562b
+- Later label escaping change and documentation are fast-forward descendants. Full final pushed SHA belongs in the final agent response because this document cannot include its own SHA.
+- Prior Session 04 baseline CI: https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38106666226
+- Revised checkpoint CI: https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38109086822
 
-Local git fetch/checkout was unavailable because github.com DNS access failed
-in the container. Local worktree cleanliness, local `git remote -v` and
-`git status --porcelain` therefore could **not** be independently verified.
-Remote SHA verification, exact-parent GitHub Git API commit creation and
-fast-forward ref updates were used instead. All reported test runs were on
-GitHub Actions clean Linux checkouts of exact source SHAs. Original proprietary
-ScriptHost was **not executed**; source-derived tests are not original-engine
-differential confirmation. Production ICMPCS was neither run nor overwritten.
+## Verified remote workflow
 
-## Original ScriptHost: binding source observations
+At revision start, the GitHub branch ref exactly matched d7891f3cbf98d3257fad2b4cf044e5b165c77e18. The initial branch descended from the Session 03 parent by 10 commits. Local git ls-remote could not connect due to DNS failure; the container had no checked-out repository. Consequently, local worktree/uncommitted status was not independently verifiable. Each commit used explicit parent/tree Git object creation and an expected-SHA, non-force branch update through the connected GitHub API. Exact commit CI ran in clean GitHub Actions Linux checkouts. No production ICMPCS job or private external network was executed.
 
-All relative to `scripthost-utilities-decompiled/SPSQL3_py/SPFLib/`:
+## Source authority
 
-| Source path/lines | Observed, implemented or still open |
-| --- | --- |
-| `SPFSQL3.py:20048–20120` | `HTMLRunTask.executeTaskCommand` immediately dispatches real TYPE=CSS through `Generate_Style_Sheet` and real TYPE=HTML through `Generate_HTML_Report("H")`. TYPE=KEY is a design-table header, not a report. HTMLI5 has a separate unsupported engine. |
-| `SPFSQL3.py:20123–20156` | `HTMLDeferTask.executeTaskCommand` writes the per-instance, per-ID definition for a later layout; repeating the identifier targets that name. |
-| `SPFSQL3.py:20159–20189` | `HTMLLayoutTask.executeTaskCommand` renders named references at execution time by `Create_HTML_Window`. |
-| `SPFSQL3.py:20224–20255` | `HTMLDeleteTask.executeTaskCommand` removes report spec paths recorded by layouts, not all stylesheet and deferred state. |
-| `SPFUtilities/utils.py:8866–9050,9052–9090` | `Generate_Style_Sheet` writes CSS; FORMAT keys case-insensitive, later duplicates replace earlier lookup, font-size normalization; some dynamic CSS paths unverified. |
-| `utils.py:9092–9274` | `Generate_HTML_Report` requires CSV input and defaults immediate output to `SQLPathFinder.htm`. |
-| `utils.py:9324–9539` | `Check_Column_Pattern` distinguishes COLUMN-DATA projection, COLUMN-HEADERS display, COLUMN-FORMAT and patterns based on actual runtime CSV schema. Full dynamic expansion is still WIP. |
-| `utils.py:12000–12240` | `Create_HTML_Window` processes :FILE:, :TITLE:, :CSS:, :CSSEMBED: and ordered HTM/HTMI references, tracks reports consumed for deletion. |
-| `utils.py:13303–13419` | `Get_Rpt_LayOut_Header` links or embeds CSS, with an original missing-file embed→link fallback. Safer failure for generated required CSS is intentional. |
-| `utils.py:14003–14125` | `Process_HTM` appends authored HTML and named report fragments in declared order; interactive variants require separate support. |
+Original Python ScriptHost is the semantic authority. The source call chain reviewed in the initial Session 04 decisions remains binding:
 
-See `docs/generated-code-refactor/04_HTML_CSS_SCRIPT_HOST_DECISIONS.md`
-for task/option matrix, comparison against initial vg2c, exact/source-derived/
-intentional-difference/unsupported tiers, and remaining parity gaps.
+- SPFSQL3.py:20048-20120 — immediate CSS/HTML dispatch and distinct unsupported HTMLI5.
+- SPFSQL3.py:20123-20156 — named deferred report definitions.
+- SPFSQL3.py:20159-20189 — layout resolves reports at execution time.
+- SPFSQL3.py:20224-20255 — HTML-DELETE removes recorded consumed report spec objects, not all CSS and definitions.
+- SPFUtilities/utils.py:8866-9090 — stylesheet generation and formatting.
+- SPFUtilities/utils.py:9092-9274 — immediate/deferred HTML report, source CSV and output defaults.
+- SPFUtilities/utils.py:9324-9539 — live CSV header-driven column selection and four pattern families.
+- SPFUtilities/utils.py:12000-12240,13303-13419,14003-14125 — layout, CSS embed/link and ordered HTML fragments.
 
-## Actual implementation, contracts and ownership
+These are SOURCE-OBSERVED file/function analyses. New tests are SOURCE-DERIVED; no independent original-engine execution was performed. Intentional safety deviations and unsupported original branches are listed below. See 04_HTML_CSS_SCRIPT_HOST_DECISIONS.md, especially its authoritative REVISION section.
 
-Changed `src/vg2c/emitter/project.py`:
-- Correctly skip initial TYPE/KEY schema header when choosing report TYPE;
-  representative `ICMPCS.txt:55-66` validated with fixture test.
-- TYPE=CSS: emit `styles/report_<block>.css` with canonical
-  `runtime/html_format.build_css`, and a short `job.define_css` action at
-  the correct step; do not inject giant `job.styles[...]` lists.
-- TYPE=HTML: create editable `html/report_<block>.html`, then execute
-  immediate `job.html(...,reports={...})`. TYPE=HTMLI5 diagnostic.
-- HTML-DEFER: keep source-order `job.reports[ID]` assignments. Small
-  explicit column lists use `csv_report`; large report schemas (8+ fields or
-  long representation) live in one editable
-  `html/report_<block>.report.json` passed through `job.report_spec`.
-- HTML-LAYOUT: source-to-HTML shell in `html/report_<block>.html`,
-  short `job.html(..., output=..., css_file=..., embed_css=...)`, runtime
-  substitution and copy/embed mode. Editor metadata/StepEmission stable.
-- HTML-DELETE: one `job.delete_html()` call, replacing unconditional
-  clearing of all report, CSS and style state.
-- SQL assets from Sessions 02–03 remain `sql/query_*.sql`; none of the
-  SQL or pivot engine files were modified in Session 04.
+## The problem found and the chosen design
 
-Changed `src/vg2c/runtime/job.py`:
-- `define_css(logical_output_path, asset_path)` reads *edited source CSS*
-  from the project asset root when the step executes, atomically publishes
-  it into the chosen workdir, and sets the per-job active CSS filename.
-  Disallow writing outside workdir or overwriting source asset.
-- `report_spec(path)` reads and validates adjacent editable JSON on each
-  report-definition execution and constructs a `CSVReport`; no new renderer.
-- `html(..., reports=None, css_file=None, embed_css=False)` uses explicit
-  per-call report map for immediate HTML or per-job deferred map for layouts;
-  relative CSS resolves first from executed workdir output, next project
-  asset root, then template-sibling fallback in `render_html`.
-- `delete_html()` deletes consumed report IDs only; unconsumed reports
-  and CSS remain. State is fresh for each `JobRuntime`.
-- Existing SQL, macro, CTARRAY, workdir and user-file APIs unchanged.
+Previous Session 04 introduced html/report_N.report.json when a report used >=8 fields or a long parameter list. In that design, output HTML still had a fixed number of numbered header placeholders based on the original VG2 source. An edited JSON field list could make headings and body cells disagree. Small reports kept presentation configuration in generated Python instead; ordinary users had no consistent place to edit table presentation.
 
-Changed `src/vg2c/runtime/html.py` and
-`src/vg2c/runtime/html_format.py`:
-- Existing `Template`, HTMLParser slot validator, escaping, single renderer
-  and atomic writes remain the authority.
-- Missing required CSS or missing referenced input CSV fails with a precise
-  path instead of a misleading empty/styled default.
-- Stylesheet FORMAT name matching is case-insensitive; no new Jinja engine,
-  style manager or duplicate formatting pipeline.
-- Used deferred report IDs are recorded after a successful render, for
-  correct later HTML-DELETE behavior.
+Alternatives reviewed: keep JSON with dynamic headings (two editing locations); put all columns in main.py (long generated calls); embed a declarative table in HTML (chosen for reports referenced once); reusable table fragments (chosen only when a report is referenced by multiple layouts or has multiple HTML-DEFER definitions).
 
-New/extended `tests/runtime/test_html_assets_session04.py` verifies actual
-TYPE/KEY header parsing, immediate CSS and HTML, edited source assets on rerun,
-CSS embedding/links, missing files, consumed/unconsumed delete behavior,
-dynamic native Python style branch/loop state, moved project and unrelated CWD,
-long JSON report definitions with changed labels, and a fully connected
-offline SQL→wide pivot→CTARRAY→editable downstream SQL→HTML scenario.
+**Final ownership:** native Python controls execution and input/output paths; HTML owns source-column selection, display headings, column ordering, report layout and alignment; CSS owns presentation styling; SQL owns query text and data transformations. There is no new configuration format, generic page builder, browser dependency, Jinja or parallel rendering engine.
 
-Updated `.github/workflows/session03-validation.yml` (name inherited) to
-test Session 04, run F821/F823 across runtime/emitter/utilities, preserve
-Session 03 benchmarks, and print read-only generated-code metrics.
+## New asset contract
 
-### External editable artifact contract
+    generated_project/
+      main.py
+      sql/query_*.sql
+      html/report_*.html
+      html/reports/ID_N.table.html       # only when shared/redefined
+      styles/report_*.css
+      output/                         # runtime files, not editable sources
 
-```text
-generated_project/
-  main.py                         # control flow and lean calls only
-  sql/query_*.sql                 # SQL body, editable and reread at execution
-  html/report_*.html              # authored shell, editable and reread on layout
-  html/report_*.report.json       # only larger report schemas, editable and reread at report definition
-  styles/report_*.css             # static source CSS, editable and reread by define_css
-  output/                         # output workdir: copied CSS and rendered HTML/CSV
-```
+One-use report:
 
-Important distinction: the source under `styles/` is never overwritten by
-the generated job; HTML-RUN **publishes a separate output CSS file** at its
-original source position. Thus user edits to source CSS are honored next run.
-The emitted call uses `css_file`, never an invented `css` keyword.
+    job.reports["R"] = csv_report("final.csv", output_file=None)
+    job.html("html/report_056.html", output="revision.htm",
+             css_file="report.css", embed_css=True)
 
-### Representative generated code, before and after
+Inside html/report_056.html:
 
-Before (legacy checked-in ICMPCS source, condensed):
-```python
-styles["Column-Headers"] = [
-    "background-color:#dbd9c0", "color:#444", "font-size:12",
-    # ... many formatting entries ...
-]
-styles["Column-Data"] = [...]
-css_file = "sqlpathfinder_style_1.css"
-reports["R"] = csv_report(
-    "data.csv", columns=[...], headers=[...], alignment=[...],
-)
-```
+    <table class="tblin" data-report="R">
+      <thead><tr id="colhdr">
+        <th data-field="LOT" data-align="left">Lot</th>
+        <th data-field="A" data-align="center">Alpha</th>
+        <th data-field="B" data-align="right">Beta</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
 
-After (Session 04 contract, representative; identifiers vary by block):
-```python
-job.define_css("sqlpathfinder_style_1.css", "styles/report_000.css")
-job.reports["R"] = job.report_spec("html/report_055.report.json")
-job.html(
-    "html/report_056.html",
-    output="revision.htm",
-    css_file="sqlpathfinder_style_1.css",
-    embed_css=True,
-)
-job.delete_html()
-```
+To change ordinary presentation, edit only this HTML file. Editing the label within th changes its display text; editing data-field chooses the CSV source column; moving/removing/adding th changes the table order/count; editing data-align changes generated cell alignment. No numbered header slots or JSON list synchronization. Runtime reevaluates the current input CSV header. All generated SQL/CSS/HTML remain editable without retranslation.
 
-The second example is a representative composition of generated call shapes,
-not a claim that one specific ICMPCS block has all these calls.
+Reused/redefined report:
 
-### Style and report-state timeline
+    job.reports["R"] = job.report(
+        "html/reports/R_055.table.html", input_file="final.csv")
 
-| Source point | Under conditional/loop | Runtime effect | Output/data read |
-| --- | --- | --- | --- |
-| HTML-RUN TYPE CSS | Can occur inside native Python branch/loop | Read one editable static CSS asset; copy into current workdir and choose active CSS path | CSS source at action time |
-| HTML-RUN TYPE HTML | At its native Python source point | Use immediate CSV spec and shell | Render output now |
-| HTML-DEFER ID=R | At its native source point, possibly redefined | Assign/replace per-job report spec | JSON read now if long; CSV deferred |
-| HTML-LAYOUT | Only if branch/iteration reached | Read authored HTML source and selected style; render ordered report contents; record successful report use | CSV and CSS read at layout |
-| HTML-DELETE | Only if reached | Remove recorded consumed report IDs; keep CSS and unconsumed reports | No generated source assets deleted |
-| Next run(workdir=...) | New `JobRuntime` | Independent CSS/reports; independent output workdir | Sources are reloaded |
+The layout source uses a dedicated TABLE slot for the report. The existing
+render_html function inserts the selected HTML fragment at layout execution,
+then performs the SAME declarative table transformation. A subsequent
+definition of report ID R can select a different fragment. A report appearing
+twice or in several pages has only one declaration to edit for that definition.
+A one-use report needs no extra fragment.
 
-Static CSS edits change output on rerun; no speculative CSS-state combinations
-or global registry. Styling values themselves containing dynamic runtime
-macro tokens remain WIP, not incorrectly advertised as fully supported.
+There are now no automatically emitted .report.json files, even for large
+reports. The existing JobRuntime.report_spec(path) reader and old numbered
+header/row placeholder semantics are retained as an input compatibility path
+for already-translated projects; new emission never invokes them. Do not
+remove historic SQL .header.json or crosstab adapter support.
 
-## Verification results and measurable user readability
+## Implementation surfaces
 
-**Baseline before code:** CI 38105594249 on docs-only
-`d2ef0c520b9b6a3e2f3da9c0fb426a23f45bb159`:
-**606 passed / six inherited failed**.
+- src/vg2c/emitter/project.py: deleted report-size threshold and
+  _report_call JSON emission; _table now builds one directly editable
+  declaration. Prepass determines IDs referenced multiple times or defined
+  multiple times. Immediate HTML-RUN produces its editable HTML and
+  renders when encountered; HTML-DEFER registers concise csv_report or
+  job.report; HTML-LAYOUT chooses inline declaration or a reusable HTML
+  fragment. Source metadata still uses StepEmission/EmittedParameter.
+- src/vg2c/runtime/html.py: CSVReport supports an optional table_template;
+  csv_report now accepts no static columns (old columns remain accepted for
+  existing generated projects). _ReportTables is a narrowly scoped HTMLParser
+  locator for marked tables, headers, and tbody ranges. The current CSV header
+  is read when the layout runs, resolved case-insensitively, and patterns are
+  expanded. _rows remains the one cell formatting implementation.
+  Only narrow source spans are transformed; authored HTML markup is retained.
+  Generated rows are passed as renderer-owned Template substitution values
+  after structural validation, not inserted early where CSV dollar-brace
+  tokens could be incorrectly reinterpreted.
+- src/vg2c/runtime/job.py: small job.report(fragment, input_file=...)
+  constructor resolves the editable fragment via asset_path and returns
+  an existing CSVReport. Per-job deferral and deletion state remain isolated.
+  job.report_spec is unchanged solely for existing JSON projects.
+- tests/runtime/test_html_assets_session04.py: stronger editing tests for
+  short/long and shared/redefined reports, exact case-folded fields, all
+  four source column-pattern types, changing input schema on rerun,
+  header-only/empty/missing/duplicate CSV, malformed th, injection-safe CSV
+  values with dollar-brace tokens, generated SQL→crosstab→CTARRAY→downstream
+  SQL→HTML→linked/embedded CSS, and user HTML edits after generation.
+- .github/workflows/session03-validation.yml: existing focused/full,
+  runtime/emitter, F821/F823, compile, and representative source metrics.
 
-**Latest tested implementation:** `59fed15c1fd5e44a3fbd45d052c53c924cbaaba6`,
-CI https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38106469080:
-- `python -m compileall -q src` — passed.
-- `ruff check --select F821,F823 src/vg2c/runtime src/vg2c/emitter src/vg2c/utilities` — passed.
-- Existing extended Session 03/04 focused list — **163 passed**.
-- Existing synthetic SQL join and crosstab benchmark step — passed (not proprietary source parity).
-- `PYTHONPATH=src:. python -m pytest -q` — **614 passed / 6 failed**,
-  **no new unexpected failures**.
-- Connected offline SQL→pivot→CTARRAY→downstream SQL→HTML and asset rerun
-  passed as part of focused/full testing.
-- CI workflow result remains **red** due to six inherited failures; never
-  claim full workflow is green.
+## Actual HTML runtime column resolution
 
-Read-only ICMPCS generation in CI, no production execution, compares
-checked-in old main.py vs newly compiled main.py:
+For an explicit th data-field, the loader resolves the user-authored field
+against actual CSV column names case-insensitively, then outputs a matching
+header and one corresponding cell per data row, preserving th order.
+Duplicate case-insensitive source CSV names are rejected as ambiguous.
+Unavailable explicit fields yield an error listing available fields.
+Header-only CSV yields the editable headers and no rows. Empty CSV with no
+header yields an error.
 
-| Observable size metric | Before | After |
-| --- | ---: | ---: |
-| Physical Python lines | 748 | 137 |
-| AST simple statements | 75 | 59 |
-| Longest simple statement, characters | 3028 | 748 |
-| Explicit style property assignments | 9 | 0 |
-| Explicit CSS-file assignments | 4 | 0 |
+For SOURCE-OBSERVED original pattern families STARTS WITH:, ENDS WITH:,
+CONTAINS:, STARTS/ENDS WITH (%):, the emitted th stores the
+matching source pattern in data-pattern. The runtime dynamically expands
+matching CSV headers in source order, with matching alignment and body cells.
+Generated names follow original basic capitalization and underscore
+substitution conventions. The unchecked legacy regex interpretation is
+replaced with bounded literal matching and percent-as-wildcard for safety;
+this is an intentional repair and not exact proprietary engine parity.
+More involved COLUMN-FORMAT transformations are not implemented.
 
-Re-emitted artifacts: **8 SQL, 2 HTML, 1 CSS, 1 report JSON**.
-The physical line reduction is approximately **81.7%**; raw line count
-comparison is not equivalent to proof of runtime semantic parity.
+No runtime CSV value or pattern-generated heading is inserted unescaped into
+HTML. Existing Template/HTMLParser structural slot checks and atomic output
+writes remain authoritative. User-authored static markup, valid custom
+classes/attributes and inline styles are trusted as source assets, not
+sanitized indiscriminately. Explicit missing generated CSS stays diagnostic.
 
-**Inherited six failing UI/JMP tests (unchanged from predecessor):**
-1. `tests/ui/test_document_store.py::test_shared_global_edits_persist_across_steps`
-2. `tests/ui/test_document_store.py::test_reorder_persists_execution_order_and_generation_state`
-3. `tests/ui/test_document_store.py::test_html_preview_is_safe_exact_approximate_and_path_bounded`
-4. `tests/ui/test_html_preview.py::test_html_preview_replays_safely_and_does_not_write_outputs`
-5. `tests/ui/test_workspace_sessions.py::test_sql_column_choices_read_uploaded_server_csv_headers`
-6. `tests/ui/test_workspace_sessions.py::test_file_backed_sql_filter_uses_workspace_choices_through_save_and_generate`
+## Before/after UX and measured output
 
-No existing active Session 03 pivot/crosstab engine file was changed. Full
-tests include `test_crosstab_script_host_parity.py`,
-`test_crosstab_corrective_pass.py`, CTARRAY and SQLite binding regressions.
-The 50k chunk-first/LAST and combine_first policy remains Session 03's
-source-derived, **not original-engine differential-verified**, contract.
+The checked-in old ICMPCS generated main.py was 748 lines, with nine inline
+style assignments and maximum simple AST statement size 3028 characters.
+Session 04 first revision achieved 137 lines, 59 statements, maximum simple
+statement length 748, zero style assignments, and ONE report JSON asset.
+The HTML-first revision maintains 137 lines / 59 simple statements / max
+748 characters / zero inline style assignments, removes the report JSON
+asset entirely, and still emits 8 SQL files, 2 HTML pages and 1 CSS
+file for a read-only ICMPCS compilation. No production execution or overwrite.
 
-## Remaining verification and Session 05 instructions
+One-use report: one layout HTML file, zero report JSON or extra fragments.
+Multi-use report: one table fragment is reused across layout pages.
+Adding/removing/reordering columns: HTML-only edit, no Python/JSON update or
+retranslation. Dynamic pattern columns follow the runtime CSV schema.
 
-1. **Semantic fidelity WIP:** runtime COLUMN-DATA pattern expansion against
-   actual CSV headers, COLUMN-FORMAT numeric/width/header-case rules,
-   independent dynamic header count, repeated IDs with changed report schema,
-   macro-dependent CSS declaration values, dynamic report IDs/paths, some
-   output/default and deletion edge cases. Review authoritative
-   `utils.py:9092-9274,9324-9539,9715+`, and original task paths.
-2. **Review error policy:** source sometimes suppresses missing CSV and
-   missing embed CSS errors; current generated output deliberately fails on
-   missing required assets. Differentially verify original behavior and
-   document narrow intentional safety repair, instead of restoring silent
-   fallback solely for legacy vg2c tests.
-3. **Dead code/callers:** `utilities/html_report.py` still renders for
-   historic tests and UI preview. Inspect its callers first, especially
-   `tests/runtime/test_html_report.py` and UI preview, before any Session 05
-   removal/bridging. Do not delete semantic editing models or public APIs
-   merely because direct Python uses the new asset contract.
-4. **UI root-cause:** triage the six inherited failures separately, with
-   real scoped fixes and unchanged Session 04 semantics. JMP/JSL remain out
-   of scope unless future product approval.
-5. **Linux release certification:** test a packaged/wheel-installed
-   `vg2c.runtime` in a fresh Linux environment without compiler checkout,
-   VG2 input file, proprietary ScriptHost import, network drives or
-   production credentials; test relocated generated project, readonly source,
-   Unicode/charset, CSS link relpaths, and artifacts.
-6. **Original-source differential:** if sanitized isolated ScriptHost
-   execution becomes possible, compare meaningful normalized DOM, CSS rules,
-   source-order output, input selection and column width semantics; label
-   previous source-derived cases honestly until then.
-7. **Integration:** retain/extend the connected SQL→pivot→CTARRAY→downstream
-   SQL→HTML test; no second pivot/HTML engines; preserve SQL output /HEADERS
-   separate from display COLUMN-HEADERS.
-8. **Metadata and save/generate:** add broader semantic editor and Save vs
-   Generate replacement tests if shared UI/metadata changes later; preserve
-   `EmittedScript.assets`, `StepEmission`, `EmittedParameter`,
-   nonempty project overwrite guard, and per-workdir isolation.
+## Verification and known inherited failures
 
-Do not merge to `main`, `html-and-sql-rework`, or any other branch.
-Session 05 starts only on explicitly requested follow-up, from the final
-pushed Session 04 SHA reported by the agent, after remote ancestry checks.
+Original Session 04 exact parent: 163 focused, 436 runtime/emitter,
+614 full suite passed with six inherited UI/JMP failures; full CI was red.
+Revision tested checkpoint 34187cdd93af7613bce423cc112910d0d979562b:
+171 focused passed, 444 runtime/emitter passed, 622 full-suite passed,
+the SAME six inherited failures. No additional full-suite failures.
+compileall, scoped Ruff, synthetic pivot benchmark and offline SQL→pivot→
+CTARRAY→SQL→HTML/CSS tests passed. See linked checkpoint CI.
+Later targeted label-dollar-escape fix and docs require final exact-SHA CI;
+its results and the final pushed SHA belong in the final agent response.
+
+Six inherited failures, to carry into Session 05:
+1. tests/ui/test_document_store.py::test_shared_global_edits_persist_across_steps
+2. tests/ui/test_document_store.py::test_reorder_persists_execution_order_and_generation_state
+3. tests/ui/test_document_store.py::test_html_preview_is_safe_exact_approximate_and_path_bounded
+4. tests/ui/test_html_preview.py::test_html_preview_replays_safely_and_does_not_write_outputs (JMP/JSL)
+5. tests/ui/test_workspace_sessions.py::test_sql_column_choices_read_uploaded_server_csv_headers
+6. tests/ui/test_workspace_sessions.py::test_file_backed_sql_filter_uses_workspace_choices_through_save_and_generate
+
+These are genuinely FAILED tests, not ignored/successful tests. Do not
+expand this HTML-focused revision into UI/JMP work.
+
+## WIP and precise Session 05 boundaries
+
+- Original ScriptHost engine differential execution is still absent;
+  reference output tests are source-derived only.
+- COLUMN-FORMAT numeric/width/header-case subformats; complex style-cascade
+  rules, dynamic CSS declaration values/filenames; original regex edge
+  cases; exact encoding/default/error behavior; advanced HTMI/HTMLI5,
+  chart/JS, distributed/email report variants are unsupported/unverified.
+- Review old utilities/html_report.py only with static caller evidence:
+  it remains for historic/preview callers and should not become a competing
+  generated HTML renderer.
+- Retain Session 03 canonical crosstab, runtime inferred grouping, 50k
+  chunk FIRST/LAST, CTARRAY/CrossTab expansion and all SQLite/SQL bind
+  semantics; Session 04 revision intentionally modifies NO SQL/pivot engine.
+- Maintain EmittedScript.assets, semantic editing offsets, Save/Generate
+  separation, nonempty-project guard and no compiler/VG2 import in generated
+  runtime. Recheck end-to-end Linux wheel-installed, offline, relocated,
+  read-only asset certification before release. Existing CI validates a
+  clean Linux checkout with project runtime installed, but is not full
+  release certification.
+- Reconcile all six inherited UI/JMP failures separately with scoped evidence.
+- Do not merge to main/html-and-sql-rework, do not force-push, do not start
+  Session 05 without a new explicit instruction.
