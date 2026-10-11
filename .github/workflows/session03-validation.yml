@@ -87,7 +87,7 @@ jobs:
           PYTHONPATH: src:.
         run: |
           python - <<'PY'
-          import ast, re
+          import ast
           from pathlib import Path
           from vg2c import compile_document
           original = Path("ICMPCS/main.py").read_text(encoding="utf-8")
@@ -102,8 +102,8 @@ jobs:
                   "lines": len(source.splitlines()),
                   "simple_statements": len(sizes),
                   "max_simple_statement_chars": max(sizes, default=0),
-                  "styles_assignments": len(re.findall(r"(?m)^\\s*(?:job\\.)?styles\\[", source)),
-                  "css_file_assignments": len(re.findall(r"(?m)^\\s*(?:job\\.)?css_file\\s*=", source)),
+                  "styles_assignments": sum(line.strip().startswith(("styles[", "job.styles[")) for line in source.splitlines()),
+                  "css_file_assignments": sum(line.strip().startswith(("css_file =", "job.css_file =")) for line in source.splitlines()),
                   "csv_report_calls": source.count("csv_report("),
                   "html_calls": source.count("job.html("),
               }
