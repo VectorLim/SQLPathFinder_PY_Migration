@@ -1,7 +1,7 @@
-"""Embeddable utility classes for generated scripts.
+"""Compiler utility handlers and their on-demand registration.
 
-All concrete ``UtilitySpec`` subclasses are auto-registered via
-``UtilitySpec.__init_subclass__`` and emitted into generated scripts.
+Concrete handlers classify and emit project calls. Generated projects execute
+``vg2c.runtime`` directly; handler classes are not embedded in ``main.py``.
 """
 
 from __future__ import annotations
@@ -15,9 +15,8 @@ def __getattr__(name: str):
 
     return getattr(_base, name)
 
-# Concrete utility classes are imported lazily by the compiler embedding pass
-# to avoid circular imports (utilities→emitter→dispatch→dataflow loop).
-# Only base classes are imported here.
+# Import concrete utility handlers only when the compiler needs them.
+# Keep the package facade lazy to avoid import cycles.
 
 _CONCRETE_UTILS_LOADED = False
 log = logging.getLogger("vg2c.utilities")
@@ -35,7 +34,6 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.csv_io import CsvIO  # noqa: F401
     from vg2c.utilities.external import ExternalProcess  # noqa: F401
     from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
-    from vg2c.utilities.generic import UnknownUtility  # noqa: F401
     from vg2c.utilities.html_report import HtmlReport  # noqa: F401
     from vg2c.utilities.macro_control import MacroControl  # noqa: F401
     from vg2c.utilities.mail import MailService  # noqa: F401
