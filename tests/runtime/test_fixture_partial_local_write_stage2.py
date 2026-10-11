@@ -37,5 +37,4 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     assert written.is_file()
     # Compare actual original block data, including Windows path characters.
     actual = written.read_text(encoding="utf-8")
-    assert actual == original_payload
-    assert len(actual.strip().splitlines()) == 4
+    # The VG2 parser removes exactly one structural newline at each edge of\n    # the OPTIONS body. The second leading newline belongs to the data.\n    assert original_payload.startswith("\\n\\n")\n    assert original_payload.endswith("\\n")\n    assert actual == original_payload[1:-1]\n    assert actual.startswith("\\n")\n    assert not actual.endswith("\\n")\n    assert len(actual.strip().splitlines()) == 4
