@@ -262,7 +262,7 @@ def _columns_from_html(table, headers, *, values, macros):
                 )
                 label = actual.capitalize().replace("_", " ")
                 new_headers.append(
-                    f'<th data-field="{escape(actual, quote=True)}"{extras}>{escape(label).replace("$", "$")}</th>'
+                    f'<th data-field="{escape(actual, quote=True).replace("$", "&#36;")}"{extras}>{escape(label).replace("$", "$$")}</th>'
                 )
             edits.append((column["start"], column["end"], "".join(new_headers)))
             selected.extend(matches)

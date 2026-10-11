@@ -437,3 +437,24 @@ def test_malformed_report_declaration_and_duplicate_csv_headers(tmp_path):
     with pytest.raises(ValueError, match="duplicate case-insensitive"):
         job.html("report.html", output="out.html")
     assert not (work / "out.html").exists()
+
+
+def test_special_csv_field_with_dollar_does_not_become_template_slot(tmp_path):
+    source = tmp_path / "special.txt"
+    spec = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "rows.csv"]),
+        D.join(["COLUMN-DATA", "", "A$B"]),
+        D.join(["COLUMN-HEADERS", "", "Price $ label"]),
+    ])
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R"))
+    main = translate(source)
+    assert not list(main.parent.rglob("*.report.json"))
+    shell = next(main.parent.glob("html/*.html"))
+    assert "A&#36;B" in shell.read_text()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "rows.csv").write_text("A$B\n52\n")
+    load_job(main)(work)
+    html = (work / "out.html").read_text()
+    assert "Price $ label" in html and "52</td>" in html

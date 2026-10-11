@@ -193,14 +193,14 @@ def _table(report_id, options):
         label = labels[index] if index < len(labels) else field
         align = alignment[index] if index < len(alignment) else "middle-left"
         # Pattern SOURCE label is a column-name matcher, not a display title.
-        pattern = f' data-pattern="{escape(label, quote=True)}"' if field.upper() in (
+        pattern = f' data-pattern="{escape(label, quote=True).replace("$", "&#36;")}"' if field.upper() in (
             "STARTS WITH:", "ENDS WITH:", "CONTAINS:", "STARTS/ENDS WITH (%):"
         ) else ""
         display = "Matching CSV columns" if pattern else label
-        parts.append(f'<th data-field="{escape(field, quote=True)}"{pattern} '
-                     f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$")}</th>')
+        parts.append(f'<th data-field="{escape(field, quote=True).replace("$", "&#36;")}"{pattern} '
+                     f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$$")}</th>')
     top = options.get("AT-TOP-OF-REPORT")
-    heading = '<p class="at-top-of-report">' + escape(" ".join(_list(top))).replace("$", "$") + "</p>\n" if top else ""
+    heading = '<p class="at-top-of-report">' + escape(" ".join(_list(top))).replace("$", "$$") + "</p>\n" if top else ""
     return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}">'
             '<thead><tr id="colhdr">' + "".join(parts) +
             '</tr></thead><tbody></tbody><tfoot></tfoot></table>')
