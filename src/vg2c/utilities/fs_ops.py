@@ -50,9 +50,9 @@ class FileSystemOps(EmitterUtility):
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        from vg2c.utilities.pipeline_context import PipelineContext
+        from vg2c.utilities.direct_operations import DirectOperationMetadata
 
-        stmt = PipelineContext.write_file.render(
+        stmt = DirectOperationMetadata.write_file.render(
             path=resolve_output_path(block),
             template=block.resolved_body,
         )
