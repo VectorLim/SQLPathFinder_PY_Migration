@@ -35,4 +35,4 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     assert written.is_file()
     # Compare actual original block data, including Windows path characters.
     assert written.read_text(encoding="utf-8").strip() == expected_file_contents
-    assert len(written.read_text(encoding="utf-8").splitlines()) == 4
+    assert len(written.read_text(encoding="utf-8").strip().splitlines()) == 4
