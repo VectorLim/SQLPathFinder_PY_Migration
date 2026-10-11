@@ -150,40 +150,49 @@ def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatc
     assert "color:purple" in (work / "report.css").read_text()
 
 
-def test_long_report_schema_externalizes_and_rereads_user_edits(tmp_path):
+def test_long_html_report_columns_edit_without_python_or_json(tmp_path):
     fields = [f"F{i}" for i in range(10)]
-    labels = [f"Label {i}" for i in range(10)]
     spec = "\n".join([
         D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "data.csv"]),
         D.join(["COLUMN-DATA", "", *fields]),
-        D.join(["COLUMN-HEADERS", "", *labels]),
-        D.join(["COLUMN-ALIGNMENT", "", *(["middle-right"] * len(fields))]),
+        D.join(["COLUMN-HEADERS", "", *(f"Label {i}" for i in range(10))]),
+        D.join(["COLUMN-ALIGNMENT", "", *(["middle-right"] * 10)]),
     ])
-    source = tmp_path / "long.txt"
-    source.write_text(block("/REPORT=HTML-DEFER\n/ID=LONG", spec)
-                      + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:LONG"))
+    source = tmp_path / "large.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R"))
     main = translate(source)
-    code = main.read_text()
-    assert "job.report_spec(" in code
-    assert "Label 9" not in code
-    definitions = list(main.parent.glob("html/*.report.json"))
-    assert len(definitions) == 1
-    import json
-    config = json.loads(definitions[0].read_text())
-    assert config["columns"] == fields
-    config["headers"][0] = "Edited & Label"
-    definitions[0].write_text(json.dumps(config))
+    python_before = main.read_text()
+    assert "job.report_spec" not in python_before and "Label 9" not in python_before
+    assert not list(main.parent.rglob("*.report.json"))
+    shell = next(main.parent.glob("html/*.html"))
+    content = shell.read_text()
+    assert 'data-field="F0"' in content
     work = tmp_path / "work"
     work.mkdir()
-    (work / "data.csv").write_text(",".join(fields) + "\n" + ",".join(str(i) for i in range(10)) + "\n")
+    (work / "data.csv").write_text(",".join(fields + ["NEW"]) + "\n" +
+        ",".join([str(i) for i in range(10)] + ["extra&<script>"]) + "\n")
     run = load_job(main)
     run(work)
-    assert "Edited &amp; Label" in (work / "out.html").read_text()
-    assert "9</td>" in (work / "out.html").read_text()
-    config["headers"][0] = "Second Label"
-    definitions[0].write_text(json.dumps(config))
+    updated = content.replace(
+        '<th data-field="F0" data-align="middle-right">Label 0</th>', "")
+    updated = updated.replace(
+        '<th data-field="F1" data-align="middle-right">Label 1</th>'
+        '<th data-field="F2" data-align="middle-right">Label 2</th>',
+        '<th data-field="F2" data-align="center">Maximum Voltage</th>'
+        '<th data-field="F1" data-align="left">First</th>')
+    updated = updated.replace("</tr></thead>",
+        '<th data-field="NEW" data-align="right">New Measurement</th></tr></thead>')
+    shell.write_text(updated.replace("</table>", "</table><p>Authored <b>markup</b></p>"))
     run(work)
-    assert "Second Label" in (work / "out.html").read_text()
+    html = (work / "out.html").read_text()
+    assert html.index("Maximum Voltage") < html.index("First")
+    assert "Label 0" not in html and "New Measurement" in html
+    assert "extra&amp;&lt;script&gt;" in html
+    assert "text-align:center" in html and "text-align:left" in html
+    assert "Authored <b>markup</b>" in html
+    assert main.read_text() == python_before
+    assert not list(main.parent.rglob("*.report.json"))
 
 
 def test_relocated_project_relative_css_and_changed_cwd(tmp_path, monkeypatch):
@@ -262,3 +271,87 @@ def test_type_key_header_precedes_actual_css_report_type(tmp_path):
     work = tmp_path / "work"
     load_job(main)(work)
     assert (work / "report.css").read_text() == css_source.read_text()
+
+
+def test_reused_report_fragment_is_one_editable_html_location(tmp_path):
+    spec = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "data.csv"]),
+        D.join(["COLUMN-DATA", "", "A", "B"]),
+        D.join(["COLUMN-HEADERS", "", "First", "Second"]),
+    ])
+    source = tmp_path / "shared.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:first.html\nHTM:R")
+        + block("/REPORT=HTML-LAYOUT", ":FILE:second.html\nHTM:R"))
+    main = translate(source)
+    assert "job.report(" in main.read_text()
+    fragments = list(main.parent.glob("html/reports/*.table.html"))
+    assert len(fragments) == 1
+    assert not list(main.parent.rglob("*.report.json"))
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A,B,C\n1,2,3\n")
+    run = load_job(main)
+    run(work)
+    for file in ("first.html", "second.html"):
+        assert "Second" in (work / file).read_text()
+    fragment = fragments[0]
+    fragment.write_text(fragment.read_text().replace(
+        '<th data-field="B" data-align="middle-left">Second</th>',
+        '<th data-field="C" data-align="right">Third</th>'))
+    run(work)
+    for file in ("first.html", "second.html"):
+        result = (work / file).read_text()
+        assert "Third" in result and "3</td>" in result and "Second" not in result
+
+
+def test_pattern_column_and_live_csv_headers(tmp_path):
+    spec = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "data.csv"]),
+        D.join(["COLUMN-DATA", "", "ID", "STARTS WITH:"]),
+        D.join(["COLUMN-HEADERS", "", "Identifier", "M_"]),
+        D.join(["COLUMN-ALIGNMENT", "", "left", "right"]),
+    ])
+    source = tmp_path / "pattern.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=P", spec)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:result.html\nHTM:P"))
+    main = translate(source)
+    assert 'data-pattern="M_"' in next(main.parent.glob("html/*.html")).read_text()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("ID,M_ONE,OTHER\nx,10,no\n")
+    run = load_job(main)
+    run(work)
+    assert "M one" in (work / "result.html").read_text()
+    (work / "data.csv").write_text("ID,M_ONE,M_TWO,OTHER\nx,10,20,no\n")
+    run(work)
+    html = (work / "result.html").read_text()
+    assert "M one" in html and "M two" in html and "20</td>" in html
+    assert html.count("<th ") == 3 and html.count("<td ") == 3
+
+
+def test_html_report_missing_field_empty_csv_and_unsafe_text(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    template = root / "report.html"
+    template.write_text(
+        '<html><body><table data-report="R"><thead><tr><th data-field="A">Shown</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    work = tmp_path / "work"
+    work.mkdir()
+    job = JobRuntime(root, work)
+    job.reports["R"] = csv_report("data.csv")
+    (work / "data.csv").write_text("A\n")
+    job.html("report.html", output="out.html")
+    assert "<td " not in (work / "out.html").read_text()
+    slot_literal = chr(36) + "{NOT_A_SLOT}"
+    (work / "data.csv").write_text('A\n"<script>& ' + slot_literal + '"\n')
+    job.html("report.html", output="out.html")
+    html = (work / "out.html").read_text()
+    assert '&lt;script&gt;&amp;' in html and slot_literal in html
+    template.write_text(template.read_text().replace('data-field="A"', 'data-field="ABSENT"'))
+    with pytest.raises(ValueError, match="missing CSV field"):
+        job.html("report.html", output="failure.html")
+    (work / "data.csv").write_text("")
+    with pytest.raises(ValueError, match="no header row"):
+        job.html("report.html", output="failure.html")
