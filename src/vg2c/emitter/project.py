@@ -21,6 +21,7 @@ from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._emit_helpers import resolve_output_path, extract_crosstab_options, split_utility_command
 from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utilities.html_report import HtmlReport
+from vg2c.runtime.html_format import build_css
 from vg2c.utilities.sqlite_engine import SqliteEngine
 
 
@@ -375,25 +376,49 @@ def emit_project(dispatched):
         def tracked(lines):
             return [RenderedCall("\n".join(lines), definition, ())]
         if report_type == "HTML-DELETE":
-            _inline(writer, block, tracked(["job.reports.clear()", "job.styles.clear()", "job.css_file = None"]), steps)
+            # SPFSQL3.py:20244-20250 deletes consumed spec files, not CSS.
+            _inline(writer, block, tracked(["job.delete_html()"]), steps)
         elif report_type == "HTML-RUN":
-            lines = []
-            for parts in HtmlReport._iter_rows(block.resolved_body):
-                if parts[0].upper() == "CSS":
-                    lines.append(f"job.css_file = {parts[1]!r}")
-                elif parts[0].upper() == "FORMAT":
-                    lines.append(f"job.styles[{parts[1]!r}] = {parts[2:]!r}")
-                elif parts[0].upper() == "TYPE" and parts[1].upper() not in {"CSS", "KEY"}:
-                    raise ValueError("Immediate HTML-RUN report requires supported report options")
-            _inline(writer, block, tracked(lines or ["pass"]), steps)
+            # SPFSQL3.py:20083-20100: CSS and HTML have immediate effects.
+            rows = list(HtmlReport._iter_rows(block.resolved_body))
+            kind = next((parts[1].upper() for parts in rows if parts[0].upper() == "TYPE"), "")
+            if kind == "CSS":
+                logical_name = next((parts[1] for parts in rows if parts[0].upper() == "CSS"), "")
+                if not logical_name:
+                    _inline(writer, block, tracked(["pass"]), steps)
+                else:
+                    if "<<<" in logical_name:
+                        raise ValueError("Dynamic HTML-RUN CSS filenames require source-backed runtime generation")
+                    styles = {parts[1]: parts[2:] for parts in rows if parts[0].upper() == "FORMAT"}
+                    name = f"styles/report_{block.index:03d}.css"
+                    # SPFUtilities/utils.py:8866-9050: one CSS file per immediate spec.
+                    assets[name] = build_css(styles) + "\n"
+                    _inline(writer, block, tracked([f"job.define_css({logical_name!r}, {name!r})"]), steps)
+            elif kind == "HTML":
+                runtime_imports.add("csv_report")
+                options = _report_options(block)
+                report_id = f"RUN_{block.index:03d}"
+                names = _list(options.get("COLUMN-DATA"))
+                labels = _list(options.get("COLUMN-HEADERS")) or names
+                shell = HtmlReport._HTML_SCAFFOLD.format(
+                    title="SQLPathFinder Report", css_decl="${VG2C_CSS}",
+                    body=_table(report_id, {**options, "COLUMN-HEADERS": labels}))
+                name = f"html/report_{block.index:03d}.html"
+                assets[name] = shell
+                report = (f"csv_report({options.get('INPUT-FILE', '')!r}, columns={names!r}, "
+                          f"headers={labels!r}, alignment={_list(options.get('COLUMN-ALIGNMENT'))!r})")
+                output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
+                _inline(writer, block, tracked([
+                    f"job.html({name!r}, output={output!r}, reports={{{report_id!r}: {report}}})"
+                ]), steps)
+            else:
+                raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS or HTML")
         elif report_type == "HTML-DEFER":
             runtime_imports.add("csv_report")
             options = _report_options(block)
             report_id = block.resolved_options.lookup.get("ID", "")
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", report_id):
                 raise ValueError(f"Invalid report ID {report_id!r}")
-            if report_id in report_options and len(_list(report_options[report_id].get("COLUMN-HEADERS"))) != len(_list(options.get("COLUMN-HEADERS"))):
-                raise ValueError("Redefining report header count requires a different table template")
             report_options[report_id] = options
             call = f"job.reports[{report_id!r}] = csv_report({options.get('INPUT-FILE', '')!r}, columns={_list(options.get('COLUMN-DATA'))!r}, headers={_list(options.get('COLUMN-HEADERS'))!r}, alignment={_list(options.get('COLUMN-ALIGNMENT'))!r}, output_file={options.get('OUTPUT-FILE')!r})"
             _inline(writer, block, tracked([call]), steps)

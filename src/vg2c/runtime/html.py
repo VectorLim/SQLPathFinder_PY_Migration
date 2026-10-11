@@ -111,7 +111,7 @@ def _validate_slots(source):
 def _rows(report, *, workdir, values, macros):
     path = job_path(substitute(report.input_file, values=values, macros=macros), workdir)
     if not path.is_file():
-        return ""
+        raise FileNotFoundError(f"Report input CSV does not exist: {path}")
     lines = []
     for index, row in enumerate(_CsvIO(workdir=workdir).iter(str(path))):
         row = {key.lower(): value for key, value in row.items() if key}
@@ -142,7 +142,8 @@ def _write_atomic(path, content):
 
 
 def render_html(template_path, *, output, workdir, reports=None, values=None, macros=None,
-                styles=None, css_file=None, embed_css=False, instance=None):
+                styles=None, css_file=None, embed_css=False, instance=None,
+                used_reports=None):
     """Read editable assets at layout time and escape data in one Template pass."""
     template_path = job_path(template_path, workdir)
     source = template_path.read_text(encoding="utf-8")
@@ -185,7 +186,9 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
         css_path = Path(substitute(str(css_file), values=values, macros=macros))
         if not css_path.is_absolute():
             css_path = template_path.parent / css_path
-        content = css_path.read_text(encoding="utf-8") if css_path.is_file() else build_css(styles or {})
+        if not css_path.is_file():
+            raise FileNotFoundError(f"Required HTML stylesheet not found: {css_path}")
+        content = css_path.read_text(encoding="utf-8")
         if re.search(r"\$\{\w+\}|<<<", content) or embed_css and "</style" in content.lower():
             raise ValueError("Dynamic or structural CSS is unsupported")
         if embed_css:
@@ -211,4 +214,6 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     if css_copy:
         _write_atomic(*css_copy)
     _write_atomic(destination, result)
+    if used_reports is not None:
+        used_reports.update(name for name in reports if f"{name}_ROWS" in slots)
     return destination

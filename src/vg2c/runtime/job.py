@@ -17,7 +17,8 @@ from vg2c.runtime.files import (
     wait_file,
     write_file,
 )
-from vg2c.runtime.html import render_html
+from vg2c.runtime.html import _write_atomic, render_html
+from vg2c.runtime.values import job_path, substitute
 from vg2c.runtime.macros import MacroStore
 from vg2c.runtime.mail import send_mail
 from vg2c.runtime.query import execute_sql
@@ -36,6 +37,7 @@ class JobRuntime:
         self.reports = {}
         self.styles = {}
         self.css_file = None
+        self._used_html_reports = set()
 
     def asset_path(self, path) -> Path:
         path = Path(path)
@@ -91,14 +93,40 @@ class JobRuntime:
                            pivot_sort=pivot_sort, pivot_header_ref=pivot_header_ref,
                            pivot_legacy_headers=pivot_legacy_headers)
 
+    def define_css(self, output, asset):
+        """Publish an editable stylesheet when HTML-RUN CSS executes.
+
+        SPFSQL3.py:20095-20098 and SPFUtilities/utils.py:9028-9047.
+        """
+        source = self.asset_path(asset)
+        target = job_path(substitute(str(output), values=self.values, macros=self.macros),
+                          self.workdir).resolve()
+        if not target.is_relative_to(self.workdir) or target == source:
+            raise ValueError(f"CSS output must stay inside the job workdir: {output!r}")
+        _write_atomic(target, source.read_text(encoding="utf-8"))
+        self.css_file = str(target)
+        return target
+
+    def delete_html(self):
+        """Remove only used deferred reports (SPFSQL3.py:20244-20250)."""
+        for report_id in self._used_html_reports:
+            self.reports.pop(report_id, None)
+        self._used_html_reports.clear()
+
     def html(self, path, *, output, values=None, instance=None,
-             css_file=None, embed_css=False):
+             css_file=None, embed_css=False, reports=None):
         slots = self.values if values is None else {**self.values, **values}
+        selected = self.css_file if css_file is None else css_file
+        if css_file is not None and not Path(str(css_file)).is_absolute():
+            candidate = job_path(substitute(str(css_file), values=slots, macros=self.macros),
+                                 self.workdir)
+            if candidate.is_file():
+                selected = str(candidate)
         return render_html(self.asset_path(path), output=output,
-                           workdir=self.workdir, reports=self.reports, values=slots,
-                           macros=self.macros, styles=self.styles,
-                           css_file=self.css_file if css_file is None else css_file,
-                           embed_css=embed_css, instance=instance)
+                           workdir=self.workdir, reports=self.reports if reports is None else reports,
+                           values=slots, macros=self.macros, styles=self.styles,
+                           css_file=selected, embed_css=embed_css, instance=instance,
+                           used_reports=self._used_html_reports if reports is None else None)
 
     def write_file(self, path, template, *, vars=None):
         return write_file(path, template, workdir=self.workdir, values=self.values,
