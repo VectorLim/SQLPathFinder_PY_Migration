@@ -1,6 +1,6 @@
-"""Execute original, isolated HTML-RUN CSS blocks from both root VG2 fixtures.
+"""Execute isolated original HTML-RUN CSS blocks from five actual VG2 fixtures.
 
-These are PARTIAL and source-derived checks, not full ICMPCS/CSR job validation.
+These are PARTIAL source-preserved checks, not full job or ScriptHost parity tests.
 All later network, credential, executable and mail steps are excluded.
 """
 from __future__ import annotations
@@ -17,8 +17,17 @@ ROOT = Path(__file__).resolve().parents[2]
 SEPARATOR = "<---- New Query ---->"
 
 
-@pytest.mark.parametrize("fixture", ["ICMPCS.txt", "CSR_IAM_v2.txt"])
-def test_original_root_fixture_first_css_block_runs_offline(tmp_path, fixture):
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "ICMPCS.txt",
+        "CSR_IAM_v2.txt",
+        "tests/fixtures/actual_script.txt",
+        "tests/fixtures/maxlidheight.txt",
+        "tests/fixtures/new_icmpcs.txt",
+    ],
+)
+def test_original_fixture_first_css_block_runs_offline(tmp_path, fixture):
     source_text = (ROOT / fixture).read_text(encoding="utf-8", errors="replace")
     sections = source_text.split(SEPARATOR)
     assert len(sections) > 2
