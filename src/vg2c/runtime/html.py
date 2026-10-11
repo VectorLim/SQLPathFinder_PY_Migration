@@ -38,10 +38,28 @@ def csv_report(input_file, *, columns=(), headers=None, alignment=None, formats=
                      str(table_template) if table_template is not None else None)
 
 
+# Template placeholders remain supported, but only explicit ${NAME} slots and
+# known legacy $NAME slots are interpreted. Other dollars are authored text.
+_DOLLAR = re.compile(r"\$\$|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$")
+
+
+def _literal_dollars(source, legacy_names):
+    def escape_literal(match):
+        token = match.group(0)
+        if token == "$":
+            if source[match.end():].startswith("{"):
+                raise ValueError("Malformed explicit HTML slot; use ${NAME} or $ for a literal $")
+            return "$"
+        if token.startswith("${") or token == "$" or token[1:] in legacy_names:
+            return token
+        return "$" + token[1:]
+    return _DOLLAR.sub(escape_literal, source)
+
+
 def _identifiers(text):
     template = Template(text)
     if not template.is_valid():
-        raise ValueError("Malformed HTML template slot; escape a literal dollar as $$")
+        raise ValueError("Malformed explicit HTML template slot")
     return template.get_identifiers()
 
 
@@ -249,7 +267,12 @@ def _columns_from_html(table, headers, *, values, macros):
                 matches = [name for name in headers if name.casefold().endswith(pattern.casefold())]
             elif requested.upper() == "CONTAINS:":
                 matches = [name for name in headers if pattern.casefold() in name.casefold()]
+            elif "%" not in pattern:
+                # SPFUtilities/utils.py:9430-9443: no-percent means starts-with.
+                matches = [name for name in headers if name.casefold().startswith(pattern.casefold())]
             else:
+                # Literal metacharacters are an intentional safety repair to
+                # the unrestricted ScriptHost regex.
                 regex = re.compile("^" + re.escape(pattern).replace("%", ".*") + "$", re.I)
                 matches = [name for name in headers if regex.fullmatch(name)]
             # Check_Column_Pattern() defaults to capitalized/underscore-expanded
@@ -305,7 +328,24 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         while "${" + slot + "}" in source:
             slot += "_NEXT"
         generated_rows[slot] = lines
-        edits.append((*table["tbody"], "${" + slot + "}"))
+        start, end = table["tbody"]
+        authored = source[start:end]
+        # The marked tbody belongs to the CSV renderer. Preserve nonsemantic
+        # whitespace/comments and one legacy row slot; reject content that
+        # would otherwise disappear without warning.
+        row_slot = re.compile(r"\$(?:\{" + re.escape(name) +
+                              r"_ROWS\}|" + re.escape(name) + r"_ROWS\b)")
+        markers = list(row_slot.finditer(authored))
+        remainder = row_slot.sub("", authored)
+        if (len(markers) > 1 or
+                re.sub(r"<!--.*?-->", "", remainder, flags=re.S).strip()):
+            raise ValueError(
+                f"Report {name!r} tbody is renderer-owned; only whitespace, "
+                "HTML comments and one matching ROWS slot are supported"
+            )
+        token = "${" + slot + "}"
+        body = row_slot.sub(lambda _: token, authored) if markers else authored + token
+        edits.append((start, end, body))
         consumed.add(name)
     for start, end, content in sorted(edits, reverse=True):
         source = source[:start] + content + source[end:]
@@ -345,9 +385,18 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     """Read editable assets at layout time and escape data in one Template pass."""
     template_path = job_path(template_path, workdir)
     source = template_path.read_text(encoding="utf-8")
-    _validate_slots(source)
     reports = reports or {}
+    # Known preexisting $NAME placeholders remain compatible; ordinary $USD,
+    # $100 and similar authored currency text are never implicit variables.
+    legacy_names = (set(values or {}) | {"VG2C_CSS"} |
+                    {f"{name}_ROWS" for name in reports} |
+                    {f"{name}_TABLE" for name in reports} |
+                    {f"{name}_HEADER_{index + 1}" for name, report in reports.items()
+                     for index in range(len(report.headers))})
+    source = _literal_dollars(source, legacy_names)
+    _validate_slots(source)
     source = _include_report_fragments(source, reports)
+    source = _literal_dollars(source, legacy_names)
     _validate_slots(source)
     source, declarative_used, generated_rows = _render_report_tables(
         source, reports, workdir=workdir, values=values, macros=macros
@@ -355,8 +404,12 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     _validate_slots(source)
     slots = _identifiers(source)
     reserved = {f"{name}_ROWS" for name in reports} | {slot for slot in slots if slot.endswith("_ROWS")} | {"VG2C_CSS"} | set(generated_rows)
-    if reserved.intersection(values or {}):
-        raise ValueError("Caller values collide with renderer-owned HTML slots")
+    forbidden_values = {name for name in (values or {}) if (
+        name == "VG2C_CSS" or name.startswith("VG2C_DYNAMIC_ROWS_") or
+        name.endswith(("_ROWS", "_TABLE",)) or
+        re.fullmatch(r".+_HEADER_[0-9]+", name))}
+    if forbidden_values:
+        raise ValueError(f"Caller values collide with renderer-owned HTML slots: {sorted(forbidden_values)}")
     replacements = dict(generated_rows)
     mapping = dict(values or {})
     for name, report in reports.items():

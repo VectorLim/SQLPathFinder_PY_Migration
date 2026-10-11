@@ -25,6 +25,13 @@ from vg2c.runtime.html_format import build_css
 from vg2c.utilities.sqlite_engine import SqliteEngine
 
 
+# Create_HTML_Window and Process_HTM in SPFUtilities/utils.py:12175-12205,
+# 14046-14125 treat HTM: report references as whole layout lines.
+_HTM_LAYOUT_LINE = re.compile(
+    r"(?m)^(?P<indent>[ \t]*)HTM:(?P<id>[A-Za-z_][A-Za-z0-9_]*)(?P<suffix>[ \t]*)(?=\r?$)"
+)
+
+
 class _Expressions(ast.NodeTransformer):
     def __init__(self, macros):
         self.macros = macros
@@ -223,7 +230,8 @@ def emit_project(dispatched):
     for candidate in blocks.values():
         if (candidate.kind is Kind.HTML_REPORT
                 and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-LAYOUT"):
-            for key in re.findall(r"HTM:([A-Za-z0-9_]+)", candidate.resolved_body):
+            for match in _HTM_LAYOUT_LINE.finditer(candidate.resolved_body):
+                key = match.group("id")
                 layout_references[key] = layout_references.get(key, 0) + 1
     sql_parameters = {}
     html_parameters = {}
@@ -487,16 +495,19 @@ def emit_project(dispatched):
                 logging.getLogger(__name__).warning(
                     "[local-html-only] %s:%s:1 (block %s): Local HTML output does not implement %s; delivery/browser/security/chart integration is outside this renderer.",
                     block.span.file or "<input>", block.span.start_line, block.index, ", ".join(unsupported))
-            source = "".join(body).replace("$", "$$")
-            for report_id in re.findall(r"HTM:([A-Za-z0-9_]+)", source):
+            source = "".join(body).replace("$", "$")
+            if re.search(r"(?m)^[ \t]*HTMI(?:C)?:[^\r\n]*$", source, re.I):
+                raise ValueError("HTMI/HTMIC interactive layout references are unsupported")
+            def insert_report(match):
+                report_id = match.group("id")
                 if report_id not in report_options:
-                    raise ValueError(f"Unknown deferred report {report_id}")
-                source = source.replace(
-                    "HTM:" + report_id,
-                    ("${" + report_id + "_TABLE}")
-                    if (layout_references.get(report_id, 0) > 1 or report_definitions.get(report_id, 0) > 1)
-                    else _table(report_id, report_options[report_id]),
-                )
+                    raise ValueError(f"Unknown deferred report {report_id!r} in HTML-LAYOUT")
+                content = (("${" + report_id + "_TABLE}")
+                           if (layout_references.get(report_id, 0) > 1 or
+                               report_definitions.get(report_id, 0) > 1)
+                           else _table(report_id, report_options[report_id]))
+                return match.group("indent") + content + match.group("suffix")
+            source = _HTM_LAYOUT_LINE.sub(insert_report, source)
             if "<html" not in source.lower():
                 source = HtmlReport._HTML_SCAFFOLD.format(title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace("$", "$$"), css_decl="${VG2C_CSS}", body=source)
             slots = {}
