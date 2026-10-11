@@ -75,10 +75,12 @@ class _CsvIO:
     @staticmethod
     def _delimiter_for(path: str) -> str:
         suffix = Path(path).suffix.casefold()
-        if suffix == ".tab":
+        if suffix in {".tab", ".hive-tab", ".hive-sequence"}:
             return "\t"
         if suffix == ".asc":
             return "|"
+        if suffix == ".plus":
+            return "+"
         return ","
 
     @staticmethod
