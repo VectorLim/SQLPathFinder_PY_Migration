@@ -404,7 +404,11 @@ def emit_project(dispatched):
         elif report_type == "HTML-RUN":
             # SPFSQL3.py:20083-20100: CSS and HTML have immediate effects.
             rows = list(HtmlReport._iter_rows(block.resolved_body))
-            kind = next((parts[1].upper() for parts in rows if parts[0].upper() == "TYPE"), "")
+            # The first TYPE/KEY/COL1... row is the spec *header*, not
+            # the semantic report type (SPFSQL3.py:20083-20100).
+            kind = next((parts[1].upper() for parts in rows
+                         if parts[0].upper() == "TYPE"
+                         and parts[1].upper() != "KEY"), "")
             if kind == "CSS":
                 logical_name = next((parts[1] for parts in rows if parts[0].upper() == "CSS"), "")
                 if not logical_name:

@@ -242,3 +242,23 @@ def test_native_conditional_and_loop_css_state_is_per_job(tmp_path):
             assert required in (root / f"{selected}_{iteration}.html").read_text()
     assert (assets / "a.css").read_text() == "p {color:red;}"
     assert (assets / "b.css").read_text() == "p {color:blue;}"
+
+
+def test_type_key_header_precedes_actual_css_report_type(tmp_path):
+    """The ScriptHost design-table header must never override TYPE=CSS."""
+    spec = "\n".join([
+        D.join(["Type", "Key", "COL1", "COL2"]),
+        D.join(["TYPE", "CSS"]),
+        D.join(["CSS", "report.css"]),
+        D.join(["FORMAT", "Column-Headers", "background-color:#eeeeee", "font-size:12"]),
+    ])
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-RUN", spec))
+    main = translate(source)
+    assert "job.define_css(" in main.read_text()
+    css_source = next(main.parent.glob("styles/*.css"))
+    assert "background-color:#eeeeee" in css_source.read_text()
+    assert "font-size:12px" in css_source.read_text()
+    work = tmp_path / "work"
+    load_job(main)(work)
+    assert (work / "report.css").read_text() == css_source.read_text()
