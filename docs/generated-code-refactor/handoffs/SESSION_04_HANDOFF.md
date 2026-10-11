@@ -1,3 +1,36 @@
+# Session 04 corrective pass — semantic and editing reliability handoff
+
+**Status:** Four issues corrected and source-based regressions implemented; no Session 05 authorization. This section is the latest handoff and supersedes any conflicting statements in the revision history below.
+
+- **Exact starting remote SHA:** `b0d08e239a98690c2fff0734bf8ad73c84ede8aa` (verified against branch ref).
+- **Previous revision parent:** `d7891f3cbf98d3257fad2b4cf044e5b165c77e18`; ancestry ahead by ten, none behind.
+- **Only branch:** `refactor/generated-code/implementation`. Updates are fast-forward, without merging/rebasing/force-pushing.
+- **Test-first checkpoint:** `56b2aef30b751307e6d4f2bae66520b0967329a0`; five failing cases introduced for the four identified issues (one pattern, two report-ID orders, one currency, one tbody). CI https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38110875588 .
+- **First fully corrected checkpoint:** `148bdaa8d14c4fa3b63428a4280d8d410feddaee`; 628 full-suite passes / six inherited failures, no new failures, https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38111007978 .
+- **Final SHA and expanded CI:** must be reported by the agent after final remote HEAD and CI verification, not embedded in the commit itself.
+- **Workspace limitation:** no local checkout; the container cannot resolve GitHub for cloning. Remote files/ancestry inspected using the connected GitHub API and checked via clean Linux GitHub Actions. No uncommitted local source was overwritten.
+
+## Corrections and source provenance
+
+1. **A — no-percent prefix pattern:** `src/vg2c/runtime/html.py` now separates starts-with without percent from bounded, fully anchored percent wildcards. Original `SPFUtilities/utils.py:9400–9475` / `Check_Column_Pattern()` is **SOURCE-OBSERVED**. Literal regex metacharacters remain escaped, a documented **INTENTIONAL-FIX**. Runtime CSV order, live schema/header expansion and alignment remain shared with existing row generation.
+2. **B — exact HTML-LAYOUT report IDs:** `src/vg2c/emitter/project.py` replaces text-wide repeated `str.replace()` with a single anchored line-oriented expression and callback, reused in reference counting. Original `Create_HTML_Window()` / `Process_HTM()` in `utils.py:12000–12240,14003–14125` are **SOURCE-OBSERVED**. Unknown IDs and source-supported-but-unsupported interactive `HTMI/HTMIC` have actionable diagnostics. Authored non-directive text is not altered.
+3. **C — literal dollar policy:** The sole HTML renderer accepts ordinary currency text and legacy dynamic placeholders without users editing Python or escaping everyday dollars. Known bare `$NAME` and explicitly braced `${NAME}` resolve; unknown bare currency is literal; unknown braced slot is an error; literal braced slot can use `$${NAME}`. Existing literal `$$` escape works. Dollar normalization is applied for slot validation, then to source after HTML table field/pattern parsing to protect exact CSV names `A$B`. Renderer-owned names cannot be overridden by caller values. This is **INTENTIONAL-FIX**, not original Template behavior.
+4. **D — clear generated tbody ownership:** Marked report table body accepts whitespace/comments and one same-ID legacy ROWS slot; meaningful static elements (including manual rows) receive a ValueError before output rather than being deleted. Unmarked tables retain their authored content. This contract has no proven direct ScriptHost analogue (**UNVERIFIED** source comparison) and is an **INTENTIONAL-FIX**.
+
+Full policy, exact evidence tiers, source references and compatibility boundaries are in `docs/generated-code-refactor/04_HTML_CSS_SCRIPT_HOST_DECISIONS.md`. Original ScriptHost is still the sole VG2 semantic authority, but no proprietary engine differential execution was performed.
+
+## Verification and remaining constraints
+
+- **Baseline:** 172 focused pass; 445 runtime/emitter pass; 623 full suite pass + six inherited failures; compile and scoped Ruff pass.
+- **Test-first:** 445 old runtime/emitter tests pass; five new fail as designed. Whole suite 623 pass + 11 fail (the same six inherited plus five new).
+- **Corrected checkpoint:** 628 pass + SAME six inherited; compilation and scoped Ruff pass; preexisting SQL→crosstab→CTARRAY→downstream SQL→HTML/CSS, runtime/emitter tests and generated readability steps ran in CI.
+- **Post-checkpoint expanded tests:** additional pattern classes, mixed-case headers, literal punctuation, multiple wildcards, zero matches, CSV dollar headers and Unicode values, unknown/interactive references, repeated IDs, single legacy ROWS and owned slot collision. Require final exact-SHA CI re-run.
+- **Changed files:** `src/vg2c/runtime/html.py`, `src/vg2c/emitter/project.py`, `tests/runtime/test_html_corrective_session04.py`, this handoff, HTML/CSS decisions. No changes to SQL/pivot/CTARRAY, UI, ScriptHost, other branches or separate JSON report emission.
+- **Scope:** Generated Python still owns execution; SQL query/data semantics; HTML headings, column choice/order/alignments; CSS styling. Short/long/shared/redefined report declarations, post-generation edits, CSS and SQL rereads remain supported. No parallel parser/renderer was added.
+- **WIP:** original-engine differential; COLUMN-FORMAT widths/cases/numeric conversion; full HTMI/HTMLI5/HTMIC and distribution/interactive report output; exact original optional CSS/error/encoding behavior. Existing six UI/JMP tests remain failed and untouched. Do not start Session 05, merge, rebase or force-push.
+
+---
+
 # Session 04 revised handoff — HTML-first report editing
 
 **Status:** Revision implemented and tested against source-derived fixtures; exact original Python ScriptHost differential parity remains WIP. Do NOT start Session 05 or merge branches.

@@ -1,3 +1,32 @@
+# Session 04 corrective pass — exact references and safe editable HTML
+
+**Authority:** Original Python ScriptHost where behavior is source-observed; safe and predictable generated HTML editing where ScriptHost has no declarative-table counterpart. This section supersedes conflicting earlier pattern/template statements below. **Starting remote SHA:** `b0d08e239a98690c2fff0734bf8ad73c84ede8aa`. The original revision parent `d7891f3cbf98d3257fad2b4cf044e5b165c77e18` is a verified ancestor. Work is scoped to Session 04 on `refactor/generated-code/implementation`.
+
+## Evidence and fixes
+
+| Issue | Evidence | Root cause | Corrected contract |
+|---|---|---|---|
+| A: `STARTS/ENDS WITH (%):` | **SOURCE-OBSERVED**: `SPFUtilities/utils.py:9400–9475`, `Check_Column_Pattern()`, explicitly distinguishes percent present and absent | A fully anchored regex was used for both | Without `%`: starts-with, case-insensitive. With one/more `%`: entire name, percent as wildcard. Match current CSV headers in original CSV order; expand headings/alignments/body cells together. **INTENTIONAL-FIX**: escape literal regex metacharacters instead of trusting arbitrary regex input. |
+| B: partial `HTM:` IDs | **SOURCE-OBSERVED**: `Create_HTML_Window()` (`utils.py:12175–12205`) and `Process_HTM()` (`utils.py:14003–14125`) process ordered layout lines | Repeated unbounded `str.replace()` corrupted IDs with shared prefixes and also replaced authored inline text | One shared, anchored full-line pattern is used both by reference counting and by one callback substitution. Preserve report ID, source order, repeat count and whitespace, case-sensitive exact identity, and shared/redefined fragments. Unknown IDs raise a diagnostic. Source-backed unsupported `HTMI/HTMIC` lines now raise instead of becoming stray page text. |
+| C: literal currency | **SOURCE-DERIVED** editing usability; original ScriptHost does not use Python `string.Template` for authored HTML | Global Template parsing treated `$100` as malformed and `$USD` as a missing variable | **INTENTIONAL-FIX**: explicit braced slots `${NAME}` are always dynamic and missing names error; legacy bare `$NAME` is dynamic only when its name is registered in caller values or supported report/renderer slots. All other dollars are literal. `$$` retains the existing dollar-escape meaning. Malformed explicit `${` is rejected; to display a literal valid placeholder sequence, write `$${NAME}` (Template `$$` escape followed by text). Preserve structural slot context checks. |
+| D: marked table body | **UNVERIFIED** original static-row analogue; the HTML-first marked tbody is a new rendering contract | The renderer silently overwrote arbitrary body markup | **INTENTIONAL-FIX**: marked `<tbody>` is renderer-owned. Whitespace, HTML comments and at most one same-report `${ID_ROWS}` / `$ID_ROWS` compatibility slot are preserved; static rows or other body elements raise a clear error before writing output. Unmarked authored tables are unchanged. |
+
+### Template and attribute ownership
+
+Dollar normalization occurs for validation and **after** declarative table parsing but **before** the one authoritative Template substitution. This is necessary for literal CSV headers such as `A$B`: the table locator reads the original HTML attribute without doubling the dollar, while the eventual Template sees safely escaped text. Rows are inserted as trusted renderer-owned slot *values*, after parsing, so CSV values containing `${NOT_A_SLOT}`, ampersands, angle brackets, Unicode or quotes cannot execute substitutions or inject markup.
+
+Supported slots remain `${VG2C_CSS}`, `${ID_TABLE}`, `${ID_ROWS}`, numbered legacy `${ID_HEADER_n}`, value `${VALUE_n}` and currently supplied caller values (including their legacy bare syntax). Unknown explicitly braced names error. Caller values may not impersonate renderer CSS, dynamic rows, report tables, report rows or numbered report headers. Structural restrictions on URL/style/event attributes, script/style content, comments and dynamic HTML names continue to apply.
+
+### Test-first evidence and bounded review
+
+At the baseline `b0d08e2`, 172 focused and 445 runtime/emitter tests passed; 623 full-suite passed and the six previously recorded UI/JMP failures persisted. New corrective tests at `56b2aef30b751307e6d4f2bae66520b0967329a0` failed as designed: five parameterized cases covered A (1), B (2), C (1), D (1). CI: https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38110875588 ; 445 preexisting runtime/emitter tests continued passing. Correction checkpoint `148bdaa8d14c4fa3b63428a4280d8d410feddaee`: all 628 full-suite passing cases passed, with the SAME six inherited full-suite failures and no new regressions; https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38111007978 . Further pattern, CSV-dollar, repeated-reference and malformed directive tests were subsequently added and require exact-final-SHA CI verification.
+
+Changed executable paths: `src/vg2c/runtime/html.py` and `src/vg2c/emitter/project.py`, with tests in `tests/runtime/test_html_corrective_session04.py`. SQL, pivot, CTARRAY, frontend and the original ScriptHost were not changed. Existing HTML-first inline/fragment design, CSS assets, SQL assets, runtime rereads, generated native Python and zero new `.report.json` remain intact. No second HTML renderer or new configuration format was introduced.
+
+**Still WIP:** exact original-engine differential parity, full COLUMN-FORMAT behavior, interactive HTMI/HTMLI5/HTMIC, distributed/email flows and broader ScriptHost presentation nuances. The six existing UI/JMP failures remain explicitly inherited. Do not start Session 05 or merge any branches. Final complete fast-forward commit SHA and exact-CI results are reported in the final agent response, as a tracked handoff cannot self-reference its own SHA.
+
+---
+
 # REVISION — HTML-first report definitions (authoritative)
 
 This revision supersedes the old large-report JSON sidecar design described below.
