@@ -17,7 +17,7 @@ from vg2c.runtime.files import (
     wait_file,
     write_file,
 )
-from vg2c.runtime.html import _write_atomic, render_html
+from vg2c.runtime.html import _write_atomic, csv_report, render_html
 from vg2c.runtime.values import job_path, substitute
 from vg2c.runtime.macros import MacroStore
 from vg2c.runtime.mail import send_mail
@@ -78,6 +78,29 @@ class JobRuntime:
         ):
             raise ValueError(f"SQL header asset must be a list of strings: {asset}")
         return value
+
+    def report_spec(self, path):
+        """Read an editable long HTML column schema when the report is defined.
+
+        Source options are kept distinct: CSV fields, presentation labels,
+        alignment and output name (utils.py:9324-9378).
+        """
+        data = self.table_spec(path)
+        allowed = {"input_file", "columns", "headers", "alignment", "output_file"}
+        if not isinstance(data, dict) or set(data) - allowed:
+            raise ValueError(f"Invalid HTML report definition {path}: unexpected fields")
+        if not isinstance(data.get("input_file"), str):
+            raise ValueError(f"HTML report definition {path} requires input_file string")
+        for key in ("columns", "headers", "alignment"):
+            if not isinstance(data.get(key), list) or not all(
+                isinstance(value, str) for value in data[key]
+            ):
+                raise ValueError(f"HTML report definition {path} requires {key} string list")
+        if data.get("output_file") is not None and not isinstance(data["output_file"], str):
+            raise ValueError(f"HTML report definition {path} requires output_file string or null")
+        return csv_report(data["input_file"], columns=data["columns"],
+                          headers=data["headers"], alignment=data["alignment"],
+                          output_file=data.get("output_file"))
 
     def sql(self, path, *, reader, output, inputs=None, header=None,
             crosstab=None, node=None, params=None,

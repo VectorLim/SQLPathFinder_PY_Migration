@@ -148,3 +148,39 @@ def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatc
     assert "Edited" in (work / "linked.html").read_text()
     assert "color:purple" in (work / "embedded.html").read_text()
     assert "color:purple" in (work / "report.css").read_text()
+
+
+def test_long_report_schema_externalizes_and_rereads_user_edits(tmp_path):
+    fields = [f"F{i}" for i in range(10)]
+    labels = [f"Label {i}" for i in range(10)]
+    spec = "\n".join([
+        D.join(["TYPE", "HTML"]), D.join(["INPUT-FILE", "data.csv"]),
+        D.join(["COLUMN-DATA", "", *fields]),
+        D.join(["COLUMN-HEADERS", "", *labels]),
+        D.join(["COLUMN-ALIGNMENT", "", *(["middle-right"] * len(fields))]),
+    ])
+    source = tmp_path / "long.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=LONG", spec)
+                      + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:LONG"))
+    main = translate(source)
+    code = main.read_text()
+    assert "job.report_spec(" in code
+    assert "Label 9" not in code
+    definitions = list(main.parent.glob("html/*.report.json"))
+    assert len(definitions) == 1
+    import json
+    config = json.loads(definitions[0].read_text())
+    assert config["columns"] == fields
+    config["headers"][0] = "Edited & Label"
+    definitions[0].write_text(json.dumps(config))
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text(",".join(fields) + "\n" + ",".join(str(i) for i in range(10)) + "\n")
+    run = load_job(main)
+    run(work)
+    assert "Edited &amp; Label" in (work / "out.html").read_text()
+    assert "9</td>" in (work / "out.html").read_text()
+    config["headers"][0] = "Second Label"
+    definitions[0].write_text(json.dumps(config))
+    run(work)
+    assert "Second Label" in (work / "out.html").read_text()

@@ -177,6 +177,29 @@ def _report_options(block):
     return options
 
 
+def _report_call(block, options, assets):
+    """A compact call for short schemas; one editable asset for long schemas."""
+    columns = _list(options.get("COLUMN-DATA"))
+    headers = _list(options.get("COLUMN-HEADERS"))
+    alignment = _list(options.get("COLUMN-ALIGNMENT"))
+    input_file = options.get("INPUT-FILE", "")
+    output_file = options.get("OUTPUT-FILE")
+    if max(len(columns), len(headers), len(alignment)) >= 8 or (
+        len(repr((columns, headers, alignment))) > 180
+    ):
+        path = f"html/report_{block.index:03d}.report.json"
+        assets[path] = json.dumps({
+            "input_file": input_file,
+            "columns": columns,
+            "headers": headers,
+            "alignment": alignment,
+            "output_file": output_file,
+        }, ensure_ascii=False, indent=2) + "\n"
+        return f"job.report_spec({path!r})"
+    return (f"csv_report({input_file!r}, columns={columns!r}, "
+            f"headers={headers!r}, alignment={alignment!r}, output_file={output_file!r})")
+
+
 def _table(report_id, options):
     headers = "".join('<th>${' + report_id + f'_HEADER_{index + 1}' + '}</th>'
                       for index, _ in enumerate(_list(options.get("COLUMN-HEADERS"))))
@@ -405,8 +428,7 @@ def emit_project(dispatched):
                     body=_table(report_id, {**options, "COLUMN-HEADERS": labels}))
                 name = f"html/report_{block.index:03d}.html"
                 assets[name] = shell
-                report = (f"csv_report({options.get('INPUT-FILE', '')!r}, columns={names!r}, "
-                          f"headers={labels!r}, alignment={_list(options.get('COLUMN-ALIGNMENT'))!r})")
+                report = _report_call(block, {**options, "COLUMN-HEADERS": labels}, assets)
                 output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
                 _inline(writer, block, tracked([
                     f"job.html({name!r}, output={output!r}, reports={{{report_id!r}: {report}}})"
@@ -423,7 +445,7 @@ def emit_project(dispatched):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", report_id):
                 raise ValueError(f"Invalid report ID {report_id!r}")
             report_options[report_id] = options
-            call = f"job.reports[{report_id!r}] = csv_report({options.get('INPUT-FILE', '')!r}, columns={_list(options.get('COLUMN-DATA'))!r}, headers={_list(options.get('COLUMN-HEADERS'))!r}, alignment={_list(options.get('COLUMN-ALIGNMENT'))!r}, output_file={options.get('OUTPUT-FILE')!r})"
+            call = f"job.reports[{report_id!r}] = {_report_call(block, options, assets)}"
             _inline(writer, block, tracked([call]), steps)
         elif report_type == "HTML-LAYOUT":
             directives = {}
