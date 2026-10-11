@@ -288,6 +288,9 @@ def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
     assert "Legacy ok &amp; &lt;done&gt; / ok &amp; &lt;done&gt;" in result
     assert "h1 {color:blue;}" in result
     assert "¥ 5 &amp; &lt;other&gt;" in result
+    # Historical ROWS-only templates use a CSVReport with explicit columns;
+    # the HTML-first fragment intentionally owns columns separately.
+    job.reports["R"] = csv_report("data.csv", columns=["A$B"])
     job.html("legacy.html", output="old.html", css_file="style.css", embed_css=True)
     assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text()
 
