@@ -1,0 +1,148 @@
+"""Stage 2 static symbol/consumer inventory (not a dead-code detector).
+
+Run from any working directory: python scripts/stage2_symbol_audit.py
+Only standard-library AST is used; dynamic registrations, callable reflection,
+string-based lookups and instance method dispatch require manual verification.
+"""
+from __future__ import annotations
+
+import ast
+import json
+from collections import defaultdict
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1] / "src"
+TARGET_MODULES = (
+    "vg2c.emitter.models",
+    "vg2c.emitter.project",
+    "vg2c.utility_metadata",
+    "vg2c.utilities._base",
+    "vg2c.utilities._emit_helpers",
+    "vg2c.editing",
+    "vg2c.workflow",
+    "vg2c.semantics",
+    "vg2c.reorder",
+    "vg2c.dataflow.file_effects",
+)
+
+
+def module_name(path: Path) -> str:
+    parts = path.relative_to(ROOT).with_suffix("").parts
+    return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+
+
+def scan():
+    paths = sorted(
+        path
+        for directory in ("vg2c", "vg2c_ui")
+        for path in (ROOT / directory).rglob("*.py")
+    )
+    trees = {module_name(path): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+             for path in paths}
+    names: dict[str, set[str]] = {}
+    attributes: dict[str, set[str]] = {}
+    imports: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    dynamic: dict[str, list[str]] = defaultdict(list)
+    definitions: list[dict[str, object]] = []
+    for module, tree in trees.items():
+        names[module] = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        attributes[module] = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                owner = "." * node.level + (node.module or "")
+                for alias in node.names:
+                    imports[module].append((owner, alias.name))
+            elif isinstance(node, ast.Import):
+                imports[module].extend((alias.name, "*module*") for alias in node.names)
+            elif isinstance(node, ast.Call):
+                callee = node.func
+                name = callee.id if isinstance(callee, ast.Name) else (
+                    callee.attr if isinstance(callee, ast.Attribute) else "")
+                if name in {"getattr", "setattr", "globals", "import_module", "__import__"}:
+                    dynamic[module].append(name)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                definitions.append({"module": module, "symbol": node.name,
+                                    "kind": type(node).__name__, "line": node.lineno})
+                if isinstance(node, ast.ClassDef):
+                    for member in node.body:
+                        if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            definitions.append({
+                                "module": module, "symbol": node.name + "." + member.name,
+                                "kind": "method", "line": member.lineno,
+                            })
+                        elif isinstance(member, (ast.Assign, ast.AnnAssign)):
+                            targets = member.targets if isinstance(member, ast.Assign) else [member.target]
+                            for target in targets:
+                                if isinstance(target, ast.Name):
+                                    definitions.append({
+                                        "module": module, "symbol": node.name + "." + target.id,
+                                        "kind": "class field", "line": member.lineno,
+                                    })
+    for item in definitions:
+        owner, symbol = str(item["module"]), str(item["symbol"])
+        leaf = symbol.rsplit(".", 1)[-1]
+        users = sorted(
+            m for m in trees if m != owner
+            and (leaf in names[m] or leaf in attributes[m]
+                 or (owner, leaf) in imports[m])
+        )
+        item["possible_external_users"] = users
+        item["exact_importers"] = sorted(
+            m for m, imported in imports.items() if (owner, leaf) in imported
+        )
+    forbidden = []
+    for module, imported in imports.items():
+        for owner, name in imported:
+            if module.startswith("vg2c.runtime.") and (
+                owner.startswith(("vg2c_ui", "vg2c.emitter", "vg2c.sql_editor",
+                                  "vg2c.editing", "vg2c.workflow", "vg2c.compilation",
+                                  "vg2c.semantics", "vg2c.dataflow"))
+            ):
+                forbidden.append((module, owner, name))
+    return {
+        "module_count": len(trees),
+        "core_modules": sum(m == "vg2c" or m.startswith("vg2c.") for m in trees),
+        "ui_modules": sum(m == "vg2c_ui" or m.startswith("vg2c_ui.") for m in trees),
+        "definitions": definitions,
+        "forbidden_runtime_imports": forbidden,
+        "dynamic_modules": {m: sorted(set(x)) for m, x in dynamic.items()},
+        "imports": {m: refs for m, refs in imports.items()},
+    }
+
+
+def main():
+    data = scan()
+    records = data["definitions"]
+    print("STAGE2_SYMBOL_AUDIT_SUMMARY", json.dumps({
+        "modules": data["module_count"], "core": data["core_modules"],
+        "ui": data["ui_modules"], "definitions": len(records),
+        "forbidden_runtime_imports": data["forbidden_runtime_imports"],
+        "dynamic_modules": len(data["dynamic_modules"]),
+    }, sort_keys=True))
+    for module in TARGET_MODULES:
+        definitions = [d for d in records if d["module"] == module]
+        possible_unused = [
+            d["symbol"] for d in definitions
+            if not d["possible_external_users"] and not str(d["symbol"]).endswith(
+                ("__init__", "__call__", "__init_subclass__", "__get__"))
+        ]
+        exact = [
+            (d["symbol"], d["exact_importers"]) for d in definitions
+            if d["exact_importers"]
+        ]
+        print("STAGE2_SYMBOL_MODULE", json.dumps({
+            "module": module, "definitions": len(definitions),
+            "possible_unreferenced_externally": possible_unused,
+            "exact_imported_symbols": exact,
+            "dynamic_lookup": data["dynamic_modules"].get(module, []),
+        }, sort_keys=True))
+    print("STAGE2_SYMBOL_AUDIT_CAUTION: AST name/attribute usage is conservative, "
+          "not type-resolved; zero external mentions does not prove dead code. "
+          "Check same-module callers, exports, dynamic registry and generated imports "
+          "before deletion.")
+
+
+if __name__ == "__main__":
+    main()
