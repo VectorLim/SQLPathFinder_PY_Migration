@@ -1,3 +1,15 @@
+# Session 04 follow-up — mixed-case declarative attributes
+
+**Verified parent:** `dc1c09b80c7f9bf2929775d455b69b022595d4ca` on `refactor/generated-code/implementation`.
+
+**Test-first reproduction:** Four new uppercase/mixed-case `DATA-REPORT`, `DATA-FIELD`, and `DATA-PATTERN` regressions failed at `bfe21d621b7f632f461f28f10b932f8f4b91f6ea`; preexisting runtime/emitter results were 477 passed. See [failing CI](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38118129718). `R$VG2C_CSS` was rejected with `Unsupported slot in table.data-report` because `_literal_declaration_attributes()` skipped its protective parse when the source contained no *lowercase* `data-report`.
+
+**Minimal fix:** The early guard now tests `"data-report" in source.lower()`. The existing `HTMLParser` already lowercases parsed tag/attribute names, so `DATA-FIELD` and `DATA-PATTERN` require no separate normalization. Existing exact tag offsets, literal-dollar escaping, braced presentation placeholders, legacy report slots, output escaping and structural slot validation remain unchanged. Review found no equivalent adjacent case-sensitive attribute-name gate.
+
+**Verification:** The new regressions assert that report IDs, exact CSV field names, expanded pattern data fields and ancillary metadata containing recognized legacy dollar names remain literal. They also assert ordinary `$VALUE_1` text, explicit `${TITLE}` values and escaped CSV data continue working. Run compile, Ruff, focused/runtime-emitter suites, integration benchmark and full suite on the final pushed SHA. The six established UI/JMP failures remain inherited; no Session 05 or unrelated module changes.
+
+---
+
 # Session 04 — final edge-case correction: literal declarative dollar names
 
 **Verified starting remote HEAD:** `798c8271b1e1b8692fcacb2cc3e781af6ff5f314`; same implementation branch, no merge or Session 05. This addendum supersedes prior advice to encode dollar signs in report attributes.
