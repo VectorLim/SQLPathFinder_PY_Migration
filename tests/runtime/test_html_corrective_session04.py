@@ -102,7 +102,7 @@ def test_tbody_does_not_silently_delete_authored_rows(tmp_path):
 
 @pytest.mark.parametrize("mode,pattern,fields", [
     ("STARTS WITH:", "a.", ["a.one", "A.two"]),
-    ("ENDS WITH:", "_x", ["a_x", "B_X"]),
+    ("ENDS WITH:", "_x", ["a_x", "B_X", "A[1]_X"]),
     ("CONTAINS:", "(z)", ["A(z)B"]),
     ("STARTS/ENDS WITH (%):", "A%B%C", ["AXBYC", "A B C"]),
     ("STARTS/ENDS WITH (%):", "A[1]", ["A[1]", "A[1]_X"]),
