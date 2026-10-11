@@ -37,7 +37,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.fs_ops import FileSystemOps  # noqa: F401
     from vg2c.utilities.generic import UnknownUtility  # noqa: F401
     from vg2c.utilities.html_report import HtmlReport  # noqa: F401
-    from vg2c.utilities.macro_state import MacroState  # noqa: F401
+    from vg2c.utilities.macro_control import MacroControl  # noqa: F401
     from vg2c.utilities.mail import MailService  # noqa: F401
     from vg2c.utilities.oracle_client import OracleClient  # noqa: F401
     from vg2c.utilities.pipeline_context import PipelineContext  # noqa: F401

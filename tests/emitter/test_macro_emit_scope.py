@@ -1,40 +1,14 @@
-from __future__ import annotations
+"""Native macro headers are compiler-owned, not emitted through legacy MacroState."""
 
-from vg2c.emitter.indent_writer import IndentWriter
-from vg2c.operands.base import ScopeNode
+from vg2c.emitter.project import control_header
 from vg2c.operands.macro import StartMacro
 
 
-def _leaf() -> ScopeNode:
-    return ScopeNode(
-        scope_id=1,
-        kind="leaf",
-        start_index=0,
-        end_index=0,
-        children=(),
-        block_index=0,
-        control_payload=None,
+def test_csv_macro_header_uses_runtime_job():
+    assert control_header(StartMacro("configsets.csv", False), 7) == (
+        "macro_row_7 = job.read_macro_row('configsets.csv')"
     )
 
 
-def test_emit_scope_uses_scoped_rows_for_csv_macros():
-    writer = IndentWriter()
-    payload = StartMacro(csv_path="configsets.csv", prompt_off=False)
-
-    payload.emit_scope(writer, lambda _node: writer.write("pass"), (_leaf(),))
-
-    source = writer.source()
-    assert "with ctx.macro.scope(ctx.csv_io.single_row('configsets.csv')):" in source
-    assert "for _ in" not in source
-    assert "with ctx.macro.scope(__row):" not in source
-
-
-def test_emit_scope_uses_scope_context_for_static_macros():
-    writer = IndentWriter()
-    payload = StartMacro(csv_path="", prompt_off=False)
-
-    payload.emit_scope(writer, lambda _node: writer.write("pass"), (_leaf(),))
-
-    source = writer.source()
-    assert "with ctx.macro.scope():" in source
-    assert "scoped_rows(" not in source
+def test_static_macro_header_uses_runtime_store():
+    assert control_header(StartMacro("", False), 7) == "with macros.scope():"

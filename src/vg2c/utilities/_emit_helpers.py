@@ -112,21 +112,21 @@ def extract_crosstab_options(block: Any) -> dict[str, Any] | None:
 
 
 def placeholders_to_python_expr(text: str) -> str:
-    from vg2c.utilities.macro_state import MacroState
+    from vg2c.utilities.macro_control import MacroControl
 
     if not text:
         return repr("")
     parts: list[str] = []
     cursor = 0
-    for match in MacroState.PLACEHOLDER_RE.finditer(text):
+    for match in MacroControl.PLACEHOLDER_RE.finditer(text):
         literal = text[cursor : match.start()]
         if literal:
             parts.append(repr(literal))
         named = match.group(1)
         if named is not None:
-            parts.append(MacroState.named.render(normalize_macro_name(named)))
+            parts.append(MacroControl.named.render(normalize_macro_name(named)))
         else:
-            parts.append(MacroState.positional.render())
+            parts.append(MacroControl.positional.render())
         cursor = match.end()
     tail = text[cursor:]
     if tail:
@@ -137,7 +137,7 @@ def placeholders_to_python_expr(text: str) -> str:
 
 
 def to_code_expr(value: str | None) -> CodeExpr:
-    from vg2c.utilities.macro_state import MacroState
+    from vg2c.utilities.macro_control import MacroControl
 
     if value is None:
         return CodeExpr("None")
@@ -146,11 +146,11 @@ def to_code_expr(value: str | None) -> CodeExpr:
     symbol_names = tuple(
         dict.fromkeys(
             normalize_macro_name(match.group(1))
-            for match in MacroState.PLACEHOLDER_RE.finditer(text)
+            for match in MacroControl.PLACEHOLDER_RE.finditer(text)
             if match.group(1) is not None
         )
     )
-    if MacroState.PLACEHOLDER_RE.search(text):
+    if MacroControl.PLACEHOLDER_RE.search(text):
         return CodeExpr(source, symbol_names=symbol_names)
     return CodeExpr(source, text)
 
