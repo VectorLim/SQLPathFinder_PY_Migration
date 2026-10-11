@@ -52,8 +52,9 @@ def test_original_sql_script_local_sqlite_join_with_tab_inputs(tmp_path):
     with output.open(encoding="utf-8", newline="") as stream:
         header_line = stream.readline()
         stream.seek(0)
-        delimiter = "\t" if "\t" in header_line else ","
-        reader = csv.DictReader(stream, delimiter=delimiter)
+        assert "\t" in header_line
+        assert "," not in header_line
+        reader = csv.DictReader(stream, delimiter="\t")
         assert reader.fieldnames == [
             "prodgroup3", "operation", "lot",
             "spc_lot", "monitor_set_name", "prevout_date",
