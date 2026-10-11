@@ -14,7 +14,7 @@ from vg2c.operands import IfThen, RunLoop, ForLoop, SiteLoop, ScopeNode, StartMa
 from vg2c.operands.base import _OPERATOR_TABLE
 from vg2c.utilities._emit_helpers import split_utility_command
 from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
-from vg2c.utilities.macro_state import MacroState
+from vg2c.utilities.macro_control import MacroControl
 from vg2c.utility_metadata import ValueSchema
 from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 
@@ -893,7 +893,7 @@ def _symbolic_operand(value: str, operator: str | None) -> str | None:
     text = value.strip()
     if text.startswith("VAR(") and text.endswith(")"):
         return text[4:-1].strip()
-    if MacroState.NAMED_PLACEHOLDER_RE.fullmatch(text):
+    if MacroControl.NAMED_PLACEHOLDER_RE.fullmatch(text):
         return text
     operator_type = _OPERATOR_TABLE.get((operator or "").upper(), ("", "string"))[1]
     if operator_type == "numeric" and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text):
