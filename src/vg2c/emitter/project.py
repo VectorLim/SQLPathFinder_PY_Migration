@@ -28,7 +28,7 @@ from vg2c.utilities.sqlite_engine import SqliteEngine
 # Create_HTML_Window and Process_HTM in SPFUtilities/utils.py:12175-12205,
 # 14046-14125 treat HTM: report references as whole layout lines.
 _HTM_LAYOUT_LINE = re.compile(
-    r"(?m)^(?P<indent>[ \t]*)HTM:(?P<id>[A-Za-z_][A-Za-z0-9_]*)(?P<suffix>[ \t]*)(?=\r?$)"
+    r"(?im)^(?P<indent>[ \t]*)HTM:(?P<id>[A-Za-z_][A-Za-z0-9_]*)(?P<suffix>[ \t]*)(?=\r?$)"
 )
 
 
@@ -498,6 +498,9 @@ def emit_project(dispatched):
             source = "".join(body).replace("$", "$$")
             if re.search(r"(?m)^[ \t]*HTMI(?:C)?:[^\r\n]*$", source, re.I):
                 raise ValueError("HTMI/HTMIC interactive layout references are unsupported")
+            for candidate in re.finditer(r"(?im)^[ \t]*HTM:[^\r\n]*", source):
+                if not _HTM_LAYOUT_LINE.fullmatch(candidate.group(0)):
+                    raise ValueError(f"Malformed HTM: report directive {candidate.group(0)!r}")
             def insert_report(match):
                 report_id = match.group("id")
                 if report_id not in report_options:

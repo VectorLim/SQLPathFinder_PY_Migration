@@ -193,3 +193,27 @@ def test_tbody_single_legacy_row_slot_and_renderer_slot_collision(tmp_path):
     with pytest.raises(ValueError, match="renderer-owned"):
         runtime.html("page.html", output="bad.html", values={"VG2C_CSS": "bad"})
     assert not (work / "bad.html").exists()
+
+
+def test_mixed_case_htm_directive_and_malformed_reference(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec("A", "Alpha"))
+                      + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nhTm:R"))
+    main = translate(source)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A\n1\n")
+    scope = {"__file__": str(main), "__name__": "test_generated"}
+    exec(compile(main.read_text(), str(main), "exec"), scope)
+    scope["run"](work)
+    assert "Alpha</th>" in (work / "out.html").read_text()
+    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R extra"))
+    with pytest.raises(ValueError, match="Malformed HTM:"):
+        translate(source)
+
+
+def test_explicit_literal_braced_text_uses_legacy_dollar_escape(tmp_path):
+    runtime, page, work = job(
+        tmp_path, "<html><head></head><body>" + "$" + "$" + "{NOT_A_SLOT}</body></html>")
+    runtime.html("page.html", output="out.html")
+    assert "$" + "{NOT_A_SLOT}" in (work / "out.html").read_text()
