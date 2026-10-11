@@ -398,3 +398,22 @@ def test_declared_report_id_is_not_replaced_by_legacy_value(tmp_path):
     content = (work / "out.html").read_text()
     assert 'data-report="R$VALUE_1"' in content
     assert "cell-value</td>" in content
+
+
+@pytest.mark.parametrize("field", ["A$R_ROWS", "A$VG2C_CSS", "A$R_HEADER_1"])
+def test_declarative_field_is_literal_even_for_reserved_renderer_slots(tmp_path, field):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><table data-report="R">'
+        '<thead><tr><th data-field="' + field + '">Text</th></tr></thead>'
+        '<tbody></tbody></table></body></html>')
+    (work / "data.csv").write_text(field + "\ncell-value\n")
+    job = JobRuntime(root, work)
+    job.reports["R"] = csv_report("data.csv", headers=["Old header"])
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert 'data-field="' + field + '"' in content
+    assert "cell-value</td>" in content
