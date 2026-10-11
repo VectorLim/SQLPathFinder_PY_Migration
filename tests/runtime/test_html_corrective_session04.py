@@ -227,3 +227,66 @@ def test_duplicate_data_report_attribute_is_not_silently_ambiguous(tmp_path):
     with pytest.raises(ValueError, match="Duplicate declarative report table attributes"):
         runtime.html("page.html", output="bad.html")
     assert not (work / "bad.html").exists()
+
+
+def test_runtime_value_names_do_not_interpolate_authored_currency_or_csv_fields(tmp_path):
+    """Only explicit placeholders may use arbitrary runtime value names."""
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text('A$B\n"100 & <b>USD</b>"\n')
+    page = root / "page.html"
+    page.write_text(
+        '<html><head></head><body><h1>Price $USD</h1>'
+        '<p title="Price $USD and $B">Amount $B / $USD</p>'
+        '<p>Chosen: ${USD}</p>'
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="A$B">Price $USD</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={"USD": "MYR", "B": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert "Price $USD" in rendered
+    assert 'title="Price $USD and $B"' in rendered
+    assert "Amount $B / $USD" in rendered
+    assert 'data-field="A$B"' in rendered
+    assert "Chosen: MYR" in rendered
+    assert "100 &amp; &lt;b&gt;USD&lt;/b&gt;" in rendered
+    assert "Achanged" not in rendered
+    page.write_text(page.read_text().replace("Price $USD</h1>", "Cost $USD</h1>"))
+    job.html("page.html", output="out.html")
+    assert "Cost $USD</h1>" in (work / "out.html").read_text()
+
+
+def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
+    root = tmp_path / "assets"
+    (root / "reports").mkdir(parents=True)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text('A$B\n"¥ 5 & <other>"\n')
+    (root / "reports/r.table.html").write_text(
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="A$B" data-note="$USD">Price $USD</th>'
+        '</tr></thead><tbody></tbody></table>')
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body>'
+        '<h1>Annual $USD</h1><p>Legacy $VALUE_1 / ${VALUE_1}</p>'
+        '${R_TABLE}</body></html>')
+    (root / "legacy.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><table><tbody>$R_ROWS</tbody></table></body></html>')
+    (root / "style.css").write_text('h1 {color:blue;}')
+    job = JobRuntime(root, work, values={"USD": "MYR", "B": "changed"})
+    job.reports["R"] = job.report("reports/r.table.html", input_file="data.csv")
+    job.html("page.html", output="out.html", values={"VALUE_1": "ok & <done>"},
+             css_file="style.css", embed_css=True)
+    result = (work / "out.html").read_text()
+    assert "Annual $USD" in result
+    assert 'data-field="A$B"' in result and 'data-note="$USD"' in result
+    assert "Price $USD" in result
+    assert "Legacy ok &amp; &lt;done&gt; / ok &amp; &lt;done&gt;" in result
+    assert "h1 {color:blue;}" in result
+    assert "¥ 5 &amp; &lt;other&gt;" in result
+    job.html("legacy.html", output="old.html", css_file="style.css", embed_css=True)
+    assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text()
