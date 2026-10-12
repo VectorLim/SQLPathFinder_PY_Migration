@@ -11,9 +11,10 @@ from vg2c.runtime.values import substitute
 class MacroStore(Mapping[str, object]):
     """One per-run macro store.
 
-    Names are case-insensitive. Reads expand exactly as `values.substitute`
-    would: missing ordinary names raise ValueError, reserved SPF tokens can
-    remain literal, and CL_/SPF-JOB-/SPF-DEFAULT-/%...% use the values snapshot.
+    Names are case-insensitive. Missing named lookups return None. Existing
+    values expand as `values.substitute` would: reserved SPF tokens can remain
+    literal, and CL_/SPF-JOB-/SPF-DEFAULT-/%...% use the values snapshot.
+    Text substitution still raises ValueError for missing ordinary names.
     Assignment writes only into the active frame. Never share an instance
     between independent jobs.
     """
@@ -33,9 +34,11 @@ class MacroStore(Mapping[str, object]):
             result.update(frame)
         return result
 
-    def __getitem__(self, name: str) -> str:
+    def __getitem__(self, name: str) -> str | None:
         # Use the existing, single token resolver (including its diagnostics).
         key = str(name).strip().upper()
+        if key not in self and not key.startswith(("SPF-", "SPF$", "!")) and key != "SPF_DATETIME":
+            return None
         return substitute(f"<<<{key}>>>", values=self._values, macros=self._snapshot())
 
     def __setitem__(self, name: str, value: object) -> None:
@@ -47,6 +50,10 @@ class MacroStore(Mapping[str, object]):
     def __len__(self) -> int:
         return len(self._snapshot())
 
+    def __contains__(self, name: object) -> bool:
+        key = str(name).strip().upper()
+        return key in self._snapshot() or key in self._values
+
     def items(self):
         # Runtime direct operations need raw values, not recursively expanded
         # bracket reads. This also preserves None for the canonical resolver.
@@ -54,7 +61,7 @@ class MacroStore(Mapping[str, object]):
 
     def get(self, name: str, default=None):
         key = str(name).strip().upper()
-        if key not in self._snapshot() and key not in self._values:
+        if key not in self:
             return default
         return self[name]
 

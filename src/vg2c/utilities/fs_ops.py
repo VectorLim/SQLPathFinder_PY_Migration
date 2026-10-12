@@ -54,7 +54,8 @@ class FileSystemOps(EmitterUtility):
 
         stmt = DirectOperationMetadata.write_file.render(
             path=resolve_output_path(block),
-            template=block.resolved_body,
+            # ScriptHost parseTaskOptions lstrips SPFTaskCommand (SPFSQL3.py:1824).
+            template=block.resolved_body.lstrip(),
         )
         return "write_file", [stmt]
 

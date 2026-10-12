@@ -20,8 +20,15 @@ def test_named_lookup_write_missing_and_values_namespace():
     assert macros["%ENV_NAME%"] == "one"
     assert macros["SPF-JOB-START-DAY"] == "today"
     assert macros.substitute("<<<site>>>/<<<CL_SITE>>>/<<<%ENV_NAME%>>>") == "VN/KM/one"
-    with pytest.raises(ValueError, match="Unknown value"):
-        _ = macros["UNKNOWN"]
+    assert macros["CSRV"] is None
+    assert macros[" csrv "] is None
+    assert "CSRV" not in macros
+    assert " site " in macros
+    assert "CL_SITE" in macros
+    macros["CSRV"] = "Y"
+    assert macros["csrv"] == "Y"
+    assert "CSRV" in macros
+    assert "empty" in macros
     with pytest.raises(ValueError, match="Unknown value"):
         macros.substitute("<<<UNKNOWN>>>")
     assert macros.substitute("<<<SPF-UNKNOWN>>>") == "<<<SPF-UNKNOWN>>>"
@@ -38,11 +45,9 @@ def test_nested_scope_shadow_mutation_exception_and_newlines():
                 assert macros.substitute("\n<<<LABEL>>>:<<<NONE>>>") == "\ninner:"
                 raise RuntimeError("probe")
         assert macros["label"] == "outer"
-        with pytest.raises(ValueError, match="Unknown value"):
-            _ = macros["ONLY_INNER"]
+        assert macros["ONLY_INNER"] is None
     assert macros["label"] == "base"
-    with pytest.raises(ValueError, match="Unknown value"):
-        _ = macros["NONE"]
+    assert macros["NONE"] is None
 
 
 def test_independent_jobs_loop_frames_and_failure_diagnostics():
@@ -57,8 +62,7 @@ def test_independent_jobs_loop_frames_and_failure_diagnostics():
             assert first["SPF-SITE"] in {"PG", "KM"}
             first["temporary"] = "loop-only"
     assert first["SPF-SITE"] == "<<<SPF-SITE>>>"  # Reserved SPF tokens remain literal.
-    with pytest.raises(ValueError, match="Unknown value"):
-        _ = first["temporary"]
+    assert first["temporary"] is None
     rows = list(for_values("0", "2", "1", "A", "N"))
     for row in rows:
         with first.scope(row):

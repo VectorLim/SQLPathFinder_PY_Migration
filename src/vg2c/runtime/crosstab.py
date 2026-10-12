@@ -291,9 +291,11 @@ class _CrosstabUtility:
         from pathlib import Path
 
         token = re.compile(
-            r"CrossTab->\[\[\s*(?P<alias>[A-Za-z_]\w*)\s*,\s*"
+            r"(?P<prefix>,\s*)?CrossTab->\[\[\s*(?P<alias>[A-Za-z_]\w*)\s*,\s*"
             r"(?P<instance>\d+)\s*(?:;\s*(?P<function>.*?))?"
-            r":\s*(?P<mode>[YNAyna])\s*\]\]",
+            r":\s*(?P<mode>[YNAyna])\s*\]\]"
+            # Consume a following separator only when there is no leading one.
+            r"(?(prefix)|(?P<suffix>\s*,)?)",
             re.IGNORECASE | re.DOTALL,
         )
 
@@ -305,11 +307,12 @@ class _CrosstabUtility:
             if not path.exists():
                 raise FileNotFoundError(f"CrossTab header metadata missing: {path}")
             columns = [name.strip() for name in path.read_text(encoding="utf-8").split("\t") if name.strip()]
-            if not columns:
-                raise ValueError(f"CrossTab header metadata is empty: {path}")
             function = (match.group("function") or "").strip().rstrip(";")
             if function and "|<>|" not in function:
                 raise ValueError(f"CrossTab expression must include |<>|: {match.group(0)}")
+            # A zero-row pivot writes an empty header list; omit its projection.
+            if not columns:
+                return ""
             expressions = []
             for column in columns:
                 if "]" in column:
@@ -319,6 +322,8 @@ class _CrosstabUtility:
                 if mode != "A":
                     expr += f" AS [{column}]"
                 expressions.append(expr)
-            return ", ".join(expressions)
+            return (match.group("prefix") or "") + ", ".join(expressions) + (
+                match.group("suffix") or ""
+            )
 
         return token.sub(replace, sql)

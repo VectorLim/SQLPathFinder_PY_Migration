@@ -22,6 +22,22 @@ def load_job(path):
     return namespace["run"]
 
 
+@pytest.mark.parametrize("command", [
+    'RoboCopy.va "HIST.txt" "source" "dest"',
+    'SPFCopy.bat "source/HIST.txt" "dest" "N"',
+])
+def test_generated_copy_imports_path_and_executes(tmp_path, command):
+    source = tmp_path / "copy.txt"
+    source.write_text(f"<OPTIONS>\n/UTILITIES={command}\n</OPTIONS>\n")
+    main = translate(source)
+    workdir = tmp_path / "work"
+    (workdir / "source").mkdir(parents=True)
+    (workdir / "dest").mkdir()
+    (workdir / "source/HIST.txt").write_text("LOT\nexample\n")
+    load_job(main)(workdir)
+    assert (workdir / "dest/HIST.txt").read_text() == "LOT\nexample\n"
+
+
 def test_project_assets_move_and_reread(tmp_path, monkeypatch):
     source = tmp_path / "source.txt"
     source.write_text(SQL)
@@ -135,6 +151,39 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     assert config == {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
 
 
+@pytest.mark.parametrize("lots", [["example"], []])
+def test_generated_backend_nodes_expand_config_macros(tmp_path, monkeypatch, lots):
+    calls = []
+
+    class Reader:
+        def read(self, *, site, query):
+            calls.append((site, query.strip()))
+            return pd.DataFrame({"LOT": lots})
+
+    monkeypatch.setitem(sys.modules, "datasyncx",
+                        SimpleNamespace(MarsReader=Reader, AriesReader=Reader))
+    source = tmp_path / "routing.txt"
+    source.write_text(
+        block('/UTILITIES={START-MACRO} "configsets.csv" "N"')
+        + block('/ENGINE=VA\n/NODE=<<<MARS>>>\n/CSV=mars.tab', "select 'mars'")
+        + block('/ENGINE=VA\n/NODE=<<<ARIES>>>\n/CSV=aries.tab', "select 'aries'")
+        + block('/UTILITIES={END-MACRO}')
+    )
+    main = translate(source)
+    generated = main.read_text()
+    assert "node=macros['MARS']" in generated
+    assert "node=macros['ARIES']" in generated
+    assert "macros.substitute(" not in generated
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "configsets.csv").write_text("MARS,ARIES\nKM.[A15_PROD_21.].MARS,KM.ARIES\n")
+    load_job(main)(work)
+    assert calls == [("KM", "select 'mars'"), ("KM", "select 'aries'")]
+    expected = "lot\n" + "".join(f"{lot}\n" for lot in lots)
+    assert (work / "mars.tab").read_text() == expected
+    assert (work / "aries.tab").read_text() == expected
+
+
 def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
     calls = []
     class Reader:
@@ -145,7 +194,7 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
     source = tmp_path / "routing.txt"
     source.write_text(
         block('/UTILITIES={START-MACRO} "config.csv" "Y"')
-        + block('/UTILITIES={SITE-LOOP} "PG.[A12_PROD_0.],KM.[A15_PROD_21.]"')
+        + block('/UTILITIES={SITE-LOOP} "<<<NODES>>>"')
         + block('/ENGINE=VA\n/NODE=<<<SPF-SITE>>>.MARS\n/CSV=<<<SPF-SITE-FOR-FILE-NAME>>>.csv', "select '<<<LABEL>>>'")
         + block('/UTILITIES={END-LOOP}')
         + block('/UTILITIES={START-MACRO} "inner.csv" "Y"')
@@ -155,21 +204,55 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
         + block('/UTILITIES={END-MACRO}')
     )
     main = translate(source)
+    assert "node=macros['SPF-SITE'] + '.MARS'" in main.read_text()
+    assert "macros.substitute(" not in main.read_text()
     work = tmp_path / "work"
     work.mkdir()
-    (work / "config.csv").write_text("LABEL\nouter\nignored\n")
+    (work / "config.csv").write_text("LABEL,NODES\nouter,\"PG.[A12_PROD_0.],KM.[A15_PROD_21.]\"\nignored,\n")
     (work / "inner.csv").write_text("LABEL\ninner\n")
     run = load_job(main)
     run(work)
     assert calls == [("PG", "select 'outer'"), ("KM", "select 'outer'")]
     assert (work / "outer.csv").read_text() == "VALUE\nouter\n"
-    (work / "config.csv").write_text("LABEL\nfresh\n")
+    (work / "config.csv").write_text("LABEL,NODES\nfresh,\"PG.[A12_PROD_0.],KM.[A15_PROD_21.]\"\n")
     run(work)
     assert calls[-2:] == [("PG", "select 'fresh'"), ("KM", "select 'fresh'")]
     assert (work / "outer.csv").read_text() == "VALUE\nfresh\n"
     tree = ast.parse(main.read_text())
     assert any(isinstance(node, ast.For) for node in ast.walk(tree))
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
+
+
+def test_loop_html_and_aed_macro_arguments_use_brackets(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("vg2c.runtime.job.bootstrap_aed", lambda **kwargs: {"ENV_MODE": "test"})
+    monkeypatch.setattr("vg2c.runtime.job.process_candidates",
+                        lambda path, **kwargs: calls.append(path))
+    source = tmp_path / "macros.txt"
+    source.write_text(
+        block('/UTILITIES={START-MACRO} "config.csv" "N"')
+        + block('/UTILITIES={FOR-LOOP} "0" "<<<END>>>" "1" "A" "N"')
+        + block('/WRITE-FILE=Y\n/CSV=loop_<<<SPF-LOOP-CTR-A-INT>>>.txt', "<<<LABEL>>>")
+        + block('/UTILITIES={END-LOOP}')
+        + block('/REPORT=HTML-LAYOUT', ':FILE:result.html\n<p><<<LABEL>>></p>')
+        + block('/UTILITIES={AED} "data/<<<CANDIDATE>>>"')
+        + block('/UTILITIES={END-MACRO}')
+    )
+    main = translate(source)
+    code = main.read_text()
+    assert "for_values('0', macros['END'], '1', 'A', 'N')" in code
+    assert "'VALUE_1': macros['LABEL']" in code
+    assert "job.process_candidates('data/' + macros['CANDIDATE']" in code
+    assert "macros.substitute(" not in code
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "config.csv").write_text("END,LABEL,CANDIDATE\n2,<Safe &>,candidates.csv\n")
+    load_job(main)(work)
+    assert calls == ["data/candidates.csv"]
+    assert [path.name for path in sorted(work.glob("loop_*.txt"))] == [
+        "loop_0.txt", "loop_1.txt", "loop_2.txt",
+    ]
+    assert "&lt;Safe &amp;&gt;" in (work / "result.html").read_text()
 
 
 def test_generated_html_reads_deferred_csv_and_edited_shell(tmp_path):

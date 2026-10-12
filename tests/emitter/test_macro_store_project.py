@@ -1,6 +1,7 @@
 """Generated macro projects use one readable store and native control flow."""
 
 import ast
+from types import SimpleNamespace
 
 from vg2c import compile_document, translate
 
@@ -13,6 +14,31 @@ def run_job(main, workdir):
     namespace = {"__file__": str(main), "__name__": "generated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
     namespace["run"](workdir)
+
+
+def test_write_file_macro_arguments_strip_only_leading_whitespace(tmp_path, monkeypatch):
+    source = tmp_path / "macro_command.txt"
+    payload = "Sfolder,underDEV,useCSR,useMMS\nICMPCS_CWFNCO_CSR_IAM,N,Y,Y\n\n"
+    source.write_text(
+        block('/WRITE-FILE=Y\n/CSV=macrotmp.csv', "\n \t\n  " + payload)
+        + block('/UTILITIES={START-MACRO} "macrotmp.csv" "N"')
+        + block('/UTILITIES=setsiteparam.exe KM <<<SFOLDER>>> <<<UNDERDEV>>> '
+                '<<<USECSR>>> <<<USEMMS>>>')
+        + block('/UTILITIES={END-MACRO}')
+    )
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("vg2c.runtime.files.subprocess.run", fake_run)
+    monkeypatch.setattr("vg2c.runtime.files.sys", SimpleNamespace(platform="win32"))
+    main = translate(source)
+    workdir = tmp_path / "work"
+    run_job(main, workdir)
+    assert (workdir / "macrotmp.csv").read_text() == payload
+    assert calls == [["setsiteparam.exe", "KM", "ICMPCS_CWFNCO_CSR_IAM", "N", "Y", "Y"]]
 
 
 def test_scopes_and_independent_runs_and_empty_csv(tmp_path):

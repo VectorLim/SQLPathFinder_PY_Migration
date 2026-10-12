@@ -21,7 +21,7 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     assert first_block.startswith("<OPTIONS>\n/WRITE-FILE=Y\n")
     assert "/CSV=path.csv" in first_block
     assert "</OPTIONS>" in first_block
-    # Preserve source payload without trimming leading or trailing whitespace.
+    # Preserve the original source payload for the ScriptHost comparison.
     original_payload = first_block.split("</OPTIONS>", maxsplit=1)[1]
     assert original_payload.startswith("\n")
 
@@ -35,12 +35,12 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
 
     written = workdir / "path.csv"
     assert written.is_file()
-    # The parser removes one structural LF at each edge of the OPTIONS body.
-    # A second leading LF belongs to the file data and must be preserved.
+    # ScriptHost parseTaskOptions lstrips SPFTaskCommand before WRITE-FILE.
+    # Keep the parser's existing removal of one trailing structural LF.
     assert original_payload.startswith("\n\n")
     assert original_payload.endswith("\n")
-    expected = original_payload[1:-1].encode("utf-8")
-    assert expected.startswith(b"\n")
-    assert not expected.endswith(b"\n")
-    assert written.read_bytes() == expected
-    assert len(expected.splitlines()) == 5
+    expected = original_payload[:-1].lstrip()
+    assert not expected.startswith("\n")
+    assert not expected.endswith("\n")
+    assert written.read_text(encoding="utf-8") == expected
+    assert len(expected.splitlines()) == 4

@@ -1252,7 +1252,7 @@ SQL_Get_CSV_List(".\HIST.csv", "1", "a0.[lot] In")
 SELECT DISTINCT 
  [Lot_NCORisk] AS [HOLD_LOT]
 ,'Y' AS [AUTO_CONTAIN]
-,[lot] AS [LOT]
+,[Lot_NCORisk] AS [LOT]
 ,'<<<dEmail>>>' AS [EMAIL]
 ,'<<<dCCB>>>' AS [CCB_NUMBER]
 ,'<<<dHNote>>>' AS [HOLD_NOTE]

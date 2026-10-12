@@ -14,6 +14,8 @@ execution time. By default,
 selects an explicit data root. SQL assets stay under `<project>/sql` and report
 shells under `<project>/html`. There is no process-wide working-directory change.
 CSV table inputs and backend node aliases are separate from SQL parameter binds.
+Direct named macro lookups such as `macros["CSRV"]` return `None` when absent.
+Unresolved macro tokens in SQL and templates still raise an error.
 
 CSS is emitted under `<project>/styles` and published on HTML-RUN execution.
 Explicit relative CSS assets are resolved from the generated project (or an

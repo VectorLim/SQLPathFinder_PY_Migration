@@ -18,7 +18,8 @@ from vg2c.project_paths import project_name
 from vg2c.operands import IfThen, StartMacro, RunLoop, ForLoop, SiteLoop
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utilities._emit_helpers import resolve_output_path, extract_crosstab_options, split_utility_command
+from vg2c.utilities._emit_helpers import (resolve_output_path, extract_crosstab_options,
+                                        split_utility_command, placeholders_to_python_expr)
 from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utilities.html_report import HtmlReport
 from vg2c.runtime.html_format import build_css
@@ -54,6 +55,10 @@ def _expression(source, macros):
     return ast.unparse(_Expressions(macros).visit(ast.parse(source, mode="eval").body))
 
 
+def _macro_expression(text, macros):
+    return _expression(placeholders_to_python_expr(text), macros)
+
+
 def control_header(payload, scope_id, macros="macros"):
     """One native header renderer shared by emission and semantic edits."""
     if isinstance(payload, IfThen):
@@ -66,7 +71,7 @@ def control_header(payload, scope_id, macros="macros"):
         return f"with closing(job.csv_chunks({payload.input_csv_path!r}, {payload.chunk_csv_path!r}, {payload.chunk_size})) as chunks_{scope_id}:"
     function = "for_values" if isinstance(payload, ForLoop) else "site_values"
     args = payload.args if isinstance(payload, ForLoop) else (payload.nodes,)
-    expr = ", ".join(f"{macros}.substitute({arg!r})" for arg in args)
+    expr = ", ".join(_macro_expression(arg, macros) for arg in args)
     return f"for loop_values_{scope_id} in {function}({expr}):"
 
 
@@ -354,7 +359,8 @@ def emit_project(dispatched):
                 if inputs:
                     kwargs["inputs"] = inputs
             else:
-                kwargs["node"] = block.reader_target.node
+                node = block.reader_target.node
+                kwargs["node"] = CodeExpr(_macro_expression(node, macros), node)
             crosstab = extract_crosstab_options(block)
             if crosstab:
                 kwargs.update(crosstab)
@@ -383,7 +389,7 @@ def emit_project(dispatched):
                 raise ValueError("AED requires exactly one candidate CSV path")
             path = strip_quotes(argv[1])
             if "<<<" in path:
-                path = CodeExpr(f"{macros}.substitute({path!r})")
+                path = CodeExpr(_macro_expression(path, macros))
             _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
@@ -401,6 +407,8 @@ def emit_project(dispatched):
             if not lines:
                 raise ValueError("Unsupported utility operation")
             lines = _lower_lines(lines, macros)
+            if block.kind is Kind.FS_COPY:
+                imports.add("from pathlib import Path")
             _inline(writer, block, lines, steps)
 
     def html(block, macros):
@@ -526,7 +534,7 @@ def emit_project(dispatched):
             kwargs = {"output": output, "instance": instance,
                       "embed_css": directives.get("CSSEMBED", "").upper() in {"Y", "YES", "TRUE"}}
             if slots:
-                kwargs["values"] = CodeExpr("{" + ", ".join(f"{key!r}: {macros}.substitute({value!r})" for key, value in slots.items()) + "}")
+                kwargs["values"] = CodeExpr("{" + ", ".join(f"{key!r}: {_macro_expression(value, macros)}" for key, value in slots.items()) + "}")
             if css:
                 kwargs["css_file"] = css
             _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), **kwargs)], steps)

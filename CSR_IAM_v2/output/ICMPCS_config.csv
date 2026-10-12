@@ -1,0 +1,12 @@
+ICMPCS,Parameter,Value,Remarks
+ICMPCS,dEmail,kuat.ball.attach.module.engineering@intel.com,Single PDL/email address for CSR notification
+ICMPCS,dCSR,Y,Enable CSR (Y or N)?
+ICMPCS,dMST,N,Enable MMS Signal Tracer (Y or N)?
+ICMPCS,dMWF,Y,Enable ICMPCS Workflow (Y or N)?
+ICMPCS,dCCB,TDB,CCB number
+ICMPCS,dHNote,CWF IAM MLI NCO RISK,"Hold note that limited to only 35 characters"
+ICMPCS,dHCat,AE,"Hold for what HDR user group to dispose the lot (e.g. AE, TE, QRE, MFG)"
+ICMPCS,dPHQ,123,PHQ number for Future-Hold (Eng-PHQ)
+
+NOTE,Note1,,Do NOT leave the first line blank!
+NOTE,Note2,,Do NOT simply leave any whitespace character or comma
