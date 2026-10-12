@@ -25,15 +25,16 @@ def test_generated_run_has_only_operations_and_preserves_workdir_override(tmp_pa
     source = _source(tmp_path)
     main = translate(source)
     text = main.read_text(encoding="utf-8")
-    assert "@job_entrypoint(__file__)" in text
-    assert "def run(job):" in text
+    assert "def run(workdir=None):" in text
+    assert "job = JobRuntime.from_script(__file__, workdir)" in text
+    assert "@job_entrypoint" not in text
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
-    assert "job = JobRuntime(" not in text
+    assert "job = JobRuntime.from_script(__file__, workdir)" in text
     assert "BASE_DIR =" not in text
     assert "WORK_DIR =" not in text
     assert "header=" not in text
-    assert "inputs=[]" not in text  # Empty TABLE configuration is the runtime default.
+    assert "inputs=[]" in text  # Explicit source table lineage, even when empty.
 
     moved = tmp_path / "relocated"
     shutil.move(str(main.parent), str(moved))

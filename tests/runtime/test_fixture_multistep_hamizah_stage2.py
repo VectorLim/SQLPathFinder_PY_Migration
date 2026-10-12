@@ -64,9 +64,12 @@ def _run(main, workdir):
 def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(tmp_path):
     main = _project(tmp_path)
     user_code = main.read_text(encoding="utf-8")
-    assert "@job_entrypoint(__file__)" in user_code
-    assert "def run(job):" in user_code
-    assert "JobRuntime(" not in user_code
+    assert "def run(workdir=None):" in user_code
+    assert "job = JobRuntime.from_script(__file__, workdir)" in user_code
+    assert "@job_entrypoint" not in user_code
+    assert "job.sql(" in user_code
+    assert "output='input.csv', inputs=['yeuchuan_a0_5547.tab', 'yeuchuan_a1_5547.tab']" in user_code
+    assert "output='yeuchuan_SQL_5547.tab', inputs=['input.csv']" in user_code
     assert "header=" not in user_code
     assets = list((main.parent / "sql").glob("*.sql"))
     assert len(assets) == 2

@@ -114,3 +114,18 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     exec(main.read_text(), namespace)
     namespace["run"](work)
     assert (work / "label.txt").read_text() == "1"
+
+def test_script_factory_uses_explicit_job_instance_with_no_shared_state(tmp_path):
+    project = tmp_path / "translated"
+    project.mkdir()
+    script = project / "main.py"
+    first = JobRuntime.from_script(script)
+    second = JobRuntime.from_script(script)
+    assert first.assets_root == second.assets_root == project.resolve()
+    assert first.workdir == second.workdir == (project / "output").resolve()
+    assert first is not second
+    first.macros["LABEL"] = "local"
+    assert "LABEL" not in second.macros
+
+    custom = JobRuntime.from_script(script, tmp_path / "custom")
+    assert custom.workdir == (tmp_path / "custom").resolve()
