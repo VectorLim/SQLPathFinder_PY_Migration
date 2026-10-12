@@ -56,7 +56,7 @@ and executes a generated project from a detached directory without a compiler
 checkout, VG2 source or ScriptHost at runtime:
 
 ```bash
-python -m pip install build wheel setuptools pandas==3.0.3 keyring==25.7.0
+python -m pip install build wheel setuptools pandas==3.0.3
 python -m build --wheel --no-isolation --outdir /tmp/vg2c-dist
 python -m venv /tmp/vg2c-wheel-venv
 /tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3
@@ -137,6 +137,23 @@ DataSyncX. That directory must contain `tnsnames.ora` and `sqlnet.ora`. If
 either file is absent, copy SQLPathFinder's provided Oracle Net files from
 `C:\Oracle\network` into `ORACLE_HOME\network\admin`, then start a new Python
 process. No client discovery or fallback configuration is supported.
+
+## Email delivery (DataSyncX)
+
+Email steps call DataSyncX `send_msg`, which owns SMTP authentication and retries
+(three attempts, about 30 seconds between attempts). The default sender is
+`atmanalytic@intel.com`; an explicit legacy sender overrides the message's From
+address. DataSyncX loads its platform/Python SMTP extension, or falls back to its
+Python service using `ATMANALYTIC` from its configured `.env`. Windows Credential
+Manager's `SMTP` entry is no longer used.
+
+Body files and attachments resolve from the job workdir. `.htm` and `.html` body
+files are sent as HTML; other files and literal bodies use plain text. Missing
+attachments are skipped. One existing attachment is sent directly; several are
+bundled into `attachments.zip` because DataSyncX accepts one file. Bundled files
+must have distinct filenames. Delivery errors propagate from DataSyncX, and
+`enabled=False` skips email without importing its service. Use Intel recipients,
+as required by DataSyncX's email API.
 
 ## CLI Usage
 

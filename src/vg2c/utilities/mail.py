@@ -1,29 +1,9 @@
-"""MailService - send email via stdlib smtplib.
-
-Credentials
------------
-Stored in Windows Credential Manager under the service name ``SMTP``:
-
-    Internet or network address : SMTP
-    User name                   : <your SMTP login e-mail, e.g. you@intel.com>
-    Password                    : <your SMTP password>
-
-To create/update the entry from PowerShell::
-
-    cmdkey /generic:SMTP /user:you@intel.com /pass:YOUR_PASSWORD
-
-Or via Control Panel → Credential Manager → Windows Credentials → Add a
-generic credential.
-"""
+"""Email utility metadata and delegation to the DataSyncX runtime adapter."""
 
 from __future__ import annotations
 
-import smtplib
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
-
-import keyring
 
 from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
@@ -38,24 +18,10 @@ from vg2c.utility_metadata import FileEffectDefinition
 
 
 class MailService(EmitterUtility):
-    """Send email. Credentials are read from Windows Credential Manager (service: SMTP)."""
+    """Send email using DataSyncX's SMTP service and authentication."""
 
     utility_name = "email"
     handles = (Kind.EMAIL,)
-    KEYRING_SERVICE = "SMTP"
-    DEFAULT_SMTP_HOST = "smtpauth.intel.com"
-    DEFAULT_SMTP_PORT = 587
-
-    @classmethod
-    def _load_credential(cls) -> keyring.credentials.Credential:
-        cred = keyring.get_credential(cls.KEYRING_SERVICE, None)
-        if cred is None:
-            raise RuntimeError(
-                f"No credential found for service '{cls.KEYRING_SERVICE}' in Windows "
-                "Credential Manager. Add a generic credential with:\n"
-                f"  cmdkey /generic:{cls.KEYRING_SERVICE} /user:<email> /pass:<password>"
-            )
-        return cred
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -151,7 +117,8 @@ class MailService(EmitterUtility):
                 "read",
                 inputs=("attachments",),
                 input_base="working-directory",
-                reason="Existing attachments are read; message body may also be read from a runtime file.",
+                reason=("Existing attachments are read; message body may also be read "
+                        "from a runtime file."),
             ),
             FileEffectDefinition(
                 "body",
@@ -171,10 +138,3 @@ class MailService(EmitterUtility):
     ) -> None:
         from vg2c.runtime.mail import send_mail
         send_mail(to, subject, body, attachments, from_addr, enabled, workdir=Path.cwd())
-
-    @staticmethod
-    def _resolve_body(body: str) -> str:
-        path = Path(body)
-        if body and path.exists() and path.is_file():
-            return path.read_text(encoding="utf-8", errors="replace")
-        return body

@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "datasyncx",
-    "keyring==25.7.0",
     "pandas==3.0.3",
     "uv",
 ]

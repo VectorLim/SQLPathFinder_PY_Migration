@@ -1,14 +1,15 @@
 from pathlib import Path
 
-from vg2c.runtime import OracleClient, SqliteReader, csv_report, job_entrypoint
+from vg2c.runtime import JobRuntime, OracleClient, SqliteReader, csv_report
 
 OracleClient.configure()
 from datasyncx import AriesReader
 from datasyncx import MarsReader
 
 
-@job_entrypoint(__file__)
-def run(job):
+def run():
+    project_dir = Path(__file__).resolve().parent
+    job = JobRuntime(assets_root=project_dir, workdir=project_dir / "output")
     macros = job.macros
     # Source block 0, line 3
     job.define_css("sqlpathfinder_style_1.css", "styles/report_000.css")
