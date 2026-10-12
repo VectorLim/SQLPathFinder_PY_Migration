@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
-from vg2c.runtime.aed import process_candidates
+from vg2c.runtime.aed import bootstrap_aed, process_candidates
 from vg2c.runtime.append import smart_append
 from vg2c.runtime.controls import csv_chunks
 from vg2c.runtime.files import (
@@ -208,3 +208,27 @@ class JobRuntime:
     def process_candidates(self, path, *, config, service_factory, logger=None):
         return process_candidates(path, config=config, workdir=self.workdir,
                                   service_factory=service_factory, logger=logger)
+
+
+def job_entrypoint(script_file, *, aed_source_name=None):
+    """Bind an editable translated job to its assets and isolated output root.
+
+    Generated main.py contains only direct job operations. The decorated run()
+    remains callable with an optional workdir, including after project relocation.
+    """
+    assets_root = Path(script_file).resolve().parent
+
+    def decorate(function):
+        if aed_source_name is None:
+            def run(workdir=None):
+                root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
+                return function(JobRuntime(assets_root, root))
+        else:
+            def run(workdir=None, *, aed_service_factory=None):
+                root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
+                config = bootstrap_aed(workdir=root, source_name=aed_source_name)
+                job = JobRuntime(assets_root, root, values=config, initial_macros=config)
+                return function(job, aed_config=config, aed_service_factory=aed_service_factory)
+        return run
+
+    return decorate
