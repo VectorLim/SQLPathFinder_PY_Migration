@@ -210,7 +210,7 @@ class JobRuntime:
                                   service_factory=service_factory, logger=logger)
 
 
-def job_entrypoint(script_file, *, aed_source_name=None):
+def job_entrypoint(script_file, *, aed_source_name=None, with_workdir=False):
     """Bind an editable translated job to its assets and isolated output root.
 
     Generated main.py contains only direct job operations. The decorated run()
@@ -222,13 +222,15 @@ def job_entrypoint(script_file, *, aed_source_name=None):
         if aed_source_name is None:
             def run(workdir=None):
                 root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
-                return function(JobRuntime(assets_root, root), root)
+                job = JobRuntime(assets_root, root)
+                return function(job, root) if with_workdir else function(job)
         else:
             def run(workdir=None, *, aed_service_factory=None):
                 root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
                 config = bootstrap_aed(workdir=root, source_name=aed_source_name)
                 job = JobRuntime(assets_root, root, values=config, initial_macros=config)
-                return function(job, root, aed_config=config, aed_service_factory=aed_service_factory)
+                kwargs = {"aed_config": config, "aed_service_factory": aed_service_factory}
+                return function(job, root, **kwargs) if with_workdir else function(job, **kwargs)
         return run
 
     return decorate
