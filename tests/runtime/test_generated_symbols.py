@@ -78,6 +78,9 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
 """
     result = run_generated(tmp_path, text)
     assert (tmp_path / "copied.txt").read_text() == "Hello Bob"
+    assert "@job_entrypoint(__file__, with_workdir=True)" in result.emitted.source
+    assert "def run(job, workdir):" in result.emitted.source
+    assert "job = JobRuntime(" not in result.emitted.source
     assert "ctx" not in result.emitted.source
 
 
