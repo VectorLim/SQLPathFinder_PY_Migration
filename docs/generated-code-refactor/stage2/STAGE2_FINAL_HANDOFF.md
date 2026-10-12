@@ -65,3 +65,27 @@ A subsequent review discovered that the original Vietnam WRITE-FILE test acciden
 Commit `5fe15ddfbeef3631e32beaabcdd3698f9bb8edf8` added a source-preserved HTML-RUN CSS asset edit/rerun check for `actual_script.txt`. CI [38188026303](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38188026303) confirms 440 runtime/emitter passing, 618 full-suite passing, the **same six inherited UI failures**, and the style-edit test; the corresponding [Linux wheel run 38188026263](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38188026263) passed. This extends behavior evidence, not the distinct fixture-block count.
 
 The AST consumer audit now recognizes explicit exports, local references and resolved relative from-imports; this improves the cautionary static inventory but is **not** a complete dynamic type-resolved proof and must not authorize deletion alone. No extra core symbols met the deletion gate; supported metadata and editor boundaries were deliberately preserved. Stage 2 remains **partially complete**, pending remaining feasible source-preserved semantic cases and explicit UI/JMP acceptance decisions. The final HEAD and newest CI must be verified independently after documentation is committed.
+
+## Generated main.py cleanup continuation (12 October 2026)
+
+**Starting remote SHA for this additional cleanup:** `441e6e0f1b99cb7877c9ac6eb4593eb99d1536e1`. Subsequent commits on the same `refactor/generated-code/implementation` branch remove ordinary generated entrypoint boilerplate and redundant main.py SQL header arguments. Verify the final remote HEAD after the documentation commit rather than embedding the SHA of a commit in its own contents.
+
+Current normal generated execution is:
+```python
+from vg2c.runtime import SqliteReader, job_entrypoint
+
+@job_entrypoint(__file__)
+def run(job):
+    job.sql("sql/query_000_input.sql", reader=SqliteReader(),
+            output="input.csv", inputs=["yeuchuan_a0_5547.tab", "yeuchuan_a1_5547.tab"])
+
+if __name__ == "__main__":
+    run()
+```
+The decorator's backend wrapper preserves `run()` default output, `run(workdir=...)` overrides and project relocation. Embedded Python projects receive `workdir` only when appropriate; AED bootstrap/config values are initialized by the backend without exposing `bootstrap_aed` or `JobRuntime` setup in main.py.
+
+Original `/HEADERS` can be more than an SQL SELECT alias: source-derived, name-based selection and output casing must be retained. Normal SQL output uses SQL result names without an extra header setting; explicit legacy overrides are now represented in the same editable SQL asset as a `-- vg2c-output-headers: ["..."]` first-line directive. The runtime validates it and does not pass the comment to the SQL engine. Removing the directive makes the output follow current SQL result column names. No `.header.json` is generated. The compiler-only `_table_option` helper was deleted; legacy public `JobRuntime.table_spec` is retained for older already-generated projects.
+
+**Red-first evidence:** [38202171001](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38202171001) had five intentionally failing new tests before the implementation. **Current tested implementation checkpoint:** [38203059174](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203059174): 445 runtime/emitter passed, 623 full-suite passed, the same six inherited UI/JMP failures; Python compilation, configured Ruff lint, static dependency audit and original multistep fixture walkthrough passed. [38203059146](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203059146): installed Linux wheel passed. New tests cover default/override workdirs, relocated project, exact SQL output, SQL-asset edit/re-execution, malformed header directive rejection, embedded Python workdir access and AED config injection.
+
+The preceding Stage 2 fixture statuses remain accurate. This change **does not** establish actual ScriptHost engine parity, real Oracle/SMTP/Windows integration, nor close the six existing UI failures. Do not promote the overall Stage 2 acceptance status to fully complete solely because generated-code cleanup tests are green. No merge or force-push occurred.
