@@ -350,7 +350,9 @@ def emit_project(dispatched):
             kwargs = {"reader": CodeExpr(f"{reader.name}(" + ", ".join(f"{key}={value!r}" for key, value in block.reader_kwargs.items()) + ")"),
                       "output": resolve_output_path(block)}
             if block.kind is Kind.SQLITE_QUERY:
-                kwargs["inputs"] = SqliteEngine._extract_table_inputs(block)
+                inputs = SqliteEngine._extract_table_inputs(block)
+                if inputs:
+                    kwargs["inputs"] = inputs
             else:
                 kwargs["node"] = block.reader_target.node
             crosstab = extract_crosstab_options(block)
