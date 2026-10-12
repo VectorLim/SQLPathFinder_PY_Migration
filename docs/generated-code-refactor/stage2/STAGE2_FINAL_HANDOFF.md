@@ -70,19 +70,23 @@ The AST consumer audit now recognizes explicit exports, local references and res
 
 **Starting remote SHA for this additional cleanup:** `441e6e0f1b99cb7877c9ac6eb4593eb99d1536e1`. Subsequent commits on the same `refactor/generated-code/implementation` branch remove ordinary generated entrypoint boilerplate and redundant main.py SQL header arguments. Verify the final remote HEAD after the documentation commit rather than embedding the SHA of a commit in its own contents.
 
-Current normal generated execution is:
-```python
-from vg2c.runtime import SqliteReader, job_entrypoint
+Current normal generated execution (revised to remove the decorator) is:
 
-@job_entrypoint(__file__)
-def run(job):
+```python
+from vg2c.runtime import JobRuntime, SqliteReader
+
+def run(workdir=None):
+    job = JobRuntime.from_script(__file__, workdir)
     job.sql("sql/query_000_input.sql", reader=SqliteReader(),
             output="input.csv", inputs=["yeuchuan_a0_5547.tab", "yeuchuan_a1_5547.tab"])
+    job.sql("sql/query_001_yeuchuan_SQL_5547.sql", reader=SqliteReader(),
+            output="yeuchuan_SQL_5547.tab", inputs=["input.csv"])
 
 if __name__ == "__main__":
     run()
 ```
-The decorator's backend wrapper preserves `run()` default output, `run(workdir=...)` overrides and project relocation. Embedded Python projects receive `workdir` only when appropriate; AED bootstrap/config values are initialized by the backend without exposing `bootstrap_aed` or `JobRuntime` setup in main.py.
+
+This presents one explicit `job = ...` line with no decorator, no manually resolved paths and no redundant `header=` in the generated Python. The `JobRuntime.from_script` classmethod handles workdir defaults/overrides and script relocation. AED bootstrap remains behind the runtime classmethod but `job.aed_config` is passed explicitly when candidates are processed. Embedded Python blocks retain resolved `workdir` access when needed. File dependencies are shown as `inputs=[...]` on **all** SQLite queries, including standalone `inputs=[]`. The compiler does not invent absent dependencies.
 
 Original `/HEADERS` can be more than an SQL SELECT alias: source-derived, name-based selection and output casing must be retained. Normal SQL output uses SQL result names without an extra header setting; explicit legacy overrides are now represented in the same editable SQL asset as a `-- vg2c-output-headers: ["..."]` first-line directive. The runtime validates it and does not pass the comment to the SQL engine. Removing the directive makes the output follow current SQL result column names. No `.header.json` is generated. The compiler-only `_table_option` helper was deleted; legacy public `JobRuntime.table_spec` is retained for older already-generated projects.
 
@@ -92,10 +96,19 @@ The preceding Stage 2 fixture statuses remain accurate. This change **does not**
 
 ## Additional continuation: verified code reduction and consumer-gated rollback
 
-**Starting checkpoint for this iteration:** `12de79f12ba823ad022c9c801d96311bdc445108`. The default SQLite emission no longer includes `inputs=[]`; it relies on the existing `JobRuntime.sql(inputs=None)` and `runtime.query.run_query(inputs or [])` defaults. The focused test was committed red-first in `74f40fb6691c0c635f2c755733ef1b585c29fdf7` and failed only that new assertion in [CI 38203567137](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203567137). Commit `42a4a9a669c276a18c142a7a34f5c7b3360afced` removed the redundant argument, leaving true `/TABLE` inputs intact.
+**Superseded intermediate choice:** Starting from `12de79f12ba823ad022c9ac6eb4593eb99d1536e1`, an earlier change omitted `inputs=[]` for standalone queries (red CI [38203567137](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203567137), fix `42a4a9a669c276a18c142a7a34f5c7b3360afced`). The current user-approved design reverses that optimization: it keeps `inputs=[]` visible to make dependencies auditable, without changing the runtime SQL defaults.
 
 An attempted removal of `JobRuntime.table_spec`/`report_spec` (believed to be leftover JSON readers) was **reverted** when four core regression tests exposed real consumers, including legacy JSON configuration rereading and validation. See [red CI 38203667770](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203667770) and restore commit `37ae674a27da7566edc02f2ec0b5535880197801`. No deletion of the tests, no compatibility fallback and no parallel JSON engine were introduced; the existing methods simply remain part of the supported runtime API.
 
 **Post-restoration verification:** [CI 38203759540](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203759540) reports **445 runtime/emitter passed**, **623 full-suite passed and the unchanged six inherited UI/JMP failures**. Python compilation, configured Ruff checks, source-preserved multistep execution and consumer audit passed. [Installed Linux wheel 38203759573](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203759573) passed. These are verified checks of the implementation, not original ScriptHost engine parity.
 
 The full symbol-level inventory remains conservative: static zero-use is insufficient to delete externally callable, dynamically registered or regression-tested methods. This iteration deliberately made no additional speculative change to `SqliteEngine._emit_sql`, compiler metadata, source diagnostics or editor layers. Final HEAD must be recorded from remote after the documentation commits, and the six UI/JMP gates remain open.
+
+
+## Final explicit-job and input-lineage revision (12 October 2026)
+
+**Starting branch SHA:** `6104d75a7874f221de90fdcd055807b7dfbfe4f7`. Red-first tests committed in `025ade8810f91df53a208c5519ea12d6a98f10e9` confirmed the old decorator and omitted inputs violated the revised generated-code contract. Commit `dec7b353ee01c579835929a651a535729411bac7` replaced the decorator with the explicit `JobRuntime.from_script` one-liner, removed the obsolete decorator export, restored `inputs=[...]` even when empty, and preserved special authored Python and AED behavior. A new isolation test initially used `"LABEL" in MacroStore` (which calls substitution and raises for unknown values); the corrected test inspects stored keys, without changing runtime semantics.
+
+**Verified checkpoint:** [CI 38204790507](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38204790507): **446 runtime/emitter passed**, **624 full-suite passed, six inherited UI/JMP failures**; compilation, configured Ruff, static audit and source-preserved multistep fixture passed. [Linux installed wheel 38204790493](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38204790493) passed. The source-preserved walkthrough compares the earlier `output='input.csv'` with the downstream `inputs=['input.csv']`, preserving original table ordering. Additional backend factory/AED and authored Python default-workdir regression tests are checked in.
+
+Remaining gates are unchanged: no original ScriptHost engine parity, production Oracle/AED/SMTP interaction or six inherited UI/JMP failures were resolved. Verify final remote HEAD after this document commit; do not merge or force-push.
