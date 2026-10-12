@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from collections.abc import Mapping
 
-_TOKENS = re.compile(r"<<<([^>]+)>>>")
+NAMED_MACRO_RE = re.compile(r"<<<(.+?)>>>", re.DOTALL)
 
 
 def strip_quotes(value: str) -> str:
@@ -83,7 +83,7 @@ def substitute(text: str, *, values: Mapping | None = None, macros: Mapping | No
             raise ValueError(f"Missing value {match.group(0)!r}")
         return "" if value is None else str(value)
 
-    result = _TOKENS.sub(replace, text)
+    result = NAMED_MACRO_RE.sub(replace, text)
     # Adapted from SPFUtilities/utils.py:1706-1739,2052-2066; preserve reserved macros.
     if "<<<%" in result or "%>>>" in result:
         raise ValueError("Malformed environment token; expected <<<%NAME%>>>")

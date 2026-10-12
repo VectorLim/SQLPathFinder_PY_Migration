@@ -101,7 +101,11 @@ def run(job):
                                 # Source block 23, line 455
                                 job.write_file(
                                     path="CSRVerror.htm",
-                                    template="<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong>\nPath: <<<CSRPATH>>></p>\n</body>\n</html>",
+                                    template="<!DOCTYPE html>\n<html>\n<body>\n<p>It is detected that you cannot access to CSR depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>CSR Superuser</strong> access.</p>\n\n<p>Script Name: <strong>"
+                                    + macros["SFOLDER"]
+                                    + "</strong>\nPath: "
+                                    + macros["CSRPATH"]
+                                    + "</p>\n</body>\n</html>",
                                 )
                                 # Source block 24, line 475
 
@@ -115,7 +119,11 @@ def run(job):
                                 # Source block 27, line 509
                                 job.write_file(
                                     path="MMSVerror.htm",
-                                    template="<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong><<<SFOLDER>>></strong><br/>\nPath: <<<MMSPATH>>></p>\n</body>\n</html>",
+                                    template="<!DOCTYPE html>\n<html\n<body>\n<p>It is detected that you cannot access to MMS Signal Tracer depository path for <strong>KM</strong> site.</p>\n\n<p>This could be due to you do NOT have the <strong>MMS Signal Tracer Admin</strong> access.</p>\n\n<p>Script Name: <strong>"
+                                    + macros["SFOLDER"]
+                                    + "</strong><br/>\nPath: "
+                                    + macros["MMSPATH"]
+                                    + "</p>\n</body>\n</html>",
                                 )
                                 # Source block 28, line 529
                                 # job.send_mail(
@@ -204,7 +212,7 @@ def run(job):
                     job.sql(
                         "sql/query_054_RESULT__username__CWFNCO_TS.sql",
                         reader=SqliteReader(),
-                        output="RESULT_<<<%username%>>>_CWFNCO{TS}.csv",
+                        output="RESULT_" + macros["%USERNAME%"] + "_CWFNCO{TS}.csv",
                         inputs=[("data.csv", "T0")],
                     )
                     # Source block 55, line 1267
@@ -218,7 +226,7 @@ def run(job):
                 # Source block 58, line 1320
                 job.html(
                     "html/report_058.html",
-                    output="EMAIL:<<<dEmail>>>",
+                    output="EMAIL:" + macros["DEMAIL"],
                     instance="17680",
                     embed_css=True,
                     values={
@@ -275,7 +283,25 @@ def run(job):
             # Source block 78, line 1596
             job.write_file(
                 path="update.bat",
-                template="@echo off\nset currd=%date:~10,4%-%date:~4,2%-%date:~7,2%\nset currms=%time:~2,6%\nset /a currh=%time:~0,2%\nif %currh% LSS 10 set currh=0%currh%\nset currt=%currh%%currms%\nset PriConfig=<<<IREPOP>>>\\<<<SFOLDER>>>\n\n\nREM ************** edit here only if needed **************\n\nset record=<<<DCSR>>>,<<<DMST>>>,<<<DMWF>>>\n\n\n\n\nREM *************** do not edit below here ***************\n\ncall :retry\ngoto:eof\n\n:retry\nset /a tries=300\n\n:loop\nif %tries% LEQ 0 goto return\necho <<<STARTTS>>>,%currd% %currt%,<<<UTC>>>,KM,<<<%username%>>>,<<<UNDERDEV>>>,%record%>>%PriConfig%\\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop\n\n:return\n@exit /B",
+                template="@echo off\nset currd=%date:~10,4%-%date:~4,2%-%date:~7,2%\nset currms=%time:~2,6%\nset /a currh=%time:~0,2%\nif %currh% LSS 10 set currh=0%currh%\nset currt=%currh%%currms%\nset PriConfig="
+                + macros["IREPOP"]
+                + "\\"
+                + macros["SFOLDER"]
+                + "\n\n\nREM ************** edit here only if needed **************\n\nset record="
+                + macros["DCSR"]
+                + ","
+                + macros["DMST"]
+                + ","
+                + macros["DMWF"]
+                + "\n\n\n\n\nREM *************** do not edit below here ***************\n\ncall :retry\ngoto:eof\n\n:retry\nset /a tries=300\n\n:loop\nif %tries% LEQ 0 goto return\necho "
+                + macros["STARTTS"]
+                + ",%currd% %currt%,"
+                + macros["UTC"]
+                + ",KM,"
+                + macros["%USERNAME%"]
+                + ","
+                + macros["UNDERDEV"]
+                + ",%record%>>%PriConfig%\\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop\n\n:return\n@exit /B",
             )
             # Source block 79, line 1634
             job.run_program(argv=["update.bat"])

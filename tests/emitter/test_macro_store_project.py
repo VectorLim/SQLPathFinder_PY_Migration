@@ -3,7 +3,13 @@
 import ast
 from types import SimpleNamespace
 
+import pytest
+
 from vg2c import compile_document, translate
+from vg2c.emitter.models import CodeExpr
+from vg2c.emitter.project import _native_argument
+from vg2c.runtime import MacroStore
+from vg2c.runtime.job import JobRuntime
 
 
 def block(options, body=""):
@@ -112,3 +118,68 @@ def test_native_numeric_branch_and_editable_macro_assignment(tmp_path):
     (folder / "rows.csv").write_text("ID\n1\n")
     run_job(main, folder)
     assert (folder / "positive.txt").read_text().strip() == "1"
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("EMAIL:<<<dEmail>>>", "EMAIL:recipient@example.com"),
+    ("<<<first>>><<<SECOND>>>", "onetwo"),
+    (["<<<FIRST>>>.csv", ("<<<SECOND>>>", "T0")], ["one.csv", ("two", "T0")]),
+    ({"field": "<<<x > y>>>"}, {"field": "comparison"}),
+    ("<<<line\nbreak>>>", "multiline"),
+])
+def test_macro_discovery_in_all_argument_values(value, expected):
+    expression = _native_argument(value, "macros")
+    assert isinstance(expression, CodeExpr)
+    assert not expression.has_value
+    assert expression.symbol_names
+    macros = MacroStore(initial={
+        "dEmail": "recipient@example.com", "first": "one", "second": "two",
+        "x > y": "comparison", "line\nbreak": "multiline",
+    })
+    assert eval(expression.source, {"macros": macros}) == expected
+    if isinstance(value, str):
+        assert macros.substitute(value) == expected
+    assert _native_argument("ordinary value", "macros") == "ordinary value"
+
+
+def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
+    source = tmp_path / "options.txt"
+    source.write_text(
+        block('/UTILITIES={START-MACRO} "<<<CL_CONFIG>>>" "N"')
+        + block('/ENGINE=SQLite\n/CSV=<<<RESULT>>>\n/TABLE=<<<INPUT>>>:T0',
+                "select * from T0")
+        + block('/REPORT=HTML-LAYOUT',
+                ':FILE:EMAIL:<<<dEmail>>>\n:CSS:<<<STYLE>>>\n<p><<<FIRST>>></p>')
+        + block('/UTILITIES={END-MACRO}')
+    )
+    emitted = compile_document(source).emitted
+    code = emitted.source
+    assert "job.read_macro_row(macros['CL_CONFIG'])" in code
+    assert "output=macros['RESULT']" in code
+    assert "inputs=[(macros['INPUT'], 'T0')]" in code
+    assert "output='EMAIL:' + macros['DEMAIL']" in code
+    assert "css_file=macros['STYLE']" in code
+    sql_output = next(parameter for step in emitted.steps for parameter in step.parameters
+                      if parameter.name == "output" and parameter.symbol_names == ("RESULT",))
+    assert not sql_output.editable
+
+    calls = []
+    monkeypatch.setattr("vg2c.runtime.job.render_html", lambda path, **kwargs: calls.append(kwargs))
+    main = translate(source)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "config.csv").write_text(
+        "RESULT,INPUT,dEmail,STYLE,FIRST\nresult.csv,data.csv,recipient@example.com,style.css,one\n"
+    )
+    (work / "data.csv").write_text("VALUE\nvalue\n")
+    job = JobRuntime(main.parent, work, values={"CL_CONFIG": "config.csv"})
+    namespace = {"__file__": str(main), "__name__": "generated_job"}
+    # Execute the authored function with an explicit per-run values snapshot.
+    tree = ast.parse(main.read_text())
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef))
+    function.decorator_list = []
+    exec(compile(tree, str(main), "exec"), namespace)
+    namespace["run"](job)
+    assert (work / "result.csv").read_text() == "VALUE\nvalue\n"
+    assert calls[0]["output"] == "EMAIL:recipient@example.com"
+    assert calls[0]["values"]["VALUE_1"] == "one"

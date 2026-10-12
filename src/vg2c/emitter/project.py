@@ -19,7 +19,9 @@ from vg2c.operands import IfThen, StartMacro, RunLoop, ForLoop, SiteLoop
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._emit_helpers import (resolve_output_path, extract_crosstab_options,
-                                        split_utility_command, placeholders_to_python_expr)
+                                        split_utility_command, placeholders_to_python_expr,
+                                        to_code_expr)
+from vg2c.utilities.macro_control import MacroControl
 from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utilities.html_report import HtmlReport
 from vg2c.runtime.html_format import build_css
@@ -38,7 +40,6 @@ class _Expressions(ast.NodeTransformer):
         self.macros = macros
 
     def visit_Call(self, node):
-        node = self.generic_visit(node)
         name = ast.unparse(node.func)
         if name == "ctx.macro.named":
             key = ast.literal_eval(node.args[0])
@@ -46,8 +47,14 @@ class _Expressions(ast.NodeTransformer):
                                  slice=ast.Constant(value=key), ctx=ast.Load())
         if name == "ctx.macro.positional":
             raise ValueError("Positional macro <<>> has no supported source cursor")
+        node = self.generic_visit(node)
         if name == "ctx.csv_io.row_count":
             node.func = ast.Attribute(value=ast.Name(id="job", ctx=ast.Load()), attr="row_count", ctx=ast.Load())
+        return node
+
+    def visit_Constant(self, node):
+        if isinstance(node.value, str) and MacroControl.PLACEHOLDER_RE.search(node.value):
+            return ast.parse(_macro_expression(node.value, self.macros), mode="eval").body
         return node
 
 
@@ -59,6 +66,20 @@ def _macro_expression(text, macros):
     return _expression(placeholders_to_python_expr(text), macros)
 
 
+def _native_argument(value, macros):
+    source = value.source if isinstance(value, CodeExpr) else repr(value)
+    names = []
+    dynamic = False
+    for node in ast.walk(ast.parse(source, mode="eval")):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if MacroControl.PLACEHOLDER_RE.search(node.value):
+                dynamic = True
+                names.extend(to_code_expr(node.value).symbol_names)
+    if dynamic:
+        return CodeExpr(_expression(source, macros), symbol_names=tuple(dict.fromkeys(names)))
+    return value
+
+
 def control_header(payload, scope_id, macros="macros"):
     """One native header renderer shared by emission and semantic edits."""
     if isinstance(payload, IfThen):
@@ -66,9 +87,13 @@ def control_header(payload, scope_id, macros="macros"):
     if isinstance(payload, StartMacro):
         if not payload.csv_path:
             return f"with {macros}.scope():"
-        return f"macro_row_{scope_id} = job.read_macro_row({payload.csv_path!r})"
+        path = _macro_expression(payload.csv_path, macros)
+        return f"macro_row_{scope_id} = job.read_macro_row({path})"
     if isinstance(payload, RunLoop):
-        return f"with closing(job.csv_chunks({payload.input_csv_path!r}, {payload.chunk_csv_path!r}, {payload.chunk_size})) as chunks_{scope_id}:"
+        input_path = _macro_expression(payload.input_csv_path, macros)
+        chunk_path = _macro_expression(payload.chunk_csv_path, macros)
+        return (f"with closing(job.csv_chunks({input_path}, {chunk_path}, "
+                f"{payload.chunk_size})) as chunks_{scope_id}:")
     function = "for_values" if isinstance(payload, ForLoop) else "site_values"
     args = payload.args if isinstance(payload, ForLoop) else (payload.nodes,)
     expr = ", ".join(_macro_expression(arg, macros) for arg in args)
@@ -103,14 +128,17 @@ def _inline(writer, block, lines, steps):
                               call_site="", invocations=tuple(invocations)))
 
 
-def _call(utility, method, function, *args, **kwargs):
+def _call(utility, method, function, *args, macros="macros", **kwargs):
     definition = UtilitySpec.operation_definition(utility, method)
     if definition is None:
         raise ValueError(f"Missing compiler operation {utility}.{method}")
     if function == "job.html":
         path = replace(definition.parameter("template"), name="template_path", position=0, display_label="HTML asset")
         definition = replace(definition, parameters=(path, *(item for item in definition.parameters if item.name not in {"ctx", "template"})))
-    return EmittableOperation.render_method_call(definition, function=function, args=args, kwargs=kwargs)
+    return EmittableOperation.render_method_call(
+        definition, function=function,
+        args=tuple(_native_argument(value, macros) for value in args),
+        kwargs={key: _native_argument(value, macros) for key, value in kwargs.items()})
 
 
 def _lower_lines(lines, macros):
@@ -139,8 +167,9 @@ def _lower_lines(lines, macros):
         arguments = []
         kwargs = {}
         for argument in line.arguments:
-            value = CodeExpr(_expression(argument.source, macros), argument.value,
-                             symbol_names=argument.symbol_names)
+            value = _native_argument(CodeExpr(argument.source, argument.value,
+                                             symbol_names=argument.symbol_names), macros)
+            value = replace(value, source=_expression(value.source, macros))
             if argument.position is not None:
                 arguments.append(value)
             else:
@@ -379,7 +408,9 @@ def emit_project(dispatched):
             path_definition = replace(sql_definition, name="path", display_label="SQL asset", capabilities=())
             definition = replace(definition, parameters=tuple(path_definition if parameter.name == "sql" else parameter for parameter in definition.parameters))
             call = EmittableOperation.render_method_call(definition, function="job.sql",
-                                                         args=(CodeExpr(repr(name)),), kwargs=kwargs)
+                                                         args=(CodeExpr(repr(name)),),
+                                                         kwargs={key: _native_argument(value, macros)
+                                                                 for key, value in kwargs.items()})
             _inline(writer, block, [call], steps)
         elif block.kind is Kind.HTML_REPORT:
             html(block, macros)
@@ -458,8 +489,9 @@ def emit_project(dispatched):
                 input_file = options.get("INPUT-FILE", "")
                 output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
                 _inline(writer, block, tracked([
-                    f"job.html({name!r}, output={output!r}, "
-                    f"reports={{{report_id!r}: csv_report({input_file!r})}})"
+                    f"job.html({name!r}, output={_macro_expression(output, macros)}, "
+                    f"reports={{{report_id!r}: "
+                    f"csv_report({_macro_expression(input_file, macros)})}})"
                 ]), steps)
             elif kind == "KEY":
                 # SPFSQL3.py:20095-20109 dispatches only CSS/HTML/HTMLI5.
@@ -478,10 +510,12 @@ def emit_project(dispatched):
             if (layout_references.get(report_id, 0) > 1 or report_definitions.get(report_id, 0) > 1):
                 fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
                 assets[fragment] = _table(report_id, options) + "\n"
-                report_ctor = (f"job.report({fragment!r}, input_file={input_file!r}, "
-                              f"output_file={output_file!r})")
+                report_ctor = _expression(
+                    f"job.report({fragment!r}, input_file={input_file!r}, "
+                    f"output_file={output_file!r})", macros)
             else:
-                report_ctor = f"csv_report({input_file!r}, output_file={output_file!r})"
+                report_ctor = _expression(
+                    f"csv_report({input_file!r}, output_file={output_file!r})", macros)
             call = f"job.reports[{report_id!r}] = {report_ctor}"
             _inline(writer, block, tracked([call]), steps)
         elif report_type == "HTML-LAYOUT":
@@ -525,7 +559,7 @@ def emit_project(dispatched):
                 key = f"VALUE_{len(slots) + 1}"
                 slots[key] = match.group(0)
                 return "${" + key + "}"
-            source = re.sub(r"<<<[^>]+>>>", slot, source)
+            source = MacroControl.NAMED_PLACEHOLDER_RE.sub(slot, source)
             name = f"html/report_{block.index:03d}.html"
             assets[name] = source
             output = directives.get("FILE", "report.html")
@@ -537,7 +571,7 @@ def emit_project(dispatched):
                 kwargs["values"] = CodeExpr("{" + ", ".join(f"{key!r}: {_macro_expression(value, macros)}" for key, value in slots.items()) + "}")
             if css:
                 kwargs["css_file"] = css
-            _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), **kwargs)], steps)
+            _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), macros=macros, **kwargs)], steps)
         else:
             raise ValueError(f"Unsupported report type {report_type}")
 

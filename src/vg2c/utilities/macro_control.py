@@ -8,6 +8,7 @@ import re
 
 from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
+from vg2c.runtime.values import NAMED_MACRO_RE
 from vg2c.utilities._base import EmitterUtility
 
 
@@ -16,8 +17,8 @@ class MacroControl(EmitterUtility):
     semantic_visibility = "internal"
     handles = (Kind.MACRO_CONTROL,)
 
-    PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>|<<>>")
-    NAMED_PLACEHOLDER_RE = re.compile(r"<<<([^>]+)>>>")
+    PLACEHOLDER_RE = re.compile(r"<<<(.+?)>>>|<<>>", re.DOTALL)
+    NAMED_PLACEHOLDER_RE = NAMED_MACRO_RE
     _TOKEN = re.compile(
         r"^\s*\{(START-MACRO|END-MACRO|IF-THEN|ELSE|END-IF|RUN-LOOP|FOR-LOOP|SITE-LOOP|END-LOOP)\}",
         re.IGNORECASE,

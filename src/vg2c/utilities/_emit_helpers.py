@@ -22,7 +22,9 @@ __all__ = [
     "placeholders_to_python_expr",
 ]
 
-_TABLE_BINDING_RE = re.compile(r"^(?P<path>.+\.[^\\/:]+):(?P<table>[A-Za-z_][A-Za-z0-9_]*)$")
+_TABLE_BINDING_RE = re.compile(
+    r"^(?P<path>.+\.[^\\/:]+|.*<<<.+>>>):(?P<table>[A-Za-z_][A-Za-z0-9_]*)$"
+)
 
 
 def parse_table_binding(value: str) -> tuple[str, str | None]:
