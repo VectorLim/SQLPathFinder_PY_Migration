@@ -117,6 +117,9 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     source.write_text(block('/WRITE-FILE=Y\n/CSV=node.txt', '<<<MARS>>>')
                       + block('/UTILITIES={AED} "candidates.csv"'))
     main = translate(source)
+    assert "@job_entrypoint(__file__, aed_source_name=" in main.read_text()
+    assert "bootstrap_aed(" not in main.read_text()
+    assert "JobRuntime(" not in main.read_text()
     namespace = {"__file__": str(main), "__name__": "job"}
     exec(main.read_text(), namespace)
     config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
