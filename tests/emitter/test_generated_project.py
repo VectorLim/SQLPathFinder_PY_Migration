@@ -132,6 +132,7 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     assert (tmp_path / "work/node.txt").read_text().strip() == config["MARS"]
     assert calls[0][0] == "candidates.csv"
     assert calls[0][1]["service_factory"] is factory
+    assert calls[0][1]["config"] == config
     assert config == {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
 
 

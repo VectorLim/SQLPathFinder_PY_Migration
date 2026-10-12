@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -164,3 +165,20 @@ runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
         assert list(csv.reader(stream)) == [["value"], ["42"]]
 
 
+
+def test_embedded_python_default_workdir_is_resolved_by_explicit_job(tmp_path):
+    source = tmp_path / "embedded_default.txt"
+    source.write_text(
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=code.py\n</OPTIONS>\n"
+        "from vg2c.runtime import write_file\n"
+        "write_file('hello.txt', 'from authored Python', workdir=workdir)\n",
+        encoding="utf-8",
+    )
+    main = translate(source)
+    generated = main.read_text(encoding="utf-8")
+    assert "def run(workdir=None):" in generated
+    assert "job = JobRuntime.from_script(__file__, workdir)" in generated
+    assert "workdir = job.workdir" in generated
+    assert "@job_entrypoint" not in generated
+    runpy.run_path(str(main), run_name="isolated_inline")["run"]()
+    assert (main.parent / "output" / "hello.txt").read_text() == "from authored Python"
