@@ -35,6 +35,12 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
 
     written = workdir / "path.csv"
     assert written.is_file()
-    # Compare actual original block data, including Windows path characters.
-    actual = written.read_text(encoding="utf-8")
-    # The VG2 parser removes exactly one structural newline at each edge of\n    # the OPTIONS body. The second leading newline belongs to the data.\n    assert original_payload.startswith("\\n\\n")\n    assert original_payload.endswith("\\n")\n    assert actual == original_payload[1:-1]\n    assert actual.startswith("\\n")\n    assert not actual.endswith("\\n")\n    assert len(actual.strip().splitlines()) == 4
+    # The parser removes one structural LF at each edge of the OPTIONS body.
+    # A second leading LF belongs to the file data and must be preserved.
+    assert original_payload.startswith("\n\n")
+    assert original_payload.endswith("\n")
+    expected = original_payload[1:-1].encode("utf-8")
+    assert expected.startswith(b"\n")
+    assert not expected.endswith(b"\n")
+    assert written.read_bytes() == expected
+    assert len(expected.splitlines()) == 5
