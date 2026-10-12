@@ -34,7 +34,9 @@ def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     output = translate(source)
     generated = output.read_text()
     assert output == tmp_path / "script/main.py"
-    assert "def run(workdir=WORK_DIR):" in generated
+    assert "@job_entrypoint(__file__)" in generated
+    assert "def run(job):" in generated
+    assert "workdir = Path(workdir).resolve()" not in generated
     assert "def step_" not in generated
     assert "PipelineContext" not in generated
     assert list(output.parent.glob("sql/*.sql"))
@@ -44,7 +46,9 @@ def test_generated_script_settings_follow_imports_and_precede_dependencies(tmp_p
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "script_short.txt").read_text())
     generated = translate(source).read_text()
-    assert generated.index("from vg2c.runtime import") < generated.index("BASE_DIR =") < generated.index("def run(")
+    assert generated.index("from vg2c.runtime import") < generated.index("@job_entrypoint(__file__)") < generated.index("def run(")
+    assert "BASE_DIR" not in generated
+    assert "WORK_DIR" not in generated
     assert "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE" not in generated
 
 
