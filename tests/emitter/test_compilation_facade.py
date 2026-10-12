@@ -35,7 +35,7 @@ def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     generated = output.read_text()
     assert output == tmp_path / "script/main.py"
     assert "@job_entrypoint(__file__)" in generated
-    assert "def run(job, workdir):" in generated
+    assert "def run(job):" in generated
     assert "workdir = Path(workdir).resolve()" not in generated
     assert "def step_" not in generated
     assert "PipelineContext" not in generated
