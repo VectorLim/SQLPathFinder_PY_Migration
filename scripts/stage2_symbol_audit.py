@@ -20,6 +20,7 @@ TARGET_MODULES = (
     "vg2c.utility_metadata",
     "vg2c.utilities._base",
     "vg2c.utilities._emit_helpers",
+    "vg2c.utilities.sqlite_engine",
     "vg2c.editing",
     "vg2c.workflow",
     "vg2c.semantics",
