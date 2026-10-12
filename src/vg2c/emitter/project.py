@@ -360,7 +360,7 @@ def emit_project(dispatched):
                     # an extra header= argument or a separate JSON sidecar in main.py.
                     assets[name] = ("-- vg2c-output-headers: "
                                     + json.dumps(header, ensure_ascii=False)
-                                    + "\\n" + assets[name])
+                                    + "\n" + assets[name])
             definition = UtilitySpec.operation_definition("ctx", "run_query")
             sql_definition = definition.parameter("sql")
             sql_parameters[block.index] = (sql_definition, assets[name])
