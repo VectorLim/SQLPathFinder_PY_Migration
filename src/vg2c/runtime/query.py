@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import re
 
 from vg2c.runtime.csv_io import _CsvIO as CsvIO
@@ -20,6 +21,32 @@ def node_site(node: str) -> str:
     return match.group(1)
 
 
+_OUTPUT_HEADERS = "-- vg2c-output-headers: "
+
+
+def _sql_output_headers(source: str, header):
+    """Read an optional legacy output-name override from the editable SQL asset.
+
+    Ordinary queries use the result column names (including SQL AS aliases).
+    The directive exists only for explicit VG2 /HEADERS semantics, which can
+    select columns by name rather than rename them positionally.
+    """
+    if not source.startswith(_OUTPUT_HEADERS):
+        return source, header
+    first, newline, sql = source.partition("\n")
+    if not newline:
+        raise ValueError("Malformed vg2c-output-headers directive: missing query body")
+    try:
+        names = json.loads(first[len(_OUTPUT_HEADERS):])
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid vg2c-output-headers JSON list") from exc
+    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+        raise ValueError("vg2c-output-headers must be a list of strings")
+    if header is not None:
+        raise ValueError("vg2c-output-headers cannot be combined with a separate header")
+    return sql, names
+
+
 def execute_sql(path, *, reader, output, workdir, values=None, macros=None,
                 inputs=None, header=None, crosstab=None, node=None, params=None,
                 pivot_columns=None, pivot_values=None, pivot_duplicate="first",
@@ -30,6 +57,7 @@ def execute_sql(path, *, reader, output, workdir, values=None, macros=None,
     with path.open(encoding="utf-8", newline="") as stream:
         sql = stream.read()
     try:
+        sql, header = _sql_output_headers(sql, header)
         return run_query(sql, reader=reader, output=output, workdir=workdir,
                          values=values, macros=macros, inputs=inputs, header=header,
                          crosstab=crosstab, node=node, params=params,
