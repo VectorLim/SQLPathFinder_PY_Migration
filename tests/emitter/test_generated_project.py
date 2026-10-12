@@ -120,7 +120,7 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     namespace = {"__file__": str(main), "__name__": "job"}
     exec(main.read_text(), namespace)
     config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
-    namespace["bootstrap_aed"] = lambda **kwargs: config.copy()
+    monkeypatch.setattr("vg2c.runtime.job.bootstrap_aed", lambda **kwargs: config.copy())
     calls = []
     monkeypatch.setattr("vg2c.runtime.job.process_candidates",
                         lambda path, **kwargs: calls.append((path, kwargs)))
