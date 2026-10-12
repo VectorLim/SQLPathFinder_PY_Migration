@@ -158,18 +158,6 @@ def _lower_lines(lines, macros):
     return result
 
 
-def _table_option(value, kind, sql_asset, assets):
-    """Externalize long static schema options into one editable JSON asset."""
-    if kind != "header":
-        raise ValueError("New pivots are emitted as concise parameters, not JSON")
-    size = len(value)
-    if size < 8:
-        return value
-    path = sql_asset.removesuffix(".sql") + f".{kind}.json"
-    assets[path] = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-    return CodeExpr(f"job.table_spec({path!r})")
-
-
 def _list(value):
     return value if isinstance(value, list) else [value] if value else []
 
@@ -236,21 +224,21 @@ def emit_project(dispatched):
     sql_parameters = {}
     html_parameters = {}
     steps = []
-    imports = {"from pathlib import Path"}
+    imports = set()
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
                     for block in blocks.values())
-    runtime_imports = {"JobRuntime"}
+    runtime_imports = {"job_entrypoint"}
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
-    writer.write("def run(workdir=WORK_DIR" + (", *, aed_service_factory=None" if has_aed else "") + "):")
-    writer.push_indent()
-    writer.write("workdir = Path(workdir).resolve()")
     if has_aed:
-        runtime_imports.add("bootstrap_aed")
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        writer.write(f"aed_config = bootstrap_aed(workdir=workdir, source_name={source_name!r})")
-    writer.write("job = JobRuntime(BASE_DIR, workdir" + (", values=aed_config, initial_macros=aed_config" if has_aed else "") + ")")
+        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r})")
+        writer.write("def run(job, *, aed_config, aed_service_factory=None):")
+    else:
+        writer.write("@job_entrypoint(__file__)")
+        writer.write("def run(job):")
+    writer.push_indent()
     if has_state:
         writer.write("macros = job.macros")
 
@@ -367,7 +355,12 @@ def emit_project(dispatched):
             else:
                 header = SqliteEngine._extract_header(block)
                 if header:
-                    kwargs["header"] = _table_option(header, "header", name, assets)
+                    # SQL owns both its projection and any original /HEADERS override.
+                    # Preserve ScriptHost's by-name output semantics without exposing
+                    # an extra header= argument or a separate JSON sidecar in main.py.
+                    assets[name] = ("-- vg2c-output-headers: "
+                                    + json.dumps(header, ensure_ascii=False)
+                                    + "\\n" + assets[name])
             definition = UtilitySpec.operation_definition("ctx", "run_query")
             sql_definition = definition.parameter("sql")
             sql_parameters[block.index] = (sql_definition, assets[name])
@@ -541,7 +534,7 @@ def emit_project(dispatched):
     reader_imports = sorted(item for item in imports if item.startswith("from datasyncx "))
     ordinary_imports = sorted(imports - set(reader_imports))
     setup = "\nOracleClient.configure()\n" if reader_imports else ""
-    header = "\n".join(ordinary_imports) + setup + "\n".join(reader_imports) + "\n\nBASE_DIR = Path(__file__).resolve().parent\nWORK_DIR = BASE_DIR / 'output'\n\n"
+    header = "\n".join(ordinary_imports) + setup + "\n".join(reader_imports) + "\n\n"
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = []
