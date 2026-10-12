@@ -33,6 +33,7 @@ def test_generated_run_has_only_operations_and_preserves_workdir_override(tmp_pa
     assert "BASE_DIR =" not in text
     assert "WORK_DIR =" not in text
     assert "header=" not in text
+    assert "inputs=[]" not in text  # Empty TABLE configuration is the runtime default.
 
     moved = tmp_path / "relocated"
     shutil.move(str(main.parent), str(moved))
