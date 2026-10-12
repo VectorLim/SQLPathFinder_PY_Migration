@@ -125,7 +125,7 @@ def test_script_factory_uses_explicit_job_instance_with_no_shared_state(tmp_path
     assert first.workdir == second.workdir == (project / "output").resolve()
     assert first is not second
     first.macros["LABEL"] = "local"
-    assert "LABEL" not in second.macros
+    assert "LABEL" not in dict(second.macros.items())
 
     custom = JobRuntime.from_script(script, tmp_path / "custom")
     assert custom.workdir == (tmp_path / "custom").resolve()
