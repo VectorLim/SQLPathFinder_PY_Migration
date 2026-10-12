@@ -231,13 +231,16 @@ def emit_project(dispatched):
     runtime_imports = {"job_entrypoint"}
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
+    has_embedded_python = any(block.kind is Kind.PYTHON_EMBED for block in blocks.values())
+    workdir_arg = ", workdir" if has_embedded_python else ""
+    workdir_option = ", with_workdir=True" if has_embedded_python else ""
     if has_aed:
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r})")
-        writer.write("def run(job, workdir, *, aed_config, aed_service_factory=None):")
+        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r}{workdir_option})")
+        writer.write(f"def run(job{workdir_arg}, *, aed_config, aed_service_factory=None):")
     else:
-        writer.write("@job_entrypoint(__file__)")
-        writer.write("def run(job, workdir):")
+        writer.write(f"@job_entrypoint(__file__{workdir_option})")
+        writer.write(f"def run(job{workdir_arg}):")
     writer.push_indent()
     body_start = len(writer.lines)
     if has_state:
