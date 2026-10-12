@@ -228,20 +228,21 @@ def emit_project(dispatched):
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
                     for block in blocks.values())
-    runtime_imports = {"job_entrypoint"}
+    runtime_imports = {"JobRuntime"}
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
     has_embedded_python = any(block.kind is Kind.PYTHON_EMBED for block in blocks.values())
-    workdir_arg = ", workdir" if has_embedded_python else ""
-    workdir_option = ", with_workdir=True" if has_embedded_python else ""
+    signature = "def run(workdir=None" + (", *, aed_service_factory=None" if has_aed else "") + "):"
+    writer.write(signature)
+    writer.push_indent()
+    job_args = "__file__, workdir"
     if has_aed:
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r}{workdir_option})")
-        writer.write(f"def run(job{workdir_arg}, *, aed_config, aed_service_factory=None):")
-    else:
-        writer.write(f"@job_entrypoint(__file__{workdir_option})")
-        writer.write(f"def run(job{workdir_arg}):")
-    writer.push_indent()
+        job_args += f", aed_source_name={source_name!r}"
+    writer.write(f"job = JobRuntime.from_script({job_args})")
+    if has_embedded_python:
+        # Authored Python may explicitly use the resolved workdir variable.
+        writer.write("workdir = job.workdir")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")
@@ -350,9 +351,8 @@ def emit_project(dispatched):
             kwargs = {"reader": CodeExpr(f"{reader.name}(" + ", ".join(f"{key}={value!r}" for key, value in block.reader_kwargs.items()) + ")"),
                       "output": resolve_output_path(block)}
             if block.kind is Kind.SQLITE_QUERY:
-                inputs = SqliteEngine._extract_table_inputs(block)
-                if inputs:
-                    kwargs["inputs"] = inputs
+                # Keep each query's file dependencies explicit in translated Python.
+                kwargs["inputs"] = SqliteEngine._extract_table_inputs(block)
             else:
                 kwargs["node"] = block.reader_target.node
             crosstab = extract_crosstab_options(block)
@@ -384,7 +384,7 @@ def emit_project(dispatched):
             path = strip_quotes(argv[1])
             if "<<<" in path:
                 path = CodeExpr(f"{macros}.substitute({path!r})")
-            _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, service_factory=aed_service_factory)"], steps)
+            _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=job.aed_config, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
                 raise ValueError("JMP/JSL blocks are outside the supported core")

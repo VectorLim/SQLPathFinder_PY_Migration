@@ -52,8 +52,8 @@ def test_api_retention_preserves_workflow_utility_selection(fixture, context_key
     imports = {name.name for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime" for name in node.names}
     assert ("SqliteReader" in imports) == reader
     assert "ctx" not in emitted.source
-    assert "job_entrypoint" in imports
-    assert "JobRuntime" not in imports
+    assert "JobRuntime" in imports
+    assert "job_entrypoint" not in imports
     if "html_report" in context_keys:
         assert "job.html(" in emitted.source
     if "email" in context_keys:

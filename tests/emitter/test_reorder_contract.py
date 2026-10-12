@@ -30,7 +30,7 @@ def test_independent_writes_reorder_execution_semantics_and_effects(tmp_path):
     assert second.scope_id in legal_reorder_targets(result)[first.scope_id]
     order = swap_adjacent(result, first.scope_id, second.scope_id)
     reordered = apply_order_changes(result, [order])
-    run_body = reordered.emitted.source.split("def run(job):", 1)[1]
+    run_body = reordered.emitted.source.split("def run(workdir=None):", 1)[1]
     assert run_body.index("second.txt") < run_body.index("first.txt")
     workflow = project_document(reordered)
     assert [item.block_index for item in workflow.operations] == [1, 0]
