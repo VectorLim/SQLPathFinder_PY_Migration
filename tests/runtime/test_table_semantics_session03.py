@@ -121,7 +121,7 @@ def test_large_explicit_header_spec_remains_by_name(tmp_path):
     assert "header=" not in generated.source
     path, text = next((name, value) for name, value in generated.assets if name.endswith(".sql"))
     assert path.startswith("sql/")
-    assert json.loads(text.split("\\n", 1)[0].removeprefix("-- vg2c-output-headers: ")) == names
+    assert json.loads(text.split("\n", 1)[0].removeprefix("-- vg2c-output-headers: ")) == names
     assert not any(name.endswith(".header.json") for name, _ in generated.assets)
 
 
