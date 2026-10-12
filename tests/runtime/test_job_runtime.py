@@ -92,7 +92,7 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     result = compile_document(source).emitted
     tree = ast.parse(result.source)
     assert "@job_entrypoint(__file__)" in result.source
-    assert "def run(job):" in result.source
+    assert "def run(job, workdir):" in result.source
     assert "job = JobRuntime(" not in result.source
     assert "job.sql(" in result.source
     assert "job.write_file(" in result.source
