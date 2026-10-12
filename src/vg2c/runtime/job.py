@@ -222,13 +222,13 @@ def job_entrypoint(script_file, *, aed_source_name=None):
         if aed_source_name is None:
             def run(workdir=None):
                 root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
-                return function(JobRuntime(assets_root, root))
+                return function(JobRuntime(assets_root, root), root)
         else:
             def run(workdir=None, *, aed_service_factory=None):
                 root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
                 config = bootstrap_aed(workdir=root, source_name=aed_source_name)
                 job = JobRuntime(assets_root, root, values=config, initial_macros=config)
-                return function(job, aed_config=config, aed_service_factory=aed_service_factory)
+                return function(job, root, aed_config=config, aed_service_factory=aed_service_factory)
         return run
 
     return decorate
