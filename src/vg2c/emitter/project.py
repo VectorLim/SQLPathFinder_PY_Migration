@@ -234,11 +234,12 @@ def emit_project(dispatched):
     if has_aed:
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
         writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r})")
-        writer.write("def run(job, *, aed_config, aed_service_factory=None):")
+        writer.write("def run(job, workdir, *, aed_config, aed_service_factory=None):")
     else:
         writer.write("@job_entrypoint(__file__)")
-        writer.write("def run(job):")
+        writer.write("def run(job, workdir):")
     writer.push_indent()
+    body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")
 
@@ -528,6 +529,8 @@ def emit_project(dispatched):
             raise ValueError(f"Unsupported report type {report_type}")
 
     walk(dispatched.resolved.scope_tree)
+    if len(writer.lines) == body_start:
+        writer.write("pass")
     writer.pop_indent()
     if runtime_imports:
         imports.add("from vg2c.runtime import " + ", ".join(sorted(runtime_imports)))
