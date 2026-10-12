@@ -25,6 +25,8 @@ TARGET_MODULES = (
     "vg2c.semantics",
     "vg2c.reorder",
     "vg2c.dataflow.file_effects",
+    "vg2c.runtime.job",
+    "vg2c.runtime.query",
 )
 
 
