@@ -529,7 +529,8 @@ def emit_project(dispatched):
             raise ValueError(f"Unsupported report type {report_type}")
 
     walk(dispatched.resolved.scope_tree)
-    if len(writer.lines) == body_start:
+    if not any(line.strip() and not line.lstrip().startswith("#")
+               for line in writer.lines[body_start:]):
         writer.write("pass")
     writer.pop_indent()
     if runtime_imports:
