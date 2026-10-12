@@ -118,9 +118,11 @@ def test_large_explicit_header_spec_remains_by_name(tmp_path):
                       + ",".join(names) + "\n</OPTIONS>\nSELECT "
                       + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names)))
     generated = compile_document(source).emitted
-    assert "header=job.table_spec(" in generated.source
-    path, text = next((name, value) for name, value in generated.assets if name.endswith(".header.json"))
-    assert json.loads(text) == names
+    assert "header=" not in generated.source
+    path, text = next((name, value) for name, value in generated.assets if name.endswith(".sql"))
+    assert path.startswith("sql/")
+    assert json.loads(text.split("\\n", 1)[0].removeprefix("-- vg2c-output-headers: ")) == names
+    assert not any(name.endswith(".header.json") for name, _ in generated.assets)
 
 
 def test_multi_alias_join_and_dynamic_sql_projection(tmp_path):
