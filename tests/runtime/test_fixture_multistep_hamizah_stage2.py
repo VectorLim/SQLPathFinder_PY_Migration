@@ -63,6 +63,15 @@ def _run(main, workdir):
 
 def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(tmp_path):
     main = _project(tmp_path)
+    user_code = main.read_text(encoding="utf-8")
+    assert "@job_entrypoint(__file__)" in user_code
+    assert "def run(job):" in user_code
+    assert "JobRuntime(" not in user_code
+    assert "header=" not in user_code
+    assets = list((main.parent / "sql").glob("*.sql"))
+    assert len(assets) == 2
+    assert all(asset.read_text(encoding="utf-8").startswith("-- vg2c-output-headers: ")
+               for asset in assets)
     workdir = tmp_path / "work"
     workdir.mkdir()
     _seed(workdir)
