@@ -50,35 +50,6 @@ class JobRuntime:
             raise ValueError("Asset path must remain inside the generated project")
         return resolved
 
-    def table_spec(self, path):
-        """Load an editable static CSV/SQL option on each invocation."""
-        import json
-
-        asset = self.asset_path(path)
-        try:
-            value = json.loads(asset.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Cannot read SQL table option asset {asset}: {exc}") from exc
-        if not isinstance(value, (list, dict)):
-            raise ValueError(f"SQL table option asset must contain a list or mapping: {asset}")
-        if asset.name.endswith(".crosstab.json"):
-            if not isinstance(value, dict):
-                raise ValueError(f"SQL crosstab asset must be a mapping: {asset}")
-            if (not isinstance(value.get("row_keys"), list)
-                or not all(isinstance(v, str) and v for v in value["row_keys"])
-                or not all(isinstance(value.get(k), str) and value[k]
-                           for k in ("header_key", "value_key"))):
-                raise ValueError(
-                    f"SQL crosstab asset {asset} requires row_keys (string list), "
-                    "header_key (string), value_key (string)"
-                )
-        if asset.name.endswith(".header.json") and (
-            not isinstance(value, list)
-            or not all(isinstance(v, str) for v in value)
-        ):
-            raise ValueError(f"SQL header asset must be a list of strings: {asset}")
-        return value
-
     def report(self, template, *, input_file, output_file=None):
         """Register one editable HTML table without a second report schema.
 
@@ -87,29 +58,6 @@ class JobRuntime:
         """
         return csv_report(input_file, output_file=output_file,
                           table_template=self.asset_path(template))
-
-    def report_spec(self, path):
-        """Read an editable long HTML column schema when the report is defined.
-
-        Source options are kept distinct: CSV fields, presentation labels,
-        alignment and output name (utils.py:9324-9378).
-        """
-        data = self.table_spec(path)
-        allowed = {"input_file", "columns", "headers", "alignment", "output_file"}
-        if not isinstance(data, dict) or set(data) - allowed:
-            raise ValueError(f"Invalid HTML report definition {path}: unexpected fields")
-        if not isinstance(data.get("input_file"), str):
-            raise ValueError(f"HTML report definition {path} requires input_file string")
-        for key in ("columns", "headers", "alignment"):
-            if not isinstance(data.get(key), list) or not all(
-                isinstance(value, str) for value in data[key]
-            ):
-                raise ValueError(f"HTML report definition {path} requires {key} string list")
-        if data.get("output_file") is not None and not isinstance(data["output_file"], str):
-            raise ValueError(f"HTML report definition {path} requires output_file string or null")
-        return csv_report(data["input_file"], columns=data["columns"],
-                          headers=data["headers"], alignment=data["alignment"],
-                          output_file=data.get("output_file"))
 
     def sql(self, path, *, reader, output, inputs=None, header=None,
             crosstab=None, node=None, params=None,
