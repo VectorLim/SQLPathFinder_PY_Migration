@@ -187,10 +187,10 @@ class SqliteEngine(EmitterUtility):
         if header:
             kwargs["header"] = header
         if crosstab:
-            kwargs["crosstab"] = crosstab
+            kwargs.update(crosstab)
 
-        from vg2c.utilities.pipeline_context import PipelineContext
+        from vg2c.utilities.direct_operations import DirectOperationMetadata
 
-        stmt = PipelineContext.run_query.render(**kwargs)
+        stmt = DirectOperationMetadata.run_query.render(**kwargs)
         suffix = "sqlite_query" if sqlite else "sql_query"
         return suffix, [stmt]

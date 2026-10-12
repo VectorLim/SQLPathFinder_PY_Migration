@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from vg2c.utilities._runtime_helpers import strip_quotes
+from vg2c.runtime.values import strip_quotes
 
 @dataclass(frozen=True, slots=True)
 class SqlGetCsvListCall:

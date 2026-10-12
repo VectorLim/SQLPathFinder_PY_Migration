@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import pandas
 
-from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.runtime.values import resolve_path
 
 
 class _CsvIO:
@@ -27,7 +27,7 @@ class _CsvIO:
         """Yield each data row as a dict keyed by header names."""
         path = resolve_path(name, workdir=self.workdir)
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(fh, delimiter=self._delimiter_for(str(path)))
             yield from reader
 
     def single_row(self, name: str) -> dict[str, str]:
@@ -44,6 +44,13 @@ class _CsvIO:
     def _read_column(self, path: str, column_ref: int | str) -> list[str]:
         """Read a column from a legacy comma, tab, or pipe-delimited file."""
         rows: list[str] = []
+        # Original VG2 SQL_Get_CSV_List uses Windows-relative .\\file paths.
+        # Interpret only their path separators; do not map Windows drives/UNC.
+        if "\\" in path:
+            windows_path = PureWindowsPath(path)
+            if windows_path.drive or windows_path.root:
+                raise ValueError(f"Windows absolute CSV-list path is unsupported: {path!r}")
+            path = str(Path(*windows_path.parts))
         resolved_path = resolve_path(path, workdir=self.workdir)
 
         with resolved_path.open(newline="", encoding="utf-8", errors="replace") as fh:
@@ -75,10 +82,12 @@ class _CsvIO:
     @staticmethod
     def _delimiter_for(path: str) -> str:
         suffix = Path(path).suffix.casefold()
-        if suffix == ".tab":
+        if suffix in {".tab", ".hive-tab", ".hive-sequence"}:
             return "\t"
         if suffix == ".asc":
             return "|"
+        if suffix == ".plus":
+            return "+"
         return ","
 
     @staticmethod
@@ -119,7 +128,7 @@ class _CsvIO:
         if not path.exists():
             return 0
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
+            reader = csv.reader(fh, delimiter=self._delimiter_for(str(path)))
             next(reader, None)  # skip header
             return sum(1 for _ in reader)
 
@@ -137,7 +146,7 @@ class _CsvIO:
         out_path = resolve_path(chunk_name, for_write=True, workdir=self.workdir)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
-            reader = csv.reader(fh)
+            reader = csv.reader(fh, delimiter=self._delimiter_for(str(in_path)))
             header = next(reader, None)
             batch: list[list[str]] = []
             for row in reader:
@@ -155,7 +164,7 @@ class _CsvIO:
         path: Path, header: list[str] | None, rows: list[list[str]]
     ) -> None:
         with path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
+            writer = csv.writer(fh, delimiter=_CsvIO._delimiter_for(str(path)))
             if header is not None:
                 writer.writerow(header)
             writer.writerows(rows)
@@ -175,17 +184,26 @@ class _CsvIO:
         """
         path = resolve_path(name, for_write=True, workdir=self.workdir)
         path.parent.mkdir(parents=True, exist_ok=True)
+        delimiter = self._delimiter_for(str(path))
 
         if isinstance(content, pandas.DataFrame):
             if header is not None:
-                columns = {str(column).casefold(): column for column in content.columns}
+                keys = [str(name).casefold() for name in header]
+                if len(set(keys)) != len(keys):
+                    raise ValueError("CSV output header names collide case-insensitively")
+                columns = {}
+                for column in content.columns:
+                    key = str(column).casefold()
+                    if key in columns and key in keys:
+                        raise ValueError(f"Ambiguous CSV source columns for {column!r}")
+                    columns[key] = column
                 content = content.reindex(
                     columns=[
                         columns.get(column.casefold(), column) for column in header
                     ]
                 )
                 content.columns = header
-            content.to_csv(path, index=False, encoding="utf-8")
+            content.to_csv(path, index=False, encoding="utf-8", sep=delimiter)
             return
 
         if isinstance(content, str):
@@ -202,7 +220,7 @@ class _CsvIO:
         if not rows:
             if header is not None:
                 with path.open("w", newline="", encoding="utf-8") as fh:
-                    writer = csv.writer(fh)
+                    writer = csv.writer(fh, delimiter=delimiter)
                     writer.writerow(header)
             else:
                 path.write_text("", encoding="utf-8")
@@ -212,12 +230,12 @@ class _CsvIO:
             if isinstance(rows[0], dict):
                 fieldnames = header if header is not None else list(rows[0].keys())
                 writer = csv.DictWriter(
-                    fh, fieldnames=fieldnames, extrasaction="ignore"
+                    fh, fieldnames=fieldnames, extrasaction="ignore", delimiter=delimiter
                 )
                 writer.writeheader()
                 writer.writerows(rows)
             else:
-                writer_plain = csv.writer(fh)
+                writer_plain = csv.writer(fh, delimiter=delimiter)
                 if header:
                     writer_plain.writerow(header)
                     if rows[0] == header:

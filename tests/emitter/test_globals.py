@@ -142,7 +142,7 @@ def test_generated_literals_and_invocation_edits_are_independent(tmp_path):
     assert _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'") * 2 + _mail_block() * 2).emitted == result.emitted
 
 
-def test_generated_queries_keep_independent_execution_boundaries(tmp_path):
+def test_generated_queries_keep_independent_execution_boundaries(tmp_path, monkeypatch):
     result = _compile(tmp_path, _sql_block("SELECT 1 AS value") * 2)
     project = tmp_path / "project"
     project.mkdir()
@@ -155,7 +155,7 @@ def test_generated_queries_keep_independent_execution_boundaries(tmp_path):
     calls = []
     def capture(path, **kwargs):
         calls.append(Path(path).read_text())
-    namespace["execute_sql"] = capture
+    monkeypatch.setattr("vg2c.runtime.job.execute_sql", capture)
     first = project / result.emitted.assets[0][0]
     first.write_text("SELECT 2 AS value")
     namespace["run"](workdir=tmp_path / "work")
@@ -206,11 +206,7 @@ def test_generated_sql_literals_remain_in_their_own_assets(tmp_path):
     assert len({name for name, _ in result.emitted.assets}) == 3
 
 
-def test_production_emitter_does_not_assemble_embedded_runtime(tmp_path, monkeypatch):
-    import vg2c.embedding
-    def forbidden(**kwargs):
-        pytest.fail("Native projects must not assemble an embedded runtime")
-    monkeypatch.setattr(vg2c.embedding, "assemble_utilities", forbidden)
+def test_production_emitter_uses_installed_runtime_not_embedded_classes(tmp_path):
     result = _compile(tmp_path, _sql_block("SELECT * FROM t WHERE lot = '1'"))
     assert "from vg2c.runtime import" in result.emitted.source
     assert "LOT =" not in result.emitted.source

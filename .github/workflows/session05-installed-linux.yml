@@ -1,0 +1,36 @@
+name: Session 05 Installed Linux Wheel Probe
+on:
+  push:
+    branches:
+      - refactor/generated-code/implementation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build a distributable wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build wheel setuptools "pandas==3.0.3" "keyring==25.7.0"
+          python -m build --wheel --no-isolation --outdir "$RUNNER_TEMP/session05-dist"
+      - name: Install wheel into clean venv (offline supported runtime path)
+        run: |
+          python -m venv "$RUNNER_TEMP/session05-venv"
+          "$RUNNER_TEMP/session05-venv/bin/python" -m pip install "pandas==3.0.3"
+          "$RUNNER_TEMP/session05-venv/bin/python" -m pip install --no-deps "$RUNNER_TEMP"/session05-dist/*.whl
+      - name: Execute moved generated projects using installed wheel only
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python -m compileall -q tests/deployment/verify_linux_wheel.py
+          python tests/deployment/verify_linux_wheel.py \
+            --python "$RUNNER_TEMP/session05-venv/bin/python" \
+            --wheel "$RUNNER_TEMP"/session05-dist/*.whl

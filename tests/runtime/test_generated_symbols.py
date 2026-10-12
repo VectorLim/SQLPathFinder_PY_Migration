@@ -11,13 +11,12 @@ from pathlib import Path
 from vg2c.compilation import compile_document
 from vg2c import translate
 import pytest
-from vg2c.embedding import assemble_utilities
 
 RUNNER = """
 import importlib.abc, runpy, sys
 class NoCompiler(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('vg2c.') and not (fullname.startswith('vg2c.runtime') or fullname in {'vg2c.utilities', 'vg2c.utilities._runtime_helpers'}):
+        if fullname.startswith('vg2c.') and not fullname.startswith('vg2c.runtime'):
             raise AssertionError('Generated script imported compiler: ' + fullname)
 sys.meta_path.insert(0, NoCompiler())
 runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
@@ -79,6 +78,9 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
 """
     result = run_generated(tmp_path, text)
     assert (tmp_path / "copied.txt").read_text() == "Hello Bob"
+    assert "@job_entrypoint(__file__, with_workdir=True)" in result.emitted.source
+    assert "def run(job, workdir):" in result.emitted.source
+    assert "job = JobRuntime(" not in result.emitted.source
     assert "ctx" not in result.emitted.source
 
 
@@ -125,7 +127,7 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "Ada" in content and "85.00%" in content
     assert "<title>Generated report</title>" in content
-    assert "render_html(" in result.emitted.source
+    assert "job.html(" in result.emitted.source
     assert "ctx" not in result.emitted.source
     assert "def emit_block" not in result.emitted.source
 
@@ -161,49 +163,3 @@ runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
         assert list(csv.reader(stream)) == [["value"], ["42"]]
 
 
-def test_uncalled_runtime_methods_execute_in_standalone_output(tmp_path):
-    # The calls below are deliberately added after assembly: they cannot influence
-    # dependency roots or rescue methods that the embedding pass incorrectly prunes.
-    embedded = assemble_utilities(
-        step_emissions=(),
-        workflow_source=(
-            "def run(ctx):\n"
-            "    ctx.macro.named('NAME')\n"
-            "    ctx.fs_ops.write_file('unused', '')\n"
-            "    ctx.csv_io.row_count('unused')\n"
-        ),
-        reader_names=set(),
-    )
-    assertions = """
-macro = MacroState()
-macro.set_named('NAME', 'Ada')
-with macro.scope({'NAME': 'Bob'}):
-    assert macro.substitute('Hello <<<NAME>>>') == 'Hello Bob'
-assert macro.named('NAME') == 'Ada'
-fs = FileSystemOps()
-fs.write_file('original.txt', 'hello')
-fs.copy('original.txt', 'copy.txt')
-fs.rename('copy.txt', 'renamed.txt')
-assert Path('renamed.txt').read_text() == 'hello'
-fs.delete(['original.txt', 'renamed.txt'])
-assert not Path('original.txt').exists() and not Path('renamed.txt').exists()
-csv_io = CsvIO()
-csv_io.write('rows.csv', [{'name': 'Ada'}, {'name': 'Bob'}])
-assert list(csv_io.iter('rows.csv')) == [{'name': 'Ada'}, {'name': 'Bob'}]
-csv_io.write('single.csv', [{'name': 'Ada'}])
-assert csv_io.single_row('single.csv') == {'name': 'Ada'}
-chunks = [Path(path).read_text() for path in csv_io.iter_chunks('rows.csv', 'chunk.csv', 1)]
-assert chunks == ['name\\nAda\\n', 'name\\nBob\\n']
-"""
-    output = tmp_path / "runtime.py"
-    output.write_text(
-        "\n\n".join([*embedded.imports, *embedded.sources, assertions]), encoding="utf-8"
-    )
-    process = subprocess.run(
-        [sys.executable, "-I", "-c", RUNNER.replace("runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])", "runpy.run_path(sys.argv[1], run_name='legacy_runtime')"), str(output)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert process.returncode == 0, process.stdout + process.stderr

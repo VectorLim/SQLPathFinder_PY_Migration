@@ -50,7 +50,8 @@ def test_translate_selected_file_to_output_directory(tmp_path):
     out_file = output_dir / "script_short" / "main.py"
     assert out_file.exists()
     text = out_file.read_text(encoding="utf-8")
-    assert "def run(workdir=WORK_DIR):" in text
+    assert "@job_entrypoint(__file__)" in text
+    assert "def run(job):" in text
     assert "ctx" not in text
     assert list(out_file.parent.glob("sql/*.sql"))
 

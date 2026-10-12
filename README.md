@@ -7,17 +7,18 @@ The root defaults to the source directory. Existing nonempty projects and batch 
 collisions are rejected before generation writes files. Move the entire generated
 directory together; the original VG2 file is not needed for execution.
 
-Generated code imports the installed `vg2c.runtime`, uses native controls and local
-macro maps, and reads SQL/HTML assets each time an operation runs. By default,
+Generated code imports the installed `vg2c.runtime`, uses native Python controls and
+one instance-scoped `MacroStore`, and rereads external SQL, HTML and CSS assets at
+execution time. By default,
 `run()` reads and writes job data under `<project>/output`; `run(workdir=...)`
 selects an explicit data root. SQL assets stay under `<project>/sql` and report
 shells under `<project>/html`. There is no process-wide working-directory change.
 CSV table inputs and backend node aliases are separate from SQL parameter binds.
 
-Relative CSS references resolve beside the HTML shell. A source CSS file there is
-read and copied beside the output on every render, or embedded for CSSEMBED. If
-absent, current native style updates supply the CSS; add the referenced file to
-override those defaults. Deferred reports read CSV data and resolve raw macro
+CSS is emitted under `<project>/styles` and published on HTML-RUN execution.
+Explicit relative CSS assets are resolved from the generated project (or an
+already-published stylesheet in the workdir), copied beside the output on render,
+or embedded for CSSEMBED. Editing a generated CSS asset does not require recompiling VG2. Deferred reports read CSV data and resolve raw macro
 paths/options at layout time. Data and headers are escaped once; authored markup
 is preserved. Unsupported active report options fail with source locations.
 Legacy browser/delivery/security/chart integration settings produce explicit
@@ -30,16 +31,45 @@ from VG2. Literal values belong to their individual calls rather than shared
 generated globals. Embedded Python must use explicit runtime functions and
 `workdir`; the retired `ctx` API and top-level return/yield have diagnostics.
 
-This migration has passed the selected offline core suites and a source-based
-Linux runtime probe. Installed-wheel validation and production AED integration
-remain blocked. AED requires an explicit per-run service factory supporting
-per-instance facility, API key, and absolute CA bundle; available client versions
-do not expose that contract. Test mode never writes lot attributes or success
-history. Embedding and `PipelineContext` remain pending these cutover gates.
-The visual editor's asset persistence/packaging, HPC, and JMP are outside this
-implementation and have not been validated against the new project contract.
+The generated project has been checked in a clean Linux virtual environment using
+a built and installed `vg2c` wheel. The offline probe covers a moved generated project,
+changed working directory, explicit `run(workdir=...)`, SQLite, crosstab/CTARRAY,
+editable SQL/HTML/CSS, linked/embedded styles, Unicode and failure handling.
+This is **not** certification of private DataSyncX/Oracle/AED services or the original
+ScriptHost engine: those require their target infrastructure and credentials.
+The old `MacroState`, `PipelineContext` and runtime HTML preview/rendering engines
+and the unused source-embedding pipeline have been retired. Compiler-only operation
+metadata and HTML parsing remain because they are necessary to translate VG2 and
+preserve editing/source offsets. The optional visual editor and its legacy HTML
+preview are not a supported Session 05 release gate; HPC/JMP/JSL remain unsupported.
 
 ---
+
+
+## Offline installed-wheel Linux verification
+
+From a clean Linux checkout with Python 3.12, the repository's Session 05 CI
+workflow builds the wheel, installs the wheel into a separate virtual environment
+and executes a generated project from a detached directory without a compiler
+checkout, VG2 source or ScriptHost at runtime:
+
+```bash
+python -m pip install build wheel setuptools pandas==3.0.3 keyring==25.7.0
+python -m build --wheel --no-isolation --outdir /tmp/vg2c-dist
+python -m venv /tmp/vg2c-wheel-venv
+/tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3
+/tmp/vg2c-wheel-venv/bin/python -m pip install --no-deps /tmp/vg2c-dist/*.whl
+python tests/deployment/verify_linux_wheel.py \\
+    --python /tmp/vg2c-wheel-venv/bin/python \\
+    --wheel /tmp/vg2c-dist/*.whl
+```
+
+The `--no-deps` wheel install is intentional for this **synthetic offline SQLite**
+probe: runtime imports require pandas, while external DataSyncX and production
+credentials are absent. For a real deployed job, install all declared project
+requirements from an authorized corporate package source and validate its
+reader/service integration separately. Do not replace the production dependency
+install with this minimal offline test environment.
 
 ## Architecture Overview
 

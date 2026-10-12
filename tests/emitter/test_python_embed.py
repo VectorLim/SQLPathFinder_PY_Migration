@@ -1,51 +1,42 @@
-"""Unit tests for PythonEmbed utility."""
+"""Native Python blocks are emitted inside run(), not legacy ctx step functions."""
+import ast
 
-from __future__ import annotations
-
-from vg2c.frontend.models import BlockOptions, ClassifiedBlock, ParsedBlock, SourceSpan
-from vg2c.kind import Kind
-from vg2c.resolver.models import ResolvedBlock
-from vg2c.utilities._base import UtilitySpec
+from vg2c import compile_document
 
 
-def _make_block(
-    index: int, kind: Kind, body: str, csv: str | None = None
-) -> ResolvedBlock:
-    pairs = [("WRITE-FILE", "Y")]
-    if csv:
-        pairs.append(("CSV", csv))
-    options = BlockOptions.from_pairs(pairs)
-    parsed = ParsedBlock(
-        index=index, options=options, body=body, raw="", span=SourceSpan(None, 1, 1)
+def _emit(tmp_path, code, filename="script.py"):
+    source = tmp_path / "embedded.txt"
+    source.write_text(
+        f"<OPTIONS>\n/WRITE-FILE=Y\n/CSV={filename}\n</OPTIONS>\n"
+        + code + "\n<---- New Query ---->\n",
+        encoding="utf-8",
     )
-    classified = ClassifiedBlock(parsed, kind, "test")
-    return ResolvedBlock(classified, options, body, None, 0)
+    return compile_document(source).emitted
 
 
-def test_emit_block_embeds_python_body() -> None:
-    code = "import os\nprint(os.getcwd())"
-    block = _make_block(3, Kind.PYTHON_EMBED, code, csv="script.py")
-    emission = UtilitySpec.dispatch_and_emit(block)
-
-    assert "def step_0003_python_embed(ctx)" in emission.source
-    assert "import os" in emission.source
-    assert "print(os.getcwd())" in emission.source
-    assert emission.call_site == "step_0003_python_embed(ctx)"
+def test_native_python_body_is_preserved(tmp_path):
+    emitted = _emit(tmp_path, "import os\nprint(os.getcwd())")
+    assert "import os" in emitted.source
+    assert "print(os.getcwd())" in emitted.source
+    assert "def step_" not in emitted.source
+    assert "ctx" not in emitted.source
+    ast.parse(emitted.source)
 
 
-def test_emit_block_preserves_multiline_indentation() -> None:
-    code = "for i in range(10):\n" "    print(i)\n" "    if i > 5:\n" "        break"
-    block = _make_block(7, Kind.PYTHON_EMBED, code, csv="loop.py")
-    emission = UtilitySpec.dispatch_and_emit(block)
+def test_nested_python_indentation_survives(tmp_path):
+    emitted = _emit(
+        tmp_path,
+        "for i in range(10):\n    print(i)\n    if i > 5:\n        break",
+        "loop.py",
+    )
+    ast.parse(emitted.source)
+    assert "    for i in range(10):" in emitted.source
+    assert "        print(i)" in emitted.source
+    assert "            break" in emitted.source
 
-    assert "    for i in range(10):" in emission.source
-    assert "        print(i)" in emission.source
-    assert "            break" in emission.source
 
-
-def test_emit_block_empty_body() -> None:
-    block = _make_block(1, Kind.PYTHON_EMBED, "", csv="empty.py")
-    emission = UtilitySpec.dispatch_and_emit(block)
-
-    assert "def step_0001_python_embed(ctx)" in emission.source
-    assert emission.call_site == "step_0001_python_embed(ctx)"
+def test_empty_python_block_does_not_create_retired_step(tmp_path):
+    emitted = _emit(tmp_path, "", "empty.py")
+    assert "def run(" in emitted.source
+    assert "def step_" not in emitted.source
+    ast.parse(emitted.source)

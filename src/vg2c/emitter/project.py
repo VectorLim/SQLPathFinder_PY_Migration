@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 from dataclasses import replace
 from html import escape
@@ -20,7 +21,15 @@ from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._emit_helpers import resolve_output_path, extract_crosstab_options, split_utility_command
 from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utilities.html_report import HtmlReport
+from vg2c.runtime.html_format import build_css
 from vg2c.utilities.sqlite_engine import SqliteEngine
+
+
+# Create_HTML_Window and Process_HTM in SPFUtilities/utils.py:12175-12205,
+# 14046-14125 treat HTM: report references as whole layout lines.
+_HTM_LAYOUT_LINE = re.compile(
+    r"(?im)^(?P<indent>[ \t]*)HTM:(?P<id>[A-Za-z_][A-Za-z0-9_]*)(?P<suffix>[ \t]*)(?=\r?$)"
+)
 
 
 class _Expressions(ast.NodeTransformer):
@@ -32,12 +41,12 @@ class _Expressions(ast.NodeTransformer):
         name = ast.unparse(node.func)
         if name == "ctx.macro.named":
             key = ast.literal_eval(node.args[0])
-            return ast.parse(f"substitute({'<<<' + key + '>>>'!r}, values=job_values, macros={self.macros})", mode="eval").body
+            return ast.Subscript(value=ast.Name(id=self.macros, ctx=ast.Load()),
+                                 slice=ast.Constant(value=key), ctx=ast.Load())
         if name == "ctx.macro.positional":
             raise ValueError("Positional macro <<>> has no supported source cursor")
         if name == "ctx.csv_io.row_count":
-            node.func = ast.Name(id="row_count", ctx=ast.Load())
-            node.keywords.append(ast.keyword(arg="workdir", value=ast.Name(id="workdir", ctx=ast.Load())))
+            node.func = ast.Attribute(value=ast.Name(id="job", ctx=ast.Load()), attr="row_count", ctx=ast.Load())
         return node
 
 
@@ -45,19 +54,19 @@ def _expression(source, macros):
     return ast.unparse(_Expressions(macros).visit(ast.parse(source, mode="eval").body))
 
 
-def control_header(payload, scope_id, macros="macro_values"):
+def control_header(payload, scope_id, macros="macros"):
     """One native header renderer shared by emission and semantic edits."""
     if isinstance(payload, IfThen):
         return "if " + _expression(payload._build_condition_expr(), macros) + ":"
     if isinstance(payload, StartMacro):
         if not payload.csv_path:
-            return f"macro_values_{scope_id} = {macros}.copy()"
-        return f"macro_row_{scope_id} = read_macro_row(substitute({payload.csv_path!r}, values=job_values, macros={macros}), workdir=workdir)"
+            return f"with {macros}.scope():"
+        return f"macro_row_{scope_id} = job.read_macro_row({payload.csv_path!r})"
     if isinstance(payload, RunLoop):
-        return f"with closing(csv_chunks(substitute({payload.input_csv_path!r}, values=job_values, macros={macros}), substitute({payload.chunk_csv_path!r}, values=job_values, macros={macros}), {payload.chunk_size}, workdir=workdir)) as chunks_{scope_id}:"
+        return f"with closing(job.csv_chunks({payload.input_csv_path!r}, {payload.chunk_csv_path!r}, {payload.chunk_size})) as chunks_{scope_id}:"
     function = "for_values" if isinstance(payload, ForLoop) else "site_values"
     args = payload.args if isinstance(payload, ForLoop) else (payload.nodes,)
-    expr = ", ".join(f"substitute({arg!r}, values=job_values, macros={macros})" for arg in args)
+    expr = ", ".join(f"{macros}.substitute({arg!r})" for arg in args)
     return f"for loop_values_{scope_id} in {function}({expr}):"
 
 
@@ -93,18 +102,18 @@ def _call(utility, method, function, *args, **kwargs):
     definition = UtilitySpec.operation_definition(utility, method)
     if definition is None:
         raise ValueError(f"Missing compiler operation {utility}.{method}")
-    if function == "render_html":
+    if function == "job.html":
         path = replace(definition.parameter("template"), name="template_path", position=0, display_label="HTML asset")
         definition = replace(definition, parameters=(path, *(item for item in definition.parameters if item.name not in {"ctx", "template"})))
     return EmittableOperation.render_method_call(definition, function=function, args=args, kwargs=kwargs)
 
 
-def _lower_lines(lines, macros, has_state=True):
+def _lower_lines(lines, macros):
     result = []
-    targets = {"ctx.write_file": "write_file", "fs_ops.copy": "copy_file",
-               "fs_ops.rename": "rename_file", "fs_ops.delete": "delete_files",
-               "wait_file.poll": "wait_file", "external.run": "run_program",
-               "smart_append.append": "smart_append", "email.send": "send_mail"}
+    targets = {"ctx.write_file": "job.write_file", "fs_ops.copy": "job.copy_file",
+               "fs_ops.rename": "job.rename_file", "fs_ops.delete": "job.delete_files",
+               "wait_file.poll": "job.wait_file", "external.run": "job.run_program",
+               "smart_append.append": "job.smart_append", "email.send": "job.send_mail"}
     for line in lines:
         if not isinstance(line, RenderedCall):
             body = ast.parse(line).body
@@ -144,10 +153,6 @@ def _lower_lines(lines, macros, has_state=True):
         target = targets.get(key)
         if target is None:
             raise ValueError(f"Unsupported direct operation {key}")
-        kwargs["workdir"] = CodeExpr("workdir")
-        if target == "write_file" and has_state:
-            kwargs["values"] = CodeExpr("job_values")
-            kwargs["macros"] = CodeExpr(macros)
         result.append(EmittableOperation.render_method_call(operation, function=target,
                                                            args=tuple(arguments), kwargs=kwargs))
     return result
@@ -168,12 +173,32 @@ def _report_options(block):
 
 
 def _table(report_id, options):
-    headers = "".join('<th>${' + report_id + f'_HEADER_{index + 1}' + '}</th>'
-                      for index, _ in enumerate(_list(options.get("COLUMN-HEADERS"))))
+    """Editable HTML is the sole definition of report projection/presentation.
+
+    SPFUtilities/utils.py:9324-9539 distinguishes CSV selection, display
+    labels and alignment. The runtime resolves actual fields from current CSV.
+    """
+    columns = _list(options.get("COLUMN-DATA"))
+    labels = _list(options.get("COLUMN-HEADERS"))
+    alignment = _list(options.get("COLUMN-ALIGNMENT"))
+    if not columns:
+        raise ValueError(f"Report {report_id} requires COLUMN-DATA")
+    parts = []
+    for index, field in enumerate(columns):
+        label = labels[index] if index < len(labels) else field
+        align = alignment[index] if index < len(alignment) else "middle-left"
+        # Pattern SOURCE label is a column-name matcher, not a display title.
+        pattern = f' data-pattern="{escape(label, quote=True).replace("$", "&#36;")}"' if field.upper() in (
+            "STARTS WITH:", "ENDS WITH:", "CONTAINS:", "STARTS/ENDS WITH (%):"
+        ) else ""
+        display = "Matching CSV columns" if pattern else label
+        parts.append(f'<th data-field="{escape(field, quote=True).replace("$", "&#36;")}"{pattern} '
+                     f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$$")}</th>')
     top = options.get("AT-TOP-OF-REPORT")
-    heading = '<p class="at-top-of-report">' + " ".join(_list(top)).replace("$", "$$") + "</p>\n" if top else ""
-    return heading + '<table class="tblin"><thead><tr id="colhdr">' + headers + \
-        '</tr></thead><tbody>${' + report_id + '_ROWS}</tbody><tfoot></tfoot></table>'
+    heading = '<p class="at-top-of-report">' + escape(" ".join(_list(top))).replace("$", "$$") + "</p>\n" if top else ""
+    return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}">'
+            '<thead><tr id="colhdr">' + "".join(parts) +
+            '</tr></thead><tbody></tbody><tfoot></tfoot></table>')
 
 
 def emit_project(dispatched):
@@ -182,53 +207,73 @@ def emit_project(dispatched):
     blocks.update({block.index: block for block in dispatched.dispatched})
     assets = {}
     report_options = {}
+    # A fragment is useful only for an ID referenced by several layouts.
+    layout_references = {}
+    report_definitions = {}
+    for candidate in blocks.values():
+        if (candidate.kind is Kind.HTML_REPORT
+                and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-DEFER"):
+            name = candidate.resolved_options.lookup.get("ID", "")
+            report_definitions[name] = report_definitions.get(name, 0) + 1
+    for candidate in blocks.values():
+        if (candidate.kind is Kind.HTML_REPORT
+                and candidate.resolved_options.lookup.get("REPORT", "").upper() == "HTML-LAYOUT"):
+            for match in _HTM_LAYOUT_LINE.finditer(candidate.resolved_body):
+                key = match.group("id")
+                layout_references[key] = layout_references.get(key, 0) + 1
     sql_parameters = {}
     html_parameters = {}
     steps = []
-    imports = {"from pathlib import Path"}
+    imports = set()
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
                     for block in blocks.values())
-    runtime_imports = {"snapshot_values", "substitute"} if has_state else set()
+    runtime_imports = {"job_entrypoint"}
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
-    writer.write("def run(workdir=WORK_DIR" + (", *, aed_service_factory=None" if has_aed else "") + "):")
-    writer.push_indent()
-    writer.write("workdir = Path(workdir).resolve()")
+    has_embedded_python = any(block.kind is Kind.PYTHON_EMBED for block in blocks.values())
+    workdir_arg = ", workdir" if has_embedded_python else ""
+    workdir_option = ", with_workdir=True" if has_embedded_python else ""
     if has_aed:
-        runtime_imports.add("bootstrap_aed")
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        writer.write(f"aed_config = bootstrap_aed(workdir=workdir, source_name={source_name!r})")
+        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r}{workdir_option})")
+        writer.write(f"def run(job{workdir_arg}, *, aed_config, aed_service_factory=None):")
+    else:
+        writer.write(f"@job_entrypoint(__file__{workdir_option})")
+        writer.write(f"def run(job{workdir_arg}):")
+    writer.push_indent()
+    body_start = len(writer.lines)
     if has_state:
-        writer.write("job_values = snapshot_values(workdir" + (", values=aed_config" if has_aed else "") + ")")
-        writer.write("macro_values = aed_config.copy()" if has_aed else "macro_values = {}")
-    has_reports = any(block.kind is Kind.HTML_REPORT for block in blocks.values())
-    if has_reports:
-        writer.write("reports = {}")
-        writer.write("styles = {}")
-        writer.write("css_file = None")
+        writer.write("macros = job.macros")
 
     def fail(block, error):
         raise ValueError(f"{block.span.file or '<input>'}:{block.span.start_line}:1 (block {block.index}): {error}")
 
-    def walk(node, macros="macro_values"):
+    def walk(node, macros="macros"):
         payload = node.control_payload
         if isinstance(payload, StartMacro):
             if not payload.csv_path:
-                active = f"macro_values_{node.scope_id}"
                 writer.write(control_header(payload, node.scope_id, macros))
+                writer.push_indent()
+                before = len(writer.lines)
                 for child in node.children:
-                    walk(child, active)
+                    walk(child, macros)
+                if len(writer.lines) == before:
+                    writer.write("pass")
+                writer.pop_indent()
                 return
-            runtime_imports.add("read_macro_row")
             row = f"macro_row_{node.scope_id}"
-            active = f"macro_values_{node.scope_id}"
             writer.write(control_header(payload, node.scope_id, macros))
             writer.write(f"if {row} is not None:")
             writer.push_indent()
-            writer.write(f"{active} = {{**{macros}, **{{key.upper(): value for key, value in {row}.items()}}}}")
+            writer.write(f"with {macros}.scope({row}):")
+            writer.push_indent()
+            before = len(writer.lines)
             for child in node.children:
-                walk(child, active)
+                walk(child, macros)
+            if len(writer.lines) == before:
+                writer.write("pass")
+            writer.pop_indent()
             writer.pop_indent()
         elif isinstance(payload, IfThen):
             writer.write(control_header(payload, node.scope_id, macros))
@@ -249,9 +294,7 @@ def emit_project(dispatched):
                     writer.write("pass")
                 writer.pop_indent()
         elif isinstance(payload, (RunLoop, ForLoop, SiteLoop)):
-            active = f"macro_values_{node.scope_id}"
             if isinstance(payload, RunLoop):
-                runtime_imports.add("csv_chunks")
                 imports.add("from contextlib import closing")
                 writer.write(control_header(payload, node.scope_id, macros))
                 writer.push_indent()
@@ -262,14 +305,15 @@ def emit_project(dispatched):
                 writer.write(control_header(payload, node.scope_id, macros))
             writer.push_indent()
             overlay = "{}" if isinstance(payload, RunLoop) else f"loop_values_{node.scope_id}"
-            writer.write(f"{active} = {{**{macros}, **{overlay}}}")
+            writer.write(f"with {macros}.scope({'' if isinstance(payload, RunLoop) else overlay}):")
+            writer.push_indent()
             trapped = isinstance(payload, SiteLoop) or isinstance(payload, RunLoop) and payload.prompt_off
             if trapped:
                 writer.write("try:")
                 writer.push_indent()
             before = len(writer.lines)
             for child in node.children:
-                walk(child, active)
+                walk(child, macros)
             if len(writer.lines) == before:
                 writer.write("pass")
             if trapped:
@@ -278,6 +322,7 @@ def emit_project(dispatched):
                 writer.push_indent()
                 writer.write("break" if isinstance(payload, SiteLoop) else "continue")
                 writer.pop_indent()
+            writer.pop_indent()
             writer.pop_indent()
             if isinstance(payload, RunLoop):
                 writer.pop_indent()
@@ -294,7 +339,6 @@ def emit_project(dispatched):
     def leaf(block, macros):
         writer.write(f"# Source block {block.index}, line {block.span.start_line}")
         if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
-            runtime_imports.add("execute_sql")
             reader = block.reader
             if reader.utility_name == "sqlite_reader":
                 runtime_imports.add("SqliteReader")
@@ -304,38 +348,43 @@ def emit_project(dispatched):
             name = f"sql/query_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.sql"
             assets[name] = SqliteEngine._sql_source(block)
             kwargs = {"reader": CodeExpr(f"{reader.name}(" + ", ".join(f"{key}={value!r}" for key, value in block.reader_kwargs.items()) + ")"),
-                      "output": resolve_output_path(block), "workdir": CodeExpr("workdir")}
-            if has_state:
-                kwargs.update(values=CodeExpr("job_values"), macros=CodeExpr(macros))
+                      "output": resolve_output_path(block)}
             if block.kind is Kind.SQLITE_QUERY:
-                kwargs["inputs"] = SqliteEngine._extract_table_inputs(block)
+                inputs = SqliteEngine._extract_table_inputs(block)
+                if inputs:
+                    kwargs["inputs"] = inputs
             else:
                 kwargs["node"] = block.reader_target.node
             crosstab = extract_crosstab_options(block)
             if crosstab:
-                kwargs["crosstab"] = crosstab
-            elif SqliteEngine._extract_header(block):
-                kwargs["header"] = SqliteEngine._extract_header(block)
+                kwargs.update(crosstab)
+            else:
+                header = SqliteEngine._extract_header(block)
+                if header:
+                    # SQL owns both its projection and any original /HEADERS override.
+                    # Preserve ScriptHost's by-name output semantics without exposing
+                    # an extra header= argument or a separate JSON sidecar in main.py.
+                    assets[name] = ("-- vg2c-output-headers: "
+                                    + json.dumps(header, ensure_ascii=False)
+                                    + "\n" + assets[name])
             definition = UtilitySpec.operation_definition("ctx", "run_query")
             sql_definition = definition.parameter("sql")
             sql_parameters[block.index] = (sql_definition, assets[name])
             path_definition = replace(sql_definition, name="path", display_label="SQL asset", capabilities=())
             definition = replace(definition, parameters=tuple(path_definition if parameter.name == "sql" else parameter for parameter in definition.parameters))
-            call = EmittableOperation.render_method_call(definition, function="execute_sql",
-                                                         args=(CodeExpr(f"BASE_DIR / {name!r}"),), kwargs=kwargs)
+            call = EmittableOperation.render_method_call(definition, function="job.sql",
+                                                         args=(CodeExpr(repr(name)),), kwargs=kwargs)
             _inline(writer, block, [call], steps)
         elif block.kind is Kind.HTML_REPORT:
             html(block, macros)
         elif block.kind is Kind.AED:
-            runtime_imports.add("process_candidates")
             argv = split_utility_command(block.resolved_options.lookup["UTILITIES"])
             if len(argv) != 2:
                 raise ValueError("AED requires exactly one candidate CSV path")
             path = strip_quotes(argv[1])
             if "<<<" in path:
-                path = CodeExpr(f"substitute({path!r}, values=job_values, macros={macros})")
-                runtime_imports.add("substitute")
-            _inline(writer, block, [f"process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, workdir=workdir, service_factory=aed_service_factory)"], steps)
+                path = CodeExpr(f"{macros}.substitute({path!r})")
+            _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
                 raise ValueError("JMP/JSL blocks are outside the supported core")
@@ -351,9 +400,7 @@ def emit_project(dispatched):
                 _, lines = lines
             if not lines:
                 raise ValueError("Unsupported utility operation")
-            lines = _lower_lines(lines, macros, has_state)
-            for line in lines:
-                runtime_imports.update(name for name in {"write_file", "row_count", "copy_file", "rename_file", "delete_files", "wait_file", "run_program", "smart_append", "send_mail"} if re.search(r"\b" + name + r"\(", str(line)))
+            lines = _lower_lines(lines, macros)
             _inline(writer, block, lines, steps)
 
     def html(block, macros):
@@ -369,30 +416,67 @@ def emit_project(dispatched):
         def tracked(lines):
             return [RenderedCall("\n".join(lines), definition, ())]
         if report_type == "HTML-DELETE":
-            _inline(writer, block, tracked(["reports.clear()", "styles.clear()", "css_file = None"]), steps)
+            # SPFSQL3.py:20244-20250 deletes consumed spec files, not CSS.
+            _inline(writer, block, tracked(["job.delete_html()"]), steps)
         elif report_type == "HTML-RUN":
-            lines = []
-            for parts in HtmlReport._iter_rows(block.resolved_body):
-                if parts[0].upper() == "CSS":
-                    lines.append(f"css_file = {parts[1]!r}")
-                elif parts[0].upper() == "FORMAT":
-                    lines.append(f"styles[{parts[1]!r}] = {parts[2:]!r}")
-                elif parts[0].upper() == "TYPE" and parts[1].upper() not in {"CSS", "KEY"}:
-                    raise ValueError("Immediate HTML-RUN report requires supported report options")
-            _inline(writer, block, tracked(lines or ["pass"]), steps)
+            # SPFSQL3.py:20083-20100: CSS and HTML have immediate effects.
+            rows = list(HtmlReport._iter_rows(block.resolved_body))
+            # The first TYPE/KEY/COL1... row is the spec *header*, not
+            # the semantic report type (SPFSQL3.py:20083-20100).
+            kind = next((parts[1].upper() for parts in rows
+                         if parts[0].upper() == "TYPE"
+                         and parts[1].upper() != "KEY"), "")
+            if kind == "CSS":
+                logical_name = next((parts[1] for parts in rows if parts[0].upper() == "CSS"), "")
+                if not logical_name:
+                    _inline(writer, block, tracked(["pass"]), steps)
+                else:
+                    if "<<<" in logical_name:
+                        raise ValueError("Dynamic HTML-RUN CSS filenames require source-backed runtime generation")
+                    styles = {parts[1]: parts[2:] for parts in rows if parts[0].upper() == "FORMAT"}
+                    name = f"styles/report_{block.index:03d}.css"
+                    # SPFUtilities/utils.py:8866-9050: one CSS file per immediate spec.
+                    assets[name] = build_css(styles) + "\n"
+                    _inline(writer, block, tracked([f"job.define_css({logical_name!r}, {name!r})"]), steps)
+            elif kind == "HTML":
+                runtime_imports.add("csv_report")
+                options = _report_options(block)
+                report_id = f"RUN_{block.index:03d}"
+                shell = HtmlReport._HTML_SCAFFOLD.format(
+                    title="SQLPathFinder Report", css_decl="${VG2C_CSS}",
+                    body=_table(report_id, options))
+                name = f"html/report_{block.index:03d}.html"
+                assets[name] = shell
+                input_file = options.get("INPUT-FILE", "")
+                output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
+                _inline(writer, block, tracked([
+                    f"job.html({name!r}, output={output!r}, "
+                    f"reports={{{report_id!r}: csv_report({input_file!r})}})"
+                ]), steps)
+            elif kind == "KEY":
+                # SPFSQL3.py:20095-20109 dispatches only CSS/HTML/HTMLI5.
+                _inline(writer, block, tracked(["pass"]), steps)
+            else:
+                raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS, HTML or KEY")
         elif report_type == "HTML-DEFER":
             runtime_imports.add("csv_report")
             options = _report_options(block)
             report_id = block.resolved_options.lookup.get("ID", "")
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", report_id):
                 raise ValueError(f"Invalid report ID {report_id!r}")
-            if report_id in report_options and len(_list(report_options[report_id].get("COLUMN-HEADERS"))) != len(_list(options.get("COLUMN-HEADERS"))):
-                raise ValueError("Redefining report header count requires a different table template")
             report_options[report_id] = options
-            call = f"reports[{report_id!r}] = csv_report({options.get('INPUT-FILE', '')!r}, columns={_list(options.get('COLUMN-DATA'))!r}, headers={_list(options.get('COLUMN-HEADERS'))!r}, alignment={_list(options.get('COLUMN-ALIGNMENT'))!r}, output_file={options.get('OUTPUT-FILE')!r})"
+            input_file = options.get("INPUT-FILE", "")
+            output_file = options.get("OUTPUT-FILE")
+            if (layout_references.get(report_id, 0) > 1 or report_definitions.get(report_id, 0) > 1):
+                fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
+                assets[fragment] = _table(report_id, options) + "\n"
+                report_ctor = (f"job.report({fragment!r}, input_file={input_file!r}, "
+                              f"output_file={output_file!r})")
+            else:
+                report_ctor = f"csv_report({input_file!r}, output_file={output_file!r})"
+            call = f"job.reports[{report_id!r}] = {report_ctor}"
             _inline(writer, block, tracked([call]), steps)
         elif report_type == "HTML-LAYOUT":
-            runtime_imports.add("render_html")
             directives = {}
             body = []
             for line in block.resolved_body.splitlines(keepends=True):
@@ -411,10 +495,21 @@ def emit_project(dispatched):
                     "[local-html-only] %s:%s:1 (block %s): Local HTML output does not implement %s; delivery/browser/security/chart integration is outside this renderer.",
                     block.span.file or "<input>", block.span.start_line, block.index, ", ".join(unsupported))
             source = "".join(body).replace("$", "$$")
-            for report_id in re.findall(r"HTM:([A-Za-z0-9_]+)", source):
+            if re.search(r"(?m)^[ \t]*HTMI(?:C)?:[^\r\n]*$", source, re.I):
+                raise ValueError("HTMI/HTMIC interactive layout references are unsupported")
+            for candidate in re.finditer(r"(?im)^[ \t]*HTM:[^\r\n]*", source):
+                if not _HTM_LAYOUT_LINE.fullmatch(candidate.group(0)):
+                    raise ValueError(f"Malformed HTM: report directive {candidate.group(0)!r}")
+            def insert_report(match):
+                report_id = match.group("id")
                 if report_id not in report_options:
-                    raise ValueError(f"Unknown deferred report {report_id}")
-                source = source.replace("HTM:" + report_id, _table(report_id, report_options[report_id]))
+                    raise ValueError(f"Unknown deferred report {report_id!r} in HTML-LAYOUT")
+                content = (("${" + report_id + "_TABLE}")
+                           if (layout_references.get(report_id, 0) > 1 or
+                               report_definitions.get(report_id, 0) > 1)
+                           else _table(report_id, report_options[report_id]))
+                return match.group("indent") + content + match.group("suffix")
+            source = _HTM_LAYOUT_LINE.sub(insert_report, source)
             if "<html" not in source.lower():
                 source = HtmlReport._HTML_SCAFFOLD.format(title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace("$", "$$"), css_decl="${VG2C_CSS}", body=source)
             slots = {}
@@ -428,23 +523,27 @@ def emit_project(dispatched):
             output = directives.get("FILE", "report.html")
             instance = block.resolved_options.lookup.get("INSTANCE")
             css = directives.get("CSS")
-            html_values = "job_values" if not slots else "{**job_values, " + ", ".join(f"{key!r}: substitute({value!r}, values=job_values, macros={macros})" for key, value in slots.items()) + "}"
-            kwargs = {"output": output, "workdir": CodeExpr("workdir"), "reports": CodeExpr("reports"),
-                      "values": CodeExpr(html_values), "macros": CodeExpr(macros), "styles": CodeExpr("styles"),
-                      "instance": instance,
-                      "css_file": css if css else CodeExpr("css_file"), "embed_css": directives.get("CSSEMBED", "").upper() in {"Y", "YES", "TRUE"}}
-            _inline(writer, block, [_call("html_report", "layout", "render_html", CodeExpr(f"BASE_DIR / {name!r}"), **kwargs)], steps)
+            kwargs = {"output": output, "instance": instance,
+                      "embed_css": directives.get("CSSEMBED", "").upper() in {"Y", "YES", "TRUE"}}
+            if slots:
+                kwargs["values"] = CodeExpr("{" + ", ".join(f"{key!r}: {macros}.substitute({value!r})" for key, value in slots.items()) + "}")
+            if css:
+                kwargs["css_file"] = css
+            _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), **kwargs)], steps)
         else:
             raise ValueError(f"Unsupported report type {report_type}")
 
     walk(dispatched.resolved.scope_tree)
+    if not any(line.strip() and not line.lstrip().startswith("#")
+               for line in writer.lines[body_start:]):
+        writer.write("pass")
     writer.pop_indent()
     if runtime_imports:
         imports.add("from vg2c.runtime import " + ", ".join(sorted(runtime_imports)))
     reader_imports = sorted(item for item in imports if item.startswith("from datasyncx "))
     ordinary_imports = sorted(imports - set(reader_imports))
     setup = "\nOracleClient.configure()\n" if reader_imports else ""
-    header = "\n".join(ordinary_imports) + setup + "\n".join(reader_imports) + "\n\nBASE_DIR = Path(__file__).resolve().parent\nWORK_DIR = BASE_DIR / 'output'\n\n"
+    header = "\n".join(ordinary_imports) + setup + "\n".join(reader_imports) + "\n\n"
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = []

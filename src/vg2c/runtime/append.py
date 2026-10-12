@@ -1,7 +1,7 @@
 """Header-aware CSV append, extracted from utilities.smart_append."""
 import csv
 from pathlib import Path
-from vg2c.utilities._runtime_helpers import resolve_path
+from vg2c.runtime.values import resolve_path
 
 def smart_append(destination: str | Path, source: str | Path, *, workdir) -> None:
     """Create or extend *destination* with source data rows exactly once."""

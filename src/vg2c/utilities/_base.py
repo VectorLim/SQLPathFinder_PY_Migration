@@ -6,14 +6,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from vg2c.emitter.models import (
     EmittableOperation,
-    StepEmission,
     UtilityOperationDefinition,
-    build_step_emission,
 )
 from vg2c.kind import Kind
 
 if TYPE_CHECKING:
-    from vg2c.emitter.globals import GlobalValues
     from vg2c.emitter.models import CodeExpr
     from vg2c.frontend.models import BlockOptions
 
@@ -123,58 +120,6 @@ class UtilitySpec(ABC):
     def extract_globals(cls, block: Any) -> dict[str, object]:
         """Select configurable literals; extraction remains owned by each utility."""
         return {}
-
-    @staticmethod
-    def _step_name(block: Any, suffix: str) -> str:
-        return f"step_{block.index:04d}_{suffix}"
-
-    @classmethod
-    def _wrap_in_step(
-        cls, subclass: type[UtilitySpec], block: Any, result: Any
-    ) -> StepEmission | None:
-        if result is None:
-            return None
-        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
-            suffix, body_lines = result
-        else:
-            suffix = getattr(subclass, "utility_name", "utility")
-            body_lines = result
-        function_name = cls._step_name(block, suffix)
-        return build_step_emission(
-            function_name=function_name,
-            block_index=block.index,
-            functional_kind=block.kind.value,
-            body_lines=body_lines,
-        )
-
-    @classmethod
-    def dispatch_and_emit(
-        cls,
-        block: Any,
-        *,
-        collected: GlobalValues | None = None,
-        reserved: set[str] | frozenset[str] = frozenset(),
-    ) -> StepEmission:
-        handler_cls = cls._emit_handlers.get(block.kind)
-        if handler_cls is not None:
-            from vg2c.emitter.globals import resolve_globals
-
-            global_refs = {}
-            if collected is not None:
-                global_refs = resolve_globals(
-                    handler_cls.extract_globals(block), collected, block.index, reserved
-                )
-            emitted = handler_cls.emit_block(block, global_refs=global_refs)
-            if emitted is not None:
-                wrapped = cls._wrap_in_step(handler_cls, block, emitted)
-                if wrapped is not None:
-                    return wrapped
-        return build_step_emission(
-            function_name=cls._step_name(block, "unsupported"),
-            block_index=block.index,
-            functional_kind=block.kind.value,
-            body_lines=[],
-        )
 
 
 class EmitterUtility(UtilitySpec):

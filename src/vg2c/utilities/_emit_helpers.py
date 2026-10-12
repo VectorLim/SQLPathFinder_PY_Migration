@@ -61,34 +61,72 @@ def resolve_output_path(block: Any) -> str:
 
 
 def extract_crosstab_options(block: Any) -> dict[str, Any] | None:
-    ctrow = strip_quotes(block.resolved_options.lookup.get("CTROW", ""))
-    ctheader = strip_quotes(block.resolved_options.lookup.get("CTHEADER", ""))
-    ctvalue = strip_quotes(block.resolved_options.lookup.get("CTVALUE", ""))
-    if not (ctrow and ctheader and ctvalue):
+    """Source-backed normal-query pivot options, not explicit row identities.
+
+    SPFSQL3.py:1609-1614 accepts CTVAL/CTVALUE and 2442-2447 gates QType
+    using CTROW presence. NormalQueryTaskBase.pivotTable():2604-2611 does
+    not pass CTROW to SPFUtilities.PivotTable(): it infers runtime columns.
+    """
+    options = block.resolved_options
+    ctheader = options.lookup.get("CTHEADER")
+    ctrow = options.lookup.get("CTROW")
+    values = [value for key, value in options.pairs if key in ("CTVAL", "CTVALUE")]
+    ctvalue = values[-1] if values else None
+    # The original QType gate checks against None, not Python truthiness.
+    if ctheader is None or ctrow is None or ctvalue is None:
         return None
-    return {
-        "row_keys": [c.strip() for c in ctrow.split(",") if c.strip()],
-        "header_key": ctheader,
-        "value_key": ctvalue,
+    if options.lookup.get("STACK") is not None:
+        return None
+
+    column = strip_quotes(ctheader).strip().strip("[]")
+    raw_values = strip_quotes(ctvalue).strip()
+    missing = None
+    if ":M=" in raw_values.upper():
+        position = raw_values.upper().index(":M=")
+        missing = raw_values[position + 3:].strip()
+        raw_values = raw_values[:position]
+    parsed_values = [item.strip().strip("[]") for item in raw_values.split(",")]
+    if not column or not all(parsed_values):
+        # A malformed explicitly gated pivot must not turn into a plain query.
+        raise ValueError("Normal crosstab requires nonempty CTHEADER and CTVAL/CTVALUE")
+    if "," in column:
+        raise ValueError("Multi-column CTHEADER is unverified for normal ScriptHost")
+    result: dict[str, Any] = {
+        "pivot_columns": column,
+        "pivot_values": parsed_values[0] if len(parsed_values) == 1 else parsed_values,
     }
+    if missing is not None:
+        result["pivot_missing"] = missing
+    duplicate = strip_quotes(options.lookup.get("PIVOT_FUNCTION", "first")).lower().strip()
+    if duplicate == "last":
+        result["pivot_duplicate"] = "last"
+    if options.lookup.get("PIVOTDOT", "").strip().upper() in {"Y", "YES", "TRUE"}:
+        result["pivot_dot"] = True
+    if options.lookup.get("USE_LEGACY_PIVOT_HEADERS", "").strip().upper() in {"Y", "YES", "TRUE"}:
+        result["pivot_legacy_headers"] = True
+    if sort := options.lookup.get("SORT"):
+        result["pivot_sort"] = strip_quotes(sort)
+    if ref := options.lookup.get("CTARRAY"):
+        result["pivot_header_ref"] = strip_quotes(ref)
+    return result
 
 
 def placeholders_to_python_expr(text: str) -> str:
-    from vg2c.utilities.macro_state import MacroState
+    from vg2c.utilities.macro_control import MacroControl
 
     if not text:
         return repr("")
     parts: list[str] = []
     cursor = 0
-    for match in MacroState.PLACEHOLDER_RE.finditer(text):
+    for match in MacroControl.PLACEHOLDER_RE.finditer(text):
         literal = text[cursor : match.start()]
         if literal:
             parts.append(repr(literal))
         named = match.group(1)
         if named is not None:
-            parts.append(MacroState.named.render(normalize_macro_name(named)))
+            parts.append(MacroControl.named.render(normalize_macro_name(named)))
         else:
-            parts.append(MacroState.positional.render())
+            parts.append(MacroControl.positional.render())
         cursor = match.end()
     tail = text[cursor:]
     if tail:
@@ -99,7 +137,7 @@ def placeholders_to_python_expr(text: str) -> str:
 
 
 def to_code_expr(value: str | None) -> CodeExpr:
-    from vg2c.utilities.macro_state import MacroState
+    from vg2c.utilities.macro_control import MacroControl
 
     if value is None:
         return CodeExpr("None")
@@ -108,11 +146,11 @@ def to_code_expr(value: str | None) -> CodeExpr:
     symbol_names = tuple(
         dict.fromkeys(
             normalize_macro_name(match.group(1))
-            for match in MacroState.PLACEHOLDER_RE.finditer(text)
+            for match in MacroControl.PLACEHOLDER_RE.finditer(text)
             if match.group(1) is not None
         )
     )
-    if MacroState.PLACEHOLDER_RE.search(text):
+    if MacroControl.PLACEHOLDER_RE.search(text):
         return CodeExpr(source, symbol_names=symbol_names)
     return CodeExpr(source, text)
 

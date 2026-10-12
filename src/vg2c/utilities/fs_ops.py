@@ -50,9 +50,9 @@ class FileSystemOps(EmitterUtility):
         if block.kind is Kind.FS_DELETE:
             return cls._emit_delete_block(block)
 
-        from vg2c.utilities.pipeline_context import PipelineContext
+        from vg2c.utilities.direct_operations import DirectOperationMetadata
 
-        stmt = PipelineContext.write_file.render(
+        stmt = DirectOperationMetadata.write_file.render(
             path=resolve_output_path(block),
             template=block.resolved_body,
         )
@@ -74,7 +74,7 @@ class FileSystemOps(EmitterUtility):
         elif "spfrename" in basename:
             stmt = cls._emit_spf_rename(argv)
         else:
-            return "fs_copy", ["pass  # TODO: unsupported FS copy utility command"]
+            raise ValueError(f"Unsupported filesystem copy utility: {basename}")
         return "fs_copy", [stmt]
 
     @classmethod
@@ -82,7 +82,7 @@ class FileSystemOps(EmitterUtility):
         argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "spfdelete" not in basename:
-            return "fs_delete", ["pass  # TODO: unsupported FS delete utility command"]
+            raise ValueError(f"Unsupported filesystem delete utility: {basename}")
         stmt = cls._emit_spf_delete(argv)
         return "fs_delete", [stmt]
 

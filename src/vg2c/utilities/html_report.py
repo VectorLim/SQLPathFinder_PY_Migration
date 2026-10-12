@@ -1,22 +1,19 @@
-"""HtmlReport - utility for generating HTML report files."""
+"""VG2 HTML report classification, parsing and emitted-operation metadata.
 
+Generated jobs render only through vg2c.runtime.html. This compiler helper does
+not retain the historical stateful HTML preview/rendering engine.
+"""
 from __future__ import annotations
 
-import csv
-import re
-from pathlib import Path
 from typing import Any
 
-from vg2c.emitter.models import CodeExpr, emittable
-from vg2c.runtime.html_format import build_css, format_cell, parse_alignment
+from vg2c.emitter.models import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import to_code_expr
-from vg2c.utilities._runtime_helpers import resolve_path
 
 
 class HtmlReport(EmitterUtility):
-    """Utility for generating HTML report files."""
+    """Compiler-only HTML report syntax and source-metadata definitions."""
 
     utility_name = "html_report"
     handles = (Kind.HTML_REPORT,)
@@ -56,27 +53,6 @@ tr th {{ background-color:#f5f5f5; }}
 """
 
 
-    # Emit-time dispatch: report-type -> (method, option-keys, needs-template)
-    _EMIT_DISPATCH: dict[str, tuple[str, list[str], bool]] = {
-        "HTML-RUN": ("run", ["INSTANCE", "PROMPT-TEXT", "APP_SERVER_DEFAULT"], True),
-        "HTML-LAYOUT": (
-            "layout",
-            [
-                "OUTLOOK",
-                "INSTANCE",
-                "JSON-ONLY",
-                "CHART-INSTANCE",
-                "APP_SERVER_DEFAULT",
-            ],
-            True,
-        ),
-        "HTML-DEFER": (
-            "defer",
-            ["INSTANCE", "ID", "PROMPT-TEXT", "APP_SERVER_DEFAULT"],
-            True,
-        ),
-        "HTML-DELETE": ("delete", ["INSTANCE"], False),
-    }
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
@@ -85,39 +61,10 @@ tr th {{ background-color:#f5f5f5; }}
             return Kind.HTML_REPORT, "/REPORT starts with HTML-"
         return None
 
-    def __init__(self) -> None:
-        self.styles: dict[str, list[str]] = {}
-        self.css_file: str | None = None
-        self.deferred_reports: dict[str, dict[str, Any]] = {}
-        self.instance: str | None = None
-
-    # ------------------------------------------------------------------
-    # Emit-time (code generation)
-    # ------------------------------------------------------------------
-
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
-        report_type = block.resolved_options.lookup.get("REPORT", "").upper().strip()
-        entry = cls._EMIT_DISPATCH.get(report_type)
-        if entry is None:
-            return None
-        method_name, keys, needs_template = entry
-
-        kwargs: dict[str, object] = {}
-        for key in keys:
-            val = block.resolved_options.lookup.get(key)
-            if val is not None:
-                kwargs[key.lower().replace("-", "_")] = to_code_expr(val)
-        if needs_template:
-            kwargs["template"] = block.resolved_body
-
-        method = getattr(cls, method_name)
-        args = (CodeExpr("ctx"),) if method_name == "layout" else ()
-        return [method.render(*args, **kwargs)]
-
-    # ------------------------------------------------------------------
-    # Template parsing
-    # ------------------------------------------------------------------
+    def emit_block(cls, block, *, global_refs=None):
+        # emitter.project is the sole direct-project HTML emitter.
+        return None
 
     @classmethod
     def _iter_rows(cls, template: str | None):
@@ -145,118 +92,10 @@ tr th {{ background-color:#f5f5f5; }}
                 options[key] = vals
         return options
 
-    # ------------------------------------------------------------------
-    # Emittable runtime methods
-    # ------------------------------------------------------------------
-
-    @emittable(display_name="Start HTML Report", file_effects=())
-    def run(
-        self,
-        instance: str | None = None,
-        prompt_text: str | None = None,
-        app_server_default: str | None = None,
-        template: str | None = None,
-    ) -> None:
-        self.instance = instance
-        for parts in self._iter_rows(template):
-            key = parts[0].upper()
-            if key == "CSS":
-                self.css_file = parts[1] or None
-            elif key == "FORMAT" and len(parts) >= 3:
-                self.styles[parts[1]] = parts[2:]
-
-    @emittable(display_name="Define HTML Report Section", file_effects=())
-    def defer(
-        self,
-        id: str,
-        instance: str | None = None,
-        prompt_text: str | None = None,
-        app_server_default: str | None = None,
-        template: str | None = None,
-    ) -> None:
-        self.deferred_reports[id] = {
-            "instance": instance,
-            "template": template,
-            "options": self._parse_options(template),
-        }
-
-    @emittable(display_name="Clear HTML Report State", file_effects=())
-    def delete(self, instance: str | None = None) -> None:
-        self.styles.clear()
-        self.css_file = None
-        self.deferred_reports.clear()
-
-    @emittable(display_name="Generate HTML Report", capabilities=("html-preview",), parameter_visibility={"ctx": "internal"}, file_effects=())
-    def layout(
-        self,
-        ctx: Any,
-        template: str,
-        outlook: str | None = None,
-        instance: str | None = None,
-        json_only: str | None = None,
-        chart_instance: str | None = None,
-        app_server_default: str | None = None,
-    ) -> None:
-        filename, body = self.render_layout(ctx, template, instance=instance)
-        if ctx and hasattr(ctx, "write_file"):
-            ctx.write_file(filename, body)
-        else:
-            out = Path(filename)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(body, encoding="utf-8")
-
-    def render_layout(
-        self,
-        ctx: Any,
-        template: str,
-        *,
-        instance: str | None = None,
-        css_resolver=None,
-        write_css: bool = True,
-    ) -> tuple[str, str]:
-        """Render a layout in memory. Runtime layout and safe preview share this path."""
-        directives, body = self._split_layout(template)
-
-        body = re.sub(
-            r"HTM:([A-Za-z0-9_]+)",
-            lambda m: (
-                self._render_report(m.group(1), ctx)
-                if m.group(1) in self.deferred_reports
-                else m.group(0)
-            ),
-            body,
-        )
-
-        css_file = directives.get("CSS") or self.css_file
-        css_embed = directives.get("CSSEMBED", "").upper() in self._TRUE_VALUES
-        css_decl = self._resolve_css(
-            css_file,
-            css_embed,
-            resolver=css_resolver,
-            write_missing=write_css,
-        )
-        title = directives.get("TITLE", "SQLPathFinder Report")
-
-        if "<html>" not in body.lower():
-            body = self._HTML_SCAFFOLD.format(title=title, css_decl=css_decl, body=body)
-        elif css_decl:
-            if "</head>" in body:
-                body = body.replace("</head>", f"{css_decl}\n</head>", 1)
-            else:
-                body = f"{css_decl}\n{body}"
-
-        filename = self._resolve_output_filename(directives.get("FILE", "report.html"), instance)
-        if ctx and hasattr(ctx, "macro"):
-            filename = ctx.macro.substitute(filename)
-        return filename, body
-
-    # ------------------------------------------------------------------
-    # Layout template split
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _split_layout(template: str) -> tuple[dict[str, str], str]:
-        """Extract ':KEY:VALUE' directives from a layout template, return (dirs, body)."""
+        """Parse compiler-visible layout directives, without rendering HTML."""
         directives: dict[str, str] = {}
         body_lines: list[str] = []
         for line in template.splitlines():
@@ -268,141 +107,33 @@ tr th {{ background-color:#f5f5f5; }}
             body_lines.append(line)
         return directives, "\n".join(body_lines)
 
-    # ------------------------------------------------------------------
-    # CSS
-    # ------------------------------------------------------------------
+    @emittable(display_name="Start HTML Report", file_effects=())
+    def run(
+        self, instance: str | None = None, prompt_text: str | None = None,
+        app_server_default: str | None = None, template: str | None = None,
+    ) -> None:
+        raise NotImplementedError("Compiler metadata only; use JobRuntime.html")
 
-    def _resolve_css(self, css_file: str | None, css_embed: bool, *, resolver=None, write_missing: bool = True) -> str:
-        """Return a <style> or <link> tag string (or empty string)."""
-        content = ""
-        if css_file:
-            path = resolver(css_file) if resolver else Path(css_file)
-            if path.exists():
-                content = path.read_text(encoding="utf-8", errors="replace")
-            elif self.styles:
-                content = self._build_css()
-                if write_missing:
-                    try:
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_text(content, encoding="utf-8")
-                    except OSError:
-                        pass
-        elif self.styles:
-            content = self._build_css()
+    @emittable(display_name="Define HTML Report Section", file_effects=())
+    def defer(
+        self, id: str, instance: str | None = None,
+        prompt_text: str | None = None, app_server_default: str | None = None,
+        template: str | None = None,
+    ) -> None:
+        raise NotImplementedError("Compiler metadata only; use JobRuntime.report")
 
-        if css_embed and content:
-            return f'<style type="text/css">\n{content}\n</style>'
-        if css_file and not css_embed:
-            return f'<link rel="stylesheet" type="text/css" href="{css_file}" />'
-        return ""
+    @emittable(display_name="Clear HTML Report State", file_effects=())
+    def delete(self, instance: str | None = None) -> None:
+        raise NotImplementedError("Compiler metadata only; use JobRuntime.delete_html")
 
-    def _build_css(self) -> str:
-        return build_css(self.styles)
-
-    # ------------------------------------------------------------------
-    # Deferred report rendering
-    # ------------------------------------------------------------------
-
-    def _render_report(self, report_id: str, ctx: Any) -> str:
-        report = self.deferred_reports.get(report_id)
-        if not report:
-            return ""
-        options = report.get("options")
-        if not isinstance(options, dict):
-            options = self._parse_options(report.get("template"))
-            report["options"] = options
-
-        def as_list(val: Any) -> list[str]:
-            if val is None:
-                return []
-            return list(val) if isinstance(val, list) else [str(val)]
-
-        cols = as_list(options.get("COLUMN-DATA"))
-        headers = as_list(options.get("COLUMN-HEADERS"))
-        alignments = as_list(options.get("COLUMN-ALIGNMENT"))
-        alignments += ["middle-left"] * (len(cols) - len(alignments))
-
-        raw_path = options.get("INPUT-FILE", "")
-        if isinstance(raw_path, list):
-            raw_path = raw_path[0] if raw_path else ""
-        rows = self._load_csv_rows(str(raw_path), ctx)
-
-        lines: list[str] = ['<table class="tblin">']
-        lines.extend("<COL>" for _ in cols)
-        lines.append("<thead>")
-        lines.append("<tr id='colhdr'>")
-        lines.extend(f"<th>{h}</th>" for h in headers)
-        lines.append("</tr>")
-        lines.append("</thead>")
-
-        for idx, row in enumerate(rows):
-            cell_class = "tblin" if idx % 2 == 0 else "alt"
-            lines.append("<tr>")
-            for ci, col in enumerate(cols):
-                val_str = self._format_cell(col, row.get(col.lower(), ""))
-                valign, halign = self._parse_alignment(alignments[ci])
-                lines.append(
-                    f'<td class="{cell_class}" '
-                    f'style="vertical-align:{valign};text-align:{halign};">'
-                    f"{val_str}</td>"
-                )
-            lines.append("</tr>")
-
-        lines.append("<tfoot>")
-        lines.append("</tfoot>")
-        lines.append("</table>")
-
-        content = "\n".join(lines)
-        top = options.get("AT-TOP-OF-REPORT")
-        if top:
-            top_str = top if isinstance(top, str) else " ".join(top)
-            content = f'<p class="at-top-of-report">\n{top_str}</p>\n{content}'
-        return content
-
-    @staticmethod
-    def _parse_alignment(align: str) -> tuple[str, str]:
-        return parse_alignment(align)
-
-    @staticmethod
-    def _format_cell(col_name: str, val: Any) -> str:
-        return format_cell(col_name, val)
-
-    @staticmethod
-    def _load_csv_rows(raw_path: str, ctx: Any) -> list[dict[str, Any]]:
-        if not raw_path:
-            return []
-        if ctx and hasattr(ctx, "macro"):
-            path = ctx.macro.resolve_file_path(raw_path)
-        else:
-            path = resolve_path(raw_path)
-        if not (path and path.is_file()):
-            return []
-        if ctx and hasattr(ctx, "csv_io") and hasattr(ctx.csv_io, "iter"):
-            source = ctx.csv_io.iter(str(path))
-        else:
-            with path.open(newline="", encoding="utf-8", errors="replace") as fh:
-                source = list(csv.DictReader(fh))
-        return [{k.lower(): v for k, v in row.items() if k} for row in source]
-
-    # ------------------------------------------------------------------
-    # Output filename
-    # ------------------------------------------------------------------
-
-    def _resolve_output_filename(self, path: str, instance: str | None) -> str:
-        if path and not path.startswith("email:"):
-            return path
-        fallback = "report.html"
-        for report in self.deferred_reports.values():
-            options = report.get("options")
-            if not isinstance(options, dict):
-                options = self._parse_options(report.get("template"))
-                report["options"] = options
-            out = options.get("OUTPUT-FILE")
-            if isinstance(out, list):
-                out = out[0] if out else None
-            if out:
-                fallback = out
-                break
-        instance_id = instance or self.instance
-        base = fallback.lower()
-        return f"{instance_id}_{base}" if instance_id else base
+    @emittable(
+        display_name="Generate HTML Report", capabilities=("html-preview",),
+        parameter_visibility={"ctx": "internal"}, file_effects=(),
+    )
+    def layout(
+        self, ctx: Any, template: str, outlook: str | None = None,
+        instance: str | None = None, json_only: str | None = None,
+        chart_instance: str | None = None,
+        app_server_default: str | None = None,
+    ) -> None:
+        raise NotImplementedError("Compiler metadata only; use JobRuntime.html")

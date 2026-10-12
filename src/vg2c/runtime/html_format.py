@@ -45,9 +45,12 @@ _CSS_RULES: list[dict[str, Any]] = [
 
 
 def build_css(styles) -> str:
+    # SPFUtilities/utils.py:9052-9084: FORMAT keys match case-insensitively.
+    normalized = {str(key).strip().casefold(): values for key, values in styles.items()}
+
     def get_decls(name: str) -> list[str]:
         decls: list[str] = []
-        for d in styles.get(name, []):
+        for d in normalized.get(name.casefold(), []):
             d = d.strip()
             if not d:
                 continue

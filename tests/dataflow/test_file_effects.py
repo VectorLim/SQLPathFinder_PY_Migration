@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from vg2c.dataflow.file_effects import bind_file_effects, order_file_effects
 from vg2c.emitter.models import CodeExpr, build_step_emission, finalize_steps
 from vg2c.utilities.fs_ops import FileSystemOps
-from vg2c.utilities.pipeline_context import PipelineContext
+from vg2c.utilities.direct_operations import DirectOperationMetadata
 from vg2c.utilities.smart_append import SmartAppend
 
 
@@ -47,7 +47,7 @@ def test_file_effect_identity_survives_path_edits_and_delete_never_produces():
 
 
 def test_query_fan_in_and_dynamic_path_are_not_inferred_from_python():
-    query = PipelineContext.run_query.render(
+    query = DirectOperationMetadata.run_query.render(
         "select 1", "out.csv", CodeExpr("reader"), inputs=["a.csv", "b.csv", "c.csv"]
     )
     effect = _effects(query)[0]
@@ -105,9 +105,9 @@ def test_conditional_delete_preserves_possible_prior_state(tmp_path):
 def test_resource_identity_uses_the_same_normalized_keys_as_dependency_state(tmp_path):
     from vg2c.workflow import file_resources
 
-    write = _effects(PipelineContext.write_file.render(r"Data\Out.csv", "body"))[0]
+    write = _effects(DirectOperationMetadata.write_file.render(r"Data\Out.csv", "body"))[0]
     copy = replace(
-        _effects(PipelineContext.run_query.render(
+        _effects(DirectOperationMetadata.run_query.render(
             "select 1", "copy.csv", CodeExpr("reader"), inputs=["data/out.csv"]
         ))[0],
         order=1,
@@ -126,7 +126,7 @@ def test_resource_identity_uses_the_same_normalized_keys_as_dependency_state(tmp
 def test_file_choices_combine_inventory_with_historical_availability(tmp_path):
     from vg2c_ui.services.file_choices import file_choices_by_operation
 
-    write = _effects(PipelineContext.write_file.render("future.csv", "body"))[0]
+    write = _effects(DirectOperationMetadata.write_file.render("future.csv", "body"))[0]
     read = _effects(FileSystemOps.copy.render("future.csv", "copy.csv"))[0]
     delete = _effects(FileSystemOps.delete.render(["future.csv"]))[0]
     later = _effects(SmartAppend.append.render("merged.csv", "future.csv"))[0]
@@ -150,7 +150,7 @@ def test_file_choices_keep_branch_outputs_possible_and_reflect_new_uploads(tmp_p
     from vg2c_ui.services.file_choices import file_choices_by_operation
 
     conditional = replace(
-        _effects(PipelineContext.write_file.render("branch.csv", "body"))[0],
+        _effects(DirectOperationMetadata.write_file.render("branch.csv", "body"))[0],
         scope_id=1,
         conditional=True,
     )
@@ -178,8 +178,8 @@ def test_file_choices_use_server_workspace_paths_only(tmp_path):
     from vg2c_ui.services.file_choices import file_choices_by_operation
 
     output = tmp_path / "generated" / "script.py"
-    write = _effects(PipelineContext.write_file.render("result.csv", "body"))[0]
-    outside = _effects(PipelineContext.write_file.render(str(tmp_path.parent / "outside.csv"), "body"))[0]
+    write = _effects(DirectOperationMetadata.write_file.render("result.csv", "body"))[0]
+    outside = _effects(DirectOperationMetadata.write_file.render(str(tmp_path.parent / "outside.csv"), "body"))[0]
     read = _effects(FileSystemOps.copy.render("result.csv", "copy.csv"))[0]
     root = SimpleNamespace(scope_id=0, kind="root", children=[])
     ordered = order_file_effects((write, outside, read), root, output)
@@ -223,9 +223,9 @@ def test_workspace_links_use_output_directory_and_do_not_resurrect_deleted_files
 ):
     from vg2c.workflow import WorkflowDocument, EffectiveDocument, workspace_links
 
-    write = _effects(PipelineContext.write_file.render("out.csv", "body"))[0]
+    write = _effects(DirectOperationMetadata.write_file.render("out.csv", "body"))[0]
     read = _effects(
-        PipelineContext.run_query.render(
+        DirectOperationMetadata.run_query.render(
             "select 1", "next.csv", CodeExpr("reader"), inputs=["out.csv"]
         )
     )[0]
@@ -303,10 +303,10 @@ def test_workspace_fan_in_reports_only_lost_endpoint(tmp_path):
         workspace_links,
     )
 
-    first = _effects(PipelineContext.write_file.render("first.csv", "body"))[0]
-    second = _effects(PipelineContext.write_file.render("second.csv", "body"))[0]
+    first = _effects(DirectOperationMetadata.write_file.render("first.csv", "body"))[0]
+    second = _effects(DirectOperationMetadata.write_file.render("second.csv", "body"))[0]
     read = _effects(
-        PipelineContext.run_query.render(
+        DirectOperationMetadata.run_query.render(
             "select 1",
             "out.csv",
             CodeExpr("reader"),

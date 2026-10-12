@@ -86,7 +86,7 @@ def test_direct_invocation_ranges(tmp_path):
         assert emitted.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
         for invocation in step.invocations:
             snippet = emitted.source[invocation.source_range.start_offset:invocation.source_range.end_offset]
-            assert snippet.startswith("execute_sql(")
+            assert snippet.startswith("job.sql(")
             for parameter in invocation.parameters:
                 if parameter.source_range:
                     assert emitted.source[parameter.source_range.start_offset:parameter.source_range.end_offset] == parameter.source
@@ -112,17 +112,21 @@ def test_authored_python_top_level_return_has_explicit_diagnostic(tmp_path):
         compile_document(source)
 
 
-def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tmp_path):
+def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tmp_path, monkeypatch):
     source = tmp_path / "aed.txt"
     source.write_text(block('/WRITE-FILE=Y\n/CSV=node.txt', '<<<MARS>>>')
                       + block('/UTILITIES={AED} "candidates.csv"'))
     main = translate(source)
+    assert "@job_entrypoint(__file__, aed_source_name=" in main.read_text()
+    assert "bootstrap_aed(" not in main.read_text()
+    assert "JobRuntime(" not in main.read_text()
     namespace = {"__file__": str(main), "__name__": "job"}
     exec(main.read_text(), namespace)
     config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
-    namespace["bootstrap_aed"] = lambda **kwargs: config.copy()
+    monkeypatch.setattr("vg2c.runtime.job.bootstrap_aed", lambda **kwargs: config.copy())
     calls = []
-    namespace["process_candidates"] = lambda path, **kwargs: calls.append((path, kwargs))
+    monkeypatch.setattr("vg2c.runtime.job.process_candidates",
+                        lambda path, **kwargs: calls.append((path, kwargs)))
     factory = object()
     namespace["run"](tmp_path / "work", aed_service_factory=factory)
     assert (tmp_path / "work/node.txt").read_text().strip() == config["MARS"]

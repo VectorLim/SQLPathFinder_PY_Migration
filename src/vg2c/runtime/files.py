@@ -30,6 +30,8 @@ def copy_file(src, dst, *, workdir, recurse=False):
     src, dst = job_path(src, workdir), job_path(dst, workdir)
     dst.parent.mkdir(parents=True, exist_ok=True)
     if src.is_dir():
+        if not recurse:
+            raise IsADirectoryError(f"Directory copy requires recurse=True: {src}")
         shutil.copytree(src, dst, dirs_exist_ok=True)
     else:
         shutil.copy2(src, dst)

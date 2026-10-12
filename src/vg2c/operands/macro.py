@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from vg2c.frontend.models import ClassifiedBlock
 from vg2c.logger import Logger
@@ -14,9 +12,6 @@ from vg2c.operands.base import (
     ScopeNode,
     _quoted_args,
 )
-
-if TYPE_CHECKING:
-    from vg2c.emitter.indent_writer import IndentWriter
 
 log = Logger.getLogger("vg2c.operands.macro")
 
@@ -86,39 +81,6 @@ class StartMacro:
             ),
             i + 1,
         )
-
-    # ------------------------------------------------------------------
-    # Emission
-    # ------------------------------------------------------------------
-
-    def render_header(self) -> str:
-        """Render the generated Python macro-scope header."""
-        from vg2c.emitter.models import CodeExpr
-        from vg2c.utilities.csv_io import CsvIO
-        from vg2c.utilities.macro_state import MacroState
-
-        if self.csv_path:
-            row_expr = CsvIO.single_row.render(self.csv_path)
-            scope_call = MacroState.scope.render(CodeExpr(str(row_expr)))
-        else:
-            scope_call = MacroState.scope.render()
-        return f"with {scope_call}:"
-
-    def emit_scope(
-        self,
-        writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
-        children: tuple[ScopeNode, ...],
-    ) -> None:
-        """Emit a CSV-backed or static macro scope using a single context manager."""
-        writer.write(self.render_header())
-        writer.push_indent()
-
-        for child in children:
-            walk(child)
-
-        writer.pop_indent()
-
 
 @dataclass(frozen=True, slots=True)
 class EndMacro:

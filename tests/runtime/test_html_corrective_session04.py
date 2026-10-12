@@ -1,0 +1,481 @@
+"""Session 04: reproduce HTML-first correctness regressions."""
+import pytest
+from vg2c import translate
+from vg2c.runtime import JobRuntime, csv_report
+
+D = r"<\\>"
+
+def block(opts, body=""):
+    return "<OPTIONS>\n" + opts + "\n</OPTIONS>\n" + body + "\n<---- New Query ---->\n"
+
+def spec(field, label):
+    return "\n".join(D.join(row) for row in [
+        ["TYPE", "HTML"], ["INPUT-FILE", "data.csv"],
+        ["COLUMN-DATA", "", field], ["COLUMN-HEADERS", "", label]])
+
+def job(tmp_path, body, columns="A"):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text(columns + "\n1\n")
+    (assets / "page.html").write_text(body)
+    runtime = JobRuntime(assets, work)
+    runtime.reports["R"] = csv_report("data.csv")
+    return runtime, assets / "page.html", work
+
+def test_no_percent_is_prefix_and_schema_is_reloaded(tmp_path):
+    html = ('<table data-report="R"><thead><tr>'
+            '<th data-field="STARTS/ENDS WITH (%):" data-pattern="VOLTAGE" '
+            'data-align="right">Match</th></tr></thead><tbody></tbody></table>')
+    runtime, _, work = job(tmp_path, html)
+    (work / "data.csv").write_text("VOLTAGE,VOLTAGE_A,Voltage_B,OTHER\n1,2,3,4\n")
+    runtime.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert result.count("<th ") == result.count("<td ") == 3
+    assert "VOLTAGE_A" in result and "Voltage b" in result
+    (work / "data.csv").write_text("VOLTAGE_NEW,OTHER\n9,0\n")
+    runtime.html("page.html", output="out.html")
+    assert (work / "out.html").read_text().count("<td ") == 1
+
+@pytest.mark.parametrize("ids", [
+    ["R", "REPORT", "A", "AB", "ABC"],
+    ["ABC", "AB", "A", "REPORT", "R"],
+])
+def test_full_line_report_directives_are_exact(tmp_path, ids):
+    script = tmp_path / "source.txt"
+    script.write_text(
+        "".join(block(f"/REPORT=HTML-DEFER\n/ID={key}", spec("F" + key, "Head " + key)) for key in ids)
+        + block("/REPORT=HTML-LAYOUT",
+                ":FILE:out.html\n<p>Authored HTM:R text</p>\n" +
+                "".join(f"HTM:{key}\n" for key in ids)))
+    main = translate(script)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text(
+        ",".join("F" + key for key in ids) + "\n" +
+        ",".join(str(i) for i in range(len(ids))) + "\n")
+    scope = {"__file__": str(main), "__name__": "test_generated"}
+    exec(compile(main.read_text(), str(main), "exec"), scope)
+    scope["run"](work)
+    result = (work / "out.html").read_text()
+    assert result.count('data-report=') == len(ids)
+    assert [result.index("Head " + key + "</th>") for key in ids] == sorted(
+        result.index("Head " + key + "</th>") for key in ids)
+    assert "Authored HTM:R text" in result
+
+def test_literal_currency_and_legacy_slots_after_html_only_edit(tmp_path):
+    runtime, page, work = job(tmp_path, '<html><head>${VG2C_CSS}</head><body>'
+        '<h1>Price $100</h1><h1>Price $USD</h1>'
+        '<h1>Cost $5.99 per unit</h1><h1>Monthly budget: $1,000</h1>'
+        '<p title="Cost $USD">$VALUE_1 ${VALUE_1}</p>'
+        '<table><tbody>${R_ROWS}</tbody></table></body></html>')
+    runtime.html("page.html", output="out.html", values={"VALUE_1": "safe & <value>"})
+    html = (work / "out.html").read_text()
+    for phrase in ("Price $100", "Price $USD", "Cost $5.99 per unit",
+                   "Monthly budget: $1,000", 'title="Cost $USD"'):
+        assert phrase in html
+    assert "safe &amp; &lt;value&gt; safe &amp; &lt;value&gt;" in html
+    page.write_text(page.read_text().replace("Price $100", "Edited $200"))
+    runtime.html("page.html", output="out.html", values={"VALUE_1": "ok"})
+    assert "Edited $200" in (work / "out.html").read_text()
+    page.write_text(page.read_text() + "${NOT_A_SLOT}")
+    with pytest.raises(ValueError, match="Missing HTML slot"):
+        runtime.html("page.html", output="failure.html", values={"VALUE_1": "ok"})
+
+def test_tbody_does_not_silently_delete_authored_rows(tmp_path):
+    table = ('<table data-report="R"><thead><tr><th data-field="A">Alpha</th>'
+             '</tr></thead><tbody>{body}</tbody></table>')
+    runtime, page, work = job(tmp_path, table.format(body=' \n<!-- keep me -->\n${R_ROWS}\n'))
+    runtime.html("page.html", output="out.html")
+    assert "<!-- keep me -->" in (work / "out.html").read_text()
+    assert (work / "out.html").read_text().count("<td ") == 1
+    page.write_text(table.format(body="<tr><td>Manual</td></tr>"))
+    with pytest.raises(ValueError, match="tbody"):
+        runtime.html("page.html", output="bad.html")
+    assert not (work / "bad.html").exists()
+    page.write_text(table.format(body="") +
+                    "<table><tbody><tr><td>Untouched</td></tr></tbody></table>")
+    runtime.html("page.html", output="out.html")
+    assert "<td>Untouched</td>" in (work / "out.html").read_text()
+
+
+@pytest.mark.parametrize("mode,pattern,fields", [
+    ("STARTS WITH:", "a.", ["a.one", "A.two"]),
+    ("ENDS WITH:", "_x", ["a_x", "B_X", "A[1]_X"]),
+    ("CONTAINS:", "(z)", ["A(z)B"]),
+    ("STARTS/ENDS WITH (%):", "A%B%C", ["AXBYC", "A B C"]),
+    ("STARTS/ENDS WITH (%):", "A[1]", ["A[1]", "A[1]_X"]),
+    ("STARTS/ENDS WITH (%):", "nomatch", []),
+])
+def test_all_source_patterns_use_literal_fields_and_matching_cell_counts(tmp_path, mode, pattern, fields):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    names = ["a.one", "A.two", "a_x", "B_X", "A(z)B",
+             "AXBYC", "A B C", "A[1]", "A[1]_X", "OTHER"]
+    (work / "data.csv").write_text(",".join(names) + "\n" +
+                                   ",".join(str(i) for i in range(len(names))) + "\n")
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="' + mode +
+        '" data-pattern="' + pattern + '" data-align="center">Any</th>'
+        '</tr></thead><tbody></tbody></table>')
+    runtime = JobRuntime(root, work)
+    runtime.reports["R"] = csv_report("data.csv")
+    runtime.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert result.count("<th ") == result.count("<td ") == len(fields)
+    assert result.count("text-align:center") == len(fields)
+    for field in fields:
+        assert 'data-field="' + field + '"' in result
+
+
+def test_html_only_csv_field_dollar_and_unicode_data_are_not_templates(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<html><head></head><body><table data-report="R"><thead><tr>'
+        '<th data-field="A$B">Price $USD &amp; ¥</th></tr></thead>'
+        '<tbody></tbody></table></body></html>')
+    (work / "data.csv").write_text('A$B\n"€ 3.25 & <span> ${NOT_A_SLOT}"\n')
+    runtime = JobRuntime(root, work)
+    runtime.reports["R"] = csv_report("data.csv")
+    runtime.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert 'data-field="A$B"' in result
+    assert "Price $USD &amp; ¥" in result
+    assert "&lt;span&gt;" in result and "€ 3.25" in result
+    assert "${NOT_A_SLOT}" in result
+
+
+def test_unknown_and_interactive_layout_references_diagnosed(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:x.html\nHTM:UNKNOWN"))
+    with pytest.raises(ValueError, match="Unknown deferred report.*UNKNOWN"):
+        translate(source)
+    source.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:x.html\nHTMI:REPO"))
+    with pytest.raises(ValueError, match="HTMI/HTMIC"):
+        translate(source)
+
+
+def test_repeated_reference_and_report_prefixes(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=A", spec("F_A", "Header A"))
+                      + block("/REPORT=HTML-DEFER\n/ID=AB", spec("F_AB", "Header AB"))
+                      + block("/REPORT=HTML-LAYOUT",
+                              ":FILE:out.html\nHTM:AB\nHTM:A\nHTM:A\n"))
+    main = translate(source)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("F_A,F_AB\none,two\n")
+    scope = {"__file__": str(main), "__name__": "test_generated"}
+    exec(compile(main.read_text(), str(main), "exec"), scope)
+    scope["run"](work)
+    html = (work / "out.html").read_text()
+    assert html.count("Header A</th>") == 2
+    assert html.count("Header AB</th>") == 1
+    assert html.index("Header AB</th>") < html.index("Header A</th>")
+
+
+def test_tbody_single_legacy_row_slot_and_renderer_slot_collision(tmp_path):
+    runtime, page, work = job(tmp_path,
+        '<table data-report="R"><thead><tr><th data-field="A">A</th>'
+        '</tr></thead><tbody>$R_ROWS</tbody></table>')
+    runtime.html("page.html", output="out.html")
+    assert (work / "out.html").read_text().count("<td ") == 1
+    page.write_text(page.read_text().replace("$R_ROWS", "${R_ROWS} ${R_ROWS}"))
+    with pytest.raises(ValueError, match="tbody"):
+        runtime.html("page.html", output="bad.html")
+    page.write_text('<html><head>${VG2C_CSS}</head><body>ok</body></html>')
+    with pytest.raises(ValueError, match="renderer-owned"):
+        runtime.html("page.html", output="bad.html", values={"VG2C_CSS": "bad"})
+    assert not (work / "bad.html").exists()
+
+
+def test_mixed_case_htm_directive_and_malformed_reference(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec("A", "Alpha"))
+                      + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nhTm:R"))
+    main = translate(source)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A\n1\n")
+    scope = {"__file__": str(main), "__name__": "test_generated"}
+    exec(compile(main.read_text(), str(main), "exec"), scope)
+    scope["run"](work)
+    assert "Alpha</th>" in (work / "out.html").read_text()
+    malformed = tmp_path / "malformed.txt"
+    malformed.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R extra"))
+    with pytest.raises(ValueError, match="Malformed HTM:"):
+        translate(malformed)
+
+
+def test_explicit_literal_braced_text_uses_legacy_dollar_escape(tmp_path):
+    runtime, page, work = job(
+        tmp_path, "<html><head></head><body>" + "$" + "$" + "{NOT_A_SLOT}</body></html>")
+    runtime.html("page.html", output="out.html")
+    assert "$" + "{NOT_A_SLOT}" in (work / "out.html").read_text()
+
+
+def test_duplicate_data_report_attribute_is_not_silently_ambiguous(tmp_path):
+    table = ('<table data-report="R" data-report="S"><thead><tr>'
+             '<th data-field="A">Alpha</th></tr></thead><tbody></tbody></table>')
+    runtime, page, work = job(tmp_path, table)
+    with pytest.raises(ValueError, match="Duplicate declarative report table attributes"):
+        runtime.html("page.html", output="bad.html")
+    assert not (work / "bad.html").exists()
+
+
+def test_runtime_value_names_do_not_interpolate_authored_currency_or_csv_fields(tmp_path):
+    """Only explicit placeholders may use arbitrary runtime value names."""
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text('A$B\n"100 & <b>USD</b>"\n')
+    page = root / "page.html"
+    page.write_text(
+        '<html><head></head><body><h1>Price $USD</h1>'
+        '<p title="Price $USD and $B">Amount $B / $USD</p>'
+        '<p>Chosen: ${USD}</p>'
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="A$B">Price $USD</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={"USD": "MYR", "B": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert "Price $USD" in rendered
+    assert 'title="Price $USD and $B"' in rendered
+    assert "Amount $B / $USD" in rendered
+    assert 'data-field="A$B"' in rendered
+    assert "Chosen: MYR" in rendered
+    assert "100 &amp; &lt;b&gt;USD&lt;/b&gt;" in rendered
+    assert "Achanged" not in rendered
+    page.write_text(page.read_text().replace("Price $USD</h1>", "Cost $USD</h1>"))
+    job.html("page.html", output="out.html")
+    assert "Cost $USD</h1>" in (work / "out.html").read_text()
+
+
+def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
+    root = tmp_path / "assets"
+    (root / "reports").mkdir(parents=True)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text('A$B\n"¥ 5 & <other>"\n')
+    (root / "reports/r.table.html").write_text(
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="A$B" data-note="$USD">Price $USD</th>'
+        '</tr></thead><tbody></tbody></table>')
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body>'
+        '<h1>Annual $USD</h1><p>Legacy $VALUE_1 / ${VALUE_1}</p>'
+        '${R_TABLE}</body></html>')
+    (root / "legacy.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><table><tbody>$R_ROWS</tbody></table></body></html>')
+    (root / "style.css").write_text('h1 {color:blue;}')
+    job = JobRuntime(root, work, values={"USD": "MYR", "B": "changed"})
+    job.reports["R"] = job.report("reports/r.table.html", input_file="data.csv")
+    job.html("page.html", output="out.html", values={"VALUE_1": "ok & <done>"},
+             css_file="style.css", embed_css=True)
+    result = (work / "out.html").read_text()
+    assert "Annual $USD" in result
+    assert 'data-field="A$B"' in result and 'data-note="$USD"' in result
+    assert "Price $USD" in result
+    assert "Legacy ok &amp; &lt;done&gt; / ok &amp; &lt;done&gt;" in result
+    assert "h1 {color:blue;}" in result
+    assert "¥ 5 &amp; &lt;other&gt;" in result
+    # Historical ROWS-only templates use a CSVReport with explicit columns;
+    # the HTML-first fragment intentionally owns columns separately.
+    job.reports["R"] = csv_report("data.csv", columns=["A$B"])
+    job.html("legacy.html", output="old.html", css_file="style.css", embed_css=True)
+    assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text()
+
+
+def test_csv_data_field_with_dollar_is_not_substituted_by_colliding_value(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr><th data-field="A$B">Exact</th>'
+        '</tr></thead><tbody></tbody></table>')
+    (work / "data.csv").write_text("A$B\ncorrect\n")
+    job = JobRuntime(root, work, values={"B": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert 'data-field="A$B"' in result
+    assert 'data-field="Achanged"' not in result
+    assert "correct</td>" in result
+
+
+@pytest.mark.parametrize("key,replacement", [
+    ("TITLE", "Changed"), ("C", "Overwritten"), ("REVENUE", "MYR"),
+])
+def test_unrelated_runtime_keys_are_never_implicit_html_slots(tmp_path, key, replacement):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    field = f"X${key}"
+    (work / "data.csv").write_text(field + "\ncorrect\n")
+    (root / "page.html").write_text(
+        f'<html><body><p title="Literal ${key}">Cost ${key}; '
+        f'explicit ${{{key}}}</p><table data-report="R"><thead><tr>'
+        f'<th data-field="{field}">Label ${key}</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={key: replacement})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    result = (work / "out.html").read_text()
+    assert f'title="Literal ${key}"' in result
+    assert f'Cost ${key}; explicit {replacement}' in result
+    assert f'data-field="{field}"' in result
+    assert f'Label ${key}</th>' in result
+    assert "correct</td>" in result
+
+
+@pytest.mark.parametrize("field", ["A$VALUE_1", "A$VALUE_12", "$VALUE_1"])
+def test_declared_csv_field_dollar_matches_output_not_legacy_slot(tmp_path, field):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text(field + "\ncell-value\n")
+    (root / "page.html").write_text(
+        '<html><body><p>Legacy $VALUE_1 / ${VALUE_1}</p>'
+        '<table data-report="R"><thead><tr>'
+        f'<th data-field="{field}">Original</th>'
+        '</tr></thead><tbody></tbody></table></body></html>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "VALUE_12": "wrong"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert f'data-field="{field}"' in content
+    assert "Legacy changed / changed" in content
+    assert "cell-value</td>" in content
+
+
+def test_declarative_pattern_and_metadata_dollars_remain_literal(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1_x,A$VALUE_1_y,OTHER\n1,2,3\n")
+    (root / "page.html").write_text(
+        '<table data-report="R"><thead><tr>'
+        '<th data-field="STARTS WITH:" data-pattern="A$VALUE_1" '
+        'data-note="literal $VALUE_1" data-dynamic="${VALUE_1}">Matches</th>'
+        '</tr></thead><tbody></tbody></table>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed"})
+    job.reports["R"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert content.count("<td ") == content.count("<th ") == 2
+    for field in ("A$VALUE_1_x", "A$VALUE_1_y"):
+        assert f'data-field="{field}"' in content or f'data-field="{field.replace("$", "&#36;")}"' in content
+    assert content.count('data-note="literal $VALUE_1"') == 2
+    assert content.count('data-dynamic="changed"') == 2
+
+
+def test_declared_report_id_is_not_replaced_by_legacy_value(tmp_path):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A\ncell-value\n")
+    (root / "page.html").write_text(
+        '<table data-report="R$VALUE_1"><thead><tr>'
+        '<th data-field="A">Value</th>'
+        '</tr></thead><tbody></tbody></table>')
+    job = JobRuntime(root, work, values={"VALUE_1": "changed"})
+    job.reports["R$VALUE_1"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert 'data-report="R$VALUE_1"' in content
+    assert "cell-value</td>" in content
+
+
+@pytest.mark.parametrize("field", ["A$R_ROWS", "A$VG2C_CSS", "A$R_HEADER_1"])
+def test_declarative_field_is_literal_even_for_reserved_renderer_slots(tmp_path, field):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><table data-report="R">'
+        '<thead><tr><th data-field="' + field + '">Text</th></tr></thead>'
+        '<tbody></tbody></table></body></html>')
+    (work / "data.csv").write_text(field + "\ncell-value\n")
+    job = JobRuntime(root, work)
+    job.reports["R"] = csv_report("data.csv", headers=["Old header"])
+    job.html("page.html", output="out.html")
+    content = (work / "out.html").read_text()
+    assert 'data-field="' + field + '"' in content
+    assert "cell-value</td>" in content
+
+
+@pytest.mark.parametrize("report_attr,field_attr", [
+    ("DATA-REPORT", "DATA-FIELD"),
+    ("DaTa-RePoRt", "DaTa-FiElD"),
+])
+def test_case_insensitive_report_and_field_declarations_preserve_literal_slots(
+    tmp_path, report_attr, field_attr,
+):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1\n<row&value>\n")
+    (root / "page.html").write_text(
+        '<html><head>${VG2C_CSS}</head><body><p>Legacy $VALUE_1</p>'
+        f'<table {report_attr}="R$VG2C_CSS"><thead><tr>'
+        f'<th {field_attr}="A$VALUE_1" data-note="Literal $VALUE_1" '
+        'data-dynamic="${TITLE}">Price $VALUE_1</th>'
+        '</tr></thead><tbody></tbody></table></body></html>'
+    )
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "TITLE": "<title&>"})
+    job.reports["R$VG2C_CSS"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert f'{report_attr}="R$VG2C_CSS"' in rendered
+    assert f'{field_attr}="A$VALUE_1"' in rendered
+    assert 'data-note="Literal $VALUE_1"' in rendered
+    assert 'data-dynamic="&lt;title&amp;&gt;"' in rendered
+    assert "Price changed</th>" in rendered
+    assert "Legacy changed</p>" in rendered
+    assert "&lt;row&amp;value&gt;</td>" in rendered
+
+
+@pytest.mark.parametrize("report_attr,field_attr,pattern_attr", [
+    ("DATA-REPORT", "DATA-FIELD", "DATA-PATTERN"),
+    ("DaTa-RePoRt", "DaTa-FiElD", "DaTa-PaTtErN"),
+])
+def test_case_insensitive_pattern_declarations_preserve_literal_legacy_dollars(
+    tmp_path, report_attr, field_attr, pattern_attr,
+):
+    root = tmp_path / "assets"
+    root.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "data.csv").write_text("A$VALUE_1_x,A$VALUE_1_y,OTHER\n1,2,3\n")
+    (root / "page.html").write_text(
+        f'<table {report_attr}="R$VG2C_CSS"><thead><tr>'
+        f'<th {field_attr}="STARTS WITH:" {pattern_attr}="A$VALUE_1" '
+        'data-note="Cost $VALUE_1" data-dynamic="${TITLE}">Matches</th>'
+        '</tr></thead><tbody></tbody></table>'
+    )
+    job = JobRuntime(root, work, values={"VALUE_1": "changed", "TITLE": "<&>"})
+    job.reports["R$VG2C_CSS"] = csv_report("data.csv")
+    job.html("page.html", output="out.html")
+    rendered = (work / "out.html").read_text()
+    assert f'{report_attr}="R$VG2C_CSS"' in rendered
+    assert rendered.count("<th ") == rendered.count("<td ") == 2
+    assert 'data-field="A$VALUE_1_x"' in rendered
+    assert 'data-field="A$VALUE_1_y"' in rendered
+    assert rendered.count('data-note="Cost $VALUE_1"') == 2
+    assert rendered.count('data-dynamic="&lt;&amp;&gt;"') == 2
