@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import json
 from collections import defaultdict
+from importlib.util import resolve_name
 from pathlib import Path
 
 
@@ -40,18 +41,40 @@ def scan():
     )
     trees = {module_name(path): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
              for path in paths}
+    # Relative imports resolve from the importing package, not the module itself.
+    packages = {module_name(path): (module_name(path) if path.stem == "__init__"
+                                    else module_name(path).rpartition(".")[0])
+                for path in paths}
     names: dict[str, set[str]] = {}
     attributes: dict[str, set[str]] = {}
     imports: dict[str, list[tuple[str, str]]] = defaultdict(list)
     dynamic: dict[str, list[str]] = defaultdict(list)
     definitions: list[dict[str, object]] = []
     registrants: list[dict[str, object]] = []
+    explicit_exports: dict[str, set[str]] = {}
     for module, tree in trees.items():
+        exported: set[str] = set()
+        for statement in tree.body:
+            if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in statement.targets
+            ):
+                try:
+                    declared = ast.literal_eval(statement.value)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(declared, (tuple, list, set)) and all(
+                    isinstance(value, str) for value in declared
+                ):
+                    exported.update(declared)
+        explicit_exports[module] = exported
         names[module] = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
         attributes[module] = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 owner = "." * node.level + (node.module or "")
+                if node.level:
+                    owner = resolve_name(owner, packages[module])
                 for alias in node.names:
                     imports[module].append((owner, alias.name))
             elif isinstance(node, ast.Import):
@@ -116,6 +139,8 @@ def scan():
                  or (owner, leaf) in imports[m])
         )
         item["possible_external_users"] = users
+        item["possible_local_use"] = leaf in names[owner] or leaf in attributes[owner]
+        item["explicit_export"] = symbol in explicit_exports[owner]
         item["exact_importers"] = sorted(
             m for m, imported in imports.items() if (owner, leaf) in imported
         )
@@ -137,6 +162,7 @@ def scan():
         "forbidden_runtime_imports": forbidden,
         "dynamic_modules": {m: sorted(set(x)) for m, x in dynamic.items()},
         "imports": {m: refs for m, refs in imports.items()},
+        "explicit_exports": {m: sorted(x) for m, x in explicit_exports.items() if x},
     }
 
 
@@ -166,6 +192,12 @@ def main():
         print("STAGE2_SYMBOL_MODULE", json.dumps({
             "module": module, "definitions": len(definitions),
             "possible_unreferenced_externally": possible_unused,
+            "possible_unreferenced_locally_or_externally": [
+                d["symbol"] for d in definitions if not d["possible_external_users"]
+                and not d["possible_local_use"] and not d["explicit_export"]
+                and not str(d["symbol"]).split(".")[-1].startswith("__")
+            ],
+            "explicit_exports": data["explicit_exports"].get(module, []),
             "exact_imported_symbols": exact,
             "dynamic_lookup": data["dynamic_modules"].get(module, []),
         }, sort_keys=True))
