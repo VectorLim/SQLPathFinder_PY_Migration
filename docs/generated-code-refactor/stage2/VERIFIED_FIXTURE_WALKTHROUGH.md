@@ -1,6 +1,6 @@
 # Stage 2 verified source-preserved fixture walkthrough
 
-This is a reproducible **PARTIAL original VG2 fixture**: consecutive local SQLite blocks 3–4 from tests/fixtures/hamizah.txt. Its prior and later Oracle/MARS blocks were **not** executed. All excerpts below were extracted from [GitHub Actions workflow 38182724183](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38182724183), which actually translated and ran the job with deterministic local synthetic inputs. This is not verification of the original ScriptHost engine. CI stdout was normalized for presentation; assertions verify parsed CSV/TSV values and asset-edit reruns.
+This is a reproducible **PARTIAL original VG2 fixture**: consecutive local SQLite blocks 3–4 from tests/fixtures/hamizah.txt. Its prior and later Oracle/MARS blocks were **not** executed. The current generated Python and SQL assets were reverified from [GitHub Actions workflow 38203059174](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38203059174), which actually translated and ran the job with deterministic local synthetic inputs. The original fixture/output evidence also appears in [workflow 38182724183](https://github.com/VectorLim/SQLPathFinder_PY_Migration/actions/runs/38182724183). This is not verification of the original ScriptHost engine. CI stdout was normalized for presentation; assertions verify parsed CSV/TSV values and asset-edit reruns.
 
 ## Original VG2 (two consecutive blocks)
 
@@ -70,15 +70,10 @@ FROM
 ## Generated main.py
 
 ```python
-from pathlib import Path
-from vg2c.runtime import JobRuntime, SqliteReader
+from vg2c.runtime import SqliteReader, job_entrypoint
 
-BASE_DIR = Path(__file__).resolve().parent
-WORK_DIR = BASE_DIR / 'output'
-
-def run(workdir=WORK_DIR):
-    workdir = Path(workdir).resolve()
-    job = JobRuntime(BASE_DIR, workdir)
+@job_entrypoint(__file__)
+def run(job):
     # Source block 0, line 1
     job.sql('sql/query_000_input.sql', reader=SqliteReader(), output='input.csv', inputs=['yeuchuan_a0_5547.tab', 'yeuchuan_a1_5547.tab'], header=['test_lot', 'tcb_lot', 'entity', 'prodgroup3'])
     # Source block 1, line 38
@@ -91,6 +86,7 @@ if __name__ == "__main__":
 ## Generated SQL asset: query_000_input.sql
 
 ```sql
+-- vg2c-output-headers: ["test_lot", "tcb_lot", "entity", "prodgroup3"]
 DROP INDEX IF EXISTS IdxA1;
 Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_5547] ([lot_1]);
 
@@ -108,12 +104,16 @@ FROM
 ## Generated SQL asset: query_001_yeuchuan_SQL_5547.sql
 
 ```sql
+-- vg2c-output-headers: ["entity", "prodgroup3"]
 SELECT /*L0*/ 
           a0.[entity] AS [entity]
          ,a0.[prodgroup3] AS [prodgroup3]
 FROM 
 [input] a0
 ```
+
+
+**Current generated-project ownership:** `main.py` no longer declares `BASE_DIR`/`WORK_DIR`, resolves `workdir`, constructs `JobRuntime`, or repeats output `header=` lists. The runtime entrypoint initializes each isolated job and still allows `run(workdir=...)`. Ordinary query output headers come directly from SQL column names and aliases. These two original blocks explicitly supplied `/HEADERS`, so their optional name-based overrides are encoded as harmless first-line SQL comments. Remove that line from an edited SQL asset to use its SQL result column names directly; retaining it preserves the original script's output selection/casing. No .header.json sidecar is emitted.
 
 ## Synthetic upstream yeuchuan_a0_5547.tab
 
