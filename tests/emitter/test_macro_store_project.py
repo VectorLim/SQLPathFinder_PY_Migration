@@ -31,7 +31,8 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     tree = ast.parse(code)
     assert "macro_values_" not in code
     assert "macro_values =" not in code
-    assert "job = JobRuntime(" in code
+    assert "@job_entrypoint(__file__)" in code
+    assert "job = JobRuntime(" not in code
     assert "macros = job.macros" in code
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
