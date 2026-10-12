@@ -26,7 +26,7 @@ def test_generated_run_has_only_operations_and_preserves_workdir_override(tmp_pa
     main = translate(source)
     text = main.read_text(encoding="utf-8")
     assert "@job_entrypoint(__file__)" in text
-    assert "def run(job):" in text
+    assert "def run(job, workdir):" in text
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
     assert "job = JobRuntime(" not in text
