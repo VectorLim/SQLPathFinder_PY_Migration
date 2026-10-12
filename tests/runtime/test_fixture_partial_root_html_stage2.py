@@ -49,3 +49,32 @@ def test_original_fixture_first_css_block_runs_offline(tmp_path, fixture):
     assert "background-color" in css
     assert "font-family" in css
     assert not (workdir / "owner.csv").exists()
+
+
+def test_original_html_run_css_asset_is_editable_and_rerun_publishes_changes(tmp_path):
+    """Original HTML-RUN CSS is a project asset, not hardcoded in main.py."""
+    fixture = (ROOT / "tests/fixtures/actual_script.txt").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    block = fixture.split(SEPARATOR)[1]
+    assert "/REPORT=HTML-RUN" in block
+    assert "TYPE<\\\\>CSS" in block
+    source = tmp_path / "original_css_block.txt"
+    source.write_text(block, encoding="utf-8")
+    main = translate(source, out_dir=tmp_path / "generated")
+    css_assets = sorted((main.parent / "styles").glob("report_*.css"))
+    assert len(css_assets) == 1
+    workdir = tmp_path / "run"
+    workdir.mkdir()
+    run = runpy.run_path(str(main), run_name="isolated_css_edit")["run"]
+    run(workdir=workdir)
+    output = workdir / "sqlpathfinder_style_1.css"
+    initial = output.read_bytes()
+    assert initial == css_assets[0].read_bytes()
+    assert b"background-color" in initial
+
+    marker = b"/* stage2 fixture asset edit */\n"
+    css_assets[0].write_bytes(initial + marker)
+    run(workdir=workdir)
+    assert output.read_bytes() == initial + marker
+    assert output.read_bytes() != initial
