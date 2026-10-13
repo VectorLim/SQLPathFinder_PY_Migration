@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from vg2c.emitter.models import CodeExpr
+from vg2c.emitter.models import BlockEmission, CodeExpr
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
@@ -35,7 +35,7 @@ class RowsInFile(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
         from vg2c.utilities.csv_io import CsvIO
         from vg2c.utilities.macro_control import MacroControl
 
@@ -46,5 +46,8 @@ class RowsInFile(EmitterUtility):
         var_name = strip_quotes(argv[2]).upper() if len(argv) > 2 else ""
 
         row_count_call = CsvIO.row_count.render(csv_path_expr)
-        stmt = MacroControl.set_named.render(var_name, CodeExpr(f"str({row_count_call})"))
-        return "rows_in_file", [stmt]
+        assignment = MacroControl.render_named_assignment(
+            MacroControl.set_named.render(var_name, CodeExpr(f"str({row_count_call})")),
+            macros,
+        )
+        return BlockEmission((assignment,))

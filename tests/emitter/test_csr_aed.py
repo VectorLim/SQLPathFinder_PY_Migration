@@ -1,11 +1,14 @@
 """Source-driven CSR translation and offline generated-project execution."""
 
+import ast
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from vg2c import compile_document, translate
-
+from vg2c.emitter import emit
+from vg2c.resolver.csr import CsrSubmission
 
 HEADERS = "HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module"
 
@@ -72,6 +75,61 @@ def test_detection_does_not_depend_on_block_numbers(tmp_path):
     result = compile_document(path)
     assert len(result.resolved.csr_submissions) == 1
     assert "job.write_file" in result.emitted.source
+
+
+def test_emitter_initializes_each_csr_submission_in_shared_signal_scope(tmp_path):
+    path = tmp_path / "shared-signal.txt"
+    path.write_text(source())
+    result = compile_document(path)
+    first = result.resolved.csr_submissions[0]
+    # Exercise the existing emitter ordering contract at its resolved boundary.
+    second = CsrSubmission(
+        block_index=first.producer_index,
+        producer_index=first.producer_index,
+        signal_scope_id=first.signal_scope_id,
+        notification_indexes=(),
+        history_scope_ids=(),
+    )
+    resolved = replace(result.resolved, csr_submissions=(first, second))
+    emitted = emit(replace(result.dispatched, resolved=resolved))
+
+    first_init = f"csr_history_allowed_{first.block_index} = True"
+    second_init = f"csr_history_allowed_{second.block_index} = True"
+    assert first_init in emitted.source
+    assert second_init in emitted.source
+    assert emitted.source.index(first_init) < emitted.source.index(second_init)
+
+
+@pytest.mark.parametrize(
+    ("has_slot", "expected_order"),
+    [
+        (False, ("css_file", "values")),
+        (True, ("values", "css_file")),
+    ],
+)
+def test_csr_html_layout_preserves_css_and_values_keyword_order(
+    tmp_path, has_slot, expected_order
+):
+    path = tmp_path / "csr-layout.txt"
+    body = ":CSS:report.css\n:TITLE:CSR outcome\n<p>Lot on hold due to NCO.</p>"
+    if has_slot:
+        body += "\n<p><<<SIGNAL>>></p>"
+    text = source().replace(
+        ":TITLE:CSR outcome\n<p>Lot on hold due to NCO.</p>", body
+    )
+    path.write_text(text)
+    emitted = compile_document(path).emitted
+    tree = ast.parse(emitted.source)
+    call = next(
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "csr_report"
+                for target in node.targets)
+    )
+    keywords = tuple(item.arg for item in call.keywords)
+    positions = tuple(keywords.index(key) for key in expected_order)
+    assert positions == tuple(sorted(positions))
 
 
 def test_ambiguous_producer_fails_with_source_location(tmp_path):

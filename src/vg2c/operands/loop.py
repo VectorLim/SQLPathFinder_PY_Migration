@@ -13,6 +13,7 @@ from vg2c.operands.base import (
     ScopeIdSource,
     ScopeNode,
     _quoted_args,
+    emit_children,
 )
 
 if TYPE_CHECKING:
@@ -100,28 +101,47 @@ class RunLoop:
     # Emission
     # ------------------------------------------------------------------
 
-    def render_header(self) -> str:
-        """Render the generated Python chunk-loop header."""
-        from vg2c.utilities.csv_io import CsvIO
+    def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
+        from vg2c.utilities._emit_helpers import native_macro_expression
 
-        chunks_call = CsvIO.iter_chunks.render(
-            self.input_csv_path,
-            self.chunk_csv_path,
-            int(self.chunk_size),
+        input_path = native_macro_expression(self.input_csv_path, macros)
+        chunk_path = native_macro_expression(self.chunk_csv_path, macros)
+        return (
+            f"with closing(job.csv_chunks({input_path}, {chunk_path}, "
+            f"{self.chunk_size})) as chunks_{scope_id}:"
         )
-        return f"for __chunk_path in {chunks_call}:"
 
     def emit_scope(
         self,
         writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
-        children: tuple[ScopeNode, ...],
+        walk: Callable[[ScopeNode, str], None],
+        node: ScopeNode,
+        *,
+        macros: str,
+        imports: set[str],
+        runtime_imports: set[str],
     ) -> None:
         """Emit a chunked for-loop over the input CSV."""
-        writer.write(self.render_header())
+        imports.add("from contextlib import closing")
+        writer.write(self.render_header(node.scope_id, macros=macros))
         writer.push_indent()
-        for child in children:
-            walk(child)
+        writer.write(f"for chunk_{node.scope_id} in chunks_{node.scope_id}:")
+        writer.push_indent()
+        writer.write(f"with {macros}.scope():")
+        writer.push_indent()
+        trapped = self.prompt_off
+        if trapped:
+            writer.write("try:")
+            writer.push_indent()
+        emit_children(writer, walk, node.children, macros)
+        if trapped:
+            writer.pop_indent()
+            writer.write("except Exception:")
+            writer.push_indent()
+            writer.write("continue")
+            writer.pop_indent()
+        writer.pop_indent()
+        writer.pop_indent()
         writer.pop_indent()
 
 
@@ -142,6 +162,31 @@ class ForLoop:
             raise ValueError(f"{block.span.file}:{block.span.start_line}: FOR requires 4-6 arguments")
         return cls(args)
 
+    def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
+        from vg2c.utilities._emit_helpers import native_macro_expression
+
+        expr = ", ".join(native_macro_expression(arg, macros) for arg in self.args)
+        return f"for loop_values_{scope_id} in for_values({expr}):"
+
+    def emit_scope(
+        self,
+        writer: IndentWriter,
+        walk: Callable[[ScopeNode, str], None],
+        node: ScopeNode,
+        *,
+        macros: str,
+        imports: set[str],
+        runtime_imports: set[str],
+    ) -> None:
+        runtime_imports.add("for_values")
+        writer.write(self.render_header(node.scope_id, macros=macros))
+        writer.push_indent()
+        writer.write(f"with {macros}.scope(loop_values_{node.scope_id}):")
+        writer.push_indent()
+        emit_children(writer, walk, node.children, macros)
+        writer.pop_indent()
+        writer.pop_indent()
+
 
 @dataclass(frozen=True, slots=True)
 class SiteLoop:
@@ -154,3 +199,35 @@ class SiteLoop:
         if len(args) != 1 or not args[0]:
             raise ValueError(f"{block.span.file}:{block.span.start_line}: SITE requires a node list")
         return cls(args[0])
+
+    def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
+        from vg2c.utilities._emit_helpers import native_macro_expression
+
+        nodes = native_macro_expression(self.nodes, macros)
+        return f"for loop_values_{scope_id} in site_values({nodes}):"
+
+    def emit_scope(
+        self,
+        writer: IndentWriter,
+        walk: Callable[[ScopeNode, str], None],
+        node: ScopeNode,
+        *,
+        macros: str,
+        imports: set[str],
+        runtime_imports: set[str],
+    ) -> None:
+        runtime_imports.add("site_values")
+        writer.write(self.render_header(node.scope_id, macros=macros))
+        writer.push_indent()
+        writer.write(f"with {macros}.scope(loop_values_{node.scope_id}):")
+        writer.push_indent()
+        writer.write("try:")
+        writer.push_indent()
+        emit_children(writer, walk, node.children, macros)
+        writer.pop_indent()
+        writer.write("except Exception:")
+        writer.push_indent()
+        writer.write("break")
+        writer.pop_indent()
+        writer.pop_indent()
+        writer.pop_indent()

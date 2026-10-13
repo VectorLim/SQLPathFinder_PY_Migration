@@ -4,14 +4,11 @@ import inspect
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from vg2c.emitter.models import (
-    EmittableOperation,
-    UtilityOperationDefinition,
-)
+from vg2c.emitter.models import BlockEmission, UtilityOperationDefinition
+from vg2c.emitter.operations import EmittableOperation
 from vg2c.kind import Kind
 
 if TYPE_CHECKING:
-    from vg2c.emitter.models import CodeExpr
     from vg2c.frontend.models import BlockOptions
 
 
@@ -111,10 +108,8 @@ class UtilitySpec(ABC):
         return raw.definition(utility) if isinstance(raw, EmittableOperation) else None
 
     @staticmethod
-    def emit_block(
-        block: Any, *, global_refs: dict[str, CodeExpr] | None = None
-    ) -> list[str] | tuple[str, list[str]] | None:
-        return None
+    def emit_block(block: Any, *, macros: str = "macros") -> BlockEmission:
+        raise ValueError("Unsupported utility operation")
 
     @classmethod
     def extract_globals(cls, block: Any) -> dict[str, object]:
@@ -142,8 +137,8 @@ class EmitterUtility(UtilitySpec):
     @classmethod
     @abstractmethod
     def emit_block(
-        cls, block: Any, *, global_refs: dict[str, CodeExpr] | None = None
-    ) -> list[str] | tuple[str, list[str]] | None:
+        cls, block: Any, *, macros: str = "macros"
+    ) -> BlockEmission:
         raise NotImplementedError
 
     @classmethod

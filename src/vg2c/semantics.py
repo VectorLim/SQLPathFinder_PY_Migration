@@ -928,11 +928,10 @@ def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
     cursor = marker if marker >= 0 else 0
     ranges: dict[int, SourceRange] = {}
 
-    from vg2c.emitter.project import control_header
     def visit(node: ScopeNode, macros="macros") -> None:
         nonlocal cursor
         if node.kind in {"if", "macro", "loop"} and node.control_payload is not None:
-            header = control_header(node.control_payload, node.scope_id, macros)
+            header = node.control_payload.render_header(node.scope_id, macros=macros)
             start = source.find(header, cursor)
             if start >= 0:
                 ranges[node.scope_id] = SourceRange(start, start + len(header))

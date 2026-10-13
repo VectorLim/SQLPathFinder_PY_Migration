@@ -9,12 +9,8 @@ from typing import Any, Literal
 
 from vg2c.compilation import CompilationResult
 from vg2c.project_paths import project_main_path
-from vg2c.emitter.models import (
-    CodeExpr,
-    EmittableOperation,
-    EmittedParameter,
-    build_step_emission,
-)
+from vg2c.emitter.models import CodeExpr, EmittedParameter
+from vg2c.emitter.operations import EmittableOperation
 from vg2c.operands import IfThen, RunLoop, StartMacro
 from vg2c.semantics import (
     EditableBinding,
@@ -382,7 +378,6 @@ def _project_control_replacements(
     values: dict[str, Any],
     replacements: dict[tuple[int, int], str],
 ) -> None:
-    from vg2c.emitter.project import control_header
     blocks = {block.index: block for block in result.resolved.blocks}
     contexts = {}
     def visit(node, macros="macros"):
@@ -411,7 +406,10 @@ def _project_control_replacements(
             continue
         replacements[
             (operation.source_range.start_offset, operation.source_range.end_offset)
-        ] = control_header(payload, *contexts[operation.block_index])
+        ] = payload.render_header(
+            contexts[operation.block_index][0],
+            macros=contexts[operation.block_index][1],
+        )
 
 
 def _project_embedded_python(

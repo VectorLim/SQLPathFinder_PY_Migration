@@ -6,7 +6,7 @@ from vg2c.utilities._base import UtilitySpec
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from vg2c.emitter.models import emittable
+from vg2c.emitter.operations import emittable
 from vg2c.utility_metadata import FileEffectDefinition
 
 

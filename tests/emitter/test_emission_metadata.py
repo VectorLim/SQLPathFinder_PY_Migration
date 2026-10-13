@@ -4,13 +4,9 @@ from typing import Literal, NotRequired, TypedDict
 import pytest
 
 from vg2c import compile_document
-from vg2c.emitter.models import (
-    ArtifactRole,
-    CodeExpr,
-    build_step_emission,
-    emittable,
-    finalize_steps,
-)
+from vg2c.emitter.models import ArtifactRole, CodeExpr
+from vg2c.emitter.operations import emittable
+from vg2c.emitter.source_map import build_step_emission, finalize_steps
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities.direct_operations import DirectOperationMetadata

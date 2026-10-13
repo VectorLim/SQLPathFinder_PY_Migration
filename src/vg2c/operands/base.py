@@ -146,16 +146,52 @@ class ScopeNode:
     def emit(
         self,
         writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
+        walk: Callable[[ScopeNode, str], None],
+        *,
+        macros: str,
+        imports: set[str],
+        runtime_imports: set[str],
     ) -> None:
-        """Delegate structural emission to the control payload, or walk children transparently.
+        """Delegate a structural scope to its payload, or walk children transparently.
 
         Leaf nodes are intentionally excluded — the walker handles them via
         UtilitySpec dispatch, which is not a payload concern.
         """
-        if self.control_payload is not None and hasattr(self.control_payload, "emit_scope"):
-            self.control_payload.emit_scope(writer, walk, self.children)  # type: ignore[union-attr]
-        else:
-            # Transparent nodes: program, if-branch, else-branch
-            for child in self.children:
-                walk(child)
+        if self.kind == "leaf":
+            return
+        if self.control_payload is not None:
+            from vg2c.operands.conditional import IfThen
+            from vg2c.operands.loop import ForLoop, RunLoop, SiteLoop
+            from vg2c.operands.macro import StartMacro
+
+            if isinstance(
+                self.control_payload,
+                (StartMacro, IfThen, RunLoop, ForLoop, SiteLoop),
+            ):
+                self.control_payload.emit_scope(
+                    writer,
+                    walk,
+                    self,
+                    macros=macros,
+                    imports=imports,
+                    runtime_imports=runtime_imports,
+                )
+                return
+
+        # Transparent nodes: program, if-branch, else-branch.
+        for child in self.children:
+            walk(child, macros)
+
+
+def emit_children(
+    writer: IndentWriter,
+    walk: Callable[[ScopeNode, str], None],
+    children: tuple[ScopeNode, ...],
+    macros: str,
+) -> None:
+    """Emit a scope body and preserve the generated pass for empty branches."""
+    before = len(writer.lines)
+    for child in children:
+        walk(child, macros)
+    if len(writer.lines) == before:
+        writer.write("pass")

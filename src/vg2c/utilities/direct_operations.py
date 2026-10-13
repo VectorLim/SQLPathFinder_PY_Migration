@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from vg2c.emitter.models import ArtifactRole, emittable
+from vg2c.emitter.models import ArtifactRole
+from vg2c.emitter.operations import emittable
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 

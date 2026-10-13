@@ -58,27 +58,25 @@ class TestEmitBlock:
         block = _block(FIXTURE_UTILITIES)
         result = WaitFile.emit_block(block)
         assert result is not None
-        suffix, lines = result
-        assert suffix == "wait_file"
-        assert len(lines) == 1
-        stmt = lines[0]
-        assert "ctx.wait_file.poll(" in stmt
+        assert len(result.lines) == 1
+        stmt = result.lines[0]
+        assert "job.wait_file(" in stmt
         assert "30" in stmt
 
     def test_emits_path_expression(self):
         block = _block(FIXTURE_UTILITIES)
-        _, lines = WaitFile.emit_block(block)
-        assert r"kmatshfs.intel.com" in lines[0]
+        emission = WaitFile.emit_block(block)
+        assert r"kmatshfs.intel.com" in emission.lines[0]
 
     def test_missing_timeout_defaults_to_30(self):
         block = _block(r'@EXEDIR@\WaitFile.va "C:\file.csv"')
-        _, lines = WaitFile.emit_block(block)
-        assert "30" in lines[0]
+        emission = WaitFile.emit_block(block)
+        assert "30" in emission.lines[0]
 
     def test_explicit_timeout_emitted(self):
         block = _block(r'@EXEDIR@\WaitFile.va "C:\file.csv" "120"')
-        _, lines = WaitFile.emit_block(block)
-        assert "120" in lines[0]
+        emission = WaitFile.emit_block(block)
+        assert "120" in emission.lines[0]
 
 
 class TestPollRuntime:
@@ -143,11 +141,10 @@ def test_waitfile_registered_as_handler_for_wait_file_kind():
 
 def test_fixture_block_expected_emit_output():
     block = _block(FIXTURE_UTILITIES, kind=Kind.WAIT_FILE)
-    suffix, lines = WaitFile.emit_block(block)
+    emission = WaitFile.emit_block(block)
 
-    assert suffix == "wait_file"
-    assert len(lines) == 1
-    stmt = lines[0]
-    assert stmt.startswith("ctx.wait_file.poll(")
+    assert len(emission.lines) == 1
+    stmt = emission.lines[0]
+    assert stmt.startswith("job.wait_file(")
     assert "TimeDelta.csv" in stmt
     assert ", 30)" in stmt

@@ -30,11 +30,11 @@ def test_smartappend_classifies_by_case_insensitive_basename() -> None:
 
 
 def test_smartappend_emits_destination_before_source() -> None:
-    _, lines = SmartAppend.emit_block(
+    emission = SmartAppend.emit_block(
         _block(r'@EXEDIR@\SmartAppend.va "HIST.csv" "data.csv" "Version 3"')
     )
 
-    assert lines == ["ctx.smart_append.append('HIST.csv', 'data.csv')"]
+    assert emission.lines == ("job.smart_append('HIST.csv', 'data.csv')",)
 
 
 def test_smartappend_writes_header_once_and_appends_data(tmp_path: Path, monkeypatch) -> None:

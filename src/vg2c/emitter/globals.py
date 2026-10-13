@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 
-from vg2c.emitter.models import CodeExpr, EmittedParameter, SourceRange, _value_metadata
+from vg2c.emitter.models import CodeExpr, EmittedParameter, SourceRange
+from vg2c.emitter.operations import _value_metadata
 
 GlobalValues = dict[str, dict[str, object]]
 

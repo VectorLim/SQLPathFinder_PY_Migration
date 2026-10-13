@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
+from dataclasses import replace
+from pathlib import Path
 
-from vg2c.emitter.models import CodeExpr
+from vg2c.emitter.models import BlockEmission, CodeExpr, ExternalParameter
+from vg2c.emitter.operations import EmittableOperation
 from vg2c.kind import Kind
-from vg2c.utilities._base import EmitterUtility
+from vg2c.project_paths import project_name
+from vg2c.utilities._base import EmitterUtility, UtilitySpec
 from vg2c.utilities._emit_helpers import (
     extract_crosstab_options,
+    native_argument,
+    native_macro_expression,
     parse_table_binding,
     resolve_output_path,
     scan_sql_get_csv_list_calls,
@@ -153,44 +160,72 @@ class SqliteEngine(EmitterUtility):
         return [p for p in parts if p]
 
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
-        sqlite = block.kind is Kind.SQLITE_QUERY
-        return cls._emit_sql(block, sqlite=sqlite, global_refs=global_refs)
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
+        reader = block.reader
+        imports = ()
+        if reader.utility_name == "sqlite_reader":
+            runtime_exports = ("SqliteReader",)
+        else:
+            imports = (f"from {reader.module} import {reader.name}",)
+            runtime_exports = ("OracleClient",)
 
-    @classmethod
-    def _emit_sql(
-        cls,
-        block,
-        *,
-        sqlite: bool,
-        global_refs=None,
-    ) -> tuple[str, list[str]]:
-        sql = cls._extract_sql_text(block, global_refs)
-        output = resolve_output_path(block)
-        reader = getattr(block, "reader", None)
-        if reader is None:
-            raise ValueError("SQL emission requires dispatch metadata")
-        crosstab = extract_crosstab_options(block)
-        header = None if crosstab else cls._extract_header(block)
-
-        reader_kwargs = getattr(block, "reader_kwargs", {})
-        reader_kwargs_items = [f"{key}={value!r}" for key, value in reader_kwargs.items()]
-        inst_expr = f"{reader.name}({', '.join(reader_kwargs_items)})"
-
-        kwargs: dict[str, object] = {
-            "sql": sql,
-            "output": output,
-            "reader": CodeExpr(inst_expr),
+        name = f"sql/query_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.sql"
+        sql = cls._sql_source(block)
+        kwargs = {
+            "reader": CodeExpr(
+                f"{reader.name}(" + ", ".join(
+                    f"{key}={value!r}" for key, value in block.reader_kwargs.items()
+                ) + ")"
+            ),
+            "output": resolve_output_path(block),
         }
-        if sqlite:
-            kwargs["inputs"] = cls._extract_table_inputs(block)
-        if header:
-            kwargs["header"] = header
+        if block.kind is Kind.SQLITE_QUERY:
+            inputs = cls._extract_table_inputs(block)
+            if inputs:
+                kwargs["inputs"] = inputs
+        else:
+            node = block.reader_target.node
+            kwargs["node"] = CodeExpr(native_macro_expression(node, macros), node)
+
+        crosstab = extract_crosstab_options(block)
         if crosstab:
             kwargs.update(crosstab)
+        else:
+            header = cls._extract_header(block)
+            if header:
+                # SQL owns both its projection and any original /HEADERS override.
+                # Preserve ScriptHost's by-name output semantics without exposing
+                # an extra header= argument or a separate JSON sidecar in main.py.
+                sql = "-- vg2c-output-headers: " + json.dumps(header, ensure_ascii=False) + "\n" + sql
 
-        from vg2c.utilities.direct_operations import DirectOperationMetadata
-
-        stmt = DirectOperationMetadata.run_query.render(**kwargs)
-        suffix = "sqlite_query" if sqlite else "sql_query"
-        return suffix, [stmt]
+        definition = UtilitySpec.operation_definition("ctx", "run_query")
+        sql_definition = definition.parameter("sql")
+        path_definition = replace(
+            sql_definition, name="path", display_label="SQL asset", capabilities=()
+        )
+        definition = replace(
+            definition,
+            parameters=tuple(
+                path_definition if parameter.name == "sql" else parameter
+                for parameter in definition.parameters
+            ),
+        )
+        call = EmittableOperation.render_method_call(
+            definition,
+            function="job.sql",
+            args=(CodeExpr(repr(name)),),
+            kwargs={key: native_argument(value, macros) for key, value in kwargs.items()},
+        )
+        external = ExternalParameter(
+            definition=sql_definition,
+            value=sql,
+            editor_type="multiline",
+            read_only_reason="SQL is an external editable asset; generated Python offsets cannot edit it.",
+        )
+        return BlockEmission(
+            lines=(call,),
+            imports=imports,
+            runtime_exports=runtime_exports,
+            assets=((name, sql),),
+            external_parameters=(external,),
+        )

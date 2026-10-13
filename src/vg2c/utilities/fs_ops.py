@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vg2c.emitter.models import CodeExpr, emittable
+from vg2c.emitter.models import BlockEmission, CodeExpr
+from vg2c.emitter.operations import emittable
 from vg2c.runtime.files import copy_file, delete_files, rename_file, write_file
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
     list_code_expr,
+    lower_native_call,
     resolve_output_path,
     split_utility_command,
     to_code_expr,
@@ -44,20 +46,24 @@ class FileSystemOps(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]] | None:
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
         if block.kind is Kind.FS_COPY:
-            return cls._emit_copy_block(block)
+            return cls._emit_copy_block(block, macros)
         if block.kind is Kind.FS_DELETE:
-            return cls._emit_delete_block(block)
+            return cls._emit_delete_block(block, macros)
 
         from vg2c.utilities.direct_operations import DirectOperationMetadata
 
-        stmt = DirectOperationMetadata.write_file.render(
-            path=resolve_output_path(block),
-            # ScriptHost parseTaskOptions lstrips SPFTaskCommand (SPFSQL3.py:1824).
-            template=block.resolved_body.lstrip(),
+        stmt = lower_native_call(
+            DirectOperationMetadata.write_file.render(
+                path=resolve_output_path(block),
+                # ScriptHost parseTaskOptions lstrips SPFTaskCommand (SPFSQL3.py:1824).
+                template=block.resolved_body.lstrip(),
+            ),
+            function="job.write_file",
+            macros=macros,
         )
-        return "write_file", [stmt]
+        return BlockEmission((stmt,))
 
     @staticmethod
     def _utility_argv(block) -> list[str]:
@@ -65,7 +71,7 @@ class FileSystemOps(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def _emit_copy_block(cls, block) -> tuple[str, list[str]]:
+    def _emit_copy_block(cls, block, macros: str) -> BlockEmission:
         argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "robocopy" in basename:
@@ -76,16 +82,19 @@ class FileSystemOps(EmitterUtility):
             stmt = cls._emit_spf_rename(argv)
         else:
             raise ValueError(f"Unsupported filesystem copy utility: {basename}")
-        return "fs_copy", [stmt]
+        target = "job.rename_file" if "spfrename" in basename else "job.copy_file"
+        return BlockEmission(
+            (lower_native_call(stmt, function=target, macros=macros),),
+        )
 
     @classmethod
-    def _emit_delete_block(cls, block) -> tuple[str, list[str]]:
+    def _emit_delete_block(cls, block, macros: str) -> BlockEmission:
         argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
         if "spfdelete" not in basename:
             raise ValueError(f"Unsupported filesystem delete utility: {basename}")
         stmt = cls._emit_spf_delete(argv)
-        return "fs_delete", [stmt]
+        return BlockEmission((lower_native_call(stmt, function="job.delete_files", macros=macros),))
 
     @classmethod
     def _emit_robocopy(cls, argv: list[str]) -> str:

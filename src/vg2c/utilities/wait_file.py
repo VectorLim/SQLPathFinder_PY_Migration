@@ -5,10 +5,15 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import BlockEmission
+from vg2c.emitter.operations import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
+from vg2c.utilities._emit_helpers import (
+    lower_native_call,
+    split_utility_command,
+    to_code_expr,
+)
 from vg2c.utilities._runtime_helpers import strip_quotes
 from vg2c.utility_metadata import FileEffectDefinition
 
@@ -51,7 +56,7 @@ class WaitFile(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> tuple[str, list[str]]:
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
         argv = cls._utility_argv(block)
         # argv[0] = tool path, argv[1] = file path, argv[2] = timeout seconds
         path_expr = to_code_expr(argv[1] if len(argv) > 1 else "")
@@ -62,8 +67,12 @@ class WaitFile(EmitterUtility):
             timeout_val = int(raw_timeout)
         except ValueError:
             timeout_val = cls._DEFAULT_TIMEOUT
-        stmt = cls.poll.render(path_expr, timeout_val)
-        return "wait_file", [stmt]
+        stmt = lower_native_call(
+            cls.poll.render(path_expr, timeout_val),
+            function="job.wait_file",
+            macros=macros,
+        )
+        return BlockEmission((stmt,))
 
     @emittable(
         display_name="Wait for File",

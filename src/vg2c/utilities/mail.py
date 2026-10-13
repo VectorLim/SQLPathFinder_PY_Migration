@@ -5,11 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import BlockEmission
+from vg2c.emitter.operations import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
     list_code_expr,
+    lower_native_call,
     split_utility_command,
     to_code_expr,
 )
@@ -33,21 +35,20 @@ class MailService(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block: Any, *, global_refs=None) -> list[str] | None:
+    def emit_block(cls, block: Any, *, macros: str = "macros") -> BlockEmission:
         argv = cls._utility_argv(block)
         if not cls._is_mail_utility(argv):
-            return None
+            raise ValueError("Unsupported utility operation")
         kwargs = cls._send_kwargs(argv, block.resolved_body)
         if kwargs is None:
             raise ValueError(
                 "Unsupported SQLPathFinder_Email.va arguments: "
                 "expected recipient, subject and message fields"
             )
-        for field in ("to", "subject"):
-            key = f"EMAIL_{field.upper()}"
-            if global_refs and key in global_refs:
-                kwargs[field] = global_refs[key]
-        return [cls.send.render(**kwargs)]
+        call = lower_native_call(
+            cls.send.render(**kwargs), function="job.send_mail", macros=macros
+        )
+        return BlockEmission((call,))
 
     @classmethod
     def extract_globals(cls, block: Any) -> dict[str, object]:

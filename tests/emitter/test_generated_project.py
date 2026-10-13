@@ -188,8 +188,16 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
         + block('/UTILITIES={END-MACRO}')
     )
     main = translate(source)
-    assert "node=macros['SPF-SITE'] + '.MARS'" in main.read_text()
-    assert "macros.substitute(" not in main.read_text()
+    generated = main.read_text()
+    assert "node=macros['SPF-SITE'] + '.MARS'" in generated
+    assert "macros.substitute(" not in generated
+    tree = ast.parse(generated)
+    assert any(
+        isinstance(child, ast.Break)
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for child in ast.walk(handler)
+    )
     work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text("LABEL,NODES\nouter,\"PG.[A12_PROD_0.],KM.[A15_PROD_21.]\"\nignored,\n")
@@ -205,6 +213,28 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
     tree = ast.parse(main.read_text())
     assert any(isinstance(node, ast.For) for node in ast.walk(tree))
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
+
+
+def test_generated_run_loop_closes_chunks_and_continues_on_prompt_off(tmp_path):
+    source = tmp_path / "chunks.txt"
+    source.write_text(
+        block('/UTILITIES={RUN-LOOP} "input.csv" "chunk.csv" "2" "Y"')
+        + block('/UTILITIES={END-LOOP}')
+    )
+
+    generated = compile_document(source).emitted.source
+    tree = ast.parse(generated)
+
+    assert "from contextlib import closing" in generated
+    assert "with closing(job.csv_chunks('input.csv', 'chunk.csv', 2))" in generated
+    assert "with macros.scope():" in generated
+    assert any(
+        isinstance(child, ast.Continue)
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for child in ast.walk(handler)
+    )
+    assert "pass" in generated
 
 
 def test_loop_html_and_file_macro_arguments_use_brackets(tmp_path):

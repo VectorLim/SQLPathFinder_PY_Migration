@@ -1,5 +1,7 @@
 """The historical HTML compiler parser is not another runtime renderer."""
 
+import pytest
+
 from vg2c import compile_document
 from vg2c.utilities.html_report import HtmlReport
 
@@ -43,3 +45,26 @@ def test_html_direct_emission_preserves_editable_shell_and_metadata(tmp_path):
     assert not any(p.endswith(".report.json") for p, _ in emitted.assets)
     assert all(emitted.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
                for step in emitted.steps)
+
+
+def test_deferred_report_state_is_isolated_between_translations(tmp_path):
+    definition = "\n".join([
+        D.join(["TYPE", "HTML"]),
+        D.join(["INPUT-FILE", "output.csv"]),
+        D.join(["COLUMN-DATA", "", "LOT"]),
+    ])
+    first = tmp_path / "first.txt"
+    first.write_text(
+        block("/REPORT=HTML-DEFER\n/ID=R", definition)
+        + block("/REPORT=HTML-LAYOUT", ":FILE:first.html\nHTM:R"),
+        encoding="utf-8",
+    )
+    second = tmp_path / "second.txt"
+    second.write_text(
+        block("/REPORT=HTML-LAYOUT", ":FILE:second.html\nHTM:R"),
+        encoding="utf-8",
+    )
+
+    compile_document(first)
+    with pytest.raises(ValueError, match="Unknown deferred report 'R'"):
+        compile_document(second)

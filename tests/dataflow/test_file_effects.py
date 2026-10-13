@@ -2,7 +2,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from vg2c.dataflow.file_effects import bind_file_effects, order_file_effects
-from vg2c.emitter.models import CodeExpr, build_step_emission, finalize_steps
+from vg2c.emitter.models import CodeExpr
+from vg2c.emitter.source_map import build_step_emission, finalize_steps
 from vg2c.utilities.fs_ops import FileSystemOps
 from vg2c.utilities.direct_operations import DirectOperationMetadata
 from vg2c.utilities.smart_append import SmartAppend

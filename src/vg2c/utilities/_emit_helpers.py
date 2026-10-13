@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import shlex
+from dataclasses import replace
 from typing import Any
 
-from vg2c.emitter.models import CodeExpr
+from vg2c.emitter.models import CodeExpr, RenderedCall
+from vg2c.emitter.operations import EmittableOperation
 from vg2c.kind import Kind
 from vg2c.runtime.sql_text import SqlGetCsvListCall, scan_sql_get_csv_list_calls
 from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
@@ -20,6 +23,11 @@ __all__ = [
     "to_code_expr",
     "list_code_expr",
     "placeholders_to_python_expr",
+    "native_expression",
+    "native_macro_expression",
+    "native_argument",
+    "native_call_arguments",
+    "lower_native_call",
 ]
 
 _TABLE_BINDING_RE = re.compile(
@@ -166,3 +174,90 @@ def list_code_expr(values: list[str]) -> CodeExpr:
     if all(item.has_value for item in items):
         return CodeExpr(source, [item.value for item in items], symbol_names=symbol_names)
     return CodeExpr(source, symbol_names=symbol_names)
+
+
+class _Expressions(ast.NodeTransformer):
+    def __init__(self, macros: str) -> None:
+        self.macros = macros
+
+    def visit_Call(self, node):
+        name = ast.unparse(node.func)
+        if name == "ctx.macro.named":
+            key = ast.literal_eval(node.args[0])
+            return ast.Subscript(
+                value=ast.Name(id=self.macros, ctx=ast.Load()),
+                slice=ast.Constant(value=key),
+                ctx=ast.Load(),
+            )
+        if name == "ctx.macro.positional":
+            raise ValueError("Positional macro <<>> has no supported source cursor")
+        node = self.generic_visit(node)
+        if name == "ctx.csv_io.row_count":
+            node.func = ast.Attribute(
+                value=ast.Name(id="job", ctx=ast.Load()),
+                attr="row_count",
+                ctx=ast.Load(),
+            )
+        return node
+
+    def visit_Constant(self, node):
+        from vg2c.utilities.macro_control import MacroControl
+
+        if isinstance(node.value, str) and MacroControl.PLACEHOLDER_RE.search(node.value):
+            return ast.parse(native_macro_expression(node.value, self.macros), mode="eval").body
+        return node
+
+
+def native_expression(source: str, macros: str) -> str:
+    return ast.unparse(_Expressions(macros).visit(ast.parse(source, mode="eval").body))
+
+
+def native_macro_expression(text: str, macros: str) -> str:
+    return native_expression(placeholders_to_python_expr(text), macros)
+
+
+def native_argument(value, macros):
+    from vg2c.utilities.macro_control import MacroControl
+
+    source = value.source if isinstance(value, CodeExpr) else repr(value)
+    names = []
+    dynamic = False
+    for node in ast.walk(ast.parse(source, mode="eval")):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if MacroControl.PLACEHOLDER_RE.search(node.value):
+                dynamic = True
+                names.extend(to_code_expr(node.value).symbol_names)
+    if dynamic:
+        return CodeExpr(
+            native_expression(source, macros), symbol_names=tuple(dict.fromkeys(names))
+        )
+    return value
+
+
+def native_call_arguments(call: RenderedCall, macros: str):
+    args = []
+    kwargs = {}
+    for argument in call.arguments:
+        value = native_argument(
+            CodeExpr(
+                argument.source,
+                argument.value,
+                symbol_names=argument.symbol_names,
+            ),
+            macros,
+        )
+        value = replace(value, source=native_expression(value.source, macros))
+        if argument.position is not None:
+            args.append(value)
+        else:
+            kwargs[argument.name] = value
+    return tuple(args), kwargs
+
+
+def lower_native_call(
+    call: RenderedCall, *, function: str, macros: str
+) -> RenderedCall:
+    args, kwargs = native_call_arguments(call, macros)
+    return EmittableOperation.render_method_call(
+        call.definition, function=function, args=args, kwargs=kwargs
+    )

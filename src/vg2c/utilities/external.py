@@ -6,10 +6,15 @@ import os
 import subprocess
 from pathlib import Path
 
-from vg2c.emitter.models import emittable
+from vg2c.emitter.models import BlockEmission
+from vg2c.emitter.operations import emittable
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
-from vg2c.utilities._emit_helpers import list_code_expr, split_utility_command
+from vg2c.utilities._emit_helpers import (
+    list_code_expr,
+    lower_native_call,
+    split_utility_command,
+)
 from vg2c.utility_metadata import FileEffectDefinition
 
 
@@ -40,13 +45,16 @@ class ExternalProcess(EmitterUtility):
         return split_utility_command(text)
 
     @classmethod
-    def emit_block(cls, block, *, global_refs=None) -> list[str] | None:
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
         argv = cls._utility_argv(block)
         if not argv:
-            return ["pass  # TODO: empty external utility command"]
+            raise ValueError("Unsupported utility operation")
 
         stmt = cls._emit_run(argv)
-        return [stmt]
+        call = lower_native_call(
+            stmt, function="job.run_program", macros=macros
+        )
+        return BlockEmission((call,))
 
     @classmethod
     def _emit_run(cls, argv: list[str]) -> str:

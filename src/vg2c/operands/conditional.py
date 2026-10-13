@@ -15,6 +15,7 @@ from vg2c.operands.base import (
     ScopeNode,
     _operand_expr,
     _quoted_args,
+    emit_children,
 )
 
 if TYPE_CHECKING:
@@ -168,39 +169,49 @@ class IfThen:
 
         return expr
 
-    def render_header(self) -> str:
-        """Render the generated Python condition header from authoritative VG2 semantics."""
-        condition_expr = self._build_condition_expr()
-        prompt = f"/PROMPT-TEXT={self.prompt_text}"
-        return f"if Logger.condition({prompt!r}, {condition_expr}):"
+    def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
+        """Render the direct Python condition used by the native emitter."""
+        from vg2c.utilities._emit_helpers import native_expression
+
+        return "if " + native_expression(self._build_condition_expr(), macros) + ":"
 
     def emit_scope(
         self,
         writer: IndentWriter,
-        walk: Callable[[ScopeNode], None],
-        children: tuple[ScopeNode, ...],
+        walk: Callable[[ScopeNode, str], None],
+        node: ScopeNode,
+        *,
+        macros: str,
+        imports: set[str],
+        runtime_imports: set[str],
+        header_override: str | None = None,
+        prelude: tuple[str, ...] = (),
     ) -> None:
         """Emit an if/else block from this IfThen payload."""
         if_branch: ScopeNode | None = None
         else_branch: ScopeNode | None = None
-        for child in children:
+        for child in node.children:
             if child.kind == "if-branch":
                 if_branch = child
             elif child.kind == "else-branch":
                 else_branch = child
 
-        writer.write(self.render_header())
+        writer.write(header_override or self.render_header(node.scope_id, macros=macros))
         writer.push_indent()
-        if if_branch:
-            for child in if_branch.children:
-                walk(child)
+        for line in prelude:
+            writer.write(line)
+        emit_children(
+            writer,
+            walk,
+            if_branch.children if if_branch else (),
+            macros,
+        )
         writer.pop_indent()
 
         if else_branch:
             writer.write("else:")
             writer.push_indent()
-            for child in else_branch.children:
-                walk(child)
+            emit_children(writer, walk, else_branch.children, macros)
             writer.pop_indent()
 
 

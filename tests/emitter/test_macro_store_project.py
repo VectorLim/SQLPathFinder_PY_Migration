@@ -8,9 +8,11 @@ import pytest
 
 from vg2c import compile_document, translate
 from vg2c.emitter.models import CodeExpr
-from vg2c.emitter.project import _native_argument
 from vg2c.runtime import MacroStore
 from vg2c.runtime.job import JobRuntime
+from vg2c.utilities._emit_helpers import native_argument
+from vg2c.utilities.csv_io import CsvIO
+from vg2c.utilities.macro_control import MacroControl
 
 
 def block(options, body=""):
@@ -132,7 +134,7 @@ def test_native_numeric_branch_and_editable_macro_assignment(tmp_path):
     ("<<<line\nbreak>>>", "multiline"),
 ])
 def test_macro_discovery_in_all_argument_values(value, expected):
-    expression = _native_argument(value, "macros")
+    expression = native_argument(value, "macros")
     assert isinstance(expression, CodeExpr)
     assert not expression.has_value
     assert expression.symbol_names
@@ -143,7 +145,24 @@ def test_macro_discovery_in_all_argument_values(value, expected):
     assert eval(expression.source, {"macros": macros}) == expected
     if isinstance(value, str):
         assert macros.substitute(value) == expected
-    assert _native_argument("ordinary value", "macros") == "ordinary value"
+    assert native_argument("ordinary value", "macros") == "ordinary value"
+
+
+def test_native_macro_assignment_tracks_nested_row_count_arguments():
+    row_count = CsvIO.row_count.render("<<<ROW_FILE>>>")
+    assignment = MacroControl.render_named_assignment(
+        MacroControl.set_named.render("COUNT", CodeExpr(f"str({row_count})")),
+        "macros",
+    )
+
+    assert str(assignment) == "macros['COUNT'] = str(job.row_count(macros['ROW_FILE']))"
+    for argument in assignment.arguments:
+        assert (
+            str(assignment)[
+                argument.source_range.start_offset : argument.source_range.end_offset
+            ]
+            == argument.source
+        )
 
 
 def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
