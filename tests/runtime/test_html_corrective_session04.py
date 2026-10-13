@@ -50,14 +50,14 @@ def test_full_line_report_directives_are_exact(tmp_path, ids):
                 ":FILE:out.html\n<p>Authored HTM:R text</p>\n" +
                 "".join(f"HTM:{key}\n" for key in ids)))
     main = translate(script)
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text(
         ",".join("F" + key for key in ids) + "\n" +
         ",".join(str(i) for i in range(len(ids))) + "\n")
     scope = {"__file__": str(main), "__name__": "test_generated"}
     exec(compile(main.read_text(), str(main), "exec"), scope)
-    scope["run"](work)
+    scope["run"]()
     result = (work / "out.html").read_text()
     assert result.count('data-report=') == len(ids)
     assert [result.index("Head " + key + "</th>") for key in ids] == sorted(
@@ -168,12 +168,12 @@ def test_repeated_reference_and_report_prefixes(tmp_path):
                       + block("/REPORT=HTML-LAYOUT",
                               ":FILE:out.html\nHTM:AB\nHTM:A\nHTM:A\n"))
     main = translate(source)
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text("F_A,F_AB\none,two\n")
     scope = {"__file__": str(main), "__name__": "test_generated"}
     exec(compile(main.read_text(), str(main), "exec"), scope)
-    scope["run"](work)
+    scope["run"]()
     html = (work / "out.html").read_text()
     assert html.count("Header A</th>") == 2
     assert html.count("Header AB</th>") == 1
@@ -200,12 +200,12 @@ def test_mixed_case_htm_directive_and_malformed_reference(tmp_path):
     source.write_text(block("/REPORT=HTML-DEFER\n/ID=R", spec("A", "Alpha"))
                       + block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nhTm:R"))
     main = translate(source)
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text("A\n1\n")
     scope = {"__file__": str(main), "__name__": "test_generated"}
     exec(compile(main.read_text(), str(main), "exec"), scope)
-    scope["run"](work)
+    scope["run"]()
     assert "Alpha</th>" in (work / "out.html").read_text()
     malformed = tmp_path / "malformed.txt"
     malformed.write_text(block("/REPORT=HTML-LAYOUT", ":FILE:out.html\nHTM:R extra"))

@@ -30,11 +30,11 @@ def test_generated_copy_imports_path_and_executes(tmp_path, command):
     source = tmp_path / "copy.txt"
     source.write_text(f"<OPTIONS>\n/UTILITIES={command}\n</OPTIONS>\n")
     main = translate(source)
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     (workdir / "source").mkdir(parents=True)
     (workdir / "dest").mkdir()
     (workdir / "source/HIST.txt").write_text("LOT\nexample\n")
-    load_job(main)(workdir)
+    load_job(main)()
     assert (workdir / "dest/HIST.txt").read_text() == "LOT\nexample\n"
 
 
@@ -64,8 +64,9 @@ def test_project_assets_move_and_reread(tmp_path, monkeypatch):
     (moved / "sql" / assets[0].name).write_text("select 2 as ID;\n")
     run()
     assert (moved / "output/result.csv").read_text() == "ID\n2\n"
-    run(workdir=other)
-    assert (other / "result.csv").read_text() == "ID\n2\n"
+    with pytest.raises(TypeError):
+        run(workdir=other)
+    assert not (other / "result.csv").exists()
 
 
 def test_project_refuses_nonempty_without_writes(tmp_path):
@@ -133,19 +134,27 @@ def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tm
     source.write_text(block('/WRITE-FILE=Y\n/CSV=node.txt', '<<<MARS>>>')
                       + block('/UTILITIES={AED} "candidates.csv"'))
     main = translate(source)
-    assert "@job_entrypoint(__file__, aed_source_name=" in main.read_text()
-    assert "bootstrap_aed(" not in main.read_text()
-    assert "JobRuntime(" not in main.read_text()
-    namespace = {"__file__": str(main), "__name__": "job"}
-    exec(main.read_text(), namespace)
+    assert "job_entrypoint" not in main.read_text()
+    assert "bootstrap_aed(" in main.read_text()
+    assert "JobRuntime(" in main.read_text()
+    factory = object()
+    namespace = {"__file__": str(main), "__name__": "job", "factory": factory}
+    exec(main.read_text().replace("aed_service_factory = None", "aed_service_factory = factory"), namespace)
     config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
-    monkeypatch.setattr("vg2c.runtime.job.bootstrap_aed", lambda **kwargs: config.copy())
+    bootstrap_calls = []
+
+    def bootstrap(**kwargs):
+        bootstrap_calls.append(kwargs)
+        return config.copy()
+
+    namespace["bootstrap_aed"] = bootstrap
     calls = []
     monkeypatch.setattr("vg2c.runtime.job.process_candidates",
                         lambda path, **kwargs: calls.append((path, kwargs)))
-    factory = object()
-    namespace["run"](tmp_path / "work", aed_service_factory=factory)
-    assert (tmp_path / "work/node.txt").read_text().strip() == config["MARS"]
+    namespace["run"]()
+    workdir = main.parent / "output"
+    assert bootstrap_calls == [{"workdir": workdir, "source_name": "aed"}]
+    assert (workdir / "node.txt").read_text().strip() == config["MARS"]
     assert calls[0][0] == "candidates.csv"
     assert calls[0][1]["service_factory"] is factory
     assert config == {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
@@ -174,10 +183,10 @@ def test_generated_backend_nodes_expand_config_macros(tmp_path, monkeypatch, lot
     assert "node=macros['MARS']" in generated
     assert "node=macros['ARIES']" in generated
     assert "macros.substitute(" not in generated
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "configsets.csv").write_text("MARS,ARIES\nKM.[A15_PROD_21.].MARS,KM.ARIES\n")
-    load_job(main)(work)
+    load_job(main)()
     assert calls == [("KM", "select 'mars'"), ("KM", "select 'aries'")]
     expected = "lot\n" + "".join(f"{lot}\n" for lot in lots)
     assert (work / "mars.tab").read_text() == expected
@@ -206,16 +215,16 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
     main = translate(source)
     assert "node=macros['SPF-SITE'] + '.MARS'" in main.read_text()
     assert "macros.substitute(" not in main.read_text()
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text("LABEL,NODES\nouter,\"PG.[A12_PROD_0.],KM.[A15_PROD_21.]\"\nignored,\n")
     (work / "inner.csv").write_text("LABEL\ninner\n")
     run = load_job(main)
-    run(work)
+    run()
     assert calls == [("PG", "select 'outer'"), ("KM", "select 'outer'")]
     assert (work / "outer.csv").read_text() == "VALUE\nouter\n"
     (work / "config.csv").write_text("LABEL,NODES\nfresh,\"PG.[A12_PROD_0.],KM.[A15_PROD_21.]\"\n")
-    run(work)
+    run()
     assert calls[-2:] == [("PG", "select 'fresh'"), ("KM", "select 'fresh'")]
     assert (work / "outer.csv").read_text() == "VALUE\nfresh\n"
     tree = ast.parse(main.read_text())
@@ -225,7 +234,7 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
 
 def test_loop_html_and_aed_macro_arguments_use_brackets(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr("vg2c.runtime.job.bootstrap_aed", lambda **kwargs: {"ENV_MODE": "test"})
+    monkeypatch.setattr("vg2c.runtime.bootstrap_aed", lambda **kwargs: {"ENV_MODE": "test"})
     monkeypatch.setattr("vg2c.runtime.job.process_candidates",
                         lambda path, **kwargs: calls.append(path))
     source = tmp_path / "macros.txt"
@@ -244,10 +253,10 @@ def test_loop_html_and_aed_macro_arguments_use_brackets(tmp_path, monkeypatch):
     assert "'VALUE_1': macros['LABEL']" in code
     assert "job.process_candidates('data/' + macros['CANDIDATE']" in code
     assert "macros.substitute(" not in code
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text("END,LABEL,CANDIDATE\n2,<Safe &>,candidates.csv\n")
-    load_job(main)(work)
+    load_job(main)()
     assert calls == ["data/candidates.csv"]
     assert [path.name for path in sorted(work.glob("loop_*.txt"))] == [
         "loop_0.txt", "loop_1.txt", "loop_2.txt",
@@ -265,11 +274,11 @@ def test_generated_html_reads_deferred_csv_and_edited_shell(tmp_path):
     source.write_text(block('/REPORT=HTML-DEFER\n/ID=REPORT1', options)
                       + block('/REPORT=HTML-LAYOUT', ':FILE:result.html\n<h1>Authored <em>markup</em></h1>\nHTM:REPORT1'))
     main = translate(source)
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text('value\n"<script>&"\n')
     run = load_job(main)
-    run(work)
+    run()
     result = (work / "result.html").read_text()
     assert "<em>markup</em>" in result
     assert "Safe &amp; Header" in result
@@ -277,6 +286,6 @@ def test_generated_html_reads_deferred_csv_and_edited_shell(tmp_path):
     shell = next(main.parent.glob("html/*.html"))
     shell.write_text(shell.read_text().replace("Authored", "Edited"))
     (work / "data.csv").write_text("value\nfresh\n")
-    run(work)
+    run()
     assert "Edited" in (work / "result.html").read_text()
     assert "fresh" in (work / "result.html").read_text()

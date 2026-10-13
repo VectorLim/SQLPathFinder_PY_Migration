@@ -39,9 +39,9 @@ def test_original_fixture_first_css_block_runs_offline(tmp_path, fixture):
     source = tmp_path / "local_first_block.txt"
     source.write_text(first_block, encoding="utf-8")
     main = translate(source, out_dir=tmp_path / "generated")
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     workdir.mkdir()
-    runpy.run_path(str(main), run_name="isolated_original_html_run")["run"](workdir=workdir)
+    runpy.run_path(str(main), run_name="isolated_original_html_run")["run"]()
 
     stylesheet = workdir / "sqlpathfinder_style_1.css"
     assert stylesheet.is_file(), sorted(workdir.iterdir())
@@ -64,10 +64,10 @@ def test_original_html_run_css_asset_is_editable_and_rerun_publishes_changes(tmp
     main = translate(source, out_dir=tmp_path / "generated")
     css_assets = sorted((main.parent / "styles").glob("report_*.css"))
     assert len(css_assets) == 1
-    workdir = tmp_path / "run"
+    workdir = main.parent / "output"
     workdir.mkdir()
     run = runpy.run_path(str(main), run_name="isolated_css_edit")["run"]
-    run(workdir=workdir)
+    run()
     output = workdir / "sqlpathfinder_style_1.css"
     initial = output.read_bytes()
     assert initial == css_assets[0].read_bytes()
@@ -75,6 +75,6 @@ def test_original_html_run_css_asset_is_editable_and_rerun_publishes_changes(tmp
 
     marker = b"/* stage2 fixture asset edit */\n"
     css_assets[0].write_bytes(initial + marker)
-    run(workdir=workdir)
+    run()
     assert output.read_bytes() == initial + marker
     assert output.read_bytes() != initial

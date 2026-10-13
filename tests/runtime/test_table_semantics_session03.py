@@ -95,8 +95,8 @@ def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
     main = translate(source)
     namespace = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
-    namespace["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == (
+    namespace["run"]()
+    assert (main.parent / "output" / "result.csv").read_text().splitlines()[0] == (
         ",".join(names).upper() + ",ALTERNATE,A"
     )
     # Edit generated Python, not a hidden JSON registry or the VG2 source.
@@ -105,8 +105,8 @@ def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
     main.write_text(text.replace("pivot_values='value'", "pivot_values='alternate'"))
     edited_namespace = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), edited_namespace)
-    edited_namespace["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "result.csv").read_text().splitlines()[0] == (
+    edited_namespace["run"]()
+    assert (main.parent / "output" / "result.csv").read_text().splitlines()[0] == (
         ",".join(names).upper() + ",VALUE,A"
     )
 

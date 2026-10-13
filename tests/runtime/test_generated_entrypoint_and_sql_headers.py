@@ -1,14 +1,15 @@
-"""Generated Python should show operations, not job plumbing or duplicate SQL headers."""
+"""Generated Python exposes setup and keeps SQL headers in editable assets."""
 
 from __future__ import annotations
 
+import inspect
 import runpy
 import shutil
 
 import pytest
 
 from vg2c import compile_document, translate
-from vg2c.runtime import SqliteReader, execute_sql
+from vg2c.runtime import JobRuntime, SqliteReader, execute_sql
 
 
 def _source(tmp_path, *, headers=None):
@@ -21,15 +22,15 @@ def _source(tmp_path, *, headers=None):
     return source
 
 
-def test_generated_run_has_only_operations_and_preserves_workdir_override(tmp_path, monkeypatch):
+def test_generated_run_is_parameterless_and_uses_relocated_project_output(tmp_path, monkeypatch):
     source = _source(tmp_path)
     main = translate(source)
     text = main.read_text(encoding="utf-8")
-    assert "@job_entrypoint(__file__)" in text
-    assert "def run(job):" in text
+    assert "job_entrypoint" not in text
+    assert "def run():" in text
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
-    assert "job = JobRuntime(" not in text
+    assert "job = JobRuntime(" in text
     assert "BASE_DIR =" not in text
     assert "WORK_DIR =" not in text
     assert "header=" not in text
@@ -38,13 +39,41 @@ def test_generated_run_has_only_operations_and_preserves_workdir_override(tmp_pa
     moved = tmp_path / "relocated"
     shutil.move(str(main.parent), str(moved))
     loaded = runpy.run_path(str(moved / "main.py"), run_name="translated")
-    workdir = tmp_path / "external"
-    loaded["run"](workdir=workdir)
+    workdir = moved / "output"
+    assert not inspect.signature(loaded["run"]).parameters
+    monkeypatch.chdir(tmp_path)
+    loaded["run"]()
     assert (workdir / "result.csv").read_text() == "code,label\n001,Example\n"
+    assert not (tmp_path / "result.csv").exists()
+    with pytest.raises(TypeError):
+        loaded["run"](workdir=tmp_path / "external")
+    with pytest.raises(TypeError):
+        loaded["run"](tmp_path / "external")
 
     monkeypatch.chdir(tmp_path)
     loaded["run"]()
     assert (moved / "output" / "result.csv").read_text() == "code,label\n001,Example\n"
+
+
+def test_generated_run_creates_fresh_state_each_time(tmp_path, monkeypatch):
+    main = translate(_source(tmp_path))
+    jobs = []
+
+    class RecordingJob(JobRuntime):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            jobs.append(self)
+
+    monkeypatch.setattr("vg2c.runtime.JobRuntime", RecordingJob)
+    run = runpy.run_path(str(main), run_name="generated")["run"]
+    run()
+    jobs[0].macros["PREVIOUS_RUN"] = "old"
+    run()
+    assert len(jobs) == 2
+    assert jobs[0] is not jobs[1]
+    assert jobs[1].macros["PREVIOUS_RUN"] is None
+    assert jobs[0].values is not jobs[1].values
+    assert jobs[0].reports is not jobs[1].reports
 
 
 def test_explicit_legacy_header_is_stored_in_sql_not_generated_main(tmp_path):
@@ -60,17 +89,17 @@ def test_explicit_legacy_header_is_stored_in_sql_not_generated_main(tmp_path):
 
     main = translate(source)
     run = runpy.run_path(str(main), run_name="generated")["run"]
-    workdir = tmp_path / "work"
-    run(workdir=workdir)
+    workdir = main.parent / "output"
+    run()
     assert (workdir / "result.csv").read_text() == "CODE,LABEL\n001,Example\n"
 
     asset = main.parent / path
     asset.write_text(sql.replace(" AS code", " AS identifier"), encoding="utf-8")
-    run(workdir=workdir)
+    run()
     # Explicit /HEADERS is a name-based projection, not a positional rename.
     assert (workdir / "result.csv").read_text() == "CODE,LABEL\n,Example\n"
     asset.write_text(asset.read_text().split("\n", 1)[1], encoding="utf-8")
-    run(workdir=workdir)
+    run()
     assert (workdir / "result.csv").read_text() == "identifier,label\n001,Example\n"
 
 

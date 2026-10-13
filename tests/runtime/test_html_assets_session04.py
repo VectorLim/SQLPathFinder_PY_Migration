@@ -38,19 +38,19 @@ def test_immediate_css_external_asset_execution_and_edit(tmp_path, monkeypatch):
     css_asset = next(main.parent.glob("styles/*.css"))
     assert "color:red" in css_asset.read_text()
     assert "font-size:12px" in css_asset.read_text()
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text("value\n<b>&</b>\n")
     monkeypatch.chdir(tmp_path)
     run = load_job(main)
-    run(work)
+    run()
     assert "color:red" in (work / "my.css").read_text()
     output = (work / "immediate.html").read_text()
     assert "Readable &amp; Label" in output
     assert "&lt;b&gt;&amp;&lt;/b&gt;" in output
     assert 'href="my.css"' in output
     css_asset.write_text("th { color:green; }\n")
-    run(work)
+    run()
     assert (work / "my.css").read_text() == "th { color:green; }\n"
     assert css_asset.read_text() == "th { color:green; }\n"
 
@@ -127,8 +127,8 @@ def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatc
     assert len(list(main.parent.glob("styles/*.css"))) == 1
     monkeypatch.chdir(tmp_path)
     run = load_job(main)
-    work = tmp_path / "work"
-    run(work)
+    work = main.parent / "output"
+    run()
     assert (work / "wide.csv").read_text().splitlines()[0] == "LOT,A,B"
     assert (work / "42_A0.ini").read_text() == "A\tB"
     assert (work / "final.csv").read_text().splitlines()[0] == "LOT,A,B"
@@ -145,7 +145,7 @@ def test_connected_sql_pivot_downstream_sql_html_css_assets(tmp_path, monkeypatc
     css_asset.write_text("th {color:purple;}\n")
     fragment = next(main.parent.glob("html/reports/*.table.html"))
     fragment.write_text(fragment.read_text().replace(">Beta</th>", ">Updated Beta</th>"))
-    run(work)
+    run()
     assert "Updated Beta" in (work / "linked.html").read_text()
     assert "Updated Beta" in (work / "embedded.html").read_text()
     assert "9" in (work / "final.csv").read_text()
@@ -172,12 +172,12 @@ def test_long_html_report_columns_edit_without_python_or_json(tmp_path):
     shell = next(main.parent.glob("html/*.html"))
     content = shell.read_text()
     assert 'data-field="F0"' in content
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text(",".join(fields + ["NEW"]) + "\n" +
         ",".join([str(i) for i in range(10)] + ["extra&<script>"]) + "\n")
     run = load_job(main)
-    run(work)
+    run()
     updated = content.replace(
         '<th data-field="F0" data-align="middle-right">Label 0</th>', "")
     updated = updated.replace(
@@ -188,7 +188,7 @@ def test_long_html_report_columns_edit_without_python_or_json(tmp_path):
     updated = updated.replace("</tr></thead>",
         '<th data-field="NEW" data-align="right">New Measurement</th></tr></thead>')
     shell.write_text(updated.replace("</table>", "</table><p>Authored <b>markup</b></p>"))
-    run(work)
+    run()
     html = (work / "out.html").read_text()
     assert html.index("Maximum Voltage") < html.index("First")
     assert "Label 0" not in html and "New Measurement" in html
@@ -272,8 +272,8 @@ def test_type_key_header_precedes_actual_css_report_type(tmp_path):
     css_source = next(main.parent.glob("styles/*.css"))
     assert "background-color:#eeeeee" in css_source.read_text()
     assert "font-size:12px" in css_source.read_text()
-    work = tmp_path / "work"
-    load_job(main)(work)
+    work = main.parent / "output"
+    load_job(main)()
     assert (work / "report.css").read_text() == css_source.read_text()
 
 
@@ -292,18 +292,18 @@ def test_reused_report_fragment_is_one_editable_html_location(tmp_path):
     fragments = list(main.parent.glob("html/reports/*.table.html"))
     assert len(fragments) == 1
     assert not list(main.parent.rglob("*.report.json"))
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text("A,B,C\n1,2,3\n")
     run = load_job(main)
-    run(work)
+    run()
     for file in ("first.html", "second.html"):
         assert "Second" in (work / file).read_text()
     fragment = fragments[0]
     fragment.write_text(fragment.read_text().replace(
         '<th data-field="B" data-align="middle-left">Second</th>',
         '<th data-field="C" data-align="right">Third</th>'))
-    run(work)
+    run()
     for file in ("first.html", "second.html"):
         result = (work / file).read_text()
         assert "Third" in result and "3</td>" in result and "Second" not in result
@@ -321,14 +321,14 @@ def test_pattern_column_and_live_csv_headers(tmp_path):
         + block("/REPORT=HTML-LAYOUT", ":FILE:result.html\nHTM:P"))
     main = translate(source)
     assert 'data-pattern="M_"' in next(main.parent.glob("html/*.html")).read_text()
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "data.csv").write_text("ID,M_ONE,OTHER\nx,10,no\n")
     run = load_job(main)
-    run(work)
+    run()
     assert "M one" in (work / "result.html").read_text()
     (work / "data.csv").write_text("ID,M_ONE,M_TWO,OTHER\nx,10,20,no\n")
-    run(work)
+    run()
     html = (work / "result.html").read_text()
     assert "M one" in html and "M two" in html and "20</td>" in html
     assert html.count("<th ") == 3 and html.count("<td ") == 3
@@ -379,17 +379,17 @@ def test_redefined_report_id_resolves_current_source_html_fragment(tmp_path):
     fragments = sorted(main.parent.glob("html/reports/*.table.html"))
     assert len(fragments) == 2
     assert "job.report(" in main.read_text()
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "rows.csv").write_text("A,B\n1,2\n")
     run = load_job(main)
-    run(work)
+    run()
     a = (work / "first.html").read_text()
     b = (work / "second.html").read_text()
     assert "Alpha" in a and "1</td>" in a and "Beta" not in a
     assert "Beta" in b and "2</td>" in b and "Alpha" not in b
     fragments[0].write_text(fragments[0].read_text().replace(">Alpha</th>", ">Edited</th>"))
-    run(work)
+    run()
     assert "Edited" in (work / "first.html").read_text()
     assert "Edited" not in (work / "second.html").read_text()
 
@@ -452,9 +452,9 @@ def test_special_csv_field_with_dollar_does_not_become_template_slot(tmp_path):
     assert not list(main.parent.rglob("*.report.json"))
     shell = next(main.parent.glob("html/*.html"))
     assert "A&#36;B" in shell.read_text()
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "rows.csv").write_text("A$B\n52\n")
-    load_job(main)(work)
+    load_job(main)()
     html = (work / "out.html").read_text()
     assert "Price $ label" in html and "52</td>" in html

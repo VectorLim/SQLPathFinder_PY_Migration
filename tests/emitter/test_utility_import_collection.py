@@ -20,8 +20,8 @@ def test_generated_runtime_imports_are_deduplicated(tmp_path):
         for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime"
         for alias in node.names
     ]
-    assert imported.count("job_entrypoint") == 1
-    assert "JobRuntime" not in imported
+    assert imported.count("JobRuntime") == 1
+    assert "job_entrypoint" not in imported
     assert imported.count("SqliteReader") == 1
 
 

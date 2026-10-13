@@ -91,9 +91,9 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     )
     result = compile_document(source).emitted
     tree = ast.parse(result.source)
-    assert "@job_entrypoint(__file__)" in result.source
-    assert "def run(job):" in result.source
-    assert "job = JobRuntime(" not in result.source
+    assert "job_entrypoint" not in result.source
+    assert "def run():" in result.source
+    assert "job = JobRuntime(" in result.source
     assert "job.sql(" in result.source
     assert "job.write_file(" in result.source
     assert "job.row_count(" in result.source
@@ -108,9 +108,9 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
                     assert result.source[param.source_range.start_offset:param.source_range.end_offset] == param.source
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
     main = translate(source)
-    work = tmp_path / "override"
+    work = main.parent / "output"
     work.mkdir()
     namespace = {"__file__": str(main), "__name__": "generated"}
     exec(main.read_text(), namespace)
-    namespace["run"](work)
+    namespace["run"]()
     assert (work / "label.txt").read_text() == "1"

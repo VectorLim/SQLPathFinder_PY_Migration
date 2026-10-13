@@ -57,26 +57,26 @@ def _seed(workdir):
     ])
 
 
-def _run(main, workdir):
-    runpy.run_path(str(main), run_name="isolated_hamizah_fixture")["run"](workdir=workdir)
+def _run(main):
+    runpy.run_path(str(main), run_name="isolated_hamizah_fixture")["run"]()
 
 
 def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(tmp_path):
     main = _project(tmp_path)
     user_code = main.read_text(encoding="utf-8")
-    assert "@job_entrypoint(__file__)" in user_code
-    assert "def run(job):" in user_code
-    assert "JobRuntime(" not in user_code
+    assert "job_entrypoint" not in user_code
+    assert "def run():" in user_code
+    assert "JobRuntime(" in user_code
     assert "header=" not in user_code
     assets = list((main.parent / "sql").glob("*.sql"))
     assert len(assets) == 2
     assert all(asset.read_text(encoding="utf-8").startswith("-- vg2c-output-headers: ")
                for asset in assets)
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     workdir.mkdir()
     _seed(workdir)
 
-    _run(main, workdir)
+    _run(main)
 
     first = workdir / "input.csv"
     second = workdir / "yeuchuan_SQL_5547.tab"
@@ -93,19 +93,19 @@ def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(t
 
 def test_consecutive_original_hamizah_sqlite_steps_fail_when_upstream_absent(tmp_path):
     main = _project(tmp_path)
-    workdir = tmp_path / "empty"
+    workdir = main.parent / "output"
     workdir.mkdir()
     with pytest.raises(FileNotFoundError):
-        _run(main, workdir)
+        _run(main)
     assert not (workdir / "yeuchuan_SQL_5547.tab").exists()
 
 
 def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
     main = _project(tmp_path)
-    workdir = tmp_path / "work-edited"
+    workdir = main.parent / "output"
     workdir.mkdir()
     _seed(workdir)
-    _run(main, workdir)
+    _run(main)
     output = workdir / "yeuchuan_SQL_5547.tab"
     assert _read(output, "\t")[1] == ["ENTITY-A", "GROUP-A"]
 
@@ -124,7 +124,7 @@ def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
         encoding="utf-8",
     )
 
-    _run(main, workdir)
+    _run(main)
     assert _read(output, "\t") == [
         ["entity", "prodgroup3"],
         ["PATCHED", "GROUP-A"],
@@ -176,9 +176,9 @@ def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(tmp_path
     monkeypatch.setitem(sys.modules, "datasyncx", fake_datasyncx)
 
     main = translate(source, out_dir=tmp_path / "generated")
-    workdir = tmp_path / "work-all-four"
+    workdir = main.parent / "output"
     workdir.mkdir()
-    _run(main, workdir)
+    _run(main)
 
     assert len(calls) == 2
     assert [site for site, _ in calls] == ["KM", "KM"]

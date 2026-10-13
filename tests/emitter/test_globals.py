@@ -158,7 +158,7 @@ def test_generated_queries_keep_independent_execution_boundaries(tmp_path, monke
     monkeypatch.setattr("vg2c.runtime.job.execute_sql", capture)
     first = project / result.emitted.assets[0][0]
     first.write_text("SELECT 2 AS value")
-    namespace["run"](workdir=tmp_path / "work")
+    namespace["run"]()
     assert calls[0] == "SELECT 2 AS value"
     assert calls[1].strip() == "SELECT 1 AS value"
 

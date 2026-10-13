@@ -136,13 +136,15 @@ def main(python: Path, wheel: Path) -> None:
                             encoding="utf-8")
         css_source.chmod(0o444)
         changed = {p.relative_to(project): p.read_bytes() for p in source_assets}
-        custom = root / "輸出 結果"
-        custom.mkdir()
-        run_override = (
-            "import runpy,sys;"
-            "runpy.run_path(sys.argv[1],run_name='wheel_probe')['run'](workdir=sys.argv[2])"
+        edited_project = root / "修改專案 with spaces"
+        shutil.copytree(project, edited_project, ignore=shutil.ignore_patterns("output"))
+        custom = edited_project / "output"
+        run_entrypoint = (
+            "import inspect,runpy,sys;"
+            "run=runpy.run_path(sys.argv[1],run_name='wheel_probe')['run'];"
+            "assert not inspect.signature(run).parameters;run()"
         )
-        run_python(python, ["-c", run_override, str(main_file), str(custom)], unrelated)
+        run_python(python, ["-c", run_entrypoint, str(edited_project / "main.py")], unrelated)
         assert "9" in (custom / "final.csv").read_text(encoding="utf-8")
         assert "Edited Beta" in (custom / "linked.html").read_text(encoding="utf-8")
         assert "Edited" in (custom / "embedded.html").read_text(encoding="utf-8")
@@ -194,7 +196,7 @@ def main(python: Path, wheel: Path) -> None:
 
         print("SESSION05_INSTALLED_LINUX_PASS: wheel-only imports; moved project; "
               "SQL/pivot/CTARRAY; two HTML pages; CSS; edits; alternate CWD; "
-              "custom workdir; Unicode; read-only source; missing-asset error")
+              "parameterless run; Unicode; read-only source; missing-asset error")
 
 
 if __name__ == "__main__":

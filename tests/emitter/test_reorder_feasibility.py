@@ -22,7 +22,7 @@ def test_scope_sibling_order_controls_generated_execution_and_semantic_order(tmp
     dispatched = replace(original.dispatched, resolved=resolved)
     result = replace(original, dispatched=dispatched, emitted=emit(dispatched))
 
-    run_body = result.emitted.source.split("def run(job):", 1)[1]
+    run_body = result.emitted.source.split("def run():", 1)[1]
     assert run_body.index("second.txt") < run_body.index("first.txt")
     operations = project_document(result).operations
     assert [item.block_index for item in operations] == [1, 0]

@@ -10,9 +10,11 @@ directory together; the original VG2 file is not needed for execution.
 Generated code imports the installed `vg2c.runtime`, uses native Python controls and
 one instance-scoped `MacroStore`, and rereads external SQL, HTML and CSS assets at
 execution time. By default,
-`run()` reads and writes job data under `<project>/output`; `run(workdir=...)`
-selects an explicit data root. SQL assets stay under `<project>/sql` and report
-shells under `<project>/html`. There is no process-wide working-directory change.
+`run()` takes no parameters and explicitly creates its `JobRuntime` inside the
+function. It reads and writes job data under `<project>/output`; edit the local
+`workdir` assignment to choose a different data folder. SQL assets stay under
+`<project>/sql` and report shells under `<project>/html`. There is no process-wide
+working-directory change.
 CSV table inputs and backend node aliases are separate from SQL parameter binds.
 Direct named macro lookups such as `macros["CSRV"]` return `None` when absent.
 Unresolved macro tokens in SQL and templates still raise an error.
@@ -35,7 +37,7 @@ generated globals. Embedded Python must use explicit runtime functions and
 
 The generated project has been checked in a clean Linux virtual environment using
 a built and installed `vg2c` wheel. The offline probe covers a moved generated project,
-changed working directory, explicit `run(workdir=...)`, SQLite, crosstab/CTARRAY,
+changed working directory, parameterless `run()`, SQLite, crosstab/CTARRAY,
 editable SQL/HTML/CSS, linked/embedded styles, Unicode and failure handling.
 This is **not** certification of private DataSyncX/Oracle/AED services or the original
 ScriptHost engine: those require their target infrastructure and credentials.

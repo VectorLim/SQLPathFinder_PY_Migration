@@ -28,10 +28,10 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     source = tmp_path / "isolated_original_block.txt"
     source.write_text(first_block, encoding="utf-8")
     main = translate(source, out_dir=tmp_path / "generated")
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     workdir.mkdir()
     namespace = runpy.run_path(str(main), run_name="safe_original_fixture_block")
-    namespace["run"](workdir=workdir)
+    namespace["run"]()
 
     written = workdir / "path.csv"
     assert written.is_file()

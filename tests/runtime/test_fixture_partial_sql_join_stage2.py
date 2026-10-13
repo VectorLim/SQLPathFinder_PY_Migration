@@ -27,7 +27,7 @@ def test_original_sql_script_local_sqlite_join_with_tab_inputs(tmp_path):
     source = tmp_path / "original_sqlite_block.txt"
     source.write_text(final_block, encoding="utf-8")
     main = translate(source, out_dir=tmp_path / "generated")
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     workdir.mkdir()
 
     sources = {
@@ -46,7 +46,7 @@ def test_original_sql_script_local_sqlite_join_with_tab_inputs(tmp_path):
             csv.writer(output, delimiter="\t").writerows(rows)
 
     namespace = runpy.run_path(str(main), run_name="isolated_original_sqlite_join")
-    namespace["run"](workdir=workdir)
+    namespace["run"]()
     output = workdir / "out_26585.tab"
     assert output.is_file()
     with output.open(encoding="utf-8", newline="") as stream:

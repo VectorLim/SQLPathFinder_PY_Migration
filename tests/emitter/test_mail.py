@@ -33,7 +33,7 @@ def test_generated_email_uses_job_workdir(monkeypatch, tmp_path):
     namespace = {"__file__": str(tmp_path / "main.py"), "__name__": "job"}
     exec(result.emitted.source, namespace)
     workdir = tmp_path / "output"
-    namespace["run"](workdir=workdir)
+    namespace["run"]()
     assert calls == [
         (("user@intel.com", "Report", "body.htm", ["report.csv"], None, True), {"workdir": workdir})
     ]

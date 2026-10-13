@@ -33,16 +33,16 @@ def _rows(path: Path) -> list[list[str]]:
         return list(csv.reader(stream))
 
 
-def _run(main_py: Path, workdir: Path) -> None:
+def _run(main_py: Path) -> None:
     # run_name is deliberately not __main__: call the generated public run()
-    # with an isolated job root, regardless of the current process CWD.
+    # with its project-local output root, regardless of the process CWD.
     namespace = runpy.run_path(str(main_py), run_name="vg2c_fixture_test")
-    namespace["run"](workdir=workdir)
+    namespace["run"]()
 
 
 def test_script_short_real_fixture_executes_distinct_owner_query(tmp_path, monkeypatch):
     main_py = _project(tmp_path)
-    workdir = tmp_path / "input-output"
+    workdir = main_py.parent / "output"
     workdir.mkdir()
     (workdir / "ww_yield.csv").write_text(
         'owner\nALICE\nBOB\nALICE\n"雪"\n', encoding="utf-8"
@@ -51,7 +51,7 @@ def test_script_short_real_fixture_executes_distinct_owner_query(tmp_path, monke
     unrelated.mkdir()
     monkeypatch.chdir(unrelated)
 
-    _run(main_py, workdir)
+    _run(main_py)
 
     result = _rows(workdir / "owner.csv")
     assert result[0] == ["owner"]
@@ -65,21 +65,21 @@ def test_script_short_real_fixture_sql_asset_is_editable(tmp_path):
     sql_assets = list((main_py.parent / "sql").glob("*.sql"))
     assert len(sql_assets) == 1
     sql_assets[0].write_text("SELECT 'patched' AS [owner] FROM [ww_yield] a0\n", encoding="utf-8")
-    workdir = tmp_path / "work"
+    workdir = main_py.parent / "output"
     workdir.mkdir()
     (workdir / "ww_yield.csv").write_text("owner\nALICE\n", encoding="utf-8")
 
-    _run(main_py, workdir)
+    _run(main_py)
 
     assert _rows(workdir / "owner.csv") == [["owner"], ["patched"]]
 
 
 def test_script_short_real_fixture_missing_csv_fails_loudly(tmp_path):
     main_py = _project(tmp_path)
-    workdir = tmp_path / "empty"
+    workdir = main_py.parent / "output"
     workdir.mkdir()
 
     with pytest.raises(FileNotFoundError):
-        _run(main_py, workdir)
+        _run(main_py)
 
     assert not (workdir / "owner.csv").exists()

@@ -1,6 +1,7 @@
 """Generated macro projects use one readable store and native control flow."""
 
 import ast
+import shutil
 from types import SimpleNamespace
 
 import pytest
@@ -16,10 +17,10 @@ def block(options, body=""):
     return "<OPTIONS>\n" + options + "\n</OPTIONS>\n" + body + "\n<---- New Query ---->\n"
 
 
-def run_job(main, workdir):
+def run_job(main):
     namespace = {"__file__": str(main), "__name__": "generated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
-    namespace["run"](workdir)
+    namespace["run"]()
 
 
 def test_write_file_macro_arguments_strip_only_leading_whitespace(tmp_path, monkeypatch):
@@ -41,8 +42,8 @@ def test_write_file_macro_arguments_strip_only_leading_whitespace(tmp_path, monk
     monkeypatch.setattr("vg2c.runtime.files.subprocess.run", fake_run)
     monkeypatch.setattr("vg2c.runtime.files.sys", SimpleNamespace(platform="win32"))
     main = translate(source)
-    workdir = tmp_path / "work"
-    run_job(main, workdir)
+    workdir = main.parent / "output"
+    run_job(main)
     assert (workdir / "macrotmp.csv").read_text() == payload
     assert calls == [["setsiteparam.exe", "KM", "ICMPCS_CWFNCO_CSR_IAM", "N", "Y", "Y"]]
 
@@ -63,8 +64,8 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     tree = ast.parse(code)
     assert "macro_values_" not in code
     assert "macro_values =" not in code
-    assert "@job_entrypoint(__file__)" in code
-    assert "job = JobRuntime(" not in code
+    assert "job_entrypoint" not in code
+    assert "job = JobRuntime(" in code
     assert "macros = job.macros" in code
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
@@ -79,19 +80,22 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
                     assert code[parameter.source_range.start_offset:parameter.source_range.end_offset] == parameter.source
 
     main = translate(source)
-    for label, folder in [("first", tmp_path / "one"), ("second", tmp_path / "two")]:
+    for label in ["first", "second"]:
+        project = tmp_path / label
+        shutil.copytree(main.parent, project)
+        folder = project / "output"
         folder.mkdir()
         (folder / "outer.csv").write_text("LABEL\n" + label + "\nignored\n")
         (folder / "inner.csv").write_text("LABEL\ninner\n")
-        run_job(main, folder)
+        run_job(project / "main.py")
         assert (folder / "outer.txt").read_text().strip() == label
         assert (folder / "inner.txt").read_text().strip() == "inner"
         assert (folder / "restored.txt").read_text().strip() == label
 
-    empty = tmp_path / "empty"
+    empty = main.parent / "output"
     empty.mkdir()
     (empty / "outer.csv").write_text("LABEL\n")
-    run_job(main, empty)
+    run_job(main)
     assert not (empty / "outer.txt").exists()
     assert not (empty / "inner.txt").exists()
 
@@ -113,10 +117,10 @@ def test_native_numeric_branch_and_editable_macro_assignment(tmp_path):
     assert "int(macros['COUNT']) > int('0')" in code
     assert "macro_values_" not in code
     main = translate(source)
-    folder = tmp_path / "work"
+    folder = main.parent / "output"
     folder.mkdir()
     (folder / "rows.csv").write_text("ID\n1\n")
-    run_job(main, folder)
+    run_job(main)
     assert (folder / "positive.txt").read_text().strip() == "1"
 
 
@@ -166,20 +170,17 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr("vg2c.runtime.job.render_html", lambda path, **kwargs: calls.append(kwargs))
     main = translate(source)
-    work = tmp_path / "work"
+    work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text(
         "RESULT,INPUT,dEmail,STYLE,FIRST\nresult.csv,data.csv,recipient@example.com,style.css,one\n"
     )
     (work / "data.csv").write_text("VALUE\nvalue\n")
-    job = JobRuntime(main.parent, work, values={"CL_CONFIG": "config.csv"})
+    # CL_CONFIG is a per-run value rather than an environment variable.
     namespace = {"__file__": str(main), "__name__": "generated_job"}
-    # Execute the authored function with an explicit per-run values snapshot.
-    tree = ast.parse(main.read_text())
-    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef))
-    function.decorator_list = []
-    exec(compile(tree, str(main), "exec"), namespace)
-    namespace["run"](job)
+    exec(compile(main.read_text(), str(main), "exec"), namespace)
+    namespace["JobRuntime"] = lambda **kwargs: JobRuntime(**kwargs, values={"CL_CONFIG": "config.csv"})
+    namespace["run"]()
     assert (work / "result.csv").read_text() == "VALUE\nvalue\n"
     assert calls[0]["output"] == "EMAIL:recipient@example.com"
     assert calls[0]["values"]["VALUE_1"] == "one"

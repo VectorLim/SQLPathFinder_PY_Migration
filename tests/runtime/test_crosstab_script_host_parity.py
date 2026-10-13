@@ -37,8 +37,8 @@ def test_ctvalue_alias_and_ctrow_is_classification_only(tmp_path, value_alias):
     main = translate(source)
     ns = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), ns)
-    ns["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "out.csv").read_text() == "LOT,EXTRA,A\n001,one,x\n"
+    ns["run"]()
+    assert (main.parent / "output" / "out.csv").read_text() == "LOT,EXTRA,A\n001,one,x\n"
 
 
 def test_missing_ctrow_does_not_emit_pivot(tmp_path):
@@ -186,8 +186,8 @@ def test_many_runtime_keys_no_crosstab_json(tmp_path):
     main = translate(path)
     ns = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), ns)
-    ns["run"](workdir=tmp_path / "work")
-    assert (tmp_path / "work" / "wide.csv").read_text().splitlines()[0] == (
+    ns["run"]()
+    assert (main.parent / "output" / "wide.csv").read_text().splitlines()[0] == (
         ",".join(k.upper() for k in keys) + ",A"
     )
 

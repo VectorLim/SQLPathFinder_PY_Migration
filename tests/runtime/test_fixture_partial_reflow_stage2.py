@@ -34,7 +34,7 @@ def test_original_reflow_sqlite_right_join_retains_unmatched_inspection_rows(
     source = tmp_path / "original_reflow_sqlite_block.txt"
     source.write_text(local_block, encoding="utf-8")
     main = translate(source, out_dir=tmp_path / "generated")
-    workdir = tmp_path / "work"
+    workdir = main.parent / "output"
     workdir.mkdir()
 
     upstream = {
@@ -65,7 +65,7 @@ def test_original_reflow_sqlite_right_join_retains_unmatched_inspection_rows(
             csv.writer(stream, delimiter="\t").writerows(rows)
 
     namespace = runpy.run_path(str(main), run_name="original_reflow_sqlite_join")
-    namespace["run"](workdir=workdir)
+    namespace["run"]()
 
     output = workdir / "XRAY_results_batch.csv"
     assert output.is_file()

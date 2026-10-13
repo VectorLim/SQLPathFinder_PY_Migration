@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +20,7 @@ class NoCompiler(importlib.abc.MetaPathFinder):
         if fullname.startswith('vg2c.') and not fullname.startswith('vg2c.runtime'):
             raise AssertionError('Generated script imported compiler: ' + fullname)
 sys.meta_path.insert(0, NoCompiler())
-runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
+runpy.run_path(sys.argv[1], run_name='generated_job')['run']()
 """
 
 
@@ -29,13 +30,18 @@ def run_generated(tmp_path, text, *, runner=RUNNER):
     result = compile_document(path)
     output = translate(path)
     path.unlink()
+    workdir = output.parent / "output"
+    workdir.mkdir()
+    for input_file in tmp_path.iterdir():
+        if input_file.is_file():
+            shutil.copyfile(input_file, workdir / input_file.name)
     unrelated = tmp_path / "unrelated"
     unrelated.mkdir()
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     env["DATASYNCX_ORACLE_CLIENT"] = "home"
     process = subprocess.run(
-        [sys.executable, "-I", "-c", runner, str(output), str(tmp_path)],
+        [sys.executable, "-I", "-c", runner, str(output)],
         cwd=unrelated,
         env=env,
         capture_output=True,
@@ -50,7 +56,7 @@ def test_sqlite_generated_script_executes_and_writes_exact_rows(tmp_path):
     fixture = Path(__file__).parents[1] / "fixtures/script_short.txt"
     (tmp_path / "ww_yield.csv").write_text("owner\nAda\nBob\nAda\n", encoding="utf-8")
     result = run_generated(tmp_path, fixture.read_text(encoding="utf-8"))
-    with (tmp_path / "owner.csv").open(newline="", encoding="utf-8") as stream:
+    with (tmp_path / "workflow" / "output" / "owner.csv").open(newline="", encoding="utf-8") as stream:
         assert list(csv.reader(stream)) == [["owner"], ["Ada"], ["Bob"]]
     assert "class SqliteEngine" not in result.emitted.source
     assert "def check(" not in result.emitted.source
@@ -60,7 +66,7 @@ def test_smart_append_generated_workflow_executes_twice_without_duplicate_header
     (tmp_path / "source.csv").write_text("id,value\n1,first\n", encoding="utf-8")
     block = '<OPTIONS>\n/UTILITIES=SmartAppend.va "dest.csv" "source.csv"\n</OPTIONS>\n'
     result = run_generated(tmp_path, block + "<---- New Query ---->\n" + block)
-    with (tmp_path / "dest.csv").open(newline="", encoding="utf-8") as stream:
+    with (tmp_path / "workflow" / "output" / "dest.csv").open(newline="", encoding="utf-8") as stream:
         assert list(csv.reader(stream)) == [["id", "value"], ["1", "first"], ["1", "first"]]
     assert "class SmartAppend:" not in result.emitted.source
     assert result.emitted.source.count("smart_append(") == 2
@@ -77,10 +83,10 @@ write_file('hello.txt', 'Hello <<<NAME>>>', workdir=workdir, macros=macros)
 copy_file('hello.txt', 'copied.txt', workdir=workdir)
 """
     result = run_generated(tmp_path, text)
-    assert (tmp_path / "copied.txt").read_text() == "Hello Bob"
-    assert "@job_entrypoint(__file__, with_workdir=True)" in result.emitted.source
-    assert "def run(job, workdir):" in result.emitted.source
-    assert "job = JobRuntime(" not in result.emitted.source
+    assert (tmp_path / "workflow" / "output" / "copied.txt").read_text() == "Hello Bob"
+    assert "job_entrypoint" not in result.emitted.source
+    assert "def run():" in result.emitted.source
+    assert "job = JobRuntime(" in result.emitted.source
     assert "ctx" not in result.emitted.source
 
 
@@ -124,7 +130,7 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
             + report + "<---- New Query ---->\n"
             + "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n" + layout)
     result = run_generated(tmp_path, text)
-    content = (tmp_path / "report.html").read_text(encoding="utf-8")
+    content = (tmp_path / "workflow" / "output" / "report.html").read_text(encoding="utf-8")
     assert "Ada" in content and "85.00%" in content
     assert "<title>Generated report</title>" in content
     assert "job.html(" in result.emitted.source
@@ -135,7 +141,7 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
 def test_generated_datasyncx_reader_with_controlled_double(tmp_path):
     # The generated source uses its normal DataSyncX import and runtime reader path.
     runner = RUNNER.replace(
-        "runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])",
+        "runpy.run_path(sys.argv[1], run_name='generated_job')['run']()",
         """
 import types, pandas
 for name in ('datasyncx', 'datasyncx.readers', 'datasyncx.readers.mars_reader'):
@@ -151,7 +157,7 @@ sys.modules['datasyncx'].MarsReader = MarsReader
 driver = types.ModuleType('oracledb')
 driver.is_thin_mode = lambda: True
 sys.modules['oracledb'] = driver
-runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
+runpy.run_path(sys.argv[1], run_name='generated_job')['run']()
 """,
     )
     text = (
@@ -159,7 +165,7 @@ runpy.run_path(sys.argv[1], run_name='generated_job')['run'](sys.argv[2])
         "select 42 as VALUE from dual\n"
     )
     run_generated(tmp_path, text, runner=runner)
-    with (tmp_path / "result.csv").open(newline="", encoding="utf-8") as stream:
+    with (tmp_path / "workflow" / "output" / "result.csv").open(newline="", encoding="utf-8") as stream:
         assert list(csv.reader(stream)) == [["value"], ["42"]]
 
 

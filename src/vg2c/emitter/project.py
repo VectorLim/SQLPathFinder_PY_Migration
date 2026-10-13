@@ -258,24 +258,26 @@ def emit_project(dispatched):
     sql_parameters = {}
     html_parameters = {}
     steps = []
-    imports = set()
+    imports = {"from pathlib import Path"}
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
                     for block in blocks.values())
-    runtime_imports = {"job_entrypoint"}
+    runtime_imports = {"JobRuntime"}
     writer = IndentWriter()
     has_aed = any(block.kind is Kind.AED for block in blocks.values())
-    has_embedded_python = any(block.kind is Kind.PYTHON_EMBED for block in blocks.values())
-    workdir_arg = ", workdir" if has_embedded_python else ""
-    workdir_option = ", with_workdir=True" if has_embedded_python else ""
+    writer.write("def run():")
+    writer.push_indent()
+    writer.write("project_dir = Path(__file__).resolve().parent")
+    writer.write('workdir = project_dir / "output"')
     if has_aed:
         source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        writer.write(f"@job_entrypoint(__file__, aed_source_name={source_name!r}{workdir_option})")
-        writer.write(f"def run(job{workdir_arg}, *, aed_config, aed_service_factory=None):")
+        runtime_imports.add("bootstrap_aed")
+        writer.write(f"aed_config = bootstrap_aed(workdir=workdir, source_name={source_name!r})")
+        writer.write("aed_service_factory = None")
+        writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir, "
+                     "values=aed_config, initial_macros=aed_config)")
     else:
-        writer.write(f"@job_entrypoint(__file__{workdir_option})")
-        writer.write(f"def run(job{workdir_arg}):")
-    writer.push_indent()
+        writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir)")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")

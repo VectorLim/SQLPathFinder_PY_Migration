@@ -9,7 +9,8 @@ from datasyncx import MarsReader
 
 def run():
     project_dir = Path(__file__).resolve().parent
-    job = JobRuntime(assets_root=project_dir, workdir=project_dir / "output")
+    workdir = project_dir / "output"
+    job = JobRuntime(assets_root=project_dir, workdir=workdir)
     macros = job.macros
     # Source block 0, line 3
     job.define_css("sqlpathfinder_style_1.css", "styles/report_000.css")
