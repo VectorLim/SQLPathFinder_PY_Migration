@@ -1,0 +1,32 @@
+name: Core Pipeline Refactor Validation
+on:
+  push:
+    branches:
+      - refactor/core-pipeline-large-files
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest "pandas==3.0.3" oracledb fastapi pydantic uvicorn python-multipart httpx2 ruff
+          python -m pip install --no-deps -e .
+      - name: Compile sources
+        run: python -m compileall -q src
+      - name: Lint core Python
+        run: ruff check --select F821,F823 src/vg2c
+      - name: Core pipeline suites
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python -m pytest -q             tests/frontend tests/resolver tests/dispatch tests/emitter tests/runtime             tests/sql_editor tests/dataflow             --ignore=tests/runtime/test_aed_client.py             --ignore=tests/emitter/test_csr_aed.py             --ignore=tests/ui
