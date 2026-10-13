@@ -37,7 +37,7 @@ def emit_project(dispatched):
     writer.push_indent()
     writer.write("project_dir = Path(__file__).resolve().parent")
     writer.write('workdir = project_dir / "output"')
-    writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir)")
+    writer.write("job = JobRuntime(project_dir, workdir)")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")
