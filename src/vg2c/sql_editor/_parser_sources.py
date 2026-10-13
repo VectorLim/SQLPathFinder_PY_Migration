@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from vg2c.sql_editor.models import SqlJoin, SqlSource, SqlSpan
+from vg2c.sql_editor.models import SqlJoin, SqlPredicate, SqlSource, SqlSpan
 from vg2c.sql_lexer import SqlToken
 from vg2c.sql_editor._parser_core import (
     _Clauses,
+    _is_trivia,
     _join_type_start,
     _next_clause_start,
     _normalize_join_type,
