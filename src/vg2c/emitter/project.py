@@ -19,7 +19,7 @@ from vg2c.operands import IfThen, StartMacro, RunLoop, ForLoop, SiteLoop
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
 from vg2c.utilities._emit_helpers import (resolve_output_path, extract_crosstab_options,
-                                        split_utility_command, placeholders_to_python_expr,
+                                        placeholders_to_python_expr,
                                         to_code_expr)
 from vg2c.utilities.macro_control import MacroControl
 from vg2c.utilities._runtime_helpers import strip_quotes
@@ -239,6 +239,11 @@ def emit_project(dispatched):
     ensure_utility_checks_loaded()
     blocks = {block.index: block for block in dispatched.resolved.blocks}
     blocks.update({block.index: block for block in dispatched.dispatched})
+    csr_submissions = {item.block_index: item for item in dispatched.resolved.csr_submissions}
+    csr_notifications = {index: item for item in csr_submissions.values()
+                         for index in item.notification_indexes}
+    csr_history = {scope_id: item.block_index for item in csr_submissions.values()
+                   for scope_id in item.history_scope_ids}
     assets = {}
     report_options = {}
     # A fragment is useful only for an ID referenced by several layouts.
@@ -264,20 +269,11 @@ def emit_project(dispatched):
                     for block in blocks.values())
     runtime_imports = {"JobRuntime"}
     writer = IndentWriter()
-    has_aed = any(block.kind is Kind.AED for block in blocks.values())
     writer.write("def run():")
     writer.push_indent()
     writer.write("project_dir = Path(__file__).resolve().parent")
     writer.write('workdir = project_dir / "output"')
-    if has_aed:
-        source_name = Path(dispatched.resolved.blocks[0].span.file).stem
-        runtime_imports.add("bootstrap_aed")
-        writer.write(f"aed_config = bootstrap_aed(workdir=workdir, source_name={source_name!r})")
-        writer.write("aed_service_factory = None")
-        writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir, "
-                     "values=aed_config, initial_macros=aed_config)")
-    else:
-        writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir)")
+    writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir)")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")
@@ -312,8 +308,15 @@ def emit_project(dispatched):
             writer.pop_indent()
             writer.pop_indent()
         elif isinstance(payload, IfThen):
-            writer.write(control_header(payload, node.scope_id, macros))
+            header = control_header(payload, node.scope_id, macros)
+            if node.scope_id in csr_history:
+                header = f"if csr_history_allowed_{csr_history[node.scope_id]} and ({header[3:-1]}):"
+            writer.write(header)
             writer.push_indent()
+            for submission in csr_submissions.values():
+                if node.scope_id == submission.signal_scope_id:
+                    writer.write(f"csr_history_allowed_{submission.block_index} = True")
+                    writer.write("job.begin_csr()")
             before = len(writer.lines)
             for child in node.children[0].children:
                 walk(child, macros)
@@ -374,7 +377,29 @@ def emit_project(dispatched):
 
     def leaf(block, macros):
         writer.write(f"# Source block {block.index}, line {block.span.start_line}")
-        if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
+        if block.index in csr_submissions:
+            runtime_imports.add("AEDClient")
+            submission = csr_submissions[block.index]
+            path = _macro_expression(resolve_output_path(blocks[submission.producer_index]), macros)
+            index = block.index
+            _inline(writer, block, [
+                f"csr_requests_{index} = job.csr_requests({path})",
+                f"if csr_requests_{index}:\n"
+                f"    request = csr_requests_{index}[0]\n"
+                "    try:\n"
+                "        aed = AEDClient(facility=AED_FACILITY, mode=AED_MODE)\n"
+                f"        for request in csr_requests_{index}:\n"
+                "            response = aed.lot_hold(\n"
+                "                lotid=request['HOLD_LOT'], operation=AED_HOLD_OPERATION,\n"
+                "                holdcode=AED_HOLD_CODE, comment=request['COMMENT'])\n"
+                "            job.record_aed_result(request, facility=AED_FACILITY, response=response)\n"
+                "    except Exception as error:\n"
+                "        job.record_aed_result(request, facility=AED_FACILITY, error=error)\n"
+                f"        job.csr_failure_mail(csr_requests_{index})\n"
+                "        raise\n"
+                f"    csr_history_allowed_{index} = aed.mode == 'prod'",
+            ], steps)
+        elif block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}:
             reader = block.reader
             if reader.utility_name == "sqlite_reader":
                 runtime_imports.add("SqliteReader")
@@ -416,14 +441,6 @@ def emit_project(dispatched):
             _inline(writer, block, [call], steps)
         elif block.kind is Kind.HTML_REPORT:
             html(block, macros)
-        elif block.kind is Kind.AED:
-            argv = split_utility_command(block.resolved_options.lookup["UTILITIES"])
-            if len(argv) != 2:
-                raise ValueError("AED requires exactly one candidate CSV path")
-            path = strip_quotes(argv[1])
-            if "<<<" in path:
-                path = CodeExpr(_macro_expression(path, macros))
-            _inline(writer, block, [f"job.process_candidates({path.source if isinstance(path, CodeExpr) else repr(path)}, config=aed_config, service_factory=aed_service_factory)"], steps)
         elif block.kind is Kind.UNKNOWN:
             if block.resolved_options.lookup.get("JSL", "").upper() == "Y":
                 raise ValueError("JMP/JSL blocks are outside the supported core")
@@ -554,6 +571,9 @@ def emit_project(dispatched):
                            else _table(report_id, report_options[report_id]))
                 return match.group("indent") + content + match.group("suffix")
             source = _HTM_LAYOUT_LINE.sub(insert_report, source)
+            if block.index in csr_notifications:
+                source = re.sub(r"(?is)<p\b[^>]*>\s*Lot on hold\b.*?</p>", "", source)
+                source = '<p>${AED_OUTCOME}</p><pre>${AED_DETAILS}</pre>\n' + source
             if "<html" not in source.lower():
                 source = HtmlReport._HTML_SCAFFOLD.format(title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace("$", "$$"), css_decl="${VG2C_CSS}", body=source)
             slots = {}
@@ -573,7 +593,17 @@ def emit_project(dispatched):
                 kwargs["values"] = CodeExpr("{" + ", ".join(f"{key!r}: {_macro_expression(value, macros)}" for key, value in slots.items()) + "}")
             if css:
                 kwargs["css_file"] = css
-            _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), macros=macros, **kwargs)], steps)
+            if block.index in csr_notifications:
+                values = [f"{key!r}: {_macro_expression(value, macros)}" for key, value in slots.items()]
+                values += ["'AED_OUTCOME': job.csr_status", "'AED_DETAILS': job.csr_details"]
+                kwargs["values"] = CodeExpr("{" + ", ".join(values) + "}")
+                call = _call("html_report", "layout", "job.html", CodeExpr(repr(name)), macros=macros, **kwargs)
+                recipient = _macro_expression(output[len("EMAIL:"):], macros)
+                _inline(writer, block, [f"csr_report = {call}",
+                    f"job.send_mail(to={recipient}, subject={directives.get('TITLE', 'CSR AED outcome')!r} "
+                    "+ ' - ' + job.csr_status, body=str(csr_report), attachments=['AED_results.csv'])"], steps)
+            else:
+                _inline(writer, block, [_call("html_report", "layout", "job.html", CodeExpr(repr(name)), macros=macros, **kwargs)], steps)
         else:
             raise ValueError(f"Unsupported report type {report_type}")
 
@@ -588,6 +618,11 @@ def emit_project(dispatched):
     ordinary_imports = sorted(imports - set(reader_imports))
     setup = "\nOracleClient.configure()\n" if reader_imports else ""
     header = "\n".join(ordinary_imports) + setup + "\n".join(reader_imports) + "\n\n"
+    if csr_submissions:
+        header += ("# Set these AED request parameters explicitly; they are absent from the VG2 payload.\n"
+                   "AED_FACILITY = None\nAED_HOLD_OPERATION = None\nAED_HOLD_CODE = None\n"
+                   "# None uses ENV_MODE, which defaults to test (no manufacturing writes).\n"
+                   "AED_MODE = None\n\n")
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = []

@@ -18,6 +18,7 @@ from vg2c.frontend.models import (
     copy_dataclass_fields,
 )
 from vg2c.operands import MacroControlPayload, ScopeNode
+from vg2c.resolver.csr import CsrSubmission
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,4 +48,5 @@ class ResolvedBlock(ClassifiedBlock):
 class ResolvedProgram:
     blocks: tuple[ResolvedBlock, ...]
     scope_tree: ScopeNode
+    csr_submissions: tuple[CsrSubmission, ...] = ()
 

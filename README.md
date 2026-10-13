@@ -75,6 +75,75 @@ requirements from an authorized corporate package source and validate its
 reader/service integration separately. Do not replace the production dependency
 install with this minimal offline test environment.
 
+## AED and legacy CSR submissions
+
+`vg2c.runtime.aed_client` owns the client, attribute-update method, and validated
+CSR request loader. Generated scripts import `AEDClient` from `vg2c.runtime`.
+
+The compiler recognizes CSR holds from a parsed `RoboCopy.va` destination of
+`<<<CSRPATH>>>`, exactly one preceding SQL CSV producer with the original CSR
+headers, and enclosing `SIGNAL > 0` / `DCSR = Y` conditions. It replaces that
+submission with an ordinary `AEDClient.lot_hold` call. Original SQL filters,
+query periods, macro scopes, and the independent MMS submission are preserved.
+Ambiguous or unsupported CSR submissions fail with source locations. Multiple
+CSR submissions in one signal branch are currently unsupported.
+
+Set the emitted `AED_FACILITY`, `AED_HOLD_OPERATION`, and `AED_HOLD_CODE` explicitly.
+The VG2 payload does not establish their AED mapping: query operation `2303`,
+XRAY report text `2846`, and `HOLDCATEGORY` are not inferred as hold parameters.
+`AED_MODE = None` reads `ENV_MODE`, defaulting to `test`. Test-mode manufacturing
+writes return dry-run results without loading the SDK or credentials. Explicit
+`lot_status` and `lot_get_attr` calls still perform reads against the PROD context.
+
+```python
+from vg2c.runtime import AEDClient
+
+aed = AEDClient(facility=facility, mode="test")
+response = aed.lot_hold(lotid=lot, operation=operation, holdcode=code, comment=note)
+# Each business action is independent and editable:
+# status = aed.lot_status(lot)
+# aed.lot_release(lotid=lot, operation=operation, comment=note)
+# aed.update_lot_attributes(lot, ("1064",), "Y", overwrite=True)
+```
+
+`1064="Y"` is the SOIMS CSR_IAM upgrade's business choice, not a translator
+default. The updater preserves its first-attribute and overwrite behavior.
+The old `{AED} candidates.csv` pipeline, config bootstrap, hardcoded site/business
+defaults, and entrypoint decorator are retired. Such directives now produce a
+unsupported-utility error; replace them with explicit client calls. Attribute update results
+follow the reference updater's acknowledgement behavior; use an explicit status or
+attribute read if your business logic requires post-write verification.
+
+Install the approved API-key wheel together with the optional extra:
+
+```powershell
+python -m pip install "<approved-wheel-directory>/aed_client_apikey-6.2.0-py3-none-any.whl" "vg2c[aed]"
+```
+
+Use an isolated environment without `aed-client-winauth`, since both distributions
+own the `aed_client` import. Credentials are loaded only for an actual request,
+using nonempty `X_API_KEY`, then the encrypted `API_KEY`/`API_CONFIG` pair, then
+`key.key` and `config_new.json` under an explicitly supplied absolute
+`AED_SECRETS_DIR`. Keep secret files outside the repository and generated projects.
+Set `REQUESTS_CA_BUNDLE` to an existing absolute corporate CA bundle; certificate
+verification remains enabled. Existing proxy bypass entries are retained.
+Generated projects do not import the SOIMS checkout, compiler, or visual editor.
+
+CSR outcomes are saved atomically in `output/AED_results.csv`, including completed
+actions before a failure. No manufacturing write retries are automatic. The CSR
+report email includes actual outcomes and CCB references; it does not claim
+readback-confirmed hold state. Failed actions stop subsequent workflow steps;
+dry-run CSR actions suppress the associated production history append. Failure
+email errors do not mask the original failure. Other HTML email directives still
+have the existing local-rendering behavior.
+
+Operations are sequential: the SDK uses process-global context and import-time
+argument parsing. Do not call the client concurrently. Attribute updates are not
+automatic containment or CCB-system association; those actions require separate
+business logic. Test hold/release/attribute writes using `service_factory` fakes
+only. A live status read additionally requires an authorized test facility/lot
+and approved credentials; offline tests do not establish live API access.
+
 ## Architecture Overview
 
 ```mermaid

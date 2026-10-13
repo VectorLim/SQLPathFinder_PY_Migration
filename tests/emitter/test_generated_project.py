@@ -129,36 +129,11 @@ def test_authored_python_top_level_return_has_explicit_diagnostic(tmp_path):
         compile_document(source)
 
 
-def test_aed_bootstrap_values_feed_native_macros_without_environment_mutation(tmp_path, monkeypatch):
+def test_retired_aed_directive_is_an_unsupported_utility(tmp_path):
     source = tmp_path / "aed.txt"
-    source.write_text(block('/WRITE-FILE=Y\n/CSV=node.txt', '<<<MARS>>>')
-                      + block('/UTILITIES={AED} "candidates.csv"'))
-    main = translate(source)
-    assert "job_entrypoint" not in main.read_text()
-    assert "bootstrap_aed(" in main.read_text()
-    assert "JobRuntime(" in main.read_text()
-    factory = object()
-    namespace = {"__file__": str(main), "__name__": "job", "factory": factory}
-    exec(main.read_text().replace("aed_service_factory = None", "aed_service_factory = factory"), namespace)
-    config = {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
-    bootstrap_calls = []
-
-    def bootstrap(**kwargs):
-        bootstrap_calls.append(kwargs)
-        return config.copy()
-
-    namespace["bootstrap_aed"] = bootstrap
-    calls = []
-    monkeypatch.setattr("vg2c.runtime.job.process_candidates",
-                        lambda path, **kwargs: calls.append((path, kwargs)))
-    namespace["run"]()
-    workdir = main.parent / "output"
-    assert bootstrap_calls == [{"workdir": workdir, "source_name": "aed"}]
-    assert (workdir / "node.txt").read_text().strip() == config["MARS"]
-    assert calls[0][0] == "candidates.csv"
-    assert calls[0][1]["service_factory"] is factory
-    assert config == {"MARS": "PG.[A12_PROD_0.].MARS", "ENV_MODE": "test"}
-
+    source.write_text(block('/UTILITIES={AED} "candidates.csv"'))
+    with pytest.raises(ValueError, match="[Uu]nclassified|[Uu]nsupported"):
+        translate(source)
 
 @pytest.mark.parametrize("lots", [["example"], []])
 def test_generated_backend_nodes_expand_config_macros(tmp_path, monkeypatch, lots):
@@ -232,11 +207,7 @@ def test_native_site_routing_and_macro_scope(tmp_path, monkeypatch):
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
 
 
-def test_loop_html_and_aed_macro_arguments_use_brackets(tmp_path, monkeypatch):
-    calls = []
-    monkeypatch.setattr("vg2c.runtime.bootstrap_aed", lambda **kwargs: {"ENV_MODE": "test"})
-    monkeypatch.setattr("vg2c.runtime.job.process_candidates",
-                        lambda path, **kwargs: calls.append(path))
+def test_loop_html_and_file_macro_arguments_use_brackets(tmp_path):
     source = tmp_path / "macros.txt"
     source.write_text(
         block('/UTILITIES={START-MACRO} "config.csv" "N"')
@@ -244,20 +215,20 @@ def test_loop_html_and_aed_macro_arguments_use_brackets(tmp_path, monkeypatch):
         + block('/WRITE-FILE=Y\n/CSV=loop_<<<SPF-LOOP-CTR-A-INT>>>.txt', "<<<LABEL>>>")
         + block('/UTILITIES={END-LOOP}')
         + block('/REPORT=HTML-LAYOUT', ':FILE:result.html\n<p><<<LABEL>>></p>')
-        + block('/UTILITIES={AED} "data/<<<CANDIDATE>>>"')
+        + block('/WRITE-FILE=Y\n/CSV=data/<<<CANDIDATE>>>', "<<<LABEL>>>")
         + block('/UTILITIES={END-MACRO}')
     )
     main = translate(source)
     code = main.read_text()
     assert "for_values('0', macros['END'], '1', 'A', 'N')" in code
     assert "'VALUE_1': macros['LABEL']" in code
-    assert "job.process_candidates('data/' + macros['CANDIDATE']" in code
+    assert "'data/' + macros['CANDIDATE']" in code
     assert "macros.substitute(" not in code
     work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text("END,LABEL,CANDIDATE\n2,<Safe &>,candidates.csv\n")
     load_job(main)()
-    assert calls == ["data/candidates.csv"]
+    assert (work / "data/candidates.csv").read_text().strip() == "<Safe &>"
     assert [path.name for path in sorted(work.glob("loop_*.txt"))] == [
         "loop_0.txt", "loop_1.txt", "loop_2.txt",
     ]

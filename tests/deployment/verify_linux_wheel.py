@@ -45,10 +45,13 @@ def run_python(python: Path, args: list[str], cwd: Path, *, success: bool = True
 def main(python: Path, wheel: Path) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
+        retired = {"vg2c/runtime/aed.py", "vg2c/runtime/aed_api.py", "vg2c/runtime/aed_updater.py"}
+        assert not names.intersection(retired), "Wheel contains retired AED modules"
         for required in (
             "vg2c/runtime/__init__.py", "vg2c/runtime/job.py",
             "vg2c/runtime/html.py", "vg2c/runtime/query.py",
             "vg2c/runtime/crosstab.py", "vg2c/runtime/macros.py",
+            "vg2c/runtime/aed_client.py",
         ):
             assert required in names, f"Wheel omits {required}"
 
@@ -193,6 +196,58 @@ def main(python: Path, wheel: Path) -> None:
         assert actual[0] == ["owner"], actual
         assert sorted(actual[1:]) == [["ALICE"], ["BOB"], ["雪"]], actual
         print("STAGE2_REAL_FIXTURE_INSTALLED_WHEEL_PASS: script_short.txt")
+
+        # Exercise emitted CSR calls with the installed runtime, never a live SDK.
+        csr_source = root / "csr.txt"
+        csr_source.write_text(
+            block('/WRITE-FILE=Y\n/CSV=config.csv', 'SIGNAL,DCSR\n1,Y')
+            + block('/UTILITIES={START-MACRO} "config.csv" "N"')
+            + block('/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""')
+            + block('/UTILITIES={IF-THEN} "VAR(<<<DCSR>>>)" "EQS" "Y" "" "" "" ""')
+            + block('/ENGINE=SQLite\n/CSV=RESULT_csr.csv\n'
+                    '/HEADERS=HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module',
+                    "select 'L1' as HOLD_LOT, 'Y' as AUTO_CONTAIN, 'L1' as LOT, "
+                    "'offline@example.test' as EMAIL, '42' as CCB_NUMBER, "
+                    "'note & detail' as HOLD_NOTE, 'NCO' as HOLDCATEGORY, 'IAM' as Module")
+            + block('/UTILITIES=RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>"')
+            + block('/UTILITIES={END-IF}')
+            + block('/REPORT=HTML-LAYOUT', ':FILE:EMAIL:offline@example.test\n'
+                    ':TITLE:CSR result\n<p>Lot on hold due to NCO.</p>')
+            + block('/UTILITIES={END-IF}')
+            + block('/UTILITIES={END-MACRO}'), encoding="utf-8",
+        )
+        csr_main = translate(csr_source)
+        csr_project = root / "relocated CSR project"
+        shutil.move(str(csr_main.parent), csr_project)
+        csr_source.unlink()
+        csr_check = '''
+import csv, runpy, sys
+from types import SimpleNamespace
+import vg2c.runtime.job as runtime_job
+from vg2c.runtime import AEDClient
+from pathlib import Path
+calls, emails = [], []
+class Service:
+    def lot_hold(self, *args):
+        calls.append(args)
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"Success": True})
+runtime_job.send_mail = lambda *args, **kwargs: emails.append((args, kwargs))
+run = runpy.run_path(sys.argv[1], run_name="installed_csr")["run"]
+run.__globals__.update(AED_FACILITY="A15", AED_HOLD_OPERATION="2303", AED_HOLD_CODE="NCO",
+                      AED_MODE="prod", AEDClient=lambda **kwargs: AEDClient(
+                          **kwargs, service_factory=lambda facility: Service()))
+run()
+assert calls == [("L1", "2303", "NCO", "note%20%26%20detail%0ACCB%3A%2042")], calls
+assert len(emails) == 1, emails
+output = Path(sys.argv[1]).parent / "output"
+with (output / "AED_results.csv").open(encoding="utf-8", newline="") as stream:
+    assert next(csv.DictReader(stream))["STATUS"] == "accepted"
+assert all(name not in sys.modules for name in (
+    "aed_client", "vg2c.frontend", "vg2c.resolver", "vg2c.emitter", "vg2c_ui"))
+print("AED_INSTALLED_WHEEL_PASS: relocated CSR; mocked hold; notification; no SDK/compiler imports")
+'''
+        result = run_python(python, ["-c", csr_check, str(csr_project / "main.py")], unrelated)
+        print(result.stdout.strip())
 
         print("SESSION05_INSTALLED_LINUX_PASS: wheel-only imports; moved project; "
               "SQL/pivot/CTARRAY; two HTML pages; CSS; edits; alternate CWD; "

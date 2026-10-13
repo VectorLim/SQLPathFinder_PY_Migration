@@ -15,6 +15,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+aed = [
+    "aed-client-apikey==6.2.0",
+    "cryptography",
+]
 ui = [
     "fastapi>=0.116,<1",
     "pydantic>=2.11,<3",

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import csv
+import io
+import logging
 from pathlib import Path, PureWindowsPath
 
-from vg2c.runtime.aed import bootstrap_aed, process_candidates
+from vg2c.runtime.aed_client import csr_requests
 from vg2c.runtime.append import smart_append
 from vg2c.runtime.controls import csv_chunks
 from vg2c.runtime.files import (
@@ -38,6 +41,8 @@ class JobRuntime:
         self.styles = {}
         self.css_file = None
         self._used_html_reports = set()
+        self.aed_results = []
+        self._csr_start = 0
 
     def asset_path(self, path) -> Path:
         path = Path(path)
@@ -205,32 +210,49 @@ class JobRuntime:
         return send_mail(to, subject, body, attachments, from_addr, enabled,
                          workdir=self.workdir)
 
-    def process_candidates(self, path, *, config, service_factory, logger=None):
-        return process_candidates(path, config=config, workdir=self.workdir,
-                                  service_factory=service_factory, logger=logger)
+    def csr_requests(self, path):
+        return csr_requests(path, workdir=self.workdir)
 
+    def begin_csr(self):
+        self._csr_start = len(self.aed_results)
 
-def job_entrypoint(script_file, *, aed_source_name=None, with_workdir=False):
-    """Bind an editable translated job to its assets and isolated output root.
+    def record_aed_result(self, request, *, facility, response=None, error=None):
+        status = "failed" if error is not None else (
+            "dry_run" if response.get("DryRun") else "accepted"
+        )
+        self.aed_results.append({"FACILITY": facility or "", "LOT": request["HOLD_LOT"],
+                                 "ACTION": "lot_hold", "STATUS": status,
+                                 "CCB_NUMBER": request["CCB_NUMBER"],
+                                 "ERROR": type(error).__name__ if error is not None else ""})
+        stream = io.StringIO(newline="")
+        writer = csv.DictWriter(stream, fieldnames=["FACILITY", "LOT", "ACTION", "STATUS", "CCB_NUMBER", "ERROR"])
+        writer.writeheader()
+        writer.writerows(self.aed_results)
+        _write_atomic(self.workdir / "AED_results.csv", stream.getvalue())
 
-    Generated main.py contains only direct job operations. The decorated run()
-    remains callable with an optional workdir, including after project relocation.
-    """
-    assets_root = Path(script_file).resolve().parent
+    @property
+    def csr_status(self):
+        statuses = {result["STATUS"] for result in self.aed_results[self._csr_start:]}
+        if "failed" in statuses:
+            return "AED request failed; review AED_results.csv for completed actions"
+        if "dry_run" in statuses:
+            return "Dry run: no AED manufacturing writes were performed"
+        if statuses:
+            return "AED accepted the hold requests; lot hold state has not been read back"
+        return "No CSR AED action was executed"
 
-    def decorate(function):
-        if aed_source_name is None:
-            def run(workdir=None):
-                root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
-                job = JobRuntime(assets_root, root)
-                return function(job, root) if with_workdir else function(job)
-        else:
-            def run(workdir=None, *, aed_service_factory=None):
-                root = Path(workdir).resolve() if workdir is not None else assets_root / "output"
-                config = bootstrap_aed(workdir=root, source_name=aed_source_name)
-                job = JobRuntime(assets_root, root, values=config, initial_macros=config)
-                kwargs = {"aed_config": config, "aed_service_factory": aed_service_factory}
-                return function(job, root, **kwargs) if with_workdir else function(job, **kwargs)
-        return run
+    @property
+    def csr_details(self):
+        return "\n".join(f"{result['LOT']}: {result['STATUS']}; CCB: {result['CCB_NUMBER']}"
+                         for result in self.aed_results[self._csr_start:])
 
-    return decorate
+    def csr_failure_mail(self, requests):
+        try:
+            self.send_mail(
+                to=";".join(dict.fromkeys(request["EMAIL"] for request in requests)),
+                subject="CSR AED request failed", body=self.csr_status,
+                attachments=["AED_results.csv"],
+            )
+        except Exception as error:
+            # Notification failure must not mask a completed or failed manufacturing action.
+            logging.getLogger(__name__).error("CSR failure notification failed (%s)", type(error).__name__)
