@@ -8,6 +8,7 @@ from vg2c.emitter.models import SourceRange
 from vg2c.operands import IfThen, RunLoop, ForLoop, SiteLoop, ScopeNode, StartMacro
 from vg2c.operands.base import _OPERATOR_TABLE
 from vg2c.semantic_models import EditableBinding, WorkflowOperation
+from vg2c._semantic_leaf_operations import _condition_summary, _summary_value
 from vg2c.utility_metadata import ValueSchema
 
 if TYPE_CHECKING:
