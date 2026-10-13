@@ -43,11 +43,16 @@ private modules are `_semantic_leaf_operations.py` (367) and
 - Refactoring does not change ScriptHost translation semantics intentionally.
 - UI tests are outside this core refactor scope.
 - AED-dependent tests are excluded from the validation workflow.
-- Generated runtime constructor cleanup is behavior-preserving and only removes
-  redundant keyword plumbing.
+- Generated runtime construction retains keyword arguments because tests and callers
+  deliberately inject keyword-only `JobRuntime` factories/subclasses. The runtime test
+  now scopes its no-`workdir=workdir` assertion to emitted operation calls instead of
+  accidentally matching the constructor.
 
 ## Validation
 
 The branch validation workflow compiles all sources, runs Ruff undefined-name
 checks across `src/vg2c`, and runs the frontend, resolver, dispatch, emitter,
 runtime, SQL-editor and dataflow suites while excluding AED-specific and UI tests.
+
+Final core validation at `af846bb5088c9f702c54669ec8b43379bbcf88df`:
+`605 passed, 1 skipped, 1 warning` with compile and Ruff checks passing.
