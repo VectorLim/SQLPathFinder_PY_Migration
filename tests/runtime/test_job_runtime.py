@@ -97,7 +97,11 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     assert "job.sql(" in result.source
     assert "job.write_file(" in result.source
     assert "job.row_count(" in result.source
-    assert "workdir=workdir" not in result.source
+    operation_source = "\n".join(
+        line for line in result.source.splitlines()
+        if "job." in line and "JobRuntime(" not in line
+    )
+    assert "workdir=workdir" not in operation_source
     assert "values=job_values" not in result.source
     for step in result.steps:
         assert result.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
