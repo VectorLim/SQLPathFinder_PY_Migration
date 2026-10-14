@@ -49,10 +49,10 @@ jobs:
           with tempfile.TemporaryDirectory() as tmp:
               root = Path(tmp)
               main = helpers["_project"](root)
-              work = root / "work"
+              work = main.parent / "output"
               work.mkdir()
               helpers["_seed"](work)
-              helpers["_run"](main, work)
+              helpers["_run"](main)
               for name, value in (
                   ("SOURCE_PRESERVED_VG2", text),
                   ("TRANSLATED_MAIN_PY", main.read_text(encoding="utf-8")),
