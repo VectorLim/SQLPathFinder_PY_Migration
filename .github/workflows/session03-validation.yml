@@ -155,8 +155,13 @@ jobs:
               "report_json": sum(name.endswith(".report.json") for name in names),
           })
           PY
+      - name: Entire non-UI test suite
+        if: always() && github.ref_name == 'html_sql-rework'
+        env:
+          PYTHONPATH: src:.
+        run: python -m pytest -q --ignore=tests/ui
       - name: Entire test suite
-        if: always()
+        if: always() && github.ref_name != 'html_sql-rework'
         env:
           PYTHONPATH: src:.
         run: python -m pytest -q
