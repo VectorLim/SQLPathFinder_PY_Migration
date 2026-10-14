@@ -9,7 +9,7 @@ from typing import get_args
 
 from vg2c import CompilationResult
 from vg2c.dataflow.file_effects import FileEffect
-from vg2c.semantics import CONDITION_OPERATORS
+from vg2c.semantic.symbols import CONDITION_OPERATORS
 from vg2c.sql_editor import SqlEditableModel, SqlLogicalConnector
 from vg2c.sql_editor.operations import FILTER_OPERATORS, JOIN_TYPES
 from vg2c.workflow import EffectiveDocument

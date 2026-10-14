@@ -80,6 +80,20 @@ def test_asset_root_guard_and_first_row_macro_snapshot(tmp_path):
         job.sql("sql/missing.sql", reader=SqliteReader(), output="out.csv")
 
 
+
+def test_from_script_binds_project_and_output_with_fresh_state(tmp_path):
+    project = tmp_path / "translated"
+    project.mkdir()
+    script = project / "main.py"
+    first = JobRuntime.from_script(script)
+    second = JobRuntime.from_script(script)
+    assert first.assets_root == second.assets_root == project.resolve()
+    assert first.workdir == second.workdir == (project / "output").resolve()
+    assert first is not second
+    first.macros["LABEL"] = "local"
+    assert "LABEL" not in dict(second.macros.items())
+
+
 def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     source = tmp_path / "sample.txt"
     source.write_text(
@@ -93,7 +107,7 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     tree = ast.parse(result.source)
     assert "job_entrypoint" not in result.source
     assert "def run():" in result.source
-    assert "job = JobRuntime(" in result.source
+    assert "job = JobRuntime.from_script(__file__)" in result.source
     assert "job.sql(" in result.source
     assert "job.write_file(" in result.source
     assert "job.row_count(" in result.source

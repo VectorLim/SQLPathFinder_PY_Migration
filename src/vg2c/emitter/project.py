@@ -35,9 +35,11 @@ def emit_project(dispatched):
     writer = IndentWriter()
     writer.write("def run():")
     writer.push_indent()
-    writer.write("project_dir = Path(__file__).resolve().parent")
-    writer.write('workdir = project_dir / "output"')
-    writer.write("job = JobRuntime(assets_root=project_dir, workdir=workdir)")
+    writer.write("job = JobRuntime.from_script(__file__)")
+    if any(block.kind is Kind.PYTHON_EMBED for block in blocks.values()):
+        # Authored Python historically runs in this scope and may use these paths.
+        writer.write("project_dir = job.assets_root")
+        writer.write("workdir = job.workdir")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")

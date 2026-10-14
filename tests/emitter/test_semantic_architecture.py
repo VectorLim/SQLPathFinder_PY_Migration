@@ -32,12 +32,13 @@ def test_condition_symbol_tokens_remain_operator_typed():
 
 def test_legacy_semantic_facades_and_imports_are_absent():
     package = Path(vg2c.__file__).parent
+    source_root = package.parent
     assert not (package / "semantics.py").exists()
     assert not list(package.glob("_semantic_*.py"))
 
     legacy_imports = []
-    for path in package.rglob("*.py"):
+    for path in source_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if "vg2c.semantics" in text or "vg2c._semantic_" in text:
-            legacy_imports.append(path.relative_to(package))
+            legacy_imports.append(path.relative_to(source_root))
     assert legacy_imports == []

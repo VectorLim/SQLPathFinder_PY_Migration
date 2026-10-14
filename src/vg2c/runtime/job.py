@@ -44,6 +44,12 @@ class JobRuntime:
         self.aed_results = []
         self._csr_start = 0
 
+    @classmethod
+    def from_script(cls, script_file):
+        """Create one fresh run bound to the generated project's own roots."""
+        project_dir = Path(script_file).resolve().parent
+        return cls(assets_root=project_dir, workdir=project_dir / "output")
+
     def asset_path(self, path) -> Path:
         path = Path(path)
         if not path.is_absolute() and PureWindowsPath(str(path)).is_absolute():

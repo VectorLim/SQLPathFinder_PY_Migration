@@ -67,7 +67,7 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     assert "macro_values_" not in code
     assert "macro_values =" not in code
     assert "job_entrypoint" not in code
-    assert "job = JobRuntime(" in code
+    assert "job = JobRuntime.from_script(__file__)" in code
     assert "macros = job.macros" in code
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
@@ -198,7 +198,11 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     # CL_CONFIG is a per-run value rather than an environment variable.
     namespace = {"__file__": str(main), "__name__": "generated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
-    namespace["JobRuntime"] = lambda **kwargs: JobRuntime(**kwargs, values={"CL_CONFIG": "config.csv"})
+    class ConfiguredJob(JobRuntime):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs, values={"CL_CONFIG": "config.csv"})
+
+    namespace["JobRuntime"] = ConfiguredJob
     namespace["run"]()
     assert (work / "result.csv").read_text() == "VALUE\nvalue\n"
     assert calls[0]["output"] == "EMAIL:recipient@example.com"

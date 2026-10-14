@@ -46,7 +46,7 @@ def test_generated_script_settings_follow_imports_and_precede_dependencies(tmp_p
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "script_short.txt").read_text())
     generated = translate(source).read_text()
-    assert generated.index("from vg2c.runtime import") < generated.index("def run():") < generated.index("job = JobRuntime(")
+    assert generated.index("from vg2c.runtime import") < generated.index("def run():") < generated.index("job = JobRuntime.from_script(")
     assert "BASE_DIR" not in generated
     assert "WORK_DIR" not in generated
     assert "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE" not in generated
