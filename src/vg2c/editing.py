@@ -12,12 +12,9 @@ from vg2c.project_paths import project_main_path
 from vg2c.emitter.models import CodeExpr, EmittedParameter
 from vg2c.emitter.operations import EmittableOperation
 from vg2c.operands import IfThen, RunLoop, StartMacro
-from vg2c.semantics import (
-    EditableBinding,
-    WorkflowOperation,
-    _build_semantics,
-    condition_symbol_token,
-)
+from vg2c.semantic.models import EditableBinding, WorkflowOperation
+from vg2c.semantic.projection import project_semantics
+from vg2c.semantic.symbols import condition_symbol_token
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +72,7 @@ def project_changes(
 ) -> ChangeProjection:
     """Project semantic binding intent onto canonical emitted source without writing files."""
     requested = tuple(changes)
-    operations, bindings, semantic_symbols = _build_semantics(result)
+    operations, bindings, semantic_symbols = project_semantics(result)
     semantic_bindings = {binding.id: binding for binding in bindings}
     symbols = {symbol.id: symbol for symbol in semantic_symbols}
     requested_by_id = {change.binding_id: change for change in requested}
@@ -451,7 +448,7 @@ def _validate_changed_controls(
     }
     if not touched:
         return
-    projected_operations, _, _ = _build_semantics(result, values)
+    projected_operations, _, _ = project_semantics(result, values)
     for operation in projected_operations:
         if operation.id not in touched:
             continue

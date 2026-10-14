@@ -19,13 +19,13 @@ from vg2c.editing import (
     SemanticChange,
     project_changes,
 )
-from vg2c.semantics import (
+from vg2c.semantic.models import (
     EditableBinding,
     OperationReference,
     Symbol,
     WorkflowOperation,
-    _build_semantics,
 )
+from vg2c.semantic.projection import project_semantics
 from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
 from vg2c.utilities.html_report import HtmlReport
 
@@ -224,7 +224,7 @@ def project_document(
         source = result.emitted.source
         values = {}
 
-    operations, _, symbols = _build_semantics(result, values)
+    operations, _, symbols = project_semantics(result, values)
     flags = _scope_flags(result)
     invocations = {
         invocation.id: (step, invocation)

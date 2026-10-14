@@ -5,7 +5,7 @@ import pytest
 from vg2c import compile_document
 from vg2c.editing import SemanticChange, project_changes
 from vg2c.operands import IfThen
-from vg2c.semantics import CONDITION_OPERATORS
+from vg2c.semantic.symbols import CONDITION_OPERATORS
 from vg2c.workflow import project_document
 
 
