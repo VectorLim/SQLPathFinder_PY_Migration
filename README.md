@@ -297,6 +297,59 @@ The current API surface uses focused routes for document open/translation, chang
 
 Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an existing generated workflow and retain previously applied visual-editor values when its sidecar still matches the source/output hashes.
 
+## SQLPathFinder companion (Windows)
+
+The optional companion observes a running `sqlpathfinder3` process through a
+small .NET Framework native-window/MSAA helper. Choose an open document from
+the filename-labelled **Open document** selector and press **Update Python**.
+Use **Refresh documents** when SQLPathFinder was opened after the companion.
+The helper identifies the selected SQLPathFinder designer window,
+invokes the accessible **File -> Show Query...** action, captures the newly
+created editor, and closes that editor with a normal window close. The source is
+then compiled into the latest local preview; an identical regenerated source is
+still a successful refresh because the editor window is new.
+
+Refresh runs away from the Tk UI with bounded waits. An existing Show Query
+editor is left alone and reported as an actionable error, and inaccessible or
+disabled menus, missing designers, empty output, and timeouts retain the last
+good preview. The helper never runs queries, saves VG2 files, chooses native
+dialogs, discards edits, injects Ctrl+Q, or relies on an unverified menu command
+ID. The legacy `--pid` option remains available for passive observation and
+compatibility. Passive read-only observation and opening exported `.txt`/`.spfsql`
+previews remain supported.
+
+Open or edit the VG2 in SQLPathFinder, then start the companion from the
+repository root with no arguments:
+
+```powershell
+.\start-vg2c-companion.bat
+```
+
+Choose the matching filename in **Open document**, press **Update Python**,
+and use **Export generated** when the preview is ready. Optional VG2 command
+line paths remain available for advanced identification and offline context.
+
+The launcher uses the repository `.venv` when present, then an installed
+`vg2c-companion` command. The package entry point is also available with
+`python -m vg2c_companion` in an installed wheel environment.
+
+The `.VG2` argument supplies identification and context only. Export writes
+`main.py` and compiler-owned SQL/HTML/CSS assets into a new or empty directory;
+existing files are refused. An exported `.txt` or `.spfsql` source can be
+opened directly for offline preview. The generated pane is read-only; **Edit
+copy** opens an independent buffer so a later source refresh cannot erase work.
+Use **Save copy** in that window to choose a new file; existing files and the
+native/source inputs are refused. **Export generated** writes the retained
+compiler snapshot and its generated assets separately.
+
+The observer is compiled on first launch into the current user's local cache
+with `Accessibility.dll` and `System.Runtime.Serialization.dll` references;
+it does not require WPF UI Automation assemblies. It uses bounded native
+window/edit reads and optional short MSAA selection reads, with honest missing,
+exited, inaccessible, and truncated states. Selection-to-generated jumps are limited to compiler block ranges and
+the verified single `1. Main Query` label in the matching SQLPathFinder process
+and main-window context. Other designer labels remain observational only.
+
 ## LAN Docker test deployment
 
 The Docker deployment serves the visual editor over one LAN port with anonymous, isolated browser workspaces. Users upload VG2/data files and download generated results; generated workflows are not executed. See [the Docker LAN guide](docs/docker-lan.md) for the Intel dependency-build prerequisites, Docker Compose commands, firewall setup, and workspace lifecycle.
