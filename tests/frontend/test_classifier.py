@@ -78,6 +78,12 @@ def test_sqlite_detection() -> None:
         assert classified[0].kind is Kind.SQLITE_QUERY
 
 
+def test_duckdb_detection() -> None:
+    for key in ("OLEDB", "ENGINE"):
+        classified = classify([_block({key: "DuckDB"})])
+        assert classified[0].kind is Kind.DUCKDB_QUERY
+
+
 def test_oracle_sql_detection() -> None:
     oracle_nodes = (
         "KM.[A15_PROD_21.].MARS",

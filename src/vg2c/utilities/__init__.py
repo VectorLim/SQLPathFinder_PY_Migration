@@ -39,6 +39,7 @@ def ensure_utility_checks_loaded() -> None:
     from vg2c.utilities.mail import MailService  # noqa: F401
     from vg2c.utilities.oracle_client import OracleClient  # noqa: F401
     from vg2c.utilities.direct_operations import DirectOperationMetadata  # noqa: F401
+    from vg2c.utilities.duckdb_reader import DuckDbReader  # noqa: F401
     from vg2c.utilities.python_embed import PythonEmbed  # noqa: F401
     from vg2c.utilities.rows_in_file import RowsInFile  # noqa: F401
     from vg2c.utilities.smart_append import SmartAppend  # noqa: F401

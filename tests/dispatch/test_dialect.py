@@ -19,6 +19,14 @@ from vg2c.kind import Kind
                 utility_name="sqlite_reader",
             ),
         ),
+        (
+            Kind.DUCKDB_QUERY,
+            ReaderSpec(
+                module="vg2c.utilities.duckdb_reader",
+                name="DuckDbReader",
+                utility_name="duckdb_reader",
+            ),
+        ),
     ],
 )
 def test_resolve_reader_sql_bearing(kind: Kind, expected: ReaderSpec | None) -> None:
@@ -43,6 +51,7 @@ def test_sql_bearing_kinds_coverage() -> None:
     sql_bearing_kinds = DialectHandler.sql_bearing_kinds()
     assert Kind.SQL_QUERY in sql_bearing_kinds
     assert Kind.SQLITE_QUERY in sql_bearing_kinds
+    assert Kind.DUCKDB_QUERY in sql_bearing_kinds
     assert Kind.WRITE_FILE not in sql_bearing_kinds
 
 
@@ -53,6 +62,15 @@ def test_derive_from_signals_sqlite_by_engine() -> None:
     assert reader is not None
     assert reader.name == "SqliteReader"
     assert reader.utility_name == "sqlite_reader"
+
+
+def test_derive_from_signals_duckdb_by_engine() -> None:
+    reader = DialectHandler.derive_reader_from_signals(
+        node="DUCKDB:data.tab:t0", engine="DuckDB", oledb="DuckDB"
+    )
+    assert reader is not None
+    assert reader.name == "DuckDbReader"
+    assert reader.utility_name == "duckdb_reader"
 
 
 def test_derive_from_signals_no_signals_returns_none() -> None:

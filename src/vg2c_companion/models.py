@@ -33,6 +33,7 @@ class ObserverSnapshot:
     status: str = "ok"
     error: str | None = None
     bounds: tuple[int, int, int, int] | None = None
+    active_control: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)

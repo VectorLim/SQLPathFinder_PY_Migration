@@ -118,15 +118,17 @@ class MailService(EmitterUtility):
                 "read",
                 inputs=("attachments",),
                 input_base="working-directory",
-                reason=("Existing attachments are read; message body may also be read "
-                        "from a runtime file."),
+                reason=(
+                    "Existing attachments are read; message body may also be read "
+                    "from a runtime file."
+                ),
             ),
             FileEffectDefinition(
                 "body",
                 "unknown",
                 reason="Message body is literal text or an existing file at runtime.",
             ),
-        )
+        ),
     )
     def send(
         self,
@@ -138,4 +140,7 @@ class MailService(EmitterUtility):
         enabled: bool = True,
     ) -> None:
         from vg2c.runtime.mail import send_mail
-        send_mail(to, subject, body, attachments, from_addr, enabled, workdir=Path.cwd())
+
+        send_mail(
+            to, subject, body, attachments, from_addr, enabled, workdir=Path.cwd()
+        )

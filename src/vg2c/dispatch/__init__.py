@@ -52,8 +52,12 @@ def dispatch(
         rewritten_sql = handler.substitute(body=source_body(block))
         reader_target = handler.build_reader_target(block)
 
-        sqlite = block.kind is Kind.SQLITE_QUERY
-        suffix = "sqlite_query" if sqlite else "sql_query"
+        if block.kind is Kind.SQLITE_QUERY:
+            suffix = "sqlite_query"
+        elif block.kind is Kind.DUCKDB_QUERY:
+            suffix = "duckdb_query"
+        else:
+            suffix = "sql_query"
         step_name = f"step_{block.index:04d}_{suffix}"
         sql_filters = detect_filters(rewritten_sql, step_name)
 

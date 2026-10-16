@@ -25,6 +25,7 @@ public sealed class SnapshotResult
     [DataMember(Name = "sourceTruncated")] public bool SourceTruncated;
     [DataMember(Name = "selection")] public SelectionResult Selection;
     [DataMember(Name = "designerValues")] public List<string> DesignerValues;
+    [DataMember(Name = "activeControl")] public string ActiveControl;
     [DataMember(Name = "fingerprint")] public string Fingerprint;
     [DataMember(Name = "designerFingerprint", EmitDefaultValue = false)] public string DesignerFingerprint;
     [DataMember(Name = "designerWindowTitle")] public string DesignerWindowTitle;
@@ -75,7 +76,11 @@ public static class Program
     private const int GwlStyle = -16;
     private const long EsMultiline = 0x0004;
     private const long EsPassword = 0x0020;
+    private const long EsReadOnly = 0x0800;
     private const uint WmClose = 0x0010;
+    private const uint TvmGetNextItem = 0x110a;
+    private const uint TvmMapHtreeItemToAccId = 0x112b;
+    private const int TvgnCaret = 9;
     private const uint GwOwner = 4;
     private const uint GaRootOwner = 3;
     private const int RefreshTimeoutMs = 30000;
@@ -98,6 +103,7 @@ public static class Program
         public List<string> DesignerStateValues;
         public int[] Bounds;
         public bool HasEditor;
+        public IntPtr FocusHandle;
     }
 
     private sealed class SelectionRead
@@ -170,11 +176,12 @@ public static class Program
                 SourceTruncated = source != null && source.SourceTruncated,
                 Selection = source == null ? new SelectionResult { Text = "", Truncated = false } : source.Selection,
                 DesignerValues = designer.DesignerValues,
+                ActiveControl = ActiveControl(main.Handle, source),
                 Bounds = source == null ? main.Bounds : source.Bounds,
                 DesignerWindowTitle = main.Title,
                 DesignerBounds = main.Bounds,
                 Fingerprint = Fingerprint(source == null ? main.Title : source.Title, source == null ? "" : source.Source, new List<string>()),
-                DesignerFingerprint = Fingerprint(main.Title, "", designer.DesignerStateValues),
+                DesignerFingerprint = Fingerprint(DesignerDocument(main.Title), "", designer.DesignerStateValues),
                 Status = "ok"
             };
         }
@@ -202,6 +209,8 @@ public static class Program
             List<NativeWindow> existingEditors = FindSourceEditors(windows, IntPtr.Zero);
             if (existingEditors.Count != 0)
                 return RefreshEmpty("editor-open", "Close the existing Show Query editor, then press Update Python again.", process.Id, designer.Title);
+            HashSet<long> existingWindows = new HashSet<long>();
+            foreach (NativeWindow window in windows) existingWindows.Add(window.Handle.ToInt64());
 
             string actionError = null;
             System.Threading.Thread action = new System.Threading.Thread((System.Threading.ThreadStart)delegate
@@ -218,7 +227,8 @@ public static class Program
             {
                 if (process.HasExited) return RefreshEmpty("exited", "SQLPathFinder exited during Show Query refresh.", process.Id);
                 List<NativeWindow> current = FindTopWindows(process.Id, process.MainWindowHandle);
-                editor = FindSourceEditor(current, designer.Handle);
+                current.RemoveAll(delegate (NativeWindow window) { return existingWindows.Contains(window.Handle.ToInt64()); });
+                editor = FindSourceEditor(current, IntPtr.Zero);
                 if (editor != null) break;
                 if (actionError != null) return RefreshEmpty("unsupported", actionError, process.Id, designer.Title);
                 System.Threading.Thread.Sleep(100);
@@ -238,7 +248,7 @@ public static class Program
             string designerFingerprint;
             try
             {
-                designerFingerprint = Fingerprint(designer.Title, "", ReadDesigner(designer).DesignerStateValues);
+                designerFingerprint = Fingerprint(DesignerDocument(designer.Title), "", ReadDesigner(designer).DesignerStateValues);
             }
             catch (Exception ex)
             {
@@ -531,6 +541,7 @@ public static class Program
             Source = ReadText(edits[0], out truncated),
             SourceTruncated = truncated,
             Selection = ReadSelection(edits[0]),
+            FocusHandle = edits[0],
             Bounds = window.Bounds,
             HasEditor = true,
             DesignerValues = new List<string>(),
@@ -548,6 +559,18 @@ public static class Program
             DesignerStateValues = ReadDesignerState(window.Handle),
             Bounds = window.Bounds, HasEditor = false
         };
+    }
+
+    private static string ActiveControl(IntPtr designer, WindowObservation source)
+    {
+        GUITHREADINFO info = new GUITHREADINFO();
+        info.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+        if (!GetGUIThreadInfo(0, ref info) || info.hwndFocus == IntPtr.Zero) return "unknown";
+        if (source != null && source.FocusHandle != IntPtr.Zero &&
+            (info.hwndFocus == source.FocusHandle || IsChild(source.FocusHandle, info.hwndFocus)))
+            return "editor";
+        if (info.hwndFocus == designer || IsChild(designer, info.hwndFocus)) return "designer";
+        return "unknown";
     }
 
     private static List<IntPtr> FindMultilineEdits(IntPtr parent)
@@ -593,7 +616,8 @@ public static class Program
                 if (hr != 0 || value == null) return;
                 Accessibility.IAccessible accessible = value as Accessibility.IAccessible;
                 if (accessible == null) return;
-                bool actual = AppendAccessible(read.Values, accessible, accessible.accSelection);
+                bool actual = AppendTreeCaret(read.Values, accessible, tree);
+                if (!actual) actual = AppendAccessible(read.Values, accessible, accessible.accSelection);
                 if (!actual) actual = AppendAccessible(read.Values, accessible, accessible.accFocus);
                 if (!actual) ScanAccessibleStates(accessible, read.Values, 0);
                 Marshal.ReleaseComObject(value);
@@ -602,8 +626,20 @@ public static class Program
         }));
         thread.IsBackground = true;
         thread.Start();
-        if (!thread.Join(250)) return new List<string>();
+        if (!thread.Join(750)) return new List<string>();
         return read.Values;
+    }
+
+    private static bool AppendTreeCaret(List<string> values, Accessibility.IAccessible root, IntPtr tree)
+    {
+        IntPtr item;
+        IntPtr result;
+        if (SendMessageTimeoutValue(tree, TvmGetNextItem, new IntPtr(TvgnCaret), IntPtr.Zero, 0x0002, 200, out item) == IntPtr.Zero || item == IntPtr.Zero)
+            return false;
+        if (SendMessageTimeoutValue(tree, TvmMapHtreeItemToAccId, item, IntPtr.Zero, 0x0002, 200, out result) == IntPtr.Zero || result == IntPtr.Zero)
+            return false;
+        long childId = result.ToInt64();
+        return childId > 0 && childId <= Int32.MaxValue && AppendAccessible(values, root, (int)childId);
     }
 
     private static bool AppendAccessible(List<string> values, Accessibility.IAccessible root, object selected)
@@ -685,6 +721,7 @@ public static class Program
             string className = GetClass(handle);
             if (!IsNativeClass(className, "Edit") && !IsNativeClass(className, "ComboBox") && !IsNativeClass(className, "Button")) continue;
             if ((GetWindowStyle(handle) & EsPassword) != 0) continue;
+            if (IsNativeClass(className, "Edit") && (GetWindowStyle(handle) & EsReadOnly) != 0) continue;
             string value = ReadWindowText(handle, 512);
             if (!String.IsNullOrWhiteSpace(value)) values.Add(GetDlgCtrlID(handle).ToString() + "=" + value);
             if (values.Count >= MaxDesignerValues) break;
@@ -697,10 +734,19 @@ public static class Program
         List<IntPtr> result = new List<IntPtr>();
         EnumChildWindows(parent, delegate (IntPtr handle, IntPtr state)
         {
-            if (IsWindowVisible(handle) && (String.IsNullOrEmpty(wanted) || IsNativeClass(GetClass(handle), wanted))) result.Add(handle);
+            if (IsWindowVisible(handle) && EnabledWithin(handle, parent)
+                && (String.IsNullOrEmpty(wanted) || IsNativeClass(GetClass(handle), wanted))) result.Add(handle);
             return result.Count < max;
         }, IntPtr.Zero);
         return result;
+    }
+
+    private static bool EnabledWithin(IntPtr handle, IntPtr parent)
+    {
+        // Disabled MDI ancestors keep visible trees whose caret belongs to the parent query.
+        for (IntPtr current = handle; current != IntPtr.Zero && current != parent; current = GetParent(current))
+            if (!IsWindowEnabled(current)) return false;
+        return true;
     }
 
     private static string ReadText(IntPtr handle, out bool truncated)
@@ -773,7 +819,7 @@ public static class Program
         {
             TargetPid = pid > 0 ? (int?)pid : null,
             WindowTitle = "", SourceText = "", Selection = new SelectionResult { Text = "", Truncated = false },
-            DesignerValues = new List<string>(), Fingerprint = "", DesignerFingerprint = "", DesignerWindowTitle = "",
+            DesignerValues = new List<string>(), ActiveControl = "unknown", Fingerprint = "", DesignerFingerprint = "", DesignerWindowTitle = "",
             Status = status, Error = error
         };
     }
@@ -809,15 +855,30 @@ public static class Program
         }
     }
 
+    private static string DesignerDocument(string title)
+    {
+        int marker = title.LastIndexOf(" - [", StringComparison.Ordinal);
+        return marker < 0 ? title : title.Substring(marker + 4).TrimEnd(']').ToLowerInvariant();
+    }
+
     private delegate bool EnumWindowsProc(IntPtr handle, IntPtr state);
     private delegate bool EnumChildWindowsProc(IntPtr handle, IntPtr state);
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct GUITHREADINFO
+    {
+        public int cbSize; public int flags; public IntPtr hwndActive; public IntPtr hwndFocus;
+        public IntPtr hwndCapture; public IntPtr hwndMenuOwner; public IntPtr hwndMoveSize; public IntPtr hwndCaret; public RECT rcCaret;
+    }
 
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
     [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumChildWindowsProc callback, IntPtr state);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr handle);
+    [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr handle);
+    [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr handle);
     [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr handle);
+    [DllImport("user32.dll")] private static extern bool IsChild(IntPtr parent, IntPtr child);
+    [DllImport("user32.dll")] private static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr handle, uint command);
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr handle, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr handle, StringBuilder text, int maxCount);

@@ -85,7 +85,7 @@ def structured_sql_model(
         raise SqlEditError("Structured SQL requires an editable string parameter.")
     model = parse_sql(value)
     block = next((item for item in result.resolved.blocks if item.index == step.block_index), None)
-    if block is None or block.kind is not Kind.SQLITE_QUERY or csv_header is None:
+    if block is None or block.kind not in {Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY} or csv_header is None:
         return model
     inputs = next((item for item in invocation.parameters if item.name == "inputs"), None)
     if inputs is None:

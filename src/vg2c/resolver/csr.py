@@ -57,7 +57,7 @@ def identify_csr(blocks, scope_tree):
                     continue
                 candidate = by_index[sibling.block_index]
                 options = candidate.resolved_options.lookup
-                if candidate.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY} and fnmatchcase(
+                if candidate.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY} and fnmatchcase(
                     options.get("CSV", "").upper(), argv[1].upper()
                 ):
                     producers.append(candidate)

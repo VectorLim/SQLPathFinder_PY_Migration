@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 
 from vg2c.emitter.indent_writer import IndentWriter
-from vg2c.emitter.models import EmittedScript
+from vg2c.emitter.models import EmittedScope, EmittedScript, SourceRange
 from vg2c.emitter.source_map import finalize_steps, record_inline_step
 from vg2c.kind import Kind
 from vg2c.utilities import ensure_utility_checks_loaded
@@ -27,6 +27,7 @@ def emit_project(dispatched):
     handlers[Kind.HTML_REPORT] = html_report.emit_block
     assets = {}
     steps = []
+    scope_lines = []
     imports = {"from pathlib import Path"}
     has_state = any(block.kind in {Kind.MACRO_CONTROL, Kind.ROWS_IN_FILE, Kind.HTML_REPORT}
                     or "<<<" in block.resolved_body or any("<<<" in value for value in block.resolved_options.lookup.values())
@@ -78,7 +79,8 @@ def emit_project(dispatched):
                 ) from exc
             return
 
-        if csr_workflow.emit_scope(
+        start_line = len(writer.lines)
+        if not csr_workflow.emit_scope(
             writer,
             walk,
             node,
@@ -86,14 +88,15 @@ def emit_project(dispatched):
             imports=imports,
             runtime_imports=runtime_imports,
         ):
-            return
-        node.emit(
-            writer,
-            walk,
-            macros=macros,
-            imports=imports,
-            runtime_imports=runtime_imports,
-        )
+            node.emit(
+                writer,
+                walk,
+                macros=macros,
+                imports=imports,
+                runtime_imports=runtime_imports,
+            )
+        if node.control_payload is not None and len(writer.lines) > start_line:
+            scope_lines.append((node.start_index, node.end_index, start_line, len(writer.lines)))
 
     walk(dispatched.resolved.scope_tree)
     if not any(line.strip() and not line.lstrip().startswith("#")
@@ -110,5 +113,12 @@ def emit_project(dispatched):
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = finalize_steps(source, steps)
+    offsets = [len(header)]
+    for line in writer.lines:
+        offsets.append(offsets[-1] + len(line) + 1)
+    scopes = tuple(
+        EmittedScope(start, end, SourceRange(offsets[first], offsets[last] - 1))
+        for start, end, first, last in scope_lines
+    )
     return EmittedScript(source=source, imports=tuple(sorted(imports)), steps=tuple(finalized),
-                         assets=tuple(assets.items()))
+                         assets=tuple(assets.items()), scopes=scopes)

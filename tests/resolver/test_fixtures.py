@@ -41,7 +41,7 @@ def test_sql_script_preserves_sql_and_has_no_resolver_sql_expansion(
     sql_blocks = [
         block
         for block in program.blocks
-        if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
+        if block.kind in {Kind.SQL_QUERY, Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY}
     ]
     assert sql_blocks
     assert any("SQL_Get_CSV_List" in block.resolved_body for block in sql_blocks)

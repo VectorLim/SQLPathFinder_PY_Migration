@@ -170,6 +170,15 @@ class EmittedStep:
 
 
 @dataclass(frozen=True, slots=True)
+class EmittedScope:
+    """Generated control structure, including its body and closing source block."""
+
+    start_index: int
+    end_index: int
+    source_range: SourceRange
+
+
+@dataclass(frozen=True, slots=True)
 class EmittedScript:
     """Stage 5 output plus the semantic/edit manifest produced during emission."""
 
@@ -177,6 +186,7 @@ class EmittedScript:
     imports: tuple[str, ...]
     steps: tuple[EmittedStep, ...] = ()
     assets: tuple[tuple[str, str], ...] = ()
+    scopes: tuple[EmittedScope, ...] = ()
 
     def step_for_block(self, block_index: int) -> EmittedStep | None:
         return next(
@@ -230,6 +240,7 @@ __all__ = [
     "EmittedInvocation",
     "EmittedParameter",
     "EmittedScript",
+    "EmittedScope",
     "EmittedStep",
     "ParameterDefinition",
     "RenderedArgument",

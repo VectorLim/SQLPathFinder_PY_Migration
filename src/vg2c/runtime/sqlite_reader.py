@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from contextlib import closing
+from functools import partial
 import re
 import sqlite3
 
@@ -16,6 +17,25 @@ from vg2c.runtime.crosstab import _CrosstabUtility
 
 def _quote_identifier(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
+
+
+class _ContinuousPercentile:
+    def __init__(self, fraction: float) -> None:
+        self._fraction = fraction
+        self._values: list[float] = []
+
+    def step(self, value) -> None:
+        if value is not None:
+            self._values.append(float(value))
+
+    def finalize(self):
+        if not self._values:
+            return None
+        values = sorted(self._values)
+        position = (len(values) - 1) * self._fraction
+        lower = int(position)
+        upper = min(lower + 1, len(values) - 1)
+        return values[lower] + (values[upper] - values[lower]) * (position - lower)
 
 
 class _SqliteReader:
@@ -85,6 +105,8 @@ class _SqliteReader:
             raise ValueError("SQL binds require exactly one statement")
         with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row
+            conn.create_aggregate("P25", 1, partial(_ContinuousPercentile, 0.25))
+            conn.create_aggregate("P75", 1, partial(_ContinuousPercentile, 0.75))
 
             for input_spec in inputs:
                 if isinstance(input_spec, tuple):

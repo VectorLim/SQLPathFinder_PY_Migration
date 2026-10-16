@@ -6,6 +6,7 @@ from enum import Enum
 class Kind(str, Enum):  # noqa: UP042 - preserve existing Enum string semantics
     SQL_QUERY = "SQL_QUERY"
     SQLITE_QUERY = "SQLITE_QUERY"
+    DUCKDB_QUERY = "DUCKDB_QUERY"
     WRITE_FILE = "WRITE_FILE"
     PYTHON_EMBED = "PYTHON_EMBED"
     FS_COPY = "FS_COPY"
@@ -25,6 +26,7 @@ class Kind(str, Enum):  # noqa: UP042 - preserve existing Enum string semantics
         return self in {
             Kind.SQL_QUERY,
             Kind.SQLITE_QUERY,
+            Kind.DUCKDB_QUERY,
             Kind.WRITE_FILE,
             Kind.PYTHON_EMBED,
         }

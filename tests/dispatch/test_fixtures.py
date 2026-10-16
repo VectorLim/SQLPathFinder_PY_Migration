@@ -16,7 +16,7 @@ FIXTURE_NAMES = [
     "actual_script.txt",
 ]
 
-_SQL_BEARING = {Kind.SQL_QUERY, Kind.SQLITE_QUERY}
+_SQL_BEARING = {Kind.SQL_QUERY, Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY}
 
 
 def _run_pipeline(fixtures: Path, file_name: str):

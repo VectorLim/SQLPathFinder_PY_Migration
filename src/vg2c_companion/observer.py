@@ -75,6 +75,7 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
         designer_fingerprint = ""
     designer_window_title = data.get("designerWindowTitle", "")
     designer_bounds_value = data.get("designerBounds")
+    active_control = data.get("activeControl", "unknown")
     status = data.get("status", "ok")
     error = data.get("error")
     if not isinstance(window_title, str) or not isinstance(source_text, str):
@@ -89,6 +90,8 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
         raise ValueError("Observer fingerprints must be strings.")
     if not isinstance(status, str) or status not in _WINDOWS_STATUS:
         raise ValueError("Observer status is invalid.")
+    if not isinstance(active_control, str) or active_control not in {"editor", "designer", "unknown"}:
+        raise ValueError("Observer activeControl is invalid.")
     if error is not None and not isinstance(error, str):
         raise ValueError("Observer error must be a string or null.")
 
@@ -143,6 +146,7 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
             truncated=selection_truncated,
         ),
         designer_values=tuple(raw_values),
+        active_control=active_control,
         fingerprint=fingerprint,
         designer_fingerprint=designer_fingerprint,
         designer_window_title=designer_window_title,

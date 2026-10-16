@@ -237,6 +237,38 @@ def test_generated_run_loop_closes_chunks_and_continues_on_prompt_off(tmp_path):
     assert "pass" in generated
 
 
+def test_generated_run_loop_batches_query_and_append_in_order(tmp_path, monkeypatch):
+    from vg2c.runtime import JobRuntime
+
+    source = tmp_path / "unit_level_data.txt"
+    source.write_text(
+        block('/UTILITIES=@EXEDIR@\\SPFDelete.bat "data.csv" "N"')
+        + block('/UTILITIES={RUN-LOOP} "cam_lot_list.csv" "temp_cam_lot_list.csv" "10" "N" "0"')
+        + block('/ENGINE=SQLite\n/CSV=xdata.csv\n/TABLE=temp_cam_lot_list.csv',
+                'SELECT lot FROM temp_cam_lot_list')
+        + block('/UTILITIES=@EXEDIR@\\SmartAppend.va "data.csv" "xdata.csv"')
+        + block('/UTILITIES={END-LOOP}')
+    )
+    main = translate(source)
+    work = main.parent / "output"
+    work.mkdir()
+    (work / "cam_lot_list.csv").write_text("lot\n" + "".join(f"LOT{i}\n" for i in range(23)))
+    (work / "data.csv").write_text("lot\nstale\n")
+    batches = []
+    original_sql = JobRuntime.sql
+
+    def sql(job, *args, **kwargs):
+        batches.append(pd.read_csv(job.workdir / "temp_cam_lot_list.csv")["lot"].tolist())
+        return original_sql(job, *args, **kwargs)
+
+    monkeypatch.setattr(JobRuntime, "sql", sql)
+    load_job(main)()
+
+    assert [len(batch) for batch in batches] == [10, 10, 3]
+    assert pd.read_csv(work / "data.csv")["lot"].tolist() == [f"LOT{i}" for i in range(23)]
+    assert not (work / "temp_cam_lot_list.csv").exists()
+
+
 def test_loop_html_and_file_macro_arguments_use_brackets(tmp_path):
     source = tmp_path / "macros.txt"
     source.write_text(

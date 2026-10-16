@@ -300,9 +300,13 @@ Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an exist
 ## SQLPathFinder companion (Windows)
 
 The optional companion observes a running `sqlpathfinder3` process through a
-small .NET Framework native-window/MSAA helper. Choose an open document from
-the filename-labelled **Open document** selector and press **Update Python**.
-Use **Refresh documents** when SQLPathFinder was opened after the companion.
+small .NET Framework native-window/MSAA helper. It detects open VG2 documents
+automatically and translates a uniquely selected document on startup, when a
+document is opened later, or when the selection changes. If several documents
+are open, choose one in the filename-labelled **Open document** selector.
+**Update Python** is always enabled: every press requests the latest native
+source, with repeated presses during an update combined into one follow-up
+refresh. **Refresh documents** also remains available.
 The helper identifies the selected SQLPathFinder designer window,
 invokes the accessible **File -> Show Query...** action, captures the newly
 created editor, and closes that editor with a normal window close. The source is
@@ -325,9 +329,20 @@ repository root with no arguments:
 .\start-vg2c-companion.bat
 ```
 
-Choose the matching filename in **Open document**, press **Update Python**,
-and use **Export generated** when the preview is ready. Optional VG2 command
-line paths remain available for advanced identification and offline context.
+The preview appears automatically when a document can be selected. After designer
+edits, press **Update Python**, then use **Export generated** when the preview
+is ready. The **Runtime library (installed)** tree shows the actual
+`vg2c/runtime` folder and its Python files alongside the generated project.
+Runtime sources are read-only library references; exports still contain the
+generated project and its assets and use the installed `vg2c` package.
+Clicking an emitted SQL, HTML, CSS, or other generated asset filename in
+`main.py` focuses that file in the companion tree and preview. Designer-step
+clicks focus `main.py` and its exact emitted block when the selected designer
+label has one matching compiler `/PROMPT-TEXT=Step <id>.` record. The companion
+does not guess mappings for missing or duplicate step IDs, and leaves its current
+view unchanged while another application has focus.
+Optional VG2 command-line paths remain available for identification and offline
+context.
 
 The launcher uses the repository `.venv` when present, then an installed
 `vg2c-companion` command. The package entry point is also available with
@@ -346,9 +361,11 @@ The observer is compiled on first launch into the current user's local cache
 with `Accessibility.dll` and `System.Runtime.Serialization.dll` references;
 it does not require WPF UI Automation assemblies. It uses bounded native
 window/edit reads and optional short MSAA selection reads, with honest missing,
-exited, inaccessible, and truncated states. Selection-to-generated jumps are limited to compiler block ranges and
-the verified single `1. Main Query` label in the matching SQLPathFinder process
-and main-window context. Other designer labels remain observational only.
+exited, inaccessible, and truncated states. Selection-to-generated jumps require
+a matching SQLPathFinder process, designer title and fingerprint, active designer
+focus, and one compiler `/PROMPT-TEXT=Step <id>.` match; missing or duplicate
+IDs do not navigate. Editor carets map only while the Show Query editor has focus,
+and focus elsewhere preserves the current companion view.
 
 ## LAN Docker test deployment
 

@@ -6,14 +6,23 @@ import keyword
 import queue
 import re
 import threading
+import time
 from pathlib import Path
 
-from .compiler import CompilationOutcome, CompilationWorker
+from .compiler import CompilationOutcome, CompilationWorker, runtime_sources
 from .export import export_preview, save_copy
 from .models import EditCopy, NativeSnapshot, ObserverSnapshot
 from .native import inspect_native
 from .observer import NativeTarget, ObserverClient, ObserverWorker, RefreshResult
-from .source import map_designer_label, map_source_offset, utf16_to_python_offset
+from .source import (
+    designer_document,
+    is_prepost_child,
+    generated_asset_links,
+    map_designer_label,
+    map_generated_offset_to_asset,
+    map_source_offset,
+    utf16_to_python_offset,
+)
 
 
 def highlight_ranges(text: str, mode: str = "python") -> list[tuple[str, int, int]]:
@@ -98,6 +107,7 @@ class CompanionApp:
         self._active_mapping = None
         self._last_compile_status = "Preview ready"
         self.current_assets: dict[str, str] = {}
+        self.runtime_files = runtime_sources()
         self.selected_generated_name = "main.py"
         self.edit_copies: list[EditCopy] = []
         self._edit_windows: list[tuple[object, object, EditCopy]] = []
@@ -109,6 +119,9 @@ class CompanionApp:
         self._poll_after = None
         self._refresh_request = 0
         self._refresh_busy = False
+        self._refresh_again = False
+        self._refresh_active: int | None = None  # Capture can outlive a document selection change.
+        self._update_after_discovery = False
         self._refresh_button = None
         self.current_native_path: Path | None = None
         self._targets: tuple[NativeTarget, ...] = ()
@@ -116,9 +129,11 @@ class CompanionApp:
         self._poll_suspended = False
         self._refresh_compile_identity: int | None = None
         self._target_discovery_busy = False
+        self._next_target_scan = time.monotonic() + 2
         self._build()
         for path in native_paths:
             self._add_path(path)
+        self._populate_generated_tree()
         self._target_discovery_busy = True
         threading.Thread(target=self._discover_targets, name="vg2c-targets", daemon=True).start()
         self._poll()
@@ -205,6 +220,10 @@ class CompanionApp:
         for tag, colour in (("keyword", "#005cc5"), ("string", "#a31515"), ("comment", "#6a737d"), ("markup", "#795da3"), ("number", "#008080")):
             self.generated.tag_configure(tag, foreground=colour)
         self.generated.tag_configure("selection", background="#fff2a8")
+        self.generated.tag_configure("asset_link", foreground="#005cc5", underline=True)
+        self.generated.tag_bind("asset_link", "<Enter>", self._enter_asset_link)
+        self.generated.tag_bind("asset_link", "<Leave>", self._leave_asset_link)
+        self.generated.tag_bind("asset_link", "<Button-1>", self._follow_asset_link)
         ttk.Label(source_tab, text="Source selection / status").pack(anchor="w", padx=4, pady=(4, 0))
         self.selection_status = ttk.Label(source_tab, text="No live selection", anchor="w")
         self.selection_status.pack(fill="x", padx=4)
@@ -306,10 +325,18 @@ class CompanionApp:
                 self.tree.delete(iid)
         self._tree_assets.clear()
         self._tree_asset_files.clear()
-        root = "generated"
-        if not self.tree.exists(root):
-            self.tree.insert("", "end", iid=root, text="Generated preview", open=True)
-        for name in ("main.py", *sorted(self.current_assets)):
+        entries = [
+            ("generated", "Generated preview", ("main.py", *sorted(self.current_assets))),
+            ("runtime", "Runtime library (installed)", tuple(self.runtime_files)),
+        ]
+        for root, label, names in entries:
+            if not self.tree.exists(root):
+                self.tree.insert("", "end", iid=root, text=label, open=True)
+            self._populate_file_branch(root, names)
+        self._resize_tree_column()
+
+    def _populate_file_branch(self, root: str, names: tuple[str, ...]) -> None:
+        for name in names:
             parts = name.replace("\\", "/").split("/")
             parent_iid = root
             for index, part in enumerate(parts):
@@ -321,7 +348,6 @@ class CompanionApp:
                 if index == len(parts) - 1:
                     self._tree_asset_files.add(iid)
                 parent_iid = iid
-        self._resize_tree_column()
 
     def open_preview(self) -> None:
         selected = self.filedialog.askopenfilename(
@@ -343,11 +369,13 @@ class CompanionApp:
             error = str(exc)
         self._target_results.put((targets, error))
 
-    def refresh_targets(self) -> None:
+    def refresh_targets(self, *, quiet: bool = False) -> None:
         if self._target_discovery_busy:
             return
         self._target_discovery_busy = True
-        self.status.configure(text="Refreshing open SQLPathFinder documents…")
+        self._next_target_scan = time.monotonic() + 2
+        if not quiet:
+            self.status.configure(text="Finding open SQLPathFinder documents…")
         threading.Thread(target=self._discover_targets, name="vg2c-targets", daemon=True).start()
 
     @staticmethod
@@ -364,6 +392,8 @@ class CompanionApp:
     def _set_targets(self, targets: tuple[NativeTarget, ...], error: str | None = None) -> None:
         if self._closed:
             return
+        update_requested = self._update_after_discovery
+        self._update_after_discovery = False
         self._target_discovery_busy = False
         previous = self._selected_target
         previous_key = self._target_key(previous) if previous else None
@@ -400,6 +430,15 @@ class CompanionApp:
             and previous is not None
             and targets[preferred].document_name.casefold() == previous.document_name.casefold()
         )
+        if (
+            preferred is not None
+            and previous is not None
+            and not update_requested
+            and is_prepost_child(targets[preferred].designer_window_title, previous.designer_window_title)
+            and self.current_result is not None
+        ):
+            self.status.configure(text="Pre/Post Query is open; retaining the parent preview.")
+            return
         preferred_name = self._preferred_document_name()
         if preferred is None:
             matches = [index for index, target in enumerate(targets) if target.document_name.casefold() == preferred_name]
@@ -421,10 +460,12 @@ class CompanionApp:
         self.target_combo.current(preferred)
         if preserved:
             self._selected_target = targets[preferred]
+            if update_requested:
+                self._start_update()
         else:
-            if self.current_source is not None:
+            if self.current_source is not None and not update_requested:
                 self.target_combo.set("")
-                self.status.configure(text="Offline preview selected; choose an open native document to enable Update Python.")
+                self.status.configure(text="Offline preview selected; press Update Python to use an open VG2.")
                 return
             self._select_target()
 
@@ -458,20 +499,29 @@ class CompanionApp:
             if hasattr(getattr(self, "_observer_worker", None), "select_target"):
                 self._observer_worker.select_target(self._selected_target.target_pid, self._selected_target.designer_hwnd)
             self.status.configure(text=f"Selected {self._selected_target.document_name}; press Update Python.")
+            self._start_update()
 
     def _invalidate_requests(self) -> None:
         self._refresh_request += 1
         self.current_identity = -self._refresh_request
         self._refresh_busy = False
+        self._refresh_again = False
         self._poll_suspended = False
         self._refresh_compile_identity = None
         if hasattr(getattr(self, "_observer_worker", None), "invalidate_frames"):
             self._observer_worker.invalidate_frames()
-        if self._refresh_button is not None:
-            self._refresh_button.state(["!disabled"])
 
     def update_python(self) -> None:
-        if self._refresh_busy:
+        if self._refresh_busy or self._refresh_active is not None:
+            self._refresh_again = True
+            self.status.configure(text="Update queued; the latest SQLPathFinder source will be captured next.")
+            return
+        self._update_after_discovery = True
+        self.refresh_targets()
+
+    def _start_update(self) -> None:
+        if self._refresh_busy or self._refresh_active is not None:
+            self._refresh_again = True
             return
         target = self._selected_target
         if target is None:
@@ -482,11 +532,10 @@ class CompanionApp:
         self.current_identity = -request
         self._refresh_compile_identity = None
         self._refresh_busy = True
+        self._refresh_active = request
         self._poll_suspended = True
         if hasattr(getattr(self, "_observer_worker", None), "invalidate_frames"):
             self._observer_worker.invalidate_frames()
-        if self._refresh_button is not None:
-            self._refresh_button.state(["disabled"])
         self.status.configure(text=f"Updating Python from {target.document_name}…")
         thread = threading.Thread(
             target=self._run_refresh,
@@ -504,7 +553,10 @@ class CompanionApp:
         self._refresh_results.put((request, result))
 
     def _finish_refresh(self, request: int, result: RefreshResult) -> None:
+        if request == self._refresh_active:
+            self._refresh_active = None
         if request != self._refresh_request or self._closed:
+            self._run_queued_update()
             return
         if result.status != "ok" or not result.source_text:
             self._refresh_busy = False
@@ -512,11 +564,10 @@ class CompanionApp:
             self._refresh_compile_identity = None
             if hasattr(getattr(self, "_observer_worker", None), "invalidate_frames"):
                 self._observer_worker.invalidate_frames()
-            if self._refresh_button is not None:
-                self._refresh_button.state(["!disabled"])
             self._set_diagnostics("Update Python failed\n\n" + (result.error or result.status))
             self._select_tab(getattr(self, "diagnostics_tab", None))
             self.status.configure(text="Update Python failed; last good preview retained")
+            self._run_queued_update()
             return
         self.last_live_source = result.source_text
         self.current_identity = self._submit_compile(
@@ -526,6 +577,11 @@ class CompanionApp:
         self._refresh_compile_identity = self.current_identity
         self._set_source(result.source_text)
         self.status.configure(text="Captured fresh Show Query source; compiling preview…")
+
+    def _run_queued_update(self) -> None:
+        if self._refresh_again and not self._refresh_busy and self._refresh_active is None and not self._closed:
+            self._refresh_again = False
+            self.update_python()
 
     def _select_file(self, _event=None) -> None:
         selected = tuple(self.tree.selection())
@@ -586,21 +642,33 @@ class CompanionApp:
         return self.worker.submit(path, text)
 
     def _show_generated(self, name: str, *, select_tab: bool = True) -> None:
-        if self.current_result is None:
+        if self.current_result is None and name not in self.runtime_files:
             return
-        text = self.current_result.emitted.source if name == "main.py" else self.current_assets.get(name, "")
+        text = self._artifact_text(name)
         self._set_generated(text, self._mode_for_name(name))
         if self.compiled_source_text:
             self._set_source(self.compiled_source_text)
         header = getattr(self, "generated_header", None)
         if header is not None:
-            header.configure(text=f"Generated preview: {name}")
+            label = "Runtime library" if name in self.runtime_files else "Generated preview"
+            header.configure(text=f"{label}: {name}")
         origin = getattr(self, "generated_origin", None)
         if origin is not None:
-            origin.configure(text=f"Origin: {getattr(self, 'compiled_origin', '') or 'retained preview'}")
+            source = (
+                "installed vg2c/runtime (read-only)"
+                if name in self.runtime_files else self.compiled_origin or "retained preview"
+            )
+            origin.configure(text=f"Origin: {source}")
         if select_tab:
             self._select_tab(getattr(self, "generated_tab", None))
         self._sync_generated_selection(name)
+
+    def _artifact_text(self, name: str) -> str:
+        if name == "main.py":
+            return self.current_result.emitted.source
+        if name in self.current_assets:
+            return self.current_assets[name]
+        return self.runtime_files[name]
 
     def _sync_generated_selection(self, name: str) -> None:
         tree = getattr(self, "tree", None)
@@ -637,13 +705,12 @@ class CompanionApp:
             self._refresh_busy = False
             if hasattr(getattr(self, "_observer_worker", None), "invalidate_frames"):
                 self._observer_worker.invalidate_frames()
-            if self._refresh_button is not None:
-                self._refresh_button.state(["!disabled"])
         if outcome.error or outcome.result is None:
             self._set_diagnostics("Compiler error\n\n" + (outcome.error or "No compiler details were returned."))
             self._select_tab(getattr(self, "diagnostics_tab", None))
             self._last_compile_status = "Compiler error; last good preview retained"
             self.status.configure(text=self._last_compile_status)
+            self._run_queued_update()
             return
         self.current_result = outcome.result
         self.compiled_source_text = outcome.source_text
@@ -658,7 +725,11 @@ class CompanionApp:
         else:
             self.compiled_origin = "Source: " + str(outcome.source_path)
         self.current_assets = dict(outcome.result.emitted.assets)
-        if self.selected_generated_name != "main.py" and self.selected_generated_name not in self.current_assets:
+        if (
+            self.selected_generated_name != "main.py"
+            and self.selected_generated_name not in self.current_assets
+            and self.selected_generated_name not in self.runtime_files
+        ):
             self.selected_generated_name = "main.py"
         self._populate_generated_tree()
         for copy in self.edit_copies:
@@ -676,15 +747,39 @@ class CompanionApp:
         if any(copy.pending_identity is not None for copy in self.edit_copies):
             self._last_compile_status += "; independent edit copy preserved"
         self.status.configure(text=self._last_compile_status)
+        self._run_queued_update()
 
     def _set_generated(self, text: str, mode: str) -> None:
         self.generated.configure(state="normal")
+        self.generated.configure(cursor="")
         self.generated.delete("1.0", "end")
         self.generated.tag_remove("selection", "1.0", "end")
         self.generated.insert("1.0", text)
         for tag, start, end in highlight_ranges(text, mode):
             self.generated.tag_add(tag, f"1.0+{start}c", f"1.0+{end}c")
+        if self.selected_generated_name == "main.py" and self.current_result is not None:
+            for link in generated_asset_links(self.current_result):
+                start, end = link.source_range
+                self.generated.tag_add("asset_link", f"1.0+{start}c", f"1.0+{end}c")
         self.generated.configure(state="disabled")
+
+    def _enter_asset_link(self, _event) -> None:
+        self.generated.configure(cursor="hand2")
+
+    def _leave_asset_link(self, _event) -> None:
+        self.generated.configure(cursor="")
+
+    def _follow_asset_link(self, event):
+        if self.selected_generated_name != "main.py" or self.current_result is None:
+            return None
+        index = self.generated.index(f"@{event.x},{event.y}")
+        offset = len(self.generated.get("1.0", index))
+        name = map_generated_offset_to_asset(self.current_result, offset)
+        if name is not None:
+            self.selected_generated_name = name
+            self._show_generated(name)
+            return "break"
+        return None
 
     def _set_source(self, text: str) -> None:
         self.source.configure(state="normal")
@@ -715,7 +810,7 @@ class CompanionApp:
             self.status.configure(text="There is no generated preview to edit.")
             return
         name = self.selected_generated_name
-        text = self.current_result.emitted.source if name == "main.py" else self.current_assets.get(name, "")
+        text = self._artifact_text(name)
         window = self.tk.Toplevel(self.root)
         window.title(f"Edit copy - {name}")
         frame = self.ttk.Frame(window)
@@ -822,14 +917,27 @@ class CompanionApp:
         self.selection_status.configure(text=label)
         live_context = (
             snapshot.target_pid,
-            snapshot.designer_window_title,
+            designer_document(snapshot.designer_window_title),
             snapshot.designer_fingerprint,
         )
         pending_context = (
             self._pending_pid,
-            self._pending_designer_title,
+            designer_document(self._pending_designer_title),
             self._pending_designer_fingerprint,
         )
+        compiled_context = (
+            self.compiled_pid,
+            designer_document(self.compiled_designer_title),
+            self.compiled_designer_fingerprint,
+        )
+        if (
+            is_prepost_child(snapshot.designer_window_title, self.compiled_designer_title)
+            and self.current_result is not None
+            and live_context != compiled_context
+            and live_context != pending_context
+        ):
+            self.selection_status.configure(text=label + " | Pre/Post Query retains the parent preview.")
+            return
         if snapshot.source_truncated:
             self.status.configure(text="Live source is truncated; preview withheld.")
         elif snapshot.source_text and (
@@ -844,29 +952,31 @@ class CompanionApp:
             self.status.configure(text="Captured original Show Query source; compiling preview…")
         designer_same = not self.designer_fingerprint or snapshot.designer_fingerprint == self.designer_fingerprint
         self.designer_fingerprint = snapshot.designer_fingerprint or self.designer_fingerprint
-        observed_label = ""
-        for raw_value in snapshot.designer_values:
-            label_value = re.split(r"(?:=| \[| <)", raw_value, maxsplit=1)[0].replace(" focused", "").strip()
-            if label_value == "1. Main Query":
-                observed_label = label_value
-                break
+        observed_labels = tuple(dict.fromkeys(
+            label_value
+            for raw_value in snapshot.designer_values
+            for label_value in (re.split(r"(?:=| \[| <)", raw_value, maxsplit=1)[0].replace(" focused", "").strip(),)
+            if re.match(r"^[0-9]+(?:[.-][0-9A-Za-z]+)*\.\s+", label_value)
+        ))
         mapping_key = (
-            observed_label,
+            snapshot.active_control,
+            observed_labels,
             self.compiled_source_text,
             self.compiled_pid,
             self.compiled_designer_title,
             self.compiled_designer_fingerprint,
         )
-        if observed_label != self._last_designer_label:
-            self._last_designer_label = observed_label
-            if not observed_label:
-                self._last_mapping_key = None
-                self._clear_selection()
-        context_matches = (
-            snapshot.target_pid == self.compiled_pid
-            and snapshot.designer_window_title == self.compiled_designer_title
-            and snapshot.designer_fingerprint == self.compiled_designer_fingerprint
-        )
+        if snapshot.active_control == "designer":
+            if observed_labels != self._last_designer_label:
+                self._last_designer_label = observed_labels
+                if not observed_labels:
+                    self._last_mapping_key = None
+                    self._clear_selection()
+        else:
+            self._last_mapping_key = None
+            if snapshot.active_control == "editor":
+                self._last_designer_label = ()
+        context_matches = live_context == compiled_context
         pending_source = bool(snapshot.source_text and snapshot.source_text != self.compiled_source_text)
         status_now = self.status.cget("text")
         persistent_status = status_now.startswith((
@@ -882,24 +992,32 @@ class CompanionApp:
             designer_same
             and context_matches
             and self.current_result is not None
-            and observed_label
+            and not pending_source
+            and not snapshot.source_truncated
+            and snapshot.active_control == "designer"
+            and observed_labels
             and mapping_key != self._last_mapping_key
         ):
             self._last_mapping_key = mapping_key
             self._clear_selection()
-            mapping = map_designer_label(
-                self.current_result,
-                observed_label,
-                observed_pid=snapshot.target_pid,
-                compiled_pid=self.compiled_pid,
-                observed_title=snapshot.designer_window_title,
-                compiled_title=self.compiled_designer_title,
+            mappings = tuple(
+                map_designer_label(
+                    self.current_result, observed_label,
+                    observed_pid=snapshot.target_pid, compiled_pid=self.compiled_pid,
+                    observed_title=snapshot.designer_window_title, compiled_title=self.compiled_designer_title,
+                )
+                for observed_label in observed_labels
             )
-            if mapping.generated_offset is not None:
+            matched = tuple(mapping for mapping in mappings if mapping.generated_offset is not None)
+            if len(matched) == 1:
+                mapping = matched[0]
                 self.selected_generated_name = "main.py"
                 self._show_generated("main.py")
                 self._show_mapping(mapping)
-                self.selection_status.configure(text=label + " | exact main-query block")
+                self.selection_status.configure(text=label + " | " + mapping.reason)
+            else:
+                reason = "Designer selection is ambiguous." if len(matched) > 1 else mappings[0].reason
+                self.selection_status.configure(text=label + " | " + reason)
         if not designer_same or not context_matches or snapshot.source_truncated:
             self._last_mapping_key = None
             self._clear_selection()
@@ -911,8 +1029,9 @@ class CompanionApp:
             and snapshot.source_text
             and snapshot.source_text == self.compiled_source_text
             and snapshot.target_pid == self.compiled_pid
-            and snapshot.designer_window_title == self.compiled_designer_title
+            and designer_document(snapshot.designer_window_title) == designer_document(self.compiled_designer_title)
             and snapshot.designer_fingerprint == self.compiled_designer_fingerprint
+            and snapshot.active_control == "editor"
             and snapshot.selection.start is not None
             and self.selected_generated_name == "main.py"
         ):
@@ -955,6 +1074,13 @@ class CompanionApp:
     def _poll(self) -> None:
         if self._closed:
             return
+        if (
+            time.monotonic() >= self._next_target_scan
+            and self.current_source is None
+            and not self._refresh_busy
+            and self._refresh_active is None
+        ):
+            self.refresh_targets(quiet=True)
         while True:
             try:
                 targets, error = self._target_results.get_nowait()

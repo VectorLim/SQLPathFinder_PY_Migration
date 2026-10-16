@@ -8,6 +8,7 @@ import re
 
 from vg2c.runtime.csv_io import _CsvIO as CsvIO
 from vg2c.runtime.crosstab import _CrosstabUtility as CrosstabUtility
+from vg2c.runtime.duckdb_reader import _DuckDbReader as DuckDbReader
 from vg2c.runtime.sqlite_reader import _SqliteReader as SqliteReader
 from vg2c.runtime.sql_text import scan_sql_get_csv_list_calls
 from vg2c.runtime.values import job_path, substitute
@@ -126,7 +127,7 @@ def run_query(sql, *, reader, output, workdir, values=None, macros=None,
         if len(SqliteReader._split_statements(sql)) != 1:
             raise ValueError("SQL binds require exactly one statement")
     kwargs = {"params": params} if params else {}
-    if isinstance(reader, SqliteReader):
+    if isinstance(reader, (SqliteReader, DuckDbReader)):
         kwargs["workdir"] = workdir
     if hasattr(reader, "execute"):
         resolved_inputs = [

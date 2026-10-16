@@ -27,14 +27,19 @@ from vg2c.utilities.csv_io import CsvIO
 
 
 class SqliteEngine(EmitterUtility):
-    """Emit query calls for external and SQLite readers."""
+    """Emit query calls for external, SQLite, and DuckDB readers."""
 
     utility_name = "sqlite_engine"
-    handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY)
+    handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY)
     _SQL_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 
     @staticmethod
     def check(options) -> tuple[Kind, str] | None:
+        if (
+            options.lookup.get("OLEDB", "").upper() == "DUCKDB"
+            or options.lookup.get("ENGINE", "").upper() == "DUCKDB"
+        ):
+            return Kind.DUCKDB_QUERY, "/OLEDB=DuckDB or /ENGINE=DuckDB"
         if options.lookup.get("OLEDB", "").upper() == "SQLITE":
             return Kind.SQLITE_QUERY, "/OLEDB=SQLite"
         if options.lookup.get("ENGINE", "").upper() == "SQLITE":
@@ -149,6 +154,23 @@ class SqliteEngine(EmitterUtility):
         return inputs
 
     @staticmethod
+    def _extract_duckdb_inputs(block) -> list[tuple[str, str]]:
+        node = block.resolved_options.lookup.get("NODE", "")
+        prefix = "DUCKDB:"
+        if not node.upper().startswith(prefix):
+            raise ValueError("DuckDB query requires /NODE=DUCKDB:<file>:<table>")
+        inputs = []
+        for binding in node.split("@@@@@"):
+            if not binding.upper().startswith(prefix):
+                raise ValueError("DuckDB /NODE entries must start with DUCKDB:")
+            binding = binding[len(prefix):]
+            path, separator, table_name = binding.rpartition(":")
+            if not separator or not path or not table_name:
+                raise ValueError("DuckDB /NODE entries must be <file>:<table>")
+            inputs.append((path, table_name))
+        return inputs
+
+    @staticmethod
     def _extract_header(block) -> list[str] | None:
         headers_value = block.resolved_options.lookup.get("HEADERS")
         if not headers_value:
@@ -165,6 +187,8 @@ class SqliteEngine(EmitterUtility):
         imports = ()
         if reader.utility_name == "sqlite_reader":
             runtime_exports = ("SqliteReader",)
+        elif reader.utility_name == "duckdb_reader":
+            runtime_exports = ("DuckDbReader",)
         else:
             imports = (f"from {reader.module} import {reader.name}",)
             runtime_exports = ("OracleClient",)
@@ -179,8 +203,12 @@ class SqliteEngine(EmitterUtility):
             ),
             "output": resolve_output_path(block),
         }
-        if block.kind is Kind.SQLITE_QUERY:
-            inputs = cls._extract_table_inputs(block)
+        if block.kind in {Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY}:
+            inputs = (
+                cls._extract_table_inputs(block)
+                if block.kind is Kind.SQLITE_QUERY
+                else cls._extract_duckdb_inputs(block)
+            )
             if inputs:
                 kwargs["inputs"] = inputs
         else:
