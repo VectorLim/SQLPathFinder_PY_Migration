@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import Any
 
 from vg2c.emitter.models import BlockEmission
 from vg2c.kind import Kind
+from vg2c.project_paths import project_name
 from vg2c.utilities._base import EmitterUtility
+from vg2c.utilities._emit_helpers import resolve_output_path
 
 
 class PythonEmbed(EmitterUtility):
@@ -39,7 +42,18 @@ class PythonEmbed(EmitterUtility):
             )
         if any(cls._top_level_exit(statement) for statement in body):
             raise ValueError("Embedded Python return/yield must be inside an authored function")
-        return BlockEmission((block.resolved_body,))
+        name = f"python/step_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.py"
+        uses_macros = any(
+            isinstance(item, ast.Name) and item.id == "macros"
+            for statement in body
+            for item in ast.walk(statement)
+        )
+        extra = f", macros={macros}" if uses_macros else ""
+        source = block.resolved_body.rstrip("\n") + "\n"
+        return BlockEmission(
+            (f"job.run_python({name!r}{extra})",),
+            assets=((name, source),),
+        )
 
     @staticmethod
     def _top_level_exit(node):

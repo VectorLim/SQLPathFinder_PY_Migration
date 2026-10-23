@@ -87,8 +87,8 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
     assert "job_entrypoint" not in result.emitted.source
     assert "def run():" in result.emitted.source
     assert "job = JobRuntime.from_script(__file__)" in result.emitted.source
-    assert "workdir = job.workdir" in result.emitted.source
-    assert "project_dir = job.assets_root" in result.emitted.source
+    assert "job.run_python('python/step_" in result.emitted.source
+    assert any(name.startswith("python/") for name, _ in result.emitted.assets)
     assert "ctx" not in result.emitted.source
 
 

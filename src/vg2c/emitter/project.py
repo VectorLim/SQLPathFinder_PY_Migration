@@ -37,10 +37,6 @@ def emit_project(dispatched):
     writer.write("def run():")
     writer.push_indent()
     writer.write("job = JobRuntime.from_script(__file__)")
-    if any(block.kind is Kind.PYTHON_EMBED for block in blocks.values()):
-        # Authored Python historically runs in this scope and may use these paths.
-        writer.write("project_dir = job.assets_root")
-        writer.write("workdir = job.workdir")
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")

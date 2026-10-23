@@ -43,6 +43,7 @@ class JobRuntime:
         self._used_html_reports = set()
         self.aed_results = []
         self._csr_start = 0
+        self._python_globals = None
 
     @classmethod
     def from_script(cls, script_file):
@@ -60,6 +61,19 @@ class JobRuntime:
         if not resolved.is_relative_to(self.assets_root):
             raise ValueError("Asset path must remain inside the generated project")
         return resolved
+
+    def run_python(self, path, **names):
+        """Run an embedded-Python asset in a namespace shared across all such assets."""
+        asset = self.asset_path(path)
+        if self._python_globals is None:
+            self._python_globals = {
+                "__name__": "__main__",
+                "job": self,
+                "project_dir": self.assets_root,
+                "workdir": self.workdir,
+            }
+        self._python_globals.update(names, __file__=str(asset))
+        exec(compile(asset.read_text(encoding="utf-8"), str(asset), "exec"), self._python_globals)
 
     def table_spec(self, path):
         """Load an editable static CSV/SQL option on each invocation."""
