@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from vg2c.emitter.models import SourceRange
+from vg2c.operands import ScopeNode
 from vg2c.semantic.models import EditableBinding, Symbol, WorkflowOperation
 from vg2c.semantic.operations import project_control_operation, project_leaf_operations
 from vg2c.semantic.symbols import (
     apply_condition_symbol_validation,
     build_symbols,
 )
-from vg2c.emitter.models import SourceRange
-from vg2c.operands import ScopeNode
 
 if TYPE_CHECKING:
     from vg2c.compilation import CompilationResult
@@ -96,7 +96,6 @@ def project_semantics(
             orphan_ops[0] = replace(orphan_ops[0], comments=_source_comments(block.raw))
         operations.extend(orphan_ops)
 
-    bindings = tuple(binding for operation in operations for binding in operation.bindings)
     symbols = build_symbols(result, operations, values)
     operations = apply_condition_symbol_validation(operations, symbols)
     bindings = tuple(binding for operation in operations for binding in operation.bindings)

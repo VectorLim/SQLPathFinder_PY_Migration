@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from vg2c.emitter.models import EmittedInvocation
+from vg2c.emitter.models import EmittedInvocation, EmittedParameter
 from vg2c.utility_metadata import FileEffectDefinition, FileEffectKind, PathBase
+
+if TYPE_CHECKING:
+    from vg2c.semantic.models import EditableBinding
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,17 +290,37 @@ def bind_file_effects(
     conditional: bool = False,
     in_loop: bool = False,
 ) -> tuple[FileEffect, ...]:
-    definitions = invocation.operation.file_effects
+    return bind_effect_definitions(
+        invocation.operation.file_effects, invocation.parameters, values,
+        operation_id=invocation.id, step_id=step_id, block_index=block_index,
+        scope_id=scope_id, order=order, conditional=conditional, in_loop=in_loop,
+    )
+
+
+def bind_effect_definitions(
+    definitions: tuple[FileEffectDefinition, ...] | None,
+    parameters: Iterable[EmittedParameter | EditableBinding],
+    values: dict[str, Any],
+    *,
+    operation_id: str,
+    step_id: str,
+    block_index: int,
+    scope_id: int,
+    order: int = 0,
+    conditional: bool = False,
+    in_loop: bool = False,
+) -> tuple[FileEffect, ...]:
+    """Bind declared effects against emitted parameters or semantic bindings."""
     if definitions is None:
         definitions = (
             FileEffectDefinition(
                 "unknown", "unknown", reason="File effects are not declared."
             ),
         )
-    parameters = {parameter.name: parameter for parameter in invocation.parameters}
+    parameters = {parameter.name: parameter for parameter in parameters}
     effects: list[FileEffect] = []
     for definition in definitions:
-        effect_id = f"{invocation.id}:effect:{definition.key}"
+        effect_id = f"{operation_id}:effect:{definition.key}"
 
         def endpoints(names: tuple[str, ...], phase, base) -> tuple[FileEndpoint, ...]:
             bound: list[FileEndpoint] = []
@@ -316,7 +340,8 @@ def bind_file_effects(
                     )
                     continue
                 value = values.get(parameter.id, parameter.value)
-                if value is None and parameter.read_only_reason is None:
+                if (isinstance(parameter, EmittedParameter) and value is None
+                        and parameter.read_only_reason is None):
                     continue
                 paths = value if isinstance(value, list) else [value]
                 for index, path in enumerate(paths):
@@ -333,7 +358,7 @@ def bind_file_effects(
                             f"{effect_id}:{phase}:{name}:{index}",
                             parameter.id,
                             path if known else None,
-                            None if known else parameter.source,
+                            None if known else getattr(parameter, "source", repr(value)),
                             base,
                             phase,
                             status="known" if known else "dynamic",
@@ -353,7 +378,7 @@ def bind_file_effects(
         effects.append(
             FileEffect(
                 effect_id,
-                invocation.id,
+                operation_id,
                 step_id,
                 block_index,
                 scope_id,
@@ -361,8 +386,8 @@ def bind_file_effects(
                 kind,
                 inputs,
                 outputs,
-                conditional,
-                in_loop,
+                conditional or definition.conditional,
+                in_loop or definition.in_loop,
                 definition.reason,
             )
         )

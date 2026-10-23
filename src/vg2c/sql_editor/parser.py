@@ -32,15 +32,15 @@ def parse_sql(source: str) -> SqlEditableModel:
     full_span = trimmed_span(source, SqlSpan(0, len(source)))
     initial = _empty_model(source, full_span)
     if full_span.start >= full_span.end:
-        return _replace_model(initial, read_only_reason="SQL is empty.")
+        return replace(initial, read_only_reason="SQL is empty.")
 
     tokens, error = lex_sql(source)
     if error:
-        return _replace_model(initial, read_only_reason=error)
+        return replace(initial, read_only_reason=error)
 
     statement_span, reason = _choose_editable_statement(tokens, full_span)
     if statement_span is None:
-        return _replace_model(
+        return replace(
             initial,
             read_only_reason=reason or "Only SELECT statements are structurally editable.",
         )
@@ -50,22 +50,22 @@ def parse_sql(source: str) -> SqlEditableModel:
         token for token in tokens if not is_trivia(token) and overlaps(token, statement_span)
     ]
     if not significant:
-        return _replace_model(empty, read_only_reason="SQL is empty.")
+        return replace(empty, read_only_reason="SQL is empty.")
 
     first = significant[0]
     if first.upper == "WITH":
-        return _replace_model(
+        return replace(
             empty,
             read_only_reason=(
                 "CTEs are preserved as raw SQL until a CTE-aware structural editor is available."
             ),
         )
     if first.upper != "SELECT":
-        return _replace_model(
+        return replace(
             empty, read_only_reason="Only SELECT statements are structurally editable."
         )
     if any(token.depth == 0 and token.upper in SET_OPERATORS for token in significant):
-        return _replace_model(
+        return replace(
             empty,
             read_only_reason="UNION, INTERSECT, and EXCEPT queries are preserved as raw SQL.",
         )
@@ -100,10 +100,6 @@ def parse_sql(source: str) -> SqlEditableModel:
         where_body_span=where_body_span,
         from_clause_span=from_span,
     )
-
-
-def _replace_model(model: SqlEditableModel, *, read_only_reason: str | None) -> SqlEditableModel:
-    return replace(model, read_only_reason=read_only_reason)
 
 
 def _choose_editable_statement(

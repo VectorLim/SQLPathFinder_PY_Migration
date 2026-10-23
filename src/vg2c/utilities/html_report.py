@@ -102,7 +102,7 @@ tr th {{ background-color:#f5f5f5; }}
                 yield parts
 
     @classmethod
-    def _parse_options(cls, template: str | None) -> dict[str, Any]:
+    def parse_options(cls, template: str | None) -> dict[str, Any]:
         """Parse an SPF options template into {KEY: value|list-of-values}."""
         options: dict[str, Any] = {}
         for parts in cls._iter_rows(template):
@@ -118,7 +118,7 @@ tr th {{ background-color:#f5f5f5; }}
         return options
 
     @staticmethod
-    def _split_layout(template: str) -> tuple[dict[str, str], str]:
+    def split_layout(template: str) -> tuple[dict[str, str], str]:
         """Parse compiler-visible layout directives, without rendering HTML."""
         directives: dict[str, str] = {}
         body_lines: list[str] = []
@@ -136,7 +136,7 @@ tr th {{ background-color:#f5f5f5; }}
         return value if isinstance(value, list) else [value] if value else []
 
     def _report_options(self, block):
-        options = self._parse_options(block.resolved_body)
+        options = self.parse_options(block.resolved_body)
         allowed = {
             "TYPE", "INPUT-FILE", "OUTPUT-FILE", "CSS", "COLUMN-DATA",
             "COLUMN-HEADERS", "COLUMN-ALIGNMENT", "AT-TOP-OF-REPORT", "NOPREPROCESS",

@@ -5,7 +5,6 @@ import pytest
 from vg2c import compile_document
 from vg2c.utilities.html_report import HtmlReport
 
-
 D = r"<\\>"
 
 
@@ -19,7 +18,7 @@ def test_html_row_parser_keeps_script_host_format_options():
         D.join(["INPUT-FILE", "output.csv"]),
         D.join(["COLUMN-DATA", "", "LOT", "VALUE"]),
     ])
-    options = HtmlReport._parse_options(value)
+    options = HtmlReport.parse_options(value)
     assert options["TYPE"] == "HTML"
     assert options["INPUT-FILE"] == "output.csv"
     assert options["COLUMN-DATA"] == ["LOT", "VALUE"]

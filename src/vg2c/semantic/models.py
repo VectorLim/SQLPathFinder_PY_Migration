@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from vg2c.emitter.models import SourceRange
-from vg2c.utility_metadata import ValueSchema
+from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 
 if TYPE_CHECKING:
     from vg2c.frontend.models import SourceSpan
@@ -64,6 +64,7 @@ class WorkflowOperation:
     scope_id: int | None = None
     reorder_targets: tuple[int, ...] = ()
     source_range: SourceRange | None = None
+    file_effects: tuple[FileEffectDefinition, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

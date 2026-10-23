@@ -5,15 +5,15 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Literal
 
-from vg2c.semantic.models import EditableBinding, WorkflowOperation
-from vg2c.semantic.sql_bindings import sql_file_list_bindings
 from vg2c.emitter.models import SourceRange
 from vg2c.kind import Kind
-from vg2c.operands import IfThen, RunLoop, ForLoop, SiteLoop, ScopeNode, StartMacro
+from vg2c.operands import ForLoop, IfThen, RunLoop, ScopeNode, SiteLoop, StartMacro
 from vg2c.operands.base import _OPERATOR_TABLE
-from vg2c.utilities._emit_helpers import split_utility_command
+from vg2c.semantic.models import EditableBinding, WorkflowOperation
+from vg2c.semantic.sql_bindings import sql_file_list_bindings
+from vg2c.utilities._emit_helpers import resolve_output_path, split_utility_command
 from vg2c.utilities._runtime_helpers import strip_quotes
-from vg2c.utility_metadata import ValueSchema
+from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 
 if TYPE_CHECKING:
     from vg2c.compilation import CompilationResult
@@ -89,6 +89,7 @@ def project_control_operation(
             capabilities=("condition-editor",),
             block_index=block.index,
             source_range=source_range,
+            file_effects=(),
         )
 
     if isinstance(payload, StartMacro):
@@ -116,6 +117,10 @@ def project_control_operation(
             capabilities=("file-input",),
             block_index=block.index,
             source_range=source_range,
+            file_effects=(FileEffectDefinition(
+                "macro-input", "read", inputs=("csv_path",),
+                reason="Macro rows are loaded from this file.",
+            ),) if binding.value else (),
         )
 
     if isinstance(payload, RunLoop):
@@ -150,6 +155,11 @@ def project_control_operation(
             capabilities=("file-input", "file-output"),
             block_index=block.index,
             source_range=source_range,
+            file_effects=(FileEffectDefinition(
+                "chunks", "transform", inputs=("input_csv_path",),
+                outputs=("chunk_csv_path",), in_loop=True,
+                reason="Each iteration reads the input and materializes the current chunk file.",
+            ),),
         )
 
     if isinstance(payload, (ForLoop, SiteLoop)):
@@ -163,7 +173,8 @@ def project_control_operation(
         return WorkflowOperation(
             id=operation_id, kind="for-loop" if isinstance(payload, ForLoop) else "site-loop",
             display_name="FOR" if isinstance(payload, ForLoop) else "SITE", parent_operation_id=parent_operation_id,
-            branch=branch, source_span=block.span, bindings=(binding,), block_index=block.index, source_range=source_range)
+            branch=branch, source_span=block.span, bindings=(binding,), block_index=block.index,
+            source_range=source_range, file_effects=())
 
     return WorkflowOperation(
         id=operation_id,
@@ -175,6 +186,10 @@ def project_control_operation(
         validation_state="unsupported",
         block_index=block.index,
         source_range=source_range,
+        file_effects=(FileEffectDefinition(
+            "unknown", "unknown",
+            reason="No declared file effects are available for this operation.",
+        ),),
     )
 
 
@@ -186,6 +201,46 @@ def project_leaf_operations(
     values: dict[str, Any],
 ) -> list[WorkflowOperation]:
     step = result.emitted.step_for_block(block.index)
+
+    submission = next(
+        (item for item in result.resolved.csr_submissions if item.block_index == block.index),
+        None,
+    )
+    if submission is not None:
+        producer = next(
+            item for item in result.resolved.blocks if item.index == submission.producer_index
+        )
+        operation_id = f"block-{block.index}:csr-submission"
+        bindings = tuple(
+            EditableBinding(
+                id=f"{operation_id}:{name}", owner_operation_id=operation_id,
+                name=name, display_label=label, schema=ValueSchema("string", path=True),
+                value=value, default=value, editable=False,
+                read_only_reason="Edit the generated Python or regenerate from the VG2 source.",
+                capabilities=(capability,), source_kind="csr",
+            )
+            for name, label, value, capability in (
+                ("input_file", "CSR requests", resolve_output_path(producer), "file-input"),
+                ("output_file", "AED results", "AED_results.csv", "file-output"),
+            )
+        )
+        return [WorkflowOperation(
+            id=operation_id, kind="csr-submission", display_name="CSR → AED",
+            parent_operation_id=parent_operation_id, branch=branch,
+            source_span=block.span, summary=f"{resolve_output_path(producer)} → AED_results.csv",
+            bindings=bindings, capabilities=("file-input", "file-output"),
+            block_index=block.index, source_range=step.source_range if step else None,
+            file_effects=(
+                FileEffectDefinition(
+                    "read", "read", inputs=("input_file",), input_base="script-directory",
+                    reason="Read CSR requests; write results when an action is attempted.",
+                ),
+                FileEffectDefinition(
+                    "write", "write", outputs=("output_file",), conditional=True,
+                    reason="Read CSR requests; write results when an action is attempted.",
+                ),
+            ),
+        )]
 
     if block.kind is Kind.ROWS_IN_FILE:
         return [_rows_in_file_operation(result, block, step, parent_operation_id, branch, values)]
@@ -217,6 +272,10 @@ def project_leaf_operations(
                 capabilities=("embedded-python",),
                 block_index=block.index,
                 source_range=step.source_range if step else None,
+                file_effects=(FileEffectDefinition(
+                    "unknown", "unknown",
+                    reason="Embedded Python may perform arbitrary file operations.",
+                ),),
             )
         ]
 
@@ -298,6 +357,7 @@ def project_leaf_operations(
                     visibility=definition.visibility,
                     block_index=block.index,
                     source_range=invocation.source_range,
+                    file_effects=definition.file_effects,
                 )
             )
 
@@ -315,6 +375,10 @@ def project_leaf_operations(
             validation_state="unsupported",
             block_index=block.index,
             source_range=step.source_range if step else None,
+            file_effects=(FileEffectDefinition(
+                "unknown", "unknown",
+                reason="No declared file effects are available for this operation.",
+            ),),
         )
     ]
 
@@ -384,6 +448,10 @@ def _rows_in_file_operation(
         capabilities=("file-input", "symbol-definition"),
         block_index=block.index,
         source_range=step.source_range if step else None,
+        file_effects=(FileEffectDefinition(
+            "row-count", "observe", inputs=("path",),
+            reason="Row count observes this input file and stores the count in a symbol.",
+        ),),
     )
 
 

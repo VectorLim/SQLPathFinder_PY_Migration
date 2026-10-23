@@ -1,16 +1,26 @@
 """Source-driven CSR translation and offline generated-project execution."""
 
 import ast
+import csv
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from vg2c import compile_document, translate
 from vg2c.emitter import emit
 from vg2c.resolver.csr import CsrSubmission
+from vg2c.runtime import AEDClient
+from vg2c.workflow import project_document
 
 HEADERS = "HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module"
+
+
+@pytest.fixture(autouse=True)
+def isolated_aed_environment(monkeypatch):
+    for name in ("AED_FACILITY", "AED_HOLD_OPERATION", "AED_HOLD_CODE", "AED_MODE", "ENV_MODE"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def block(options, body=""):
@@ -75,6 +85,40 @@ def test_detection_does_not_depend_on_block_numbers(tmp_path):
     result = compile_document(path)
     assert len(result.resolved.csr_submissions) == 1
     assert "job.write_file" in result.emitted.source
+
+
+def test_csr_step_has_source_metadata_and_real_file_dependencies(tmp_path):
+    path = tmp_path / "metadata.txt"
+    path.write_text((block('/WRITE-FILE=Y\n/CSV=unrelated.txt', "unrelated") + source())
+                    .replace("RESULT_<<<LOT>>>.csv", "RESULT_requests.csv"))
+    result = compile_document(path)
+    submission = result.resolved.csr_submissions[0]
+    step = result.emitted.step_for_block(submission.block_index)
+    model = project_document(result)
+    operation = next(op for op in model.operations if op.block_index == submission.block_index)
+    assert operation.kind == "csr-submission"
+    assert operation.display_name == "CSR → AED"
+    assert operation.validation_state == "valid"
+    assert operation.source_span == result.resolved.blocks[submission.block_index].span
+    assert operation.source_range == step.source_range
+    assert step.functional_kind == "CSR_SUBMISSION"
+    assert step.function_name.endswith("_csr_submission")
+    generated_step = model.source[
+        operation.source_range.start_offset:operation.source_range.end_offset
+    ]
+    assert "aed.lot_hold(" in generated_step
+    assert all(not binding.editable for binding in operation.bindings)
+    effects = [effect for effect in model.effects if effect.operation_id == operation.id]
+    assert [effect.kind for effect in effects] == ["read", "write"]
+    assert effects[0].inputs[0].path == "RESULT_requests.csv"
+    assert effects[1].outputs[0].path == "AED_results.csv"
+    assert effects[1].conditional
+    producer_effects = {
+        effect.id for effect in model.effects if effect.block_index == submission.producer_index
+    }
+    assert producer_effects.intersection(effects[0].dependency_ids)
+    assert not any("CSRPATH" in (endpoint.path or endpoint.expression or "")
+                   for effect in effects for endpoint in (*effect.inputs, *effect.outputs))
 
 
 def test_emitter_initializes_each_csr_submission_in_shared_signal_scope(tmp_path):
@@ -246,3 +290,116 @@ def test_mocked_production_partial_failure_keeps_completed_actions(tmp_path, mon
     results = (work / "AED_results.csv").read_text()
     assert "accepted" in results and "failed" in results
     assert not (work / "history-written.txt").exists()
+
+
+def test_environment_overrides_python_defaults_on_each_run(tmp_path, monkeypatch):
+    _, namespace, work = generated(tmp_path)
+    calls = []
+
+    class Service:
+        def lot_hold(self, *args):
+            calls.append(args)
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"Success": True})
+
+    namespace["AEDClient"] = lambda **kwargs: AEDClient(
+        **kwargs, service_factory=lambda facility: Service())
+    monkeypatch.setattr("vg2c.runtime.job.send_mail", lambda *args, **kwargs: None)
+    for key, value in dict(AED_FACILITY="A16", AED_HOLD_OPERATION="2846",
+                           AED_HOLD_CODE="ENV", AED_MODE="prod").items():
+        monkeypatch.setenv(key, value)
+    namespace["run"]()
+    assert calls == [("L1", "2846", "ENV", "note%20%26%20detail%0ACCB%3A%2042")]
+    with (work / "AED_results.csv").open() as stream:
+        assert next(csv.DictReader(stream))["FACILITY"] == "A16"
+    assert (work / "history-written.txt").exists()
+    (work / "history-written.txt").unlink()
+
+    for key in ("AED_FACILITY", "AED_HOLD_OPERATION", "AED_HOLD_CODE", "AED_MODE"):
+        monkeypatch.delenv(key)
+    namespace["run"]()
+    assert len(calls) == 1
+    with (work / "AED_results.csv").open() as stream:
+        row = next(csv.DictReader(stream))
+    assert row["FACILITY"] == "A15"
+    assert row["STATUS"] == "dry_run"
+    assert not (work / "history-written.txt").exists()
+
+
+@pytest.mark.parametrize("env_mode", [None, "test", "prod"])
+def test_generated_mode_falls_back_to_env_mode_then_test(tmp_path, monkeypatch, env_mode):
+    _, namespace, work = generated(tmp_path)
+    namespace["AED_MODE"] = None
+    modes = []
+
+    def client(**kwargs):
+        aed = AEDClient(**kwargs, service_factory=lambda facility: SimpleNamespace(
+            lot_hold=lambda *args: SimpleNamespace(
+                raise_for_status=lambda: None, json=lambda: {"Success": True})))
+        modes.append(aed.mode)
+        return aed
+
+    namespace["AEDClient"] = client
+    monkeypatch.setattr("vg2c.runtime.job.send_mail", lambda *args, **kwargs: None)
+    if env_mode is not None:
+        monkeypatch.setenv("ENV_MODE", env_mode)
+    namespace["run"]()
+    assert modes == [env_mode or "test"]
+    assert (work / "history-written.txt").exists() == (env_mode == "prod")
+
+
+@pytest.mark.parametrize("key", ["AED_FACILITY", "AED_HOLD_OPERATION", "AED_HOLD_CODE", "AED_MODE"])
+@pytest.mark.parametrize("value", ["", "invalid value"])
+def test_invalid_environment_does_not_fall_back_to_python(tmp_path, monkeypatch, key, value):
+    _, namespace, work = generated(tmp_path)
+    monkeypatch.setenv(key, value)
+    monkeypatch.setattr("vg2c.runtime.job.send_mail", lambda *args, **kwargs: None)
+    with pytest.raises(ValueError):
+        namespace["run"]()
+    assert "failed" in (work / "AED_results.csv").read_text()
+    assert not (work / "history-written.txt").exists()
+    assert not (work / "after.txt").exists()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_user_can_replace_direct_hold_with_attribute_call(tmp_path, monkeypatch, fail):
+    main, namespace, work = generated(tmp_path)
+    code = main.read_text()
+    call = next(node for node in ast.walk(ast.parse(code)) if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute) and node.func.attr == "lot_hold")
+    code = code.replace(ast.get_source_segment(code, call),
+                        "aed.lot_set_attr(lotid=request['HOLD_LOT'], "
+                        "attributeid='1234', attributevalue='Y')")
+    code = code.replace("aed_action = 'lot_hold'", "aed_action = 'lot_set_attr'")
+    exec(code, namespace)
+    namespace.update(AED_FACILITY="A15", AED_MODE="prod")
+    calls, mails = [], []
+
+    class Service:
+        def lot_set_attr(self, *args):
+            calls.append(args)
+            if fail:
+                raise RuntimeError("synthetic attribute failure")
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"Success": True})
+
+    namespace["AEDClient"] = lambda **kwargs: AEDClient(
+        **kwargs, service_factory=lambda facility: Service())
+    monkeypatch.setattr(
+        "vg2c.runtime.job.send_mail", lambda *args, **kwargs: mails.append((args, kwargs))
+    )
+    if fail:
+        with pytest.raises(RuntimeError, match="synthetic attribute failure"):
+            namespace["run"]()
+    else:
+        namespace["run"]()
+    assert calls == [("L1", "1234", "Y")]
+    with (work / "AED_results.csv").open() as stream:
+        row = next(csv.DictReader(stream))
+    assert row["ACTION"] == "lot_set_attr"
+    assert row["STATUS"] == ("failed" if fail else "accepted")
+    assert (work / "history-written.txt").exists() == (not fail)
+    assert (work / "after.txt").exists() == (not fail)
+    assert len(mails) == 1
+    if not fail:
+        report = Path(mails[0][0][2]).read_text()
+        assert "lot_set_attr accepted" in report
+        assert "hold requests" not in report

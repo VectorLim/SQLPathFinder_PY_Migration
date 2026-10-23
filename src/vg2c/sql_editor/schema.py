@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, replace
 
+from vg2c.sql_editor._parser_support import is_identifier_token
 from vg2c.sql_editor.models import SqlColumnChoice, SqlEditableModel, SqlTableChoice
 from vg2c.sql_editor.parser import unquote_identifier
-from vg2c.sql_lexer import SqlToken, lex_sql
+from vg2c.sql_lexer import lex_sql
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,23 +79,19 @@ def _source_identity(expression: str) -> tuple[str, str] | None:
     significant = [token for token in tokens if token.kind != "whitespace"]
     if any(token.kind == "comment" for token in significant):
         return None
-    if len(significant) == 1 and _identifier(significant[0]):
+    if len(significant) == 1 and is_identifier_token(significant[0]):
         table = unquote_identifier(significant[0].text)
         return table, table
-    if len(significant) == 2 and all(_identifier(token) for token in significant):
+    if len(significant) == 2 and all(is_identifier_token(token) for token in significant):
         return unquote_identifier(significant[0].text), unquote_identifier(significant[1].text)
     if (
         len(significant) == 3
-        and _identifier(significant[0])
+        and is_identifier_token(significant[0])
         and significant[1].upper == "AS"
-        and _identifier(significant[2])
+        and is_identifier_token(significant[2])
     ):
         return unquote_identifier(significant[0].text), unquote_identifier(significant[2].text)
     return None
-
-
-def _identifier(token: SqlToken) -> bool:
-    return token.kind in {"word", "quoted"}
 
 
 def _quote(value: str) -> str:

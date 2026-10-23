@@ -221,7 +221,7 @@ def main(python: Path, wheel: Path) -> None:
         shutil.move(str(csr_main.parent), csr_project)
         csr_source.unlink()
         csr_check = '''
-import csv, runpy, sys
+import csv, os, runpy, sys
 from types import SimpleNamespace
 import vg2c.runtime.job as runtime_job
 from vg2c.runtime import AEDClient
@@ -233,8 +233,9 @@ class Service:
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"Success": True})
 runtime_job.send_mail = lambda *args, **kwargs: emails.append((args, kwargs))
 run = runpy.run_path(sys.argv[1], run_name="installed_csr")["run"]
-run.__globals__.update(AED_FACILITY="A15", AED_HOLD_OPERATION="2303", AED_HOLD_CODE="NCO",
-                      AED_MODE="prod", AEDClient=lambda **kwargs: AEDClient(
+os.environ.update(AED_FACILITY="A15", AED_HOLD_OPERATION="2303",
+                  AED_HOLD_CODE="NCO", AED_MODE="prod")
+run.__globals__.update(AEDClient=lambda **kwargs: AEDClient(
                           **kwargs, service_factory=lambda facility: Service()))
 run()
 assert calls == [("L1", "2303", "NCO", "note%20%26%20detail%0ACCB%3A%2042")], calls
@@ -244,7 +245,8 @@ with (output / "AED_results.csv").open(encoding="utf-8", newline="") as stream:
     assert next(csv.DictReader(stream))["STATUS"] == "accepted"
 assert all(name not in sys.modules for name in (
     "aed_client", "vg2c.frontend", "vg2c.resolver", "vg2c.emitter", "vg2c_ui"))
-print("AED_INSTALLED_WHEEL_PASS: relocated CSR; mocked hold; notification; no SDK/compiler imports")
+print("AED_INSTALLED_WHEEL_PASS: relocated CSR; env settings; mocked hold; "
+      "notification; no SDK/compiler imports")
 '''
         result = run_python(python, ["-c", csr_check, str(csr_project / "main.py")], unrelated)
         print(result.stdout.strip())

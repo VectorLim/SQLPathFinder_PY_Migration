@@ -195,12 +195,17 @@ def test_csr_outcomes_survive_notification_failure_and_scope_reset(tmp_path, mon
     job = JobRuntime(tmp_path, tmp_path / "output")
     request = {"HOLD_LOT": "L1", "CCB_NUMBER": "42", "EMAIL": "recipient@example.test"}
     job.record_aed_result(request, facility="A15", response={"Success": True})
+    assert job.aed_results[-1]["ACTION"] == "lot_hold"
+    assert "hold requests" not in job.csr_status
+    job.record_aed_result(request, facility="A15", action="lot_set_attr", response={"DryRun": True})
     job.record_aed_result(request, facility="A15", error=RuntimeError("private"))
     monkeypatch.setattr(job, "send_mail", lambda **kwargs: (_ for _ in ()).throw(OSError("mail failed")))
     job.csr_failure_mail([request])
     with (job.workdir / "AED_results.csv").open() as stream:
         rows = list(csv.DictReader(stream))
-    assert [row["STATUS"] for row in rows] == ["accepted", "failed"]
+    assert [row["STATUS"] for row in rows] == ["accepted", "dry_run", "failed"]
+    assert rows[1]["ACTION"] == "lot_set_attr"
+    assert "lot_set_attr dry_run" in job.csr_details
     assert "private" not in (job.workdir / "AED_results.csv").read_text()
     job.begin_csr()
     assert job.csr_status == "No CSR AED action was executed"

@@ -43,6 +43,8 @@ class FileEffectDefinition:
     output_base: PathBase = "script-directory"
     reason: str | None = None
     input_format: Literal["path", "table-binding"] = "path"
+    conditional: bool = False
+    in_loop: bool = False
 
 
 @dataclass(frozen=True, slots=True)

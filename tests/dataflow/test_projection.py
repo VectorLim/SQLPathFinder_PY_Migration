@@ -1,14 +1,89 @@
+from dataclasses import replace
 from pathlib import Path
+from typing import get_type_hints
 
 from vg2c import compile_document
 from vg2c.editing import SemanticChange
+from vg2c.semantic.models import EditableBinding
+from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 from vg2c.workflow import (
+    EffectiveDocument,
     WorkflowDocument,
     project_document,
     workspace_issues,
 )
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
+
+
+def test_public_workspace_document_annotations_remain_resolvable():
+    assert get_type_hints(WorkflowDocument)["workflow"] is EffectiveDocument
+
+
+def test_new_operation_binds_declared_effects_without_a_kind_handler(tmp_path, monkeypatch):
+    source = tmp_path / "new-operation.txt"
+    source.write_text("<OPTIONS>\n/WRITE-FILE=Y\n/CSV=placeholder.txt\n</OPTIONS>\nbody")
+    result = compile_document(source)
+    original = project_document(result).operations[0]
+    operation = replace(
+        original, id="custom-operation", kind="custom-file-operation",
+        bindings=tuple(EditableBinding(
+            id=f"custom:{name}", owner_operation_id="custom-operation", name=name,
+            display_label=name, schema=ValueSchema("string", path=True), value=value,
+        ) for name, value in (("source", "input.csv"), ("destination", "result.csv"))),
+        file_effects=(
+            FileEffectDefinition("input", "read", inputs=("source",)),
+            FileEffectDefinition(
+                "result", "write", outputs=("destination",), conditional=True, in_loop=True,
+            ),
+        ),
+    )
+    monkeypatch.setattr("vg2c.workflow.project_semantics", lambda *args: ((operation,), (), ()))
+    effects = project_document(result).effects
+    assert [effect.id for effect in effects] == [
+        "custom-operation:effect:input", "custom-operation:effect:result",
+    ]
+    assert effects[0].inputs[0].path == "input.csv"
+    assert effects[1].outputs[0].path == "result.csv"
+    assert effects[1].conditional and effects[1].in_loop
+    operation = replace(operation, file_effects=None)
+    unknown = project_document(result).effects
+    assert len(unknown) == 1 and unknown[0].kind == "unknown"
+    assert not unknown[0].inputs and not unknown[0].outputs
+
+
+def test_scope_flags_follow_scope_ids_after_a_conditional(tmp_path):
+    def block(options, body=""):
+        return f"<OPTIONS>\n{options}\n</OPTIONS>\n{body}\n<---- New Query ---->\n"
+
+    source = tmp_path / "scope-flags.txt"
+    source.write_text(
+        block('/UTILITIES={START-MACRO} "config.csv" "N"')
+        + block('/UTILITIES={IF-THEN} "1" "EQ" "1" "" "" "" ""')
+        + block('/WRITE-FILE=Y\n/CSV=inside.csv', "inside")
+        + block('/UTILITIES={END-IF}')
+        + block('/UTILITIES={END-MACRO}')
+        + block('/WRITE-FILE=Y\n/CSV=outside.csv', "outside")
+        + block('/UTILITIES=RoboCopy.va "outside.csv" "." "copies"')
+    )
+    effects = project_document(compile_document(source)).effects
+    by_block = {effect.block_index: effect for effect in effects}
+    assert by_block[0].in_loop
+    inside, outside, copy = (by_block[index] for index in (2, 5, 6))
+    assert inside.conditional
+    assert not outside.conditional
+    assert any(item.path == "outside.csv" and item.status == "guaranteed"
+               for item in copy.available_before)
+
+
+def test_html_layout_declares_its_parsed_output(tmp_path):
+    source = tmp_path / "layout.txt"
+    source.write_text("<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n"
+                      ":FILE:report.html\n:TITLE:Report\n<p>content</p>")
+    effects = project_document(compile_document(source)).effects
+    assert len(effects) == 1
+    assert effects[0].kind == "write"
+    assert effects[0].outputs[0].path == "report.html"
 
 
 def _artifact_parameter(result, direction: str):

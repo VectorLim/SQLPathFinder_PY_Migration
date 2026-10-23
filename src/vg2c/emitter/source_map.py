@@ -22,6 +22,7 @@ def record_inline_step(
     lines,
     *,
     external_parameters: tuple[ExternalParameter, ...] = (),
+    functional_kind: str | None = None,
 ) -> StepEmission:
     prefix = " " * writer.indent_depth * writer.indent_step
     fragments = []
@@ -63,13 +64,15 @@ def record_inline_step(
     if not fragments:
         fragments = [prefix + "pass"]
         writer.write("pass")
-    suffix = {Kind.EXTERNAL_RUN: "external", Kind.EMAIL: "email"}.get(
-        block.kind, block.kind.value.lower()
+    suffix = functional_kind.lower() if functional_kind else (
+        {Kind.EXTERNAL_RUN: "external", Kind.EMAIL: "email"}.get(
+            block.kind, block.kind.value.lower()
+        )
     )
     return StepEmission(
         function_name=f"step_{block.index:04d}_{suffix}",
         block_index=block.index,
-        functional_kind=block.kind.value,
+        functional_kind=functional_kind or block.kind.value,
         source="\n".join(fragments),
         call_site="",
         invocations=tuple(invocations),

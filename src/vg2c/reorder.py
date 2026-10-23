@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Iterable
 
 from vg2c.compilation import CompilationResult
-from vg2c.project_paths import project_main_path
 from vg2c.editing import SemanticChange
 from vg2c.emitter import emit
 from vg2c.operands import ScopeNode
-from vg2c.workflow import project_document, _reorder_safe_outputs
+from vg2c.project_paths import project_main_path
+from vg2c.reorder_analysis import safe_leaf_outputs, walk_scopes
+from vg2c.workflow import project_document
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +28,7 @@ def _safe_leaf_ids(
     result: CompilationResult, changes: Iterable[SemanticChange]
 ) -> dict[int, set[str]]:
     document = project_document(result, changes)
-    return _reorder_safe_outputs(
+    return safe_leaf_outputs(
         result,
         document.operations,
         document.effects,
@@ -57,7 +58,7 @@ def swap_adjacent(
     targets = legal_reorder_targets(result, changes)
     if target_scope_id not in targets.get(source_scope_id, ()):
         raise InvalidOrderChange("These operations cannot be reordered safely.")
-    for parent in _walk(result.resolved.scope_tree):
+    for parent in walk_scopes(result.resolved.scope_tree):
         ids = [child.scope_id for child in parent.children]
         if source_scope_id in ids and target_scope_id in ids:
             first, second = ids.index(source_scope_id), ids.index(target_scope_id)
@@ -114,12 +115,6 @@ def apply_order_changes(
     resolved = replace(result.resolved, scope_tree=tree)
     dispatched = replace(result.dispatched, resolved=resolved)
     return replace(result, dispatched=dispatched, emitted=emit(dispatched))
-
-
-def _walk(node: ScopeNode):
-    yield node
-    for child in node.children:
-        yield from _walk(child)
 
 
 __all__ = [

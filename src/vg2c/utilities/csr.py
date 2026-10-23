@@ -44,23 +44,34 @@ class CsrWorkflow:
             index = block.index
             return BlockEmission(
                 lines=(
+                    "# CSR -> AED: direct submission; edit the action and client call together.",
                     f"csr_requests_{index} = job.csr_requests({path})",
                     f"if csr_requests_{index}:\n"
                     f"    request = csr_requests_{index}[0]\n"
+                    "    aed_facility = os.environ.get('AED_FACILITY', AED_FACILITY)\n"
+                    "    aed_action = 'lot_hold'\n"
                     "    try:\n"
-                    "        aed = AEDClient(facility=AED_FACILITY, mode=AED_MODE)\n"
+                    "        aed = AEDClient(facility=aed_facility, "
+                    "mode=os.environ.get('AED_MODE', AED_MODE))\n"
                     f"        for request in csr_requests_{index}:\n"
+                    "            # Alternative: aed.lot_set_attr(\n"
+                    "            #     lotid=..., attributeid=..., attributevalue=...)\n"
                     "            response = aed.lot_hold(\n"
-                    "                lotid=request['HOLD_LOT'], operation=AED_HOLD_OPERATION,\n"
-                    "                holdcode=AED_HOLD_CODE, comment=request['COMMENT'])\n"
-                    "            job.record_aed_result(request, facility=AED_FACILITY, "
-                    "response=response)\n"
+                    "                lotid=request['HOLD_LOT'],\n"
+                    "                operation=os.environ.get("
+                    "'AED_HOLD_OPERATION', AED_HOLD_OPERATION),\n"
+                    "                holdcode=os.environ.get('AED_HOLD_CODE', AED_HOLD_CODE),\n"
+                    "                comment=request['COMMENT'])\n"
+                    "            job.record_aed_result(request, facility=aed_facility, "
+                    "action=aed_action, response=response)\n"
                     "    except Exception as error:\n"
-                    "        job.record_aed_result(request, facility=AED_FACILITY, error=error)\n"
+                    "        job.record_aed_result(request, facility=aed_facility, "
+                    "action=aed_action, error=error)\n"
                     f"        job.csr_failure_mail(csr_requests_{index})\n"
                     "        raise\n"
                     f"    csr_history_allowed_{index} = aed.mode == 'prod'",
                 ),
+                imports=("import os",),
                 runtime_exports=("AEDClient",),
             )
 
@@ -139,7 +150,8 @@ class CsrWorkflow:
         if not self.submissions:
             return ""
         return (
-            "# Set these AED request parameters explicitly; they are absent from the VG2 payload.\n"
+            "# Editable AED defaults; matching environment variables override these at run time.\n"
+            "# Set request parameters explicitly; they are absent from the VG2 payload.\n"
             "AED_FACILITY = None\nAED_HOLD_OPERATION = None\nAED_HOLD_CODE = None\n"
             "# None uses ENV_MODE, which defaults to test (no manufacturing writes).\n"
             "AED_MODE = None\n\n"

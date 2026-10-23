@@ -236,12 +236,12 @@ class JobRuntime:
     def begin_csr(self):
         self._csr_start = len(self.aed_results)
 
-    def record_aed_result(self, request, *, facility, response=None, error=None):
+    def record_aed_result(self, request, *, facility, action="lot_hold", response=None, error=None):
         status = "failed" if error is not None else (
             "dry_run" if response.get("DryRun") else "accepted"
         )
         self.aed_results.append({"FACILITY": facility or "", "LOT": request["HOLD_LOT"],
-                                 "ACTION": "lot_hold", "STATUS": status,
+                                 "ACTION": action, "STATUS": status,
                                  "CCB_NUMBER": request["CCB_NUMBER"],
                                  "ERROR": type(error).__name__ if error is not None else ""})
         stream = io.StringIO(newline="")
@@ -258,13 +258,15 @@ class JobRuntime:
         if "dry_run" in statuses:
             return "Dry run: no AED manufacturing writes were performed"
         if statuses:
-            return "AED accepted the hold requests; lot hold state has not been read back"
+            return "AED accepted the requests; resulting state has not been read back"
         return "No CSR AED action was executed"
 
     @property
     def csr_details(self):
-        return "\n".join(f"{result['LOT']}: {result['STATUS']}; CCB: {result['CCB_NUMBER']}"
-                         for result in self.aed_results[self._csr_start:])
+        return "\n".join(
+            f"{result['LOT']}: {result['ACTION']} {result['STATUS']}; CCB: {result['CCB_NUMBER']}"
+            for result in self.aed_results[self._csr_start:]
+        )
 
     def csr_failure_mail(self, requests):
         try:

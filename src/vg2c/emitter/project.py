@@ -67,6 +67,9 @@ def emit_project(dispatched):
                     block,
                     emission.lines,
                     external_parameters=emission.external_parameters,
+                    functional_kind=(
+                        "CSR_SUBMISSION" if block.index in csr_workflow.submissions else None
+                    ),
                 ))
             except (ValueError, SyntaxError) as exc:
                 raise ValueError(

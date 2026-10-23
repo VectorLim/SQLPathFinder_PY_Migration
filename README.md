@@ -58,10 +58,10 @@ and executes a generated project from a detached directory without a compiler
 checkout, VG2 source or ScriptHost at runtime:
 
 ```bash
-python -m pip install build wheel setuptools pandas==3.0.3
+python -m pip install build wheel setuptools pandas==3.0.3 duckdb==1.5.6
 python -m build --wheel --no-isolation --outdir /tmp/vg2c-dist
 python -m venv /tmp/vg2c-wheel-venv
-/tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3
+/tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3 duckdb==1.5.6
 /tmp/vg2c-wheel-venv/bin/python -m pip install --no-deps /tmp/vg2c-dist/*.whl
 python tests/deployment/verify_linux_wheel.py \\
     --python /tmp/vg2c-wheel-venv/bin/python \\
@@ -69,7 +69,7 @@ python tests/deployment/verify_linux_wheel.py \\
 ```
 
 The `--no-deps` wheel install is intentional for this **synthetic offline SQLite**
-probe: runtime imports require pandas, while external DataSyncX and production
+probe: runtime imports require pandas and DuckDB, while external DataSyncX and production
 credentials are absent. For a real deployed job, install all declared project
 requirements from an authorized corporate package source and validate its
 reader/service integration separately. Do not replace the production dependency
@@ -87,13 +87,35 @@ submission with an ordinary `AEDClient.lot_hold` call. Original SQL filters,
 query periods, macro scopes, and the independent MMS submission are preserved.
 Ambiguous or unsupported CSR submissions fail with source locations. Multiple
 CSR submissions in one signal branch are currently unsupported.
+Recognized submissions appear as **CSR → AED** operations with their source location,
+generated Python range, request CSV input and `AED_results.csv` output. The source
+`DCSR` gate remains in effect; no additional AED enable flag is required.
 
-Set the emitted `AED_FACILITY`, `AED_HOLD_OPERATION`, and `AED_HOLD_CODE` explicitly.
+Set the emitted `AED_FACILITY`, `AED_HOLD_OPERATION`, and `AED_HOLD_CODE` defaults
+or supply matching environment variables. Environment values override Python defaults
+each time `run()` executes, including after the generated module has been imported.
+Empty or invalid values fail validation rather than falling back to a default.
 The VG2 payload does not establish their AED mapping: query operation `2303`,
 XRAY report text `2846`, and `HOLDCATEGORY` are not inferred as hold parameters.
-`AED_MODE = None` reads `ENV_MODE`, defaulting to `test`. Test-mode manufacturing
+Mode precedence is environment `AED_MODE`, Python `AED_MODE`, `ENV_MODE`, then `test`.
+The Python default is `None`. Test-mode manufacturing
 writes return dry-run results without loading the SDK or credentials. Explicit
 `lot_status` and `lot_get_attr` calls still perform reads against the PROD context.
+
+For a generated job packaged into your own Linux image, pass these non-secret
+settings with `docker run --env-file aed.env <your-job-image>`; replace the placeholders
+in `aed.env` with the required facility, operation and hold code:
+
+```dotenv
+AED_FACILITY=<facility>
+AED_HOLD_OPERATION=<operation>
+AED_HOLD_CODE=<hold-code>
+AED_MODE=test
+```
+
+Production writes require an explicit `prod` mode plus the credentials and CA bundle
+described below. This configures AED only; any Windows batch/executable steps in
+the original job still need Linux replacements before that whole job can run there.
 
 ```python
 from vg2c.runtime import AEDClient
@@ -105,6 +127,24 @@ response = aed.lot_hold(lotid=lot, operation=operation, holdcode=code, comment=n
 # aed.lot_release(lotid=lot, operation=operation, comment=note)
 # aed.update_lot_attributes(lot, ("1064",), "Y", overwrite=True)
 ```
+
+The generated submission contains a direct `aed.lot_hold(...)` call. To change it
+to an attribute write, edit that call and its adjacent action label together:
+
+```python
+aed_action = "lot_set_attr"
+# Inside the existing request loop; supply your business-specific ID and value:
+response = aed.lot_set_attr(
+    lotid=request["HOLD_LOT"], attributeid=attribute_id, attributevalue=attribute_value)
+# Keep the existing result/failure recording, notification and history guards.
+job.record_aed_result(request, facility=aed_facility, action=aed_action, response=response)
+```
+
+There is no action dispatcher: the Python call determines what runs. Hold operation
+and code settings are used only by the hold call. `record_aed_result` defaults its
+optional `action` argument to `lot_hold` for existing callers; the CSV and email
+details use the supplied action name. If adding multiple actions, record each result
+and set the current action label before each call so partial failures remain accurate.
 
 `1064="Y"` is the SOIMS CSR_IAM upgrade's business choice, not a translator
 default. The updater preserves its first-attribute and overwrite behavior.
@@ -132,7 +172,7 @@ Generated projects do not import the SOIMS checkout, compiler, or visual editor.
 CSR outcomes are saved atomically in `output/AED_results.csv`, including completed
 actions before a failure. No manufacturing write retries are automatic. The CSR
 report email includes actual outcomes and CCB references; it does not claim
-readback-confirmed hold state. Failed actions stop subsequent workflow steps;
+readback-confirmed manufacturing state. Failed actions stop subsequent workflow steps;
 dry-run CSR actions suppress the associated production history append. Failure
 email errors do not mask the original failure. Other HTML email directives still
 have the existing local-rendering behavior.
@@ -164,6 +204,10 @@ graph TD
 ```
 
 `CompilationResult` and the compiler-stage objects are the authoritative semantic chain. The emitter records utility invocations, editable parameters, stable identities, artifact roles, capabilities, and exact generated-source spans while it generates Python. The UI API serializes those compiler-owned results and handles persistence/workspace security; React renders the returned metadata and sends edit intent back to core APIs rather than reconstructing SQL or dataflow semantics locally.
+
+Workflow file effects are declared with their operations and bound by one shared
+implementation. Document assembly, workspace analysis and reorder analysis have
+separate owners; see the [responsibility and redundancy map](docs/workflow-responsibilities.md).
 
 Native scope payloads own their generated headers and bodies for macro, conditional, and loop scopes; the project emitter walks the resolved scope tree and assembles imports, assets, and source maps. HTML report emission belongs to a per-translation `HtmlReport`, while CSR submission and history policy belongs to a per-translation `CsrWorkflow`. Generated jobs call the installed `vg2c.runtime` APIs, which own file, SQL, email, and control behavior at execution time.
 
