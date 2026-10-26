@@ -1,0 +1,2768 @@
+`<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-RUN
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-1. create revision footer
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8
+TYPE<\\>CSS<\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\>
+FORMAT<\\>Column-Headers<\\>background-color:#dbd9c0<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>text-decoration:normal<\\>vertical-align:middle
+FORMAT<\\>Column-Data<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>Column-Alt-Row<\\>background-color:#f7f5dc<\\>color:#333<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>text-align:left<\\>vertical-align:middle<\\>
+FORMAT<\\>At-Top-of-Report<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:15<\\>font-style:normal<\\>font-weight:bold<\\>text-align:center<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col1<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col2<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>At-Top-of-Col3<\\>background-color:white<\\>color:#444<\\>font-family:Arial<\\>font-size:12<\\>font-style:normal<\\>font-weight:bold<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>JQX-All-IChart-Text<\\>background-color:white<\\>color:black<\\>font-family:Verdana<\\>font-size:11<\\>font-style:normal<\\>font-weight:normal<\\>text-align:left<\\>vertical-align:middle
+FORMAT<\\>COLUMN-BORDER<\\>border-color:#cc9<\\>border-collapse:collapse<\\>border-style:solid<\\>border-width:1px<\\>border-spacing:4px<\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-LAYOUT
+/OUTLOOK=N
+/INSTANCE=3182
+/JSON-ONLY=N
+/CHART-INSTANCE=3450
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+:FILE:revision.htm
+:CSS:sqlpathfinder_style_1.css
+:CSSEMBED:Y
+:RR:NO
+:B:Y
+:EM-A:
+:EM-S:
+:SEC:Y
+:TITLE:revision
+<table class="tblout">
+<tr class="tblout">
+<td class="tblout">
+<p style="text-align: left" style="background-color: white"><i><font face="arial" size="2.66666666666667" color="silver"><script filename><br>- <changes made></font></i>
+</td>
+</tr>
+</table>
+</td><td class="tblout" valign="top">
+<table class="tblout">
+<tr class="tblout"><td class="tblout"></td></tr>
+</table>
+</td></tr></table>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-DELETE
+/INSTANCE=3182
+</OPTIONS>
+N/A
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-2. create macro.tmp, update script name here
+/CSV=macrotmp.csv
+</OPTIONS>
+
+Sfolder,underDEV,useCSR,useMMS
+ICMPCS_GE_Signal_CSR_CAM,N,Y,Y
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-4. create getcsrsu.bat
+/CSV=getcsrsu.bat
+</OPTIONS>
+
+@echo off
+set PriCSR="\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\Patrol\*.___"
+set SecCSR="\\KMATSHFS.intel.com\KMATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\Patrol\*.___"
+set BakCSR="\\SHUser-ProdAT.intel.com\SHProdATUser$\%username%\Patrol\*.___"
+copy %PriCSR% . || copy %SecCSR% . || copy %BAKCSR% .
+ren setsiteparam.___ setsiteparam.exe
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=getcsrsu.bat
+/PROMPT-TEXT=Step 1-5. run getcsrsu.bat
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "macrotmp.csv" "N"
+/PROMPT-TEXT=Step 1-6. Start Macro Processing
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=setsiteparam.exe VN <<<SFOLDER>>> <<<UNDERDEV>>> <<<USECSR>>> <<<USEMMS>>>
+/PROMPT-TEXT=Step 1-7. run setsiteparam.exe
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/CSV=TT
+</OPTIONS>
+
+SST Rev3g
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFDelete.bat "macrotmp.csv,getcsrsu.bat,setsiteparam.exe,csrsu.txt" "N"
+/PROMPT-TEXT=Step 1-9. delete temporary files
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "ctime.csv" "N"
+/PROMPT-TEXT=Step 1-10. pass server time info and CSR path to config file
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "ICMPCS_config.csv" "CONFIG" "N"
+/PROMPT-TEXT=Step 1-11. Check existence of config file
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "CONFIG" "LE" "0" "" "" "" ""
+/PROMPT-TEXT=Step 1-12. TRUE if config file not found
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ELSE}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/TS=_20261026111352
+/CSV=configsets.csv
+/CTROW=icmpcs,STARTTS,UTC,TZONE,TZS,SFOLDER,FAC,MARS,MARSN,RIMS,EIMS,ARIES,OASYS,MONGO,MMS,MMSI,TOOLLOG,VFMARS,VFARIES,VFMONGO,CSRPATH,MMSPATH,MIPPATH,LURL,IREPOP,UNDERDEV,CSRV,MMSV
+/CTVALUE=value
+/CTHEADER=parameter
+/CTARRAY=SQL,3182
+/TABLE=ICMPCS_config.csv
+/HEADERS=icmpcs,STARTTS,UTC,TZONE,TZS,SFOLDER,FAC,MARS,MARSN,RIMS,EIMS,ARIES,OASYS,MONGO,MMS,MMSI,TOOLLOG,VFMARS,VFARIES,VFMONGO,CSRPATH,MMSPATH,MIPPATH,LURL,IREPOP,UNDERDEV,CSRV,MMSV
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-14.1. Transpose config file to macro-friendly format
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/EMPTY_TO_NULL=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L10*/  DISTINCT 
+          [icmpcs] AS [icmpcs]
+         ,[parameter] AS [parameter]
+         ,Max([value]) AS [value]
+         ,[STARTTS] AS [STARTTS]
+         ,[UTC] AS [UTC]
+         ,[TZONE] AS [TZONE]
+         ,[TZS] AS [TZS]
+         ,[SFOLDER] AS [SFOLDER]
+         ,[FAC] AS [FAC]
+         ,[MARS] AS [MARS]
+         ,[MARSN] AS [MARSN]
+         ,[RIMS] AS [RIMS]
+         ,[EIMS] AS [EIMS]
+         ,[ARIES] AS [ARIES]
+         ,[OASYS] AS [OASYS]
+         ,[MONGO] AS [MONGO]
+         ,[MMS] AS [MMS]
+         ,[MMSI] AS [MMSI]
+         ,[TOOLLOG] AS [TOOLLOG]
+         ,[VFMARS] AS [VFMARS]
+         ,[VFARIES] AS [VFARIES]
+         ,[VFMONGO] AS [VFMONGO]
+         ,[CSRPATH] AS [CSRPATH]
+         ,[MMSPATH] AS [MMSPATH]
+         ,[MIPPATH] AS [MIPPATH]
+         ,[LURL] AS [LURL]
+         ,[IREPOP] AS [IREPOP]
+         ,[UNDERDEV] AS [UNDERDEV]
+         ,[CSRV] AS [CSRV]
+         ,[MMSV] AS [MMSV]
+FROM
+(
+SELECT /*L0*/  
+          a0.[icmpcs] AS [icmpcs]
+         ,a0.[parameter] AS [parameter]
+         ,a0.[value] AS [value]
+         ,'<<<STARTTS>>>' AS [STARTTS]
+         ,'<<<UTC>>>' AS [UTC]
+         ,'<<<TZONE>>>' AS [TZONE]
+         ,'<<<TZS>>>' AS [TZS]
+         ,'<<<SFOLDER>>>' AS [SFOLDER]
+         ,'<<<FAC>>>' AS [FAC]
+         ,'<<<MARS>>>' AS [MARS]
+         ,'<<<MARSN>>>' AS [MARSN]
+         ,'<<<RIMS>>>' AS [RIMS]
+         ,'<<<EIMS>>>' AS [EIMS]
+         ,'<<<ARIES>>>' AS [ARIES]
+         ,'<<<OASYS>>>' AS [OASYS]
+         ,'<<<MONGO>>>' AS [MONGO]
+         ,'<<<MMS>>>' AS [MMS]
+         ,'<<<MMSI>>>' AS [MMSI]
+         ,'<<<TOOLLOG>>>' AS [TOOLLOG]
+         ,'<<<VFMARS>>>' AS [VFMARS]
+         ,'<<<VFARIES>>>' AS [VFARIES]
+         ,'<<<VFMONGO>>>' AS [VFMONGO]
+         ,'<<<CSRPATH>>>' AS [CSRPATH]
+         ,'<<<MMSPATH>>>' AS [MMSPATH]
+         ,'<<<MIPPATH>>>' AS [MIPPATH]
+         ,'<<<LURL>>>' AS [LURL]
+         ,'<<<IREPOP>>>' AS [IREPOP]
+         ,'<<<UNDERDEV>>>' AS [UNDERDEV]
+         ,'<<<CSRV>>>' AS [CSRV]
+         ,'<<<MMSV>>>' AS [MMSV]
+FROM 
+[ICMPCS_config] a0
+WHERE
+              a0.[icmpcs] = 'ICMPCS' 
+) t /*L0*/
+GROUP BY 
+          [icmpcs]
+         ,[parameter]
+         ,[STARTTS]
+         ,[UTC]
+         ,[TZONE]
+         ,[TZS]
+         ,[SFOLDER]
+         ,[FAC]
+         ,[MARS]
+         ,[MARSN]
+         ,[RIMS]
+         ,[EIMS]
+         ,[ARIES]
+         ,[OASYS]
+         ,[MONGO]
+         ,[MMS]
+         ,[MMSI]
+         ,[TOOLLOG]
+         ,[VFMARS]
+         ,[VFARIES]
+         ,[VFMONGO]
+         ,[CSRPATH]
+         ,[MMSPATH]
+         ,[MIPPATH]
+         ,[LURL]
+         ,[IREPOP]
+         ,[UNDERDEV]
+         ,[CSRV]
+         ,[MMSV]
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "configsets.csv" "CONFIGSETS" "N"
+/PROMPT-TEXT=Step 1-15. Check config file conversion output
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "CONFIGSETS" "NE" "1" "" "" "" ""
+/PROMPT-TEXT=Step 1-16. TRUE if config file converted output >1 row
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ELSE}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "configsets.csv" "N"
+/PROMPT-TEXT=Step 1-18. Start Macro Processing
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "HIST.txt" "\\AZATSHFS.intel.com\AZATAnalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\<<<SFOLDER>>>\VN\HIST" "." "5" "30" "N" "" "N"
+/PROMPT-TEXT=Step 1-25. robocopy HIST.txt
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "HIST.txt" "HIST" "N"
+/PROMPT-TEXT=Step 1-26. check presence of HIST.txt
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "HIST" "LE" "0" "" "" "" ""
+/PROMPT-TEXT=Step 1-27. TRUE if HIST.txt is not found
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-28. create dummy HIST.csv
+/CSV=HIST.csv
+</OPTIONS>
+
+LOT,OUT_DATE
+DUMMY,2000-01-01 00:00:00
+<---- New Query ---->
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 1-29. create HISTERROR.txt
+/CSV=HISTERROR.txt
+</OPTIONS>
+
+ERROR
+ERROR
+ERROR
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ELSE}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFRename.va "HIST.txt" "HIST.csv"
+/PROMPT-TEXT=Step 1-30. convert HIST.txt to HIST.csv
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={START-MACRO} "configsets.csv" "N"
+/PROMPT-TEXT=Step 2. Apply variables from config file
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<MARS>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20261026111352
+/CSV=yeuchuan_a0_3182.tab
+/HEADERS=ww,prod,subs,lot,qty,out_date,attribute_name,owner,current_time
+/INSTANCE=3182
+/PROMPT-TEXT=Step 3-1.1-a0. Fetching MARS Data
+/RECORD=WIP_Lot_History_v2@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          ww AS ww
+         ,prod AS prod
+         ,Replace(Replace(Replace(Replace(Replace(Replace(subs,',',';'),chr(9),' '),chr(10),' '),chr(13),' '),chr(34),''''),chr(7),' ') AS subs
+         ,lot AS lot
+         ,qty AS qty
+         ,To_Char(out_date,'yyyy-mm-dd hh24:mi:ss') AS out_date
+         ,attribute_name AS attribute_name
+         ,owner AS owner
+         ,To_Char(SYSDATE,'yyyy-mm-dd hh24:mi:ss') AS current_time
+FROM
+(
+SELECT  
+          c0.ww AS ww
+         ,p.prodgroup3 AS prod
+         ,f12.attribute_value AS subs
+         ,f0.lot AS lot
+         ,f0.newqty1 AS qty
+         ,f0.out_date AS out_date
+         ,(SELECT alpha1 as attribute_name FROM @[]@F_GTSData WHERE facility IN ('IMORA','IMO','COMETS') AND table_name = 'COM$ATTR' AND key1 = 'LOT' AND src_erase_date IS NULL AND key2_numeric = f12.attribute_number AND rownum <= 1) AS attribute_name
+         ,f0.owner AS owner
+FROM 
+@[]@F_LotHist f0
+INNER JOIN @[]@F_Calendar c0 ON f0.last_action_date BETWEEN c0.start_date AND c0.end_date AND c0.event_code = 'S' AND decode(f0.facility,'RA3','AAL',f0.facility)= c0.facility
+LEFT JOIN @[]@F_Product p ON p.product = f0.product AND p.facility = f0.facility AND NVL(p.latest_version,'Y') = 'Y' -- AND p.product_version = f0.product_version
+INNER JOIN @[]@F_Lot f9 ON f9.lot = f0.lot
+LEFT JOIN @[]@F_LotAttribute f12 ON f9.lot = f12.lot
+WHERE
+NVL(f0.history_deleted_flag,'N') = 'N'
+AND      f0.owner <> 'EMPTYFOUP'
+ AND      f0.operation = '1210' 
+ AND      f0.last_pass = 'Y' 
+ AND      f0.movedout = 'Y' 
+ AND      f0.owner = 'PROD' 
+ AND      f0.out_date Between To_Date('28-Jun-2026 00:00:00','dd-Mon-yyyy hh24:mi:ss') AND To_Date('30-Jun-2026 00:00:00','dd-Mon-yyyy hh24:mi:ss') 
+-- Tail A
+)
+WHERE
+              attribute_name = 'SUB VEND ID' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<ARIES>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20261026111352
+/CSV=yeuchuan_a1_3182.tab
+/HEADERS=link,lot_1,program_name,lot_2
+/INSTANCE=3182
+/PROMPT-TEXT=Step 3-1.1-a1. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          ats.link_id AS link
+         ,ats.lot AS lot_1
+         ,ats.program_name AS program_name
+         ,ats.lot AS lot_2
+FROM 
+A_Testing_Session ats
+WHERE ats.data_domain='METROLOGY'
+ AND      ats.operation = '1210' 
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_3182.tab", lot, "ats.lot In") 
+ AND      ats.latest_flag = 'Y' 
+ AND      ats.valid_flag = 'Y' 
+ AND      ats.program_name = 'DPMS_PREBTU' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111352
+/CSV=cam_lot_list.csv
+/TABLE=yeuchuan_a0_3182.tab,yeuchuan_a1_3182.tab
+/SORT=[LOT_GROUP] ASC
+/HEADERS=ww,link,prod,subs,lot,qty,out_date,current_time,LOT_GROUP,time_gap,SEQ,lot_2
+/DELETE=*Instance*
+/INSTANCE=3182
+/SQLITE_DT=,ww(n),link(c),prod(c),subs(x),lot(c),qty(n),out_date(d),attribute_name(c),owner(c),lot_1(c),program_name(c),current_time(d),LOT_GROUP(c),time_gap(n),SEQ(n),MIN_TIME(n),lot_2(c)
+/QUOTECSV=Y
+/EMPTY_TO_NULL=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_3182] ([lot_1]);
+
+SELECT /*L4*/  DISTINCT 
+          [ww] AS [ww]
+         ,[link] AS [link]
+         ,[prod] AS [prod]
+         ,Replace(Replace(Replace(Replace(Replace(Replace([subs],',',';'),CAST(X'09' AS TEXT),' '),CAST(X'0A' AS TEXT),' '),CAST(X'0D' AS TEXT),' '),CAST(X'22' AS TEXT),''''),CAST(X'07' AS TEXT),' ') AS [subs]
+         ,[lot] AS [lot]
+         ,[qty] AS [qty]
+         ,[out_date] AS [out_date]
+         ,[current_time] AS [current_time]
+         ,[LOT_GROUP] AS [LOT_GROUP]
+         ,CASE WHEN 2=0 THEN CAST(ROUND([time_gap],0) AS Integer) ELSE Round([time_gap],2) END AS [time_gap]
+         ,[SEQ] AS [SEQ]
+         ,[lot_2] AS [lot_2]
+FROM
+(
+SELECT /*L3*/ 
+          [ww] AS [ww]
+         ,[link] AS [link]
+         ,[prod] AS [prod]
+         ,[subs] AS [subs]
+         ,[lot] AS [lot]
+         ,[qty] AS [qty]
+         ,[out_date] AS [out_date]
+         ,[attribute_name] AS [attribute_name]
+         ,[owner] AS [owner]
+         ,[lot_1] AS [lot_1]
+         ,[program_name] AS [program_name]
+         ,[current_time] AS [current_time]
+         ,[LOT_GROUP] AS [LOT_GROUP]
+         ,[time_gap] AS [time_gap]
+         ,RANK () OVER (PARTITION BY  [LOT_GROUP]  ORDER BY  [out_date]  DESC) AS [SEQ]
+         ,MIN ( [time_gap] ) OVER (PARTITION BY  [LOT_GROUP]  ) AS [MIN_TIME]
+         ,[lot_2] AS [lot_2]
+FROM
+(
+SELECT /*L2*/ 
+          [ww] AS [ww]
+         ,[link] AS [link]
+         ,[prod] AS [prod]
+         ,[subs] AS [subs]
+         ,[lot] AS [lot]
+         ,[qty] AS [qty]
+         ,[out_date] AS [out_date]
+         ,[attribute_name] AS [attribute_name]
+         ,[owner] AS [owner]
+         ,[lot_1] AS [lot_1]
+         ,[program_name] AS [program_name]
+         ,[current_time] AS [current_time]
+         ,[link] ||'_'|| [prod] ||'_'|| [subs] AS [LOT_GROUP]
+         ,[time_gap] AS [time_gap]
+         ,[lot_2] AS [lot_2]
+FROM
+(
+SELECT /*L1*/ 
+          [ww] AS [ww]
+         ,[link] AS [link]
+         ,[prod] AS [prod]
+         ,[subs] AS [subs]
+         ,[lot] AS [lot]
+         ,[qty] AS [qty]
+         ,[out_date] AS [out_date]
+         ,[attribute_name] AS [attribute_name]
+         ,[owner] AS [owner]
+         ,[lot_1] AS [lot_1]
+         ,[program_name] AS [program_name]
+         ,[current_time] AS [current_time]
+         ,[time_gap] AS [time_gap]
+         ,[lot_2] AS [lot_2]
+FROM
+(
+SELECT /*L0*/  
+          a0.[ww] AS [ww]
+         ,a1.[link] AS [link]
+         ,a0.[prod] AS [prod]
+         ,a0.[subs] AS [subs]
+         ,a0.[lot] AS [lot]
+         ,a0.[qty] AS [qty]
+         ,a0.[out_date] AS [out_date]
+         ,a0.[attribute_name] AS [attribute_name]
+         ,a0.[owner] AS [owner]
+         ,a1.[lot_1] AS [lot_1]
+         ,a1.[program_name] AS [program_name]
+         ,a0.[current_time] AS [current_time]
+         ,(( strftime('%s',[current_time]) -  strftime('%s',[out_date]) ) / 3600.0 / 24.0)*24 AS [time_gap]
+         ,a1.[lot_2] AS [lot_2]
+FROM 
+           [yeuchuan_a0_3182] a0
+ LEFT OUTER JOIN [yeuchuan_a1_3182] a1
+  ON a0.[lot] = a1.[lot_1] 
+) t /*L0*/
+) t /*L1*/
+) t /*L2*/
+WHERE
+              [LOT_GROUP] Is Not Null  
+) t /*L3*/
+WHERE
+              [SEQ] < 30 
+ORDER BY
+           [LOT_GROUP] Asc
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "cam_lot_list.csv" "RowsInFile" "N" ""
+/PROMPT-TEXT=Step 4. Count Rows in a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "RowsInFile" "GT" "0" "" "" "" ""
+/PROMPT-TEXT=Step 5. Apply Conditional Logic
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFDelete.bat "data.csv" "N"
+/PROMPT-TEXT=Step 6-1. Delete Files
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={RUN-LOOP} "cam_lot_list.csv" "temp_cam_lot_list.csv" "1" "N"
+/PROMPT-TEXT=Step 6-2. Loop through a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<ARIES>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20261026111353
+/CSV=yeuchuan_a0_3182.tab
+/CTROW=ww,link_id,prodgroup3,program_name,test_end_date,tester_id,lot,visual_id,complevel_1,complevel_2,tray_or_carrier_id,carrier_x,carrier_y
+/CTVALUE=all_value
+/CTHEADER=test_name
+/CTARRAY=a0,3182
+/HEADERS=ww,link_id,prodgroup3,program_name,test_end_date,tester_id,lot,visual_id,complevel_1,complevel_2,test_name,all_value,tray_or_carrier_id,carrier_x,carrier_y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 6-3.1-a0. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          ww AS ww
+         ,link_id AS link_id
+         ,prodgroup3 AS prodgroup3
+         ,program_name AS program_name
+         ,To_Char(test_end_date,'yyyy-mm-dd hh24:mi:ss') AS test_end_date
+         ,tester_id AS tester_id
+         ,lot AS lot
+         ,visual_id AS visual_id
+         ,complevel_1 AS complevel_1
+         ,complevel_2 AS complevel_2
+         ,test_name AS test_name
+         ,Max(all_value) AS all_value
+         ,tray_or_carrier_id AS tray_or_carrier_id
+         ,carrier_x AS carrier_x
+         ,carrier_y AS carrier_y
+FROM
+(
+SELECT  
+          ats.lao_start_ww AS ww
+         ,ats.link_id AS link_id
+         ,mp.prodgroup3 AS prodgroup3
+         ,ats.program_name AS program_name
+         ,ats.test_end_date_time AS test_end_date
+         ,ats.tester_id AS tester_id
+         ,ats.lot AS lot
+         ,di.visual_id AS visual_id
+         ,ctr.complevel_1 AS complevel_1
+         ,ctr.complevel_2 AS complevel_2
+         ,t.test_name AS test_name
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value
+         ,dt.testing_session_tray_id AS tray_or_carrier_id
+         ,dt.carrier_x AS carrier_x
+         ,dt.carrier_y AS carrier_y
+FROM 
+A_Testing_Session ats
+LEFT JOIN A_MARS_Lot ml ON ats.lot=ml.lot
+LEFT JOIN A_MARS_Product mp ON ml.product = mp.product AND ml.mars_schema=mp.mars_schema AND ats.facility = mp.facility
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      ats.operation = '1210' 
+ AND      ats.latest_flag = 'Y' 
+ AND      ats.valid_flag = 'Y' 
+ AND      ctr.latest_flag = 'Y' 
+ AND      dt.within_lao_latest_flag = 'Y' 
+ AND      dt.within_lao_latest_flag = 'Y' 
+ AND      dt.latest_flag = 'Y' 
+ AND      ctr.complevel_1 Like 'U%' 
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\temp_cam_lot_list.csv", "5", "ats.lot In") 
+ AND      ats.program_name = 'DPMS_PREBTU' 
+)
+GROUP BY 
+          ww
+         ,link_id
+         ,prodgroup3
+         ,program_name
+         ,test_end_date
+         ,tester_id
+         ,lot
+         ,visual_id
+         ,complevel_1
+         ,complevel_2
+         ,test_name
+         ,tray_or_carrier_id
+         ,carrier_x
+         ,carrier_y
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<ARIES>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=No
+/TS=_20261026111353
+/CSV=yeuchuan_a2_agg_3182.tab
+/HEADERS=test_name_1,complevel_1_1,all_value_1,visual_id_2,entity
+/INSTANCE=3182
+/PROMPT-TEXT=Step 6-3.1-a2. Fetching ARIES Data
+/RECORD=AT_Metrology@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          t.test_name AS test_name_1
+         ,ctr.complevel_1 AS complevel_1_1
+         ,CASE WHEN ctr.string_value IS NULL THEN to_char(ctr.numeric_result) ELSE ctr.string_value END AS all_value_1
+         ,di.visual_id AS visual_id_2
+         ,ats.tester_id AS entity
+FROM 
+A_Testing_Session ats
+INNER JOIN A_All_Component_Testing_Result ctr ON ctr.lao_start_ww = ats.lao_start_ww AND ctr.ts_id = ats.ts_id AND (ctr.numeric_result IS NOT NULL or ctr.string_value is NOT NULL)
+INNER JOIN A_Test t ON t.t_id = ctr.t_id
+INNER JOIN A_Device_Testing dt ON dt.lao_start_ww = ats.lao_start_ww AND dt.ts_id = ats.ts_id
+AND dt.lao_start_ww = ctr.lao_start_ww AND dt.ts_id = ctr.ts_id AND dt.dt_id = ctr.dt_id
+LEFT JOIN A_Device_Item di ON di.di_id = dt.di_id
+WHERE ats.data_domain='METROLOGY'
+ AND      (ats.lot In 
+SQL_Get_CSV_List(".\yeuchuan_a0_3182.tab->100", lot, "ats.lot In") 
+ AND      ats.program_name Like 'PNP%' 
+ AND      ctr.complevel_1 Like 'U%' 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=DUCKDB:yeuchuan_a2_agg_3182.tab:t0
+/OLEDB=DUCKDB
+/ENGINE=DUCKDB
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20261026111353
+/CSV=yeuchuan_a2_3182.tab
+/CTROW=complevel_1_1,visual_id_2,entity
+/CTVALUE=all_value_1
+/CTHEADER=test_name_1
+/CTARRAY=a2,3182
+/INSTANCE=3182
+/PROMPT-TEXT=Step 6-3.1-a2. Fetching ARIES Data
+/QUOTECSV=Y
+/EMPTY_TO_NULL=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT * FROM (
+SELECT  DISTINCT 
+          "test_name_1" AS "test_name_1"
+         ,"complevel_1_1" AS "complevel_1_1"
+         ,Max ("all_value_1") AS "all_value_1"
+         ,"visual_id_2" AS "visual_id_2"
+         ,"entity" AS "entity"
+FROM
+(
+SELECT  
+          "test_name_1" AS "test_name_1"
+         ,"complevel_1_1" AS "complevel_1_1"
+         ,"all_value_1" AS "all_value_1"
+         ,"visual_id_2" AS "visual_id_2"
+         ,"entity" AS "entity"
+FROM 
+<DDBTable>t0</DDBTable>
+)
+GROUP BY 
+          "test_name_1"
+         ,"complevel_1_1"
+         ,"visual_id_2"
+         ,"entity"
+)
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<ARIES>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20261026111353
+/CSV=yeuchuan_a1_3182.tab
+/HEADERS=visual_id_1,attribute_name,subs
+/INSTANCE=3182
+/PROMPT-TEXT=Step 6-3.1-a1. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT  DISTINCT 
+          u0.visualid AS visual_id_1
+         ,u1.attr_name AS attribute_name
+         ,u1.attr_value AS subs
+FROM 
+A_Ube_Unit_Hist2 u0
+INNER JOIN A_Ube_Unit_Hist2_Attr u1 ON u0.creation_ww = u1.creation_ww AND u0.unit_hist_key = u1.unit_hist_key AND u0.facility = u1.facility
+ AND      u1.attr_name = 'VENDOR_ID' 
+WHERE 1=1
+ AND      u0.ws_operation = '0614' 
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_a0_3182.tab->500", visual_id, "u0.visualid In") 
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111353
+/CSV=xdata.csv
+/TABLE=yeuchuan_a0_3182.tab,yeuchuan_a2_3182.tab,yeuchuan_a1_3182.tab
+/HEADERS=ww,link_id,prodgroup3,program_name,test_end_date,tester_id,lot,visual_id,complevel_1,complevel_2,CrossTab->[[a0,3182;:N]],tray_or_carrier_id,carrier_x,carrier_y,subs,CrossTab->[[a2,3182;:N]],entity
+/DELETE=*Instance*
+/INSTANCE=3182
+/SQLITE_DT=,ww(n),link_id(c),prodgroup3(c),program_name(c),test_end_date(d),tester_id(c),lot(c),visual_id(c),complevel_1(c),complevel_2(c),tray_or_carrier_id(c),carrier_x(n),carrier_y(n),visual_id_1(c),attribute_name(c),subs(c),complevel_1_1(c),visual_id_2(c),entity(c)
+/QUOTECSV=Y
+/EMPTY_TO_NULL=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA2;
+Create Index IF NOT EXISTS IdxA2 ON [yeuchuan_a2_3182] ([visual_id_2],[complevel_1_1]);
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_3182] ([visual_id_1]);
+
+SELECT /*L0*/  DISTINCT 
+          a0.[ww] AS [ww]
+         ,a0.[link_id] AS [link_id]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[program_name] AS [program_name]
+         ,a0.[test_end_date] AS [test_end_date]
+         ,a0.[tester_id] AS [tester_id]
+         ,a0.[lot] AS [lot]
+         ,a0.[visual_id] AS [visual_id]
+         ,a0.[complevel_1] AS [complevel_1]
+         ,a0.[complevel_2] AS [complevel_2]
+         ,CrossTab->[[a0,3182;:Y]]
+         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,a0.[carrier_x] AS [carrier_x]
+         ,a0.[carrier_y] AS [carrier_y]
+         ,a1.[subs] AS [subs]
+         ,CrossTab->[[a2,3182;:Y]]
+         ,a2.[entity] AS [entity]
+FROM 
+           [yeuchuan_a0_3182] a0
+ LEFT OUTER JOIN [yeuchuan_a2_3182] a2
+  ON a0.[visual_id] = a2.[visual_id_2] 
+ AND a0.[complevel_1] = a2.[complevel_1_1] 
+ LEFT OUTER JOIN [yeuchuan_a1_3182] a1
+  ON a0.[visual_id] = a1.[visual_id_1]
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SmartAppend.va "data.csv" "xdata.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
+/PROMPT-TEXT=Step 6-4. Smart-Append Data
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-LOOP}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111353
+/CSV=flagged_data.csv
+/TABLE=data.csv
+/HEADERS=out_ratio,ww,link_id,prodgroup3,program_name,test_end_date,tester_id,lot,visual_id,complevel_1,complevel_2,theta,wcc,x_offset,y_offset,tray_or_carrier_id,carrier_x,carrier_y,subs,grouping,headnumber,entity,x_25,x_75,y_25,y_75,wcc_25,wcc_75,theta_25,theta_75,x_lolimit,y_lolimit,wcc_lolimit,theta_lolimit,x_hilimit,y_hilimit,wcc_hilimit,theta_hilimit,x_flagged,y_flagged,wcc_flagged,theta_flagged,flagged,sum_flagged,qty,outlier_pct
+/INSTANCE=3182
+/PROMPT-TEXT=Step 7-1.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP TABLE IF EXISTS T_L2_Init;
+CREATE TABLE T_L2_Init AS
+SELECT /*L2*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+FROM
+(
+SELECT /*L1*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+FROM
+(
+SELECT /*L0*/  
+          3.5 AS [out_limit]
+         ,0.25 AS [out_ratio]
+         ,a0.[ww] AS [ww]
+         ,a0.[link_id] AS [link_id]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[program_name] AS [program_name]
+         ,a0.[test_end_date] AS [test_end_date]
+         ,a0.[tester_id] AS [tester_id]
+         ,a0.[lot] AS [lot]
+         ,a0.[visual_id] AS [visual_id]
+         ,a0.[complevel_1] AS [complevel_1]
+         ,a0.[complevel_2] AS [complevel_2]
+         ,CASE WHEN a0.[theta] = '' THEN NULL ELSE CAST (a0.[theta] AS REAL) END AS [theta]
+         ,CASE WHEN a0.[wcc] = '' THEN NULL ELSE CAST (a0.[wcc] AS REAL) END AS [wcc]
+         ,CASE WHEN a0.[x offset] = '' THEN NULL ELSE CAST (a0.[x offset] AS REAL) END AS [x_offset]
+         ,CASE WHEN a0.[y offset] = '' THEN NULL ELSE CAST (a0.[y offset] AS REAL) END AS [y_offset]
+         ,a0.[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,a0.[carrier_x] AS [carrier_x]
+         ,a0.[carrier_y] AS [carrier_y]
+         ,a0.[subs] AS [subs]
+         ,a0.[link_id]||'_'|| a0.[prodgroup3] ||'_'|| a0.[subs] ||'_'|| a0.[entity] ||'_'|| a0.[headnumber] ||'_'|| a0.[complevel_1] AS [grouping]
+         ,a0.[headnumber] AS [headnumber]
+         ,a0.[entity] AS [entity]
+FROM 
+[data] a0
+WHERE
+              a0.[entity] Like 'GSC%' 
+) t /*L0*/
+) t /*L1*/
+;
+
+DROP TABLE IF EXISTS T_L2_1_1;
+CREATE TABLE T_L2_1_1 AS
+SELECT P25(x_offset) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_1_1_Idx ON T_L2_1_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_1_Result;
+CREATE TABLE T_L2_1_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [x_25]
+FROM T_L2_Init a0 LEFT JOIN T_L2_1_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_1_1;
+
+CREATE INDEX T_L2_1_Result_Idx ON T_L2_1_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_2_1;
+CREATE TABLE T_L2_2_1 AS
+SELECT P75(x_offset) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_2_1_Idx ON T_L2_2_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_2_Result;
+CREATE TABLE T_L2_2_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [x_75]
+FROM T_L2_Init a0 LEFT JOIN T_L2_2_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_2_1;
+
+CREATE INDEX T_L2_2_Result_Idx ON T_L2_2_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_3_1;
+CREATE TABLE T_L2_3_1 AS
+SELECT P25(y_offset) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_3_1_Idx ON T_L2_3_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_3_Result;
+CREATE TABLE T_L2_3_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [y_25]
+FROM T_L2_Init a0 LEFT JOIN T_L2_3_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_3_1;
+
+CREATE INDEX T_L2_3_Result_Idx ON T_L2_3_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_4_1;
+CREATE TABLE T_L2_4_1 AS
+SELECT P75(y_offset) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_4_1_Idx ON T_L2_4_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_4_Result;
+CREATE TABLE T_L2_4_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [y_75]
+FROM T_L2_Init a0 LEFT JOIN T_L2_4_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_4_1;
+
+CREATE INDEX T_L2_4_Result_Idx ON T_L2_4_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_5_1;
+CREATE TABLE T_L2_5_1 AS
+SELECT P25(wcc) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_5_1_Idx ON T_L2_5_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_5_Result;
+CREATE TABLE T_L2_5_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [wcc_25]
+FROM T_L2_Init a0 LEFT JOIN T_L2_5_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_5_1;
+
+CREATE INDEX T_L2_5_Result_Idx ON T_L2_5_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_6_1;
+CREATE TABLE T_L2_6_1 AS
+SELECT P75(wcc) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_6_1_Idx ON T_L2_6_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_6_Result;
+CREATE TABLE T_L2_6_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [wcc_75]
+FROM T_L2_Init a0 LEFT JOIN T_L2_6_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_6_1;
+
+CREATE INDEX T_L2_6_Result_Idx ON T_L2_6_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_7_1;
+CREATE TABLE T_L2_7_1 AS
+SELECT P25(theta) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_7_1_Idx ON T_L2_7_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_7_Result;
+CREATE TABLE T_L2_7_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [theta_25]
+FROM T_L2_Init a0 LEFT JOIN T_L2_7_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_7_1;
+
+CREATE INDEX T_L2_7_Result_Idx ON T_L2_7_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_8_1;
+CREATE TABLE T_L2_8_1 AS
+SELECT P75(theta) AS AF$S1
+,grouping AS AF$PB1
+FROM T_L2_Init GROUP BY 
+AF$PB1
+;
+CREATE INDEX T_L2_8_1_Idx ON T_L2_8_1 (AF$PB1);
+DROP TABLE IF EXISTS T_L2_8_Result;
+CREATE TABLE T_L2_8_Result AS
+SELECT a0.rowid AS orig_rowid, a1.AF$S1 AS [theta_75]
+FROM T_L2_Init a0 LEFT JOIN T_L2_8_1 a1 ON 
+grouping = a1.AF$PB1
+;
+DROP TABLE IF EXISTS T_L2_8_1;
+
+CREATE INDEX T_L2_8_Result_Idx ON T_L2_8_Result (orig_rowid);
+DROP TABLE IF EXISTS T_L2_Result;
+CREATE TABLE T_L2_Result AS
+SELECT
+
+[out_limit]
+,[out_ratio]
+,[ww]
+,[link_id]
+,[prodgroup3]
+,[program_name]
+,[test_end_date]
+,[tester_id]
+,[lot]
+,[visual_id]
+,[complevel_1]
+,[complevel_2]
+,[theta]
+,[wcc]
+,[x_offset]
+,[y_offset]
+,[tray_or_carrier_id]
+,[carrier_x]
+,[carrier_y]
+,[subs]
+,[grouping]
+,[headnumber]
+,[entity]
+,[x_25]
+,[x_75]
+,[y_25]
+,[y_75]
+,[wcc_25]
+,[wcc_75]
+,[theta_25]
+,[theta_75]
+FROM T_L2_Init a0
+LEFT JOIN T_L2_1_Result a1 ON a0.rowid = a1.orig_rowid
+LEFT JOIN T_L2_2_Result a2 ON a0.rowid = a2.orig_rowid
+LEFT JOIN T_L2_3_Result a3 ON a0.rowid = a3.orig_rowid
+LEFT JOIN T_L2_4_Result a4 ON a0.rowid = a4.orig_rowid
+LEFT JOIN T_L2_5_Result a5 ON a0.rowid = a5.orig_rowid
+LEFT JOIN T_L2_6_Result a6 ON a0.rowid = a6.orig_rowid
+LEFT JOIN T_L2_7_Result a7 ON a0.rowid = a7.orig_rowid
+LEFT JOIN T_L2_8_Result a8 ON a0.rowid = a8.orig_rowid
+;
+DROP TABLE IF EXISTS T_L2_1_Result;
+DROP TABLE IF EXISTS T_L2_2_Result;
+DROP TABLE IF EXISTS T_L2_3_Result;
+DROP TABLE IF EXISTS T_L2_4_Result;
+DROP TABLE IF EXISTS T_L2_5_Result;
+DROP TABLE IF EXISTS T_L2_6_Result;
+DROP TABLE IF EXISTS T_L2_7_Result;
+DROP TABLE IF EXISTS T_L2_8_Result;
+DROP TABLE IF EXISTS T_L2_Init;
+
+SELECT /*L7*/ 
+          [out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+         ,[x_25] AS [x_25]
+         ,[x_75] AS [x_75]
+         ,[y_25] AS [y_25]
+         ,[y_75] AS [y_75]
+         ,[wcc_25] AS [wcc_25]
+         ,[wcc_75] AS [wcc_75]
+         ,[theta_25] AS [theta_25]
+         ,[theta_75] AS [theta_75]
+         ,[x_lolimit] AS [x_lolimit]
+         ,[y_lolimit] AS [y_lolimit]
+         ,[wcc_lolimit] AS [wcc_lolimit]
+         ,[theta_lolimit] AS [theta_lolimit]
+         ,[x_hilimit] AS [x_hilimit]
+         ,[y_hilimit] AS [y_hilimit]
+         ,[wcc_hilimit] AS [wcc_hilimit]
+         ,[theta_hilimit] AS [theta_hilimit]
+         ,[x_flagged] AS [x_flagged]
+         ,[y_flagged] AS [y_flagged]
+         ,[wcc_flagged] AS [wcc_flagged]
+         ,[theta_flagged] AS [theta_flagged]
+         ,[flagged] AS [flagged]
+         ,[sum_flagged] AS [sum_flagged]
+         ,[qty] AS [qty]
+         ,CASE WHEN 3=0 THEN CAST(ROUND(([sum_flagged] /  [qty]) *100,0) AS Integer) ELSE Round(([sum_flagged] /  [qty]) *100,3) END AS [outlier_pct]
+FROM
+(
+SELECT /*L6*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+         ,[x_25] AS [x_25]
+         ,[x_75] AS [x_75]
+         ,[y_25] AS [y_25]
+         ,[y_75] AS [y_75]
+         ,[wcc_25] AS [wcc_25]
+         ,[wcc_75] AS [wcc_75]
+         ,[theta_25] AS [theta_25]
+         ,[theta_75] AS [theta_75]
+         ,[x_lolimit] AS [x_lolimit]
+         ,[y_lolimit] AS [y_lolimit]
+         ,[wcc_lolimit] AS [wcc_lolimit]
+         ,[theta_lolimit] AS [theta_lolimit]
+         ,[x_hilimit] AS [x_hilimit]
+         ,[y_hilimit] AS [y_hilimit]
+         ,[wcc_hilimit] AS [wcc_hilimit]
+         ,[theta_hilimit] AS [theta_hilimit]
+         ,[x_flagged] AS [x_flagged]
+         ,[y_flagged] AS [y_flagged]
+         ,[wcc_flagged] AS [wcc_flagged]
+         ,[theta_flagged] AS [theta_flagged]
+         ,[flagged] AS [flagged]
+         ,SUM([flagged]) OVER (PARTITION BY [grouping], [lot]) AS [sum_flagged]
+         ,(COUNT([visual_id]) OVER (PARTITION BY [grouping], [lot])) * 1.0 AS [qty]
+FROM
+(
+SELECT /*L5*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+         ,[x_25] AS [x_25]
+         ,[x_75] AS [x_75]
+         ,[y_25] AS [y_25]
+         ,[y_75] AS [y_75]
+         ,[wcc_25] AS [wcc_25]
+         ,[wcc_75] AS [wcc_75]
+         ,[theta_25] AS [theta_25]
+         ,[theta_75] AS [theta_75]
+         ,[x_lolimit] AS [x_lolimit]
+         ,[y_lolimit] AS [y_lolimit]
+         ,[wcc_lolimit] AS [wcc_lolimit]
+         ,[theta_lolimit] AS [theta_lolimit]
+         ,[x_hilimit] AS [x_hilimit]
+         ,[y_hilimit] AS [y_hilimit]
+         ,[wcc_hilimit] AS [wcc_hilimit]
+         ,[theta_hilimit] AS [theta_hilimit]
+         ,[x_flagged] AS [x_flagged]
+         ,[y_flagged] AS [y_flagged]
+         ,[wcc_flagged] AS [wcc_flagged]
+         ,[theta_flagged] AS [theta_flagged]
+         ,CASE WHEN ( [x_flagged] ==1) |  (  [y_flagged] ==1) | (  [wcc_flagged] ==1) | (  [theta_flagged] ==1) THEN 1 ELSE 0 END AS [flagged]
+FROM
+(
+SELECT /*L4*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+         ,[x_25] AS [x_25]
+         ,[x_75] AS [x_75]
+         ,[y_25] AS [y_25]
+         ,[y_75] AS [y_75]
+         ,[wcc_25] AS [wcc_25]
+         ,[wcc_75] AS [wcc_75]
+         ,[theta_25] AS [theta_25]
+         ,[theta_75] AS [theta_75]
+         ,[x_lolimit] AS [x_lolimit]
+         ,[y_lolimit] AS [y_lolimit]
+         ,[wcc_lolimit] AS [wcc_lolimit]
+         ,[theta_lolimit] AS [theta_lolimit]
+         ,[x_hilimit] AS [x_hilimit]
+         ,[y_hilimit] AS [y_hilimit]
+         ,[wcc_hilimit] AS [wcc_hilimit]
+         ,[theta_hilimit] AS [theta_hilimit]
+         ,CASE WHEN  ((  [x_offset] >   [x_hilimit]) | (  [x_offset] <   [x_lolimit] )) THEN 1 ELSE 0 END AS [x_flagged]
+         ,CASE WHEN  (( [y_offset] >  [y_hilimit]) | ( [y_offset] <  [y_lolimit] )) THEN 1 ELSE 0 END AS [y_flagged]
+         ,CASE WHEN  ((  [wcc] >   [wcc_hilimit] ) | (  [wcc] <   [wcc_lolimit] )) THEN 1 ELSE 0 END AS [wcc_flagged]
+         ,CASE WHEN  ((  [theta] >  [theta_hilimit] ) | (  [theta] <   [theta_lolimit] )) THEN 1 ELSE 0 END AS [theta_flagged]
+FROM
+(
+SELECT /*L3*/ 
+          [out_limit] AS [out_limit]
+         ,[out_ratio] AS [out_ratio]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[program_name] AS [program_name]
+         ,[test_end_date] AS [test_end_date]
+         ,[tester_id] AS [tester_id]
+         ,[lot] AS [lot]
+         ,[visual_id] AS [visual_id]
+         ,[complevel_1] AS [complevel_1]
+         ,[complevel_2] AS [complevel_2]
+         ,[theta] AS [theta]
+         ,[wcc] AS [wcc]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[tray_or_carrier_id] AS [tray_or_carrier_id]
+         ,[carrier_x] AS [carrier_x]
+         ,[carrier_y] AS [carrier_y]
+         ,[subs] AS [subs]
+         ,[grouping] AS [grouping]
+         ,[headnumber] AS [headnumber]
+         ,[entity] AS [entity]
+         ,[x_25] AS [x_25]
+         ,[x_75] AS [x_75]
+         ,[y_25] AS [y_25]
+         ,[y_75] AS [y_75]
+         ,[wcc_25] AS [wcc_25]
+         ,[wcc_75] AS [wcc_75]
+         ,[theta_25] AS [theta_25]
+         ,[theta_75] AS [theta_75]
+         ,[x_25] -( [out_limit] *( [x_75] - [x_25] )) AS [x_lolimit]
+         ,[y_25] -( [out_limit] *(  [y_75] -  [y_25] )) AS [y_lolimit]
+         ,[wcc_25] -( [out_limit] *(  [wcc_75] -  [wcc_25] )) AS [wcc_lolimit]
+         ,[theta_25] -( [out_limit] *(  [theta_75] -  [theta_25] )) AS [theta_lolimit]
+         ,[x_75] +( [out_limit] *( [x_75] - [x_25] )) AS [x_hilimit]
+         ,[y_75] +( [out_limit] *(  [y_75] -  [y_25] )) AS [y_hilimit]
+         ,[wcc_75] +( [out_limit] *(  [wcc_75] -  [wcc_25] )) AS [wcc_hilimit]
+         ,[theta_75] +( [out_limit] *(   [theta_75] -   [theta_25] )) AS [theta_hilimit]
+FROM
+(
+T_L2_Result
+)
+) t /*L3*/
+) t /*L4*/
+) t /*L5*/
+) t /*L6*/
+;
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "prod_hold.csv" "\\AZatshfs.intel.com\AZatanalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\ICMPCS_GE_Signal_CSR_CAM" ".\" "5" "5" "N" "" "N"
+/PROMPT-TEXT=Step 8-1. Robocopy Files/Folders
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111353
+/CSV=final_data.csv
+/TABLE=prod_hold.csv,flagged_data.csv
+/HEADERS=ww,link_id,prodgroup3,grouping,lot,test_end_date,x_offset,y_offset,theta,wcc,sum_flagged,qty,outlier_pct
+/INSTANCE=3182
+/PROMPT-TEXT=Step 8-2.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [flagged_data] ([prodgroup3]);
+
+SELECT /*L1*/  DISTINCT 
+          [ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[grouping] AS [grouping]
+         ,[lot] AS [lot]
+         ,[test_end_date] AS [test_end_date]
+         ,SUM ( [x_flagged] ) OVER (PARTITION BY  [grouping] , [lot] ) AS [x_offset]
+         ,SUM (  [y_flagged] ) OVER (PARTITION BY  [grouping] , [lot] ) AS [y_offset]
+         ,SUM (  [theta_flagged] ) OVER (PARTITION BY  [grouping] , [lot] ) AS [theta]
+         ,SUM (  [wcc_flagged] ) OVER (PARTITION BY  [grouping] , [lot] ) AS [wcc]
+         ,[sum_flagged] AS [sum_flagged]
+         ,[qty] AS [qty]
+         ,[outlier_pct] AS [outlier_pct]
+FROM
+(
+SELECT /*L0*/  
+          a0.[ww] AS [ww]
+         ,a0.[link_id] AS [link_id]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[grouping] AS [grouping]
+         ,a0.[lot] AS [lot]
+         ,a0.[test_end_date] AS [test_end_date]
+         ,CASE WHEN a0.[x_flagged] = '' THEN NULL ELSE CAST (a0.[x_flagged] AS REAL) END AS [x_flagged]
+         ,CASE WHEN a0.[y_flagged] = '' THEN NULL ELSE CAST (a0.[y_flagged] AS REAL) END AS [y_flagged]
+         ,CASE WHEN a0.[wcc_flagged] = '' THEN NULL ELSE CAST (a0.[wcc_flagged] AS REAL) END AS [wcc_flagged]
+         ,CASE WHEN a0.[theta_flagged] = '' THEN NULL ELSE CAST (a0.[theta_flagged] AS REAL) END AS [theta_flagged]
+         ,CASE WHEN a0.[sum_flagged] = '' THEN NULL ELSE CAST (a0.[sum_flagged] AS REAL) END AS [sum_flagged]
+         ,CASE WHEN a0.[qty] = '' THEN NULL ELSE CAST (a0.[qty] AS REAL) END AS [qty]
+         ,CASE WHEN a0.[outlier_pct] = '' THEN NULL ELSE CAST (a0.[outlier_pct] AS REAL) END AS [outlier_pct]
+         ,a1.[product] AS [product]
+FROM 
+           [prod_hold] a1
+ LEFT OUTER JOIN [flagged_data] a0
+  ON a0.[prodgroup3] = a1.[product] 
+WHERE
+              CASE WHEN a0.[outlier_pct] = '' THEN NULL ELSE CAST (a0.[outlier_pct] AS REAL) END > 0.25 
+ AND NOT      (a0.[lot] In 
+SQL_Get_CSV_List(".\HIST.csv", "5", "a0.[lot] In") 
+) t /*L0*/
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "VAR(VN)" "EQS" "KM" "" "" "" ""
+/PROMPT-TEXT=Step 9. Apply Conditional Logic
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "prod_kill.csv" "\\AZatshfs.intel.com\AZatanalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\ICMPCS_GE_Signal_CSR_CAM" ".\" "5" "5" "Y" "" "N"
+/PROMPT-TEXT=Step 10-1. copy kill prod
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "DispoByScreenDataFile.csv" "\\datagrovekm.kssm.intel.com\AED_HYBRID_SCREENING\ScreenData\BDW_CAM_OUTLIER_11829695\DiePlacementOffset" "." "5" "5" "N" "" "N"
+/PROMPT-TEXT=Step 10-2. copy dispo
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20261026111354
+/CSV=yeuchuan_SQL_3182.tab
+/TABLE=prod_kill.csv,flagged_data.csv
+/HEADERS=product,ww,link_id,prodgroup3,lot,VisualId,x_offset,y_offset,wcc,theta,A_status,B_status,C_status,rule,outlier_pct
+/INSTANCE=3182
+/PROMPT-TEXT=Step 10-3.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA0;
+Create Index IF NOT EXISTS IdxA0 ON [flagged_data] ([prodgroup3]);
+
+SELECT /*L1*/  DISTINCT 
+          [product] AS [product]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[lot] AS [lot]
+         ,[VisualId] AS [VisualId]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[wcc] AS [wcc]
+         ,[theta] AS [theta]
+         ,CASE WHEN (     (ABS([x_offset]) >= 45 AND ABS([wcc]) >= 55) OR     (ABS([y_offset]) >= 45 AND ABS([wcc]) >= 55) OR     (ABS([x_offset]) >= 40 AND ABS([y_offset]) >= 40 AND ABS([wcc]) >= 65) ) THEN 'A'   ELSE 'N' END AS [A_status]
+         ,CASE WHEN (     (ABS([x_offset]) >= 40 AND ABS([wcc]) >= 47) OR     (ABS([y_offset]) >= 40 AND ABS([wcc]) >= 47) OR     (ABS([x_offset]) >= 30 AND ABS([y_offset]) >= 30 AND ABS([wcc]) >= 65) OR     (ABS( [theta] )>=0.65)  ) THEN 'B' ELSE 'N' END AS [B_status]
+         ,CASE WHEN (     (ABS([x_offset]) >= 40 AND ABS([wcc]) >= 47) OR     (ABS([y_offset]) >= 30 AND ABS([wcc]) >= 37) OR     (ABS([y_offset]) >= 20 AND ABS([y_offset]) >= 20 AND ABS([wcc]) >= 45) OR     (ABS( [theta] )>=0.65) OR     (ABS ([x_offset]) >= 25 AND ABS ([theta]) >= 0.1 AND ABS([wcc]) >= 50) OR     (ABS ([y_offset]) >= 25 AND ABS ([theta]) >= 0.1 AND ABS([wcc]) >= 50)   ) THEN 'C' ELSE 'N' END AS [C_status]
+         ,[rule] AS [rule]
+         ,[outlier_pct] AS [outlier_pct]
+FROM
+(
+SELECT /*L0*/  
+          a1.[product] AS [product]
+         ,a0.[ww] AS [ww]
+         ,a0.[link_id] AS [link_id]
+         ,a0.[prodgroup3] AS [prodgroup3]
+         ,a0.[lot] AS [lot]
+         ,a0.[visual_id] AS [VisualId]
+         ,CASE WHEN a0.[x_offset] = '' THEN NULL ELSE CAST (a0.[x_offset] AS REAL) END AS [x_offset]
+         ,CASE WHEN a0.[y_offset] = '' THEN NULL ELSE CAST (a0.[y_offset] AS REAL) END AS [y_offset]
+         ,CASE WHEN a0.[wcc] = '' THEN NULL ELSE CAST (a0.[wcc] AS REAL) END AS [wcc]
+         ,CASE WHEN a0.[theta] = '' THEN NULL ELSE CAST (a0.[theta] AS REAL) END AS [theta]
+         ,a1.[rule] AS [rule]
+         ,a0.[outlier_pct] AS [outlier_pct]
+FROM 
+           [prod_kill] a1
+ LEFT OUTER JOIN [flagged_data] a0
+  ON a0.[prodgroup3] = a1.[product] 
+WHERE
+              a0.[outlier_pct] > '0.25' 
+) t /*L0*/
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111354
+/CSV=unit_killed.csv
+/TABLE=yeuchuan_SQL_3182.tab
+/HEADERS=product,ww,link_id,prodgroup3,lot,VisualId,x_offset,y_offset,wcc,theta,A_status,B_status,C_status,rule,kill_flagged,outlier_pct
+/DELETE=*Instance*
+/INSTANCE=3182
+/SQLITE_DT=,product(c),ww(c),link_id(c),prodgroup3(c),lot(c),VisualId(c),x_offset(f),y_offset(f),wcc(f),theta(f),A_status(c),B_status(c),C_status(c),rule(c),kill_flagged(n),outlier_pct(c)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L2*/ 
+          [product] AS [product]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[lot] AS [lot]
+         ,[VisualId] AS [VisualId]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[wcc] AS [wcc]
+         ,[theta] AS [theta]
+         ,[A_status] AS [A_status]
+         ,[B_status] AS [B_status]
+         ,[C_status] AS [C_status]
+         ,[rule] AS [rule]
+         ,[kill_flagged] AS [kill_flagged]
+         ,[outlier_pct] AS [outlier_pct]
+FROM
+(
+SELECT /*L1*/ 
+          [product] AS [product]
+         ,[ww] AS [ww]
+         ,[link_id] AS [link_id]
+         ,[prodgroup3] AS [prodgroup3]
+         ,[lot] AS [lot]
+         ,[VisualId] AS [VisualId]
+         ,[x_offset] AS [x_offset]
+         ,[y_offset] AS [y_offset]
+         ,[wcc] AS [wcc]
+         ,[theta] AS [theta]
+         ,[A_status] AS [A_status]
+         ,[B_status] AS [B_status]
+         ,[C_status] AS [C_status]
+         ,[rule] AS [rule]
+         ,CASE WHEN  [rule] ==    [A_status] THEN '1' WHEN  [rule] ==     [B_status] THEN '1' WHEN  [rule] ==   [C_status] THEN '1'     ELSE 0 END AS [kill_flagged]
+         ,[outlier_pct] AS [outlier_pct]
+FROM
+(
+SELECT /*L0*/  
+          sql.[product] AS [product]
+         ,sql.[ww] AS [ww]
+         ,sql.[link_id] AS [link_id]
+         ,sql.[prodgroup3] AS [prodgroup3]
+         ,sql.[lot] AS [lot]
+         ,sql.[VisualId] AS [VisualId]
+         ,sql.[x_offset] AS [x_offset]
+         ,sql.[y_offset] AS [y_offset]
+         ,sql.[wcc] AS [wcc]
+         ,sql.[theta] AS [theta]
+         ,sql.[A_status] AS [A_status]
+         ,sql.[B_status] AS [B_status]
+         ,sql.[C_status] AS [C_status]
+         ,sql.[rule] AS [rule]
+         ,sql.[outlier_pct] AS [outlier_pct]
+FROM 
+[yeuchuan_SQL_3182] sql
+) t /*L0*/
+) t /*L1*/
+WHERE
+              [kill_flagged] > 0
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "unit_killed.csv" "RowsInFile" "N" ""
+/PROMPT-TEXT=Step 10-4. Count Rows in a File
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "RowsInFile" "GT" "0" "" "" "" ""
+/PROMPT-TEXT=Step 10-5. Apply Conditional Logic
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 10-6. Write Text to a file. Optionally use <EOF> to mark end of file
+/CSV=concat.py
+</OPTIONS>
+
+import pandas as pd
+import os
+
+
+current_dir = os.getcwd()
+
+dispo = pd.read_csv('./DispoByScreenDataFile.csv',usecols=lambda x: x.strip().lower() == 'visualid')
+kill = pd.read_csv('./unit_killed.csv',usecols=lambda x: x.strip().lower() == 'visualid')
+dispo.columns = ['VisualId']
+kill.columns = ['VisualId']
+result = pd.concat([dispo, kill], ignore_index=True)
+result = result.dropna(subset=['VisualId'])
+result['VisualId'] = result['VisualId'].astype(str).str.strip()
+result = result[result['VisualId'] != '']
+result = result.drop_duplicates(subset=['VisualId'], keep='first')
+result.to_csv('./dispo_append.csv', index=False)
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\Run_Python_Script.va "concat.py" "" "N" "atd_atm.hadoop" "Python-v3"
+/PROMPT-TEXT=Step 10-7. Run Python script
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=
+/TS=_20261026111354
+/CSV=yeuchuan_SQL_3182.tab
+/TABLE=dispo_append.csv
+/HEADERS=visualid
+/INSTANCE=3182
+/PROMPT-TEXT=Step 11-2.1. Fetching Text (SQLite) Data
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+SELECT /*L0*/ 
+          a0.[visualid] AS [visualid]
+FROM 
+[dispo_append] a0
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=<<<ARIES>>>
+/UN=
+/PW=
+/OLEDB=SQLPlus
+/ENGINE=VA
+/WORKDIR=.\
+/T=
+/TS=_20261026111354
+/CSV=yeuchuan_a1_3182.tab
+/HEADERS=visual_id,unit_process_date,status
+/INSTANCE=3182
+/PROMPT-TEXT=Step 11-2.2-a1. Fetching ARIES Data
+/RECORD=ULT_Data@1.0.0.0
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+/*BEGIN SQL*/
+SELECT 
+          visual_id AS visual_id
+         ,To_Char(Max(unit_process_date),'yyyy-mm-dd hh24:mi:ss') AS unit_process_date
+         ,Max(status) AS status
+FROM
+(
+SELECT  
+          u0.visualid AS visual_id
+         ,u0.unit_process_date AS unit_process_date
+         ,u0.status_id AS status
+FROM 
+A_Ube_Unit_Hist2 u0
+WHERE 1=1
+ AND      (u0.visualid In 
+SQL_Get_CSV_List(".\yeuchuan_SQL_3182.tab", visualid, "u0.visualid In") 
+ AND      u0.status_id = 0 
+)
+GROUP BY 
+          visual_id
+/*END SQL*/
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/RESET=Y
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=Yes
+/TS=_20261026111354
+/CSV=DispoByScreenDataFile.csv
+/TABLE=yeuchuan_SQL_3182.tab,yeuchuan_a1_3182.tab
+/HEADERS=visualid,visual_id,unit_process_date,status
+/DELETE=*Instance*
+/INSTANCE=3182
+/SQLITE_DT=,visualid(c),visual_id(c),unit_process_date(d),status(n)
+/QUOTECSV=Y
+/HADOOP_SERVER_DEFAULT=ATD_ATM.HADOOP
+</OPTIONS>
+
+
+DROP INDEX IF EXISTS IdxA1;
+Create Index IF NOT EXISTS IdxA1 ON [yeuchuan_a1_3182] ([visual_id]);
+
+SELECT /*L0*/ 
+          sql.[visualid] AS [visualid]
+         ,a1.[visual_id] AS [visual_id]
+         ,a1.[unit_process_date] AS [unit_process_date]
+         ,a1.[status] AS [status]
+FROM 
+           [yeuchuan_SQL_3182] sql
+ LEFT OUTER JOIN [yeuchuan_a1_3182] a1
+  ON sql.[visualid] = a1.[visual_id]
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "DispoByScreenDataFile.csv" "." "\\datagrovekm.kssm.intel.com\AED_HYBRID_SCREENING\ScreenData\BDW_CAM_OUTLIER_11829695\DiePlacementOffset" "5" "5" "N" "" "N"
+/PROMPT-TEXT=Step 11-3. Robocopy Files/Folders
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "final_data.csv" "SIGNAL" "N" ""
+/PROMPT-TEXT=Step 12-1. check if got signal
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""
+/PROMPT-TEXT=Step 12-2. TRUE if signal is found
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "VAR(<<<DCSR>>>)" "EQS" "Y" "" "" "" ""
+/PROMPT-TEXT=Step 12-3. TRUE if CSR is enabled
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/CSV=RESULT_<<<%username%>>>_ICMPCS_GE_Signal_CSR_CAM{TS}.csv
+/TABLE=final_data.csv:T0
+/HEADERS=HOLD_LOT,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,FUTURE_OPERATION,PHQ
+/INSTANCE=3182
+/PROMPT-TEXT=Step 12-4. Create ICM-PCS CSR Signal, pls remove whichever not applicable
+/HEADERS_UNIQUE=Y
+</OPTIONS>
+
+SELECT DISTINCT 
+ 'Y' AS [HOLD_LOT]
+,[lot] AS [LOT]
+,'<<<dEmail>>>' AS [EMAIL]
+,'<<<dCCB>>>' AS [CCB_NUMBER]
+,'<<<dHNote>>>' AS [HOLD_NOTE]
+,'<<<dHoldOperation>>>' AS [FUTURE_OPERATION]
+,'<<<dPHQ>>>' AS [PHQ]
+FROM [T0] 
+WHERE 1=1
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>" "5" "30" "N" "/MOV" "N"
+/PROMPT-TEXT=Step 12-5. submit to CSR depository
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/JSL=Y
+/OUTLOOK=N
+/PROMPT-TEXT=Step 12-6. Create a JMP Program
+/INSTANCE=3182
+</OPTIONS>
+/*------------------------------------------------------------------------------------
+|
+| Load file to a JMP Table table
+|
+ --------------------------------------------------------------------------------------*/
+If (IsEmpty(::Default_Dir),::Default_Dir ="$default$dir$");
+::MyInFile1= ::Default_Dir || "flagged_data.csv";
+Try(Close( Data Table ("flagged_data_csv") , NoSave);,Print("Warning Only: Table could not be found!"));
+
+::myspfcsv= Open(::MyInFile1,
+Import Settings(
+   End Of Line( CRLF, CR, LF ),
+   End Of Field( Comma ),
+   Strip Quotes( 1 ),
+   Use Apostrophe as Quotation Mark( 0 ),
+   Labels( 1 ),
+   Column Names Start( 1 ),
+   Data Starts( 2 ),
+   Lines To Read( All ),
+   Year Rule( "10-90" )
+   ));
+Wait(0.1);
+/*Set Columns Lowercase*/
+For(j = 1, j <= NCol(myspfcsv), j++,
+  col = Column(j); nm = lowercase(char(column name(j)));
+  col << Set Name(nm);
+);
+::myspfcsv << Set Name("flagged_data_csv");
+
+Current Data Table (Data Table("flagged_data_csv"));
+/*------------------------------------------------------------------------------------
+|
+| Generate a Chart or Perform a Table Manipulation
+|
+ --------------------------------------------------------------------------------------*/
+// Assign a VL variable to hold Object name 
+MyVariability4 = V List Box(); 
+
+// Assign Source Table 
+::SPFDT=Data Table("flagged_data_csv");                       
+Current Data Table (::SPFDT);
+
+// Process By variables
+Summary( Group(                                                          
+               :Name("prodgroup3")                                           
+              ),output table name ("SPFSumm"));
+
+::SPFSumm=DataTable("SPFSumm");
+
+// Assign # objects to layout per row
+::NoPerRow = 01;
+
+// Determine number rows needed to layout object, and initialize counter
+::NoTableRows = nrow(::SPFSumm);              
+::NoRows = Ceiling( ::NoTableRows / ::NoPerRow );                     
+::MyCounter = 0; 
+
+Current Data Table (::SPFDT);              
+
+// Loop through By Variable List and desired number of graphs per row        
+For( ::Idx = 1, ::Idx <= ::NoRows, ::Idx++,
+
+   // Assign an HListBox to hold a row of graphs
+   ::hb1 = H List Box();
+
+   For( ::Idx2 = 1, ::Idx2 <= ::NoPerRow, ::Idx2++,     
+
+     If( (::MyCounter + ::Idx2) <= ::NoTableRows,
+
+       ::SPF_By_Col1 = column(::SPFSumm,1)[::MyCounter + ::Idx2];
+
+MyVariability4$OB = outlinebox("",::Var = /*MyVariability4*/ Variability Chart(
+        Y( :Name("x_offset"),:Name("y_offset"),:Name("theta"),:Name("wcc") ),
+        X( :Name("prodgroup3"),:Name("link_id"),:Name("entity"),:Name("headnumber"),:Name("subs"),:Name("lot"),:Name("test_end_date") ),
+	
+                           Where( :Name("prodgroup3") == ::SPF_By_Col1),
+        Analysis Type( Name( "Choose best analysis (EMS REML Bayesian)" ) ),
+        SendToReport(
+        
+	                            Dispatch({},"Variability Chart",FrameBox,Row Legend(:Name("flagged"),Color( 1 ),Color Theme( "JMP Default" ),Marker( 0 ),Marker Theme( "" ),)),,
+        Dispatch( {}, "2", ScaleBox, {Show Major Grid( 0 ), Show Minor Grid( 0 )   }), 
+        , 
+        Dispatch( {}, "Variability Chart", FrameBox, {Frame Size( 570, 180 ), Background Color( -16777183 ), Marker Size( 2 )} ),
+        
+        )
+);
+
+if( Is scriptable(::VAR),
+
+ 
+VAR << Show Points (1) ;
+VAR << Show Range Bars (0); 
+VAR << Show Cell Means (0) ;
+VAR << Connect Cell Means (0);
+
+
+
+
+
+
+
+ 
+
+
+VAR << Variability Summary Report (0);
+
+VAR << Std Dev Chart (0);
+
+
+
+
+
+); //Is Scriptable
+
+/*MyVariability4*/
+
+);
+
+       ::hb1 << Append( MyVariability4$OB);  // Append report to HListBox
+       );  //End If 
+    ); //End For Idx2
+    MyVariability4 << Append( ::hb1 ); //Append HListBox to VListBox 
+    ::MyCounter += ::NoPerRow;    //Increment  count by NoPerRow 
+); //End For Idx
+
+Close(::SPFSumm, NoSave);
+
+
+/*------------------------------------------------------------------------------------
+|
+| Create a Results Window
+|
+ --------------------------------------------------------------------------------------*/
+::HL0= HLISTBOX(::MyVariability4);
+::Win7_3182 = New Window( "CAM GE Triggering", HListBox(VListBox(::HL0),));
+Wait( 0.1 );
+Wait( 0.1 );
+::Win7_3182 << Bring Window To Front;
+/*------------------------------------------------------------------------------------
+|
+| Save the Display Window
+|
+ --------------------------------------------------------------------------------------*/
+::MyOutFile1= ::Default_Dir || "chart.html";
+If (Is Empty(::Win7_3182) == 0, Try( ::Win7_3182 << save HTML(::MyOutFile1) ;,Print("File could not be saved") ),Print("The Window does not exist" ));
+
+<---- New Query ---->
+
+
+<---- New Query ---->
+<OPTIONS>
+/INSTANCE=3182
+/ID=MYREPORT3
+/REPORT=HTML-DEFER
+/PROMPT-TEXT=Step 12-7. sending notification
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+
+
+
+Type<\\>Key<\\>COL1<\\>COL2<\\>COL3<\\>COL4<\\>COL5<\\>COL6<\\>COL7<\\>COL8<\\>COL9<\\>COL10<\\>COL11<\\>COL12<\\>COL13
+TYPE<\\>HTML<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+INPUT-FILE<\\>final_data.csv<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+OUTPUT-FILE<\\>SQLPathFinder.htm<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+CSS<\\>sqlpathfinder_style_1.css<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLSPAN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DRILLDOWN<\\>N<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICSORT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+DYNAMICFILTER<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+ATTOPDRILLDOWN<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+NOPREPROCESS<\\>Y<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+AT-TOP-OF-REPORT<\\><\\>CAM GE TRIGGERING<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+COLUMN-DATA<\\><\\>ww<\\>link_id<\\>prodgroup3<\\>grouping<\\>lot<\\>test_end_date<\\>x_offset<\\>y_offset<\\>theta<\\>wcc<\\>sum_flagged<\\>qty<\\>outlier_pct
+COLUMN-HEADERS<\\><\\>Ww<\\>Link Id<\\>Prodgroup3<\\>Grouping<\\>Lot<\\>Test End Date<\\>X Offset<\\>Y Offset<\\>Theta<\\>Wcc<\\>Sum Flagged<\\>Qty<\\>Outlier Pct
+COLUMN-ALIGNMENT<\\><\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left<\\>middle-left
+COLUMN-FORMAT<\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\><\\>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-LAYOUT
+/OUTLOOK=N
+/INSTANCE=3182
+/JSON-ONLY=N
+/CHART-INSTANCE=30819
+/APP_SERVER_DEFAULT=atd_atm.hadoop
+</OPTIONS>
+<table class="tblout"><tr class="tblout"><td class="tblout" valign="top">
+:FILE:EMAIL:<<<DEMAIL>>>
+:CSS:sqlpathfinder_style_1.css
+:CSSEMBED:Y
+:RR:NO
+:B:Y
+:EM-A:
+:EM-S:
+:SEC:Y
+:TITLE:CAM GE TRIGGERING
+<table class="tblout">
+<tr class="tblout">
+<td class="tblout">
+HTM:MYREPORT3
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+<p style="text-align: center" style="background-color: white"><font face="Verdana" size="4" color="black"><a href="https://content.sp2019.intel.com/sites/ATMICMPCS/RFCvault/67_ICMPCS_GE_Signal_CSR_CAM/ICMPCS_CAM_GE_DM_TriggerSignal.pdf">RFC</a></font>
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+<p style="text-align: left" style="background-color: white"><font face="intel clear" size="3.66666666666667" color="black"><strong>Configurations applied</strong><br>CSR enabled: <<<DCSR>>><br>ICMPCS MMS Workflow enabled: <<<DMWF>>><br>MMS Signal Tracer enabled: <<<DMST>>></font>
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+IHJ:revision.htm
+</td>
+</tr>
+<tr class="tblout">
+<td class="tblout">
+IHJ:chart.html
+</td>
+</tr>
+</table>
+</td><td class="tblout" valign="top">
+<table class="tblout">
+<tr class="tblout"><td class="tblout"></td></tr>
+</table>
+</td></tr></table>
+<---- New Query ---->
+<OPTIONS>
+/REPORT=HTML-DELETE
+/INSTANCE=3182
+</OPTIONS>
+N/A
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "HISTERROR.txt" "HISTERR" "N" ""
+/PROMPT-TEXT=Step 12-8. check existence of HISTERROR.txt
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "HISTERR" "LE" "0" "" "" "" ""
+/PROMPT-TEXT=Step 12-9. TRUE if HISTERROR.txt is not found
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SmartAppend.va "HIST.csv" "final_data.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
+/PROMPT-TEXT=Step 12-10. add new signal into HIST
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFRename.va "HIST.csv" "HIST.txt"
+/PROMPT-TEXT=Step 12-11. convert HIST.csv to HIST.txt
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "HIST.txt" "." "<<<IREPOP>>>\<<<SFOLDER>>>\VN\HIST" "5" "30" "N" "" "N"
+/PROMPT-TEXT=Step 12-12. upload HIST.txt
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={ROWS-IN-FILE} "final_data.csv" "SIGNAL" "N" ""
+/PROMPT-TEXT=Step 13-1. check if got signal
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""
+/PROMPT-TEXT=Step 13-2. TRUE if signal is found
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={IF-THEN} "VAR(<<<DMWF>>>)" "EQS" "Y" "" "" "" ""
+/PROMPT-TEXT=Step 13-3. TRUE if ICMPCS MMS Workflow is enabled
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 13-4. Create ICM-PCS MMS Workflow
+/CSV=spfheaderfile.csv
+</OPTIONS>
+DATE,EMAIL,MODULE,SIGNALTYPE,COMPONENT_ID,HOLD_LOT,AUTO_CONTAIN,SHOULD_EMAIL,MMS,ALARMTYPE,SUB_ENTITY_1,SUB_ENTITY_2,SUB_ENTITY_3,FACILITY,PRODGROUP3,ENTITY,DEFECT_SIDE,DEFECT_MODE,LOT_OWNR,IMPACT_LOT_VI,IMPACT_VIDS
+
+<---- New Query ---->
+<OPTIONS>
+/NODE=.\
+/OLEDB=SQLite
+/ENGINE=SQLite
+/UN=
+/PW=
+/WORKDIR=.\
+/T=No
+/CSV=SPFMMSTMP.csv
+/TABLE=final_data.csv:T0
+/HEADERS=MODULE,SIGNALTYPE,ALARMTYPE,EMAIL,HOLD_LOT,AUTO_CONTAIN,PRODGROUP3,ENTITY,IMPACT_LOT_VI
+/INSTANCE=3182
+/HEADERS_UNIQUE=Y
+/QUOTECSV=Y
+</OPTIONS>
+
+SELECT DISTINCT 
+ 'CAM' AS [MODULE]
+,'ICMPCS' AS [SIGNALTYPE]
+,'CAM_GE' AS [ALARMTYPE]
+,'EMAIL:<<<DEMAIL>>>' AS [EMAIL]
+,'N' AS [HOLD_LOT]
+,'N' AS [AUTO_CONTAIN]
+,[prodgroup3] AS [PRODGROUP3]
+,[link_id] AS [ENTITY]
+,[lot] AS [IMPACT_LOT_VI]
+               ,'Y' AS [MMS]
+               ,'Y' AS [SHOULD_EMAIL]
+               ,CAST(DATETIME('now','localtime') AS TEXT)||'.000000' AS [DATE]
+               ,'' AS [FACILITY]
+FROM [T0]
+WHERE 1=1
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=Y
+/UTILITIES=@EXEDIR@\SmartAppend.va "spfheaderfile.csv" "SPFMMSTMP.csv" "" "" "" "N" "N" "" "Version 3" "ATD_ATM.HADOOP" ""
+</OPTIONS>
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=Y
+/UTILITIES=@EXEDIR@\SPFRename.va "spfheaderfile.csv" "<TS>_<<<%username%>>>_output.pickle.csv"
+</OPTIONS>
+
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=Y
+/UTILITIES=@EXEDIR@\SPFDelete.bat "SPFMMSTMP.csv" "N"
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\RoboCopy.va "*_output.pickle.csv" "." "<<<MIPPATH>>>" "5" "30" "N" "/MOV" "N"
+/PROMPT-TEXT=Step 13-5. submit to ICMPCS MMS Workflow depository
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-IF}
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WRITE-FILE=Y
+/INSTANCE=3182
+/PROMPT-TEXT=Step 14-1. create update.bat
+/CSV=update.bat
+</OPTIONS>
+
+@echo off
+set currd=%date:~10,4%-%date:~4,2%-%date:~7,2%
+set currms=%time:~2,6%
+set /a currh=%time:~0,2%
+if %currh% LSS 10 set currh=0%currh%
+set currt=%currh%%currms%
+set PriConfig=<<<IREPOP>>>\<<<SFOLDER>>>
+
+
+REM ************** edit here only if needed **************
+
+set record=<<<DCSR>>>,<<<DMST>>>,<<<DMWF>>>
+
+
+
+
+REM *************** do not edit below here ***************
+
+call :retry
+goto:eof
+
+:retry
+set /a tries=300
+
+:loop
+if %tries% LEQ 0 goto return
+echo <<<STARTTS>>>,%currd% %currt%,<<<UTC>>>,VN,<<<%username%>>>,<<<UNDERDEV>>>,%record%>>%PriConfig%\VF_CE.txt && goto return || set /a tries-=1 && ping -n 1 127.0.0.1>nul 2>&1 && goto loop
+
+:return
+@exit /B
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=update.bat
+/PROMPT-TEXT=Step 14-2. run update.bat
+</OPTIONS>
+
+
+
+<---- New Query ---->
+
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES=@EXEDIR@\SPFDelete.bat "update.bat" "N"
+/PROMPT-TEXT=Step 14-3. delete update.bat
+</OPTIONS>
+
+
+<---- New Query ---->
+<OPTIONS>
+/WORKDIR=.\
+/INSTANCE=3182
+/OUTLOOK=N
+/UTILITIES={END-MACRO}
+</OPTIONS>
+
+

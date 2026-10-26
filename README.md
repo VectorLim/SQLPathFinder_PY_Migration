@@ -25,6 +25,9 @@ already-published stylesheet in the workdir), copied beside the output on render
 or embedded for CSSEMBED. Editing a generated CSS asset does not require recompiling VG2. Deferred reports read CSV data and resolve raw macro
 paths/options at layout time. Data and headers are escaped once; authored markup
 is preserved. Unsupported active report options fail with source locations.
+Repeated report `SORT` rows are retained in the editable table's `data-sort`
+attribute. Row spans merge adjacent cells within the complete preceding sort-key
+prefix; sort fields without row spans still establish group boundaries.
 Legacy browser/delivery/security/chart integration settings produce explicit
 `local-html-only` diagnostics; the local renderer does not implement those services.
 

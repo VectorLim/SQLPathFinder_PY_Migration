@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from html import escape
 import csv
+import json
+from itertools import groupby
 from html.parser import HTMLParser
 from pathlib import Path
 from string import Template
@@ -130,16 +132,35 @@ def _validate_slots(source):
     parser.close()
 
 
-def _rows(report, *, workdir, values, macros):
+def _rows(report, *, workdir, values, macros, sorting=()):
     path = job_path(substitute(report.input_file, values=values, macros=macros), workdir)
     if not path.is_file():
         raise FileNotFoundError(f"Report input CSV does not exist: {path}")
+    rows = ({key.lower(): value for key, value in row.items() if key}
+            for row in _CsvIO(workdir=workdir).iter(str(path)))
+    spans = {}
+    if sorting:
+        rows = list(rows)
+        for field, direction, _merge in reversed(sorting):
+            rows.sort(key=lambda row: row.get(field, "") or "", reverse=direction == "DESC")
+        # Native row spans group by the cumulative SORT prefix, including nonmerged keys.
+        for depth, (field, _direction, merge) in enumerate(sorting):
+            if not merge:
+                continue
+            prefix = [item[0] for item in sorting[:depth + 1]]
+            for _key, group in groupby(enumerate(rows), lambda item: tuple(item[1].get(k) for k in prefix)):
+                indexes = [item[0] for item in group]
+                spans[indexes[0], field] = len(indexes)
+                for index in indexes[1:]:
+                    spans[index, field] = 0
     lines = []
-    for index, row in enumerate(_CsvIO(workdir=workdir).iter(str(path))):
-        row = {key.lower(): value for key, value in row.items() if key}
+    for index, row in enumerate(rows):
         lines.append("<tr>")
         for column_index, column in enumerate(report.columns):
             column = substitute(column, values=values, macros=macros)
+            span = spans.get((index, column.lower()), 1)
+            if span == 0:
+                continue
             value = row.get(column.lower(), "")
             content = "&nbsp;" if value is None or str(value).strip().lower() in {"", "nan"} else escape(format_cell(column, value), quote=True)
             alignment = substitute(report.alignment[column_index], values=values, macros=macros) if column_index < len(report.alignment) else "middle-left"
@@ -147,7 +168,8 @@ def _rows(report, *, workdir, values, macros):
             if vertical not in {"top", "middle", "bottom", "baseline"} or horizontal not in {"left", "center", "right", "justify"}:
                 raise ValueError(f"Unsupported column alignment {alignment!r}")
             cell_class = "tblin" if index % 2 == 0 else "alt"
-            lines.append(f'<td class="{cell_class}" style="vertical-align:{vertical};text-align:{horizontal};">{content}</td>')
+            rowspan = f' rowspan="{span}"' if span > 1 else ""
+            lines.append(f'<td class="{cell_class}"{rowspan} style="vertical-align:{vertical};text-align:{horizontal};">{content}</td>')
         lines.append("</tr>")
     return "\n".join(lines)
 
@@ -189,7 +211,7 @@ class _ReportTables(HTMLParser):
             if not data["data-report"]:
                 raise ValueError("data-report requires a nonempty report ID")
             start = self.absolute_offset()
-            self.active = {"name": data["data-report"], "columns": [],
+            self.active = {"name": data["data-report"], "columns": [], "sort": data.get("data-sort", "[]"),
                            "tbody": None, "depth": len(self.stack) + 1,
                            "start": start, "open_end": start + len(self.get_starttag_text())}
         elif self.active is not None and tag == "th" and "thead" in self.stack:
@@ -342,6 +364,22 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
             raise ValueError(f"Undefined HTML report {name!r}")
         report = reports[name]
         headers = _csv_headers(report, workdir=workdir, values=values, macros=macros)
+        try:
+            sorting = json.loads(table["sort"])
+        except json.JSONDecodeError as exc:
+            raise ValueError("Report data-sort requires a JSON array") from exc
+        if not isinstance(sorting, list) or any(
+            not isinstance(item, list) or len(item) != 3
+            or not isinstance(item[0], str) or item[1] not in ("ASC", "DESC")
+            or not isinstance(item[2], bool) for item in sorting
+        ):
+            raise ValueError("Report data-sort entries require [field, ASC/DESC, merge boolean]")
+        sorting = [(substitute(field, values=values, macros=macros).lower(), direction, merge)
+                   for field, direction, merge in sorting]
+        if any(field not in {name.lower() for name in headers} for field, _, _ in sorting):
+            raise ValueError("Report data-sort requests a missing CSV field")
+        if len({field for field, _, _ in sorting}) != len(sorting):
+            raise ValueError("Report data-sort contains duplicate fields")
         columns, alignments, head_edits = _columns_from_html(
             table, headers, values=values, macros=macros, source=source
         )
@@ -351,7 +389,7 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         edits.append((start, end, _literal_dollars(source[start:end], ())))
         lines = _rows(replace(report, columns=tuple(columns),
                               alignment=tuple(alignments)),
-                      workdir=workdir, values=values, macros=macros)
+                      workdir=workdir, values=values, macros=macros, sorting=sorting)
         slot = f"VG2C_DYNAMIC_ROWS_{len(generated_rows) + 1}"
         while "${" + slot + "}" in source:
             slot += "_NEXT"

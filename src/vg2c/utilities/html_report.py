@@ -6,6 +6,7 @@ not retain the historical stateful HTML preview/rendering engine.
 from __future__ import annotations
 
 import logging
+import json
 import re
 from dataclasses import replace
 from html import escape
@@ -107,6 +108,11 @@ tr th {{ background-color:#f5f5f5; }}
         options: dict[str, Any] = {}
         for parts in cls._iter_rows(template):
             key = parts[0].upper()
+            if key == "SORT":
+                if any(parts[4:]):
+                    raise ValueError("SORT accepts only a field, order and row-span flag")
+                options.setdefault(key, []).append(parts[1:4])
+                continue
             # 2nd column is an optional sub-key. If blank, values start at [2].
             vals = [p for p in (parts[2:] if parts[1] == "" else parts[1:]) if p]
             if not vals:
@@ -140,6 +146,7 @@ tr th {{ background-color:#f5f5f5; }}
         allowed = {
             "TYPE", "INPUT-FILE", "OUTPUT-FILE", "CSS", "COLUMN-DATA",
             "COLUMN-HEADERS", "COLUMN-ALIGNMENT", "AT-TOP-OF-REPORT", "NOPREPROCESS",
+            "SORT",
         }
         for name, value in options.items():
             if name not in allowed and value and str(value).upper() not in {"N", "NO", "FALSE"}:
@@ -167,7 +174,14 @@ tr th {{ background-color:#f5f5f5; }}
                          f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$$")}</th>')
         top = options.get("AT-TOP-OF-REPORT")
         heading = '<p class="at-top-of-report">' + escape(" ".join(cls._list(top))).replace("$", "$$") + "</p>\n" if top else ""
-        return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}">'
+        sorting = []
+        for row in options.get("SORT", []):
+            if (len(row) != 3 or not row[0] or row[1].upper() not in {"ASC", "DESC", ""}
+                    or row[2].upper() not in {"Y", "N", ""}):
+                raise ValueError(f"Invalid report SORT row: {row!r}")
+            sorting.append([row[0], row[1].upper() or "ASC", row[2].upper() == "Y"])
+        sort_attribute = (' data-sort="' + escape(json.dumps(sorting), quote=True).replace("$", "&#36;") + '"') if sorting else ""
+        return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}"{sort_attribute}>'
                 '<thead><tr id="colhdr">' + "".join(parts) +
                 '</tr></thead><tbody></tbody><tfoot></tfoot></table>')
 
