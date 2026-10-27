@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.fixtures.generated_job import capture_jobs
 from vg2c import compile_document, translate
 from vg2c.emitter.models import CodeExpr
 from vg2c.runtime import MacroStore
@@ -16,24 +17,32 @@ from vg2c.utilities.macro_control import MacroControl
 
 
 def block(options, body=""):
-    return "<OPTIONS>\n" + options + "\n</OPTIONS>\n" + body + "\n<---- New Query ---->\n"
+    return (
+        "<OPTIONS>\n" + options + "\n</OPTIONS>\n" + body + "\n<---- New Query ---->\n"
+    )
 
 
 def run_job(main):
     namespace = {"__file__": str(main), "__name__": "generated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
+    capture_jobs(namespace)
     namespace["run"]()
+    return namespace["_job"]
 
 
-def test_write_file_macro_arguments_strip_only_leading_whitespace(tmp_path, monkeypatch):
+def test_write_file_macro_arguments_strip_only_leading_whitespace(
+    tmp_path, monkeypatch
+):
     source = tmp_path / "macro_command.txt"
     payload = "Sfolder,underDEV,useCSR,useMMS\nICMPCS_CWFNCO_CSR_IAM,N,Y,Y\n\n"
     source.write_text(
-        block('/WRITE-FILE=Y\n/CSV=macrotmp.csv', "\n \t\n  " + payload)
+        block("/WRITE-FILE=Y\n/CSV=macrotmp.csv", "\n \t\n  " + payload)
         + block('/UTILITIES={START-MACRO} "macrotmp.csv" "N"')
-        + block('/UTILITIES=setsiteparam.exe KM <<<SFOLDER>>> <<<UNDERDEV>>> '
-                '<<<USECSR>>> <<<USEMMS>>>')
-        + block('/UTILITIES={END-MACRO}')
+        + block(
+            "/UTILITIES=setsiteparam.exe KM <<<SFOLDER>>> <<<UNDERDEV>>> "
+            "<<<USECSR>>> <<<USEMMS>>>"
+        )
+        + block("/UTILITIES={END-MACRO}")
     )
     calls = []
 
@@ -45,8 +54,10 @@ def test_write_file_macro_arguments_strip_only_leading_whitespace(tmp_path, monk
     monkeypatch.setattr("vg2c.runtime.files.sys", SimpleNamespace(platform="win32"))
     main = translate(source)
     workdir = main.parent / "output"
-    run_job(main)
-    assert (workdir / "macrotmp.csv").read_text() == payload
+    job = run_job(main)
+    assert job.read_file("macrotmp.csv") == payload
+    assert (main.parent / "files/macrotmp.csv").read_text() == payload
+    assert not (workdir / "macrotmp.csv").exists()
     assert calls == [["setsiteparam.exe", "KM", "ICMPCS_CWFNCO_CSR_IAM", "N", "Y", "Y"]]
 
 
@@ -54,12 +65,12 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     source = tmp_path / "macros.txt"
     source.write_text(
         block('/UTILITIES={START-MACRO} "outer.csv" "N"')
-        + block('/WRITE-FILE=Y\n/CSV=outer.txt', "<<<LABEL>>>")
+        + block("/WRITE-FILE=Y\n/CSV=outer.txt", "<<<LABEL>>>")
         + block('/UTILITIES={START-MACRO} "inner.csv" "N"')
-        + block('/WRITE-FILE=Y\n/CSV=inner.txt', "<<<LABEL>>>")
-        + block('/UTILITIES={END-MACRO}')
-        + block('/WRITE-FILE=Y\n/CSV=restored.txt', "<<<LABEL>>>")
-        + block('/UTILITIES={END-MACRO}')
+        + block("/WRITE-FILE=Y\n/CSV=inner.txt", "<<<LABEL>>>")
+        + block("/UTILITIES={END-MACRO}")
+        + block("/WRITE-FILE=Y\n/CSV=restored.txt", "<<<LABEL>>>")
+        + block("/UTILITIES={END-MACRO}")
     )
     emitted = compile_document(source).emitted
     code = emitted.source
@@ -67,19 +78,32 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     assert "macro_values_" not in code
     assert "macro_values =" not in code
     assert "job_entrypoint" not in code
-    assert "job = JobRuntime.from_script(__file__)" in code
+    assert (
+        "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)"
+        in code
+    )
     assert "macros = job.macros" in code
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
     for step in emitted.steps:
-        assert code[step.source_range.start_offset:step.source_range.end_offset] == step.source
+        assert (
+            code[step.source_range.start_offset : step.source_range.end_offset]
+            == step.source
+        )
         for invocation in step.invocations:
-            snippet = code[invocation.source_range.start_offset:invocation.source_range.end_offset]
+            snippet = code[
+                invocation.source_range.start_offset : invocation.source_range.end_offset
+            ]
             assert "(" in snippet and ")" in snippet
             for parameter in invocation.parameters:
                 if parameter.source_range is not None:
-                    assert code[parameter.source_range.start_offset:parameter.source_range.end_offset] == parameter.source
+                    assert (
+                        code[
+                            parameter.source_range.start_offset : parameter.source_range.end_offset
+                        ]
+                        == parameter.source
+                    )
 
     main = translate(source)
     for label in ["first", "second"]:
@@ -89,10 +113,10 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
         folder.mkdir()
         (folder / "outer.csv").write_text("LABEL\n" + label + "\nignored\n")
         (folder / "inner.csv").write_text("LABEL\ninner\n")
-        run_job(project / "main.py")
-        assert (folder / "outer.txt").read_text().strip() == label
-        assert (folder / "inner.txt").read_text().strip() == "inner"
-        assert (folder / "restored.txt").read_text().strip() == label
+        job = run_job(project / "main.py")
+        assert job.read_file("outer.txt").strip() == label
+        assert job.read_file("inner.txt").strip() == "inner"
+        assert job.read_file("restored.txt").strip() == label
 
     empty = main.parent / "output"
     empty.mkdir()
@@ -107,41 +131,50 @@ def test_native_numeric_branch_and_editable_macro_assignment(tmp_path):
     source.write_text(
         block('/UTILITIES={ROWS-IN-FILE} "rows.csv" "COUNT" "N"')
         + block('/UTILITIES={IF-THEN} "COUNT" "GT" "0" "" "" "" ""')
-        + block('/WRITE-FILE=Y\n/CSV=positive.txt', "<<<COUNT>>>")
-        + block('/UTILITIES={ELSE}')
-        + block('/WRITE-FILE=Y\n/CSV=empty.txt', "zero")
-        + block('/UTILITIES={END-IF}')
+        + block("/WRITE-FILE=Y\n/CSV=positive.txt", "<<<COUNT>>>")
+        + block("/UTILITIES={ELSE}")
+        + block("/WRITE-FILE=Y\n/CSV=empty.txt", "zero")
+        + block("/UTILITIES={END-IF}")
     )
     emitted = compile_document(source).emitted
     code = emitted.source
     ast.parse(code)
-    assert "macros['COUNT'] = str(job.row_count(" in code
-    assert "int(macros['COUNT']) > int('0')" in code
+    # <<<COUNT>>> is read again in the branch, so the macro stays assigned.
+    assert "macros['COUNT'] = str(job.row_count('rows.csv'))" in code
+    assert "if int(macros['COUNT']) > 0:" in code
     assert "macro_values_" not in code
     main = translate(source)
     folder = main.parent / "output"
     folder.mkdir()
     (folder / "rows.csv").write_text("ID\n1\n")
-    run_job(main)
-    assert (folder / "positive.txt").read_text().strip() == "1"
+    job = run_job(main)
+    assert job.read_file("positive.txt").strip() == "1"
 
 
-@pytest.mark.parametrize("value, expected", [
-    ("EMAIL:<<<dEmail>>>", "EMAIL:recipient@example.com"),
-    ("<<<first>>><<<SECOND>>>", "onetwo"),
-    (["<<<FIRST>>>.csv", ("<<<SECOND>>>", "T0")], ["one.csv", ("two", "T0")]),
-    ({"field": "<<<x > y>>>"}, {"field": "comparison"}),
-    ("<<<line\nbreak>>>", "multiline"),
-])
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("EMAIL:<<<dEmail>>>", "EMAIL:recipient@example.com"),
+        ("<<<first>>><<<SECOND>>>", "onetwo"),
+        (["<<<FIRST>>>.csv", ("<<<SECOND>>>", "T0")], ["one.csv", ("two", "T0")]),
+        ({"field": "<<<x > y>>>"}, {"field": "comparison"}),
+        ("<<<line\nbreak>>>", "multiline"),
+    ],
+)
 def test_macro_discovery_in_all_argument_values(value, expected):
     expression = native_argument(value, "macros")
     assert isinstance(expression, CodeExpr)
     assert not expression.has_value
     assert expression.symbol_names
-    macros = MacroStore(initial={
-        "dEmail": "recipient@example.com", "first": "one", "second": "two",
-        "x > y": "comparison", "line\nbreak": "multiline",
-    })
+    macros = MacroStore(
+        initial={
+            "dEmail": "recipient@example.com",
+            "first": "one",
+            "second": "two",
+            "x > y": "comparison",
+            "line\nbreak": "multiline",
+        }
+    )
     assert eval(expression.source, {"macros": macros}) == expected
     if isinstance(value, str):
         assert macros.substitute(value) == expected
@@ -169,11 +202,15 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     source = tmp_path / "options.txt"
     source.write_text(
         block('/UTILITIES={START-MACRO} "<<<CL_CONFIG>>>" "N"')
-        + block('/ENGINE=SQLite\n/CSV=<<<RESULT>>>\n/TABLE=<<<INPUT>>>:T0',
-                "select * from T0")
-        + block('/REPORT=HTML-LAYOUT',
-                ':FILE:EMAIL:<<<dEmail>>>\n:CSS:<<<STYLE>>>\n<p><<<FIRST>>></p>')
-        + block('/UTILITIES={END-MACRO}')
+        + block(
+            "/ENGINE=SQLite\n/CSV=<<<RESULT>>>\n/TABLE=<<<INPUT>>>:T0",
+            "select * from T0",
+        )
+        + block(
+            "/REPORT=HTML-LAYOUT",
+            ":FILE:EMAIL:<<<dEmail>>>\n:CSS:<<<STYLE>>>\n<p><<<FIRST>>></p>",
+        )
+        + block("/UTILITIES={END-MACRO}")
     )
     emitted = compile_document(source).emitted
     code = emitted.source
@@ -182,12 +219,18 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     assert "inputs=[(macros['INPUT'], 'T0')]" in code
     assert "output='EMAIL:' + macros['DEMAIL']" in code
     assert "css_file=macros['STYLE']" in code
-    sql_output = next(parameter for step in emitted.steps for parameter in step.parameters
-                      if parameter.name == "output" and parameter.symbol_names == ("RESULT",))
+    sql_output = next(
+        parameter
+        for step in emitted.steps
+        for parameter in step.parameters
+        if parameter.name == "output" and parameter.symbol_names == ("RESULT",)
+    )
     assert not sql_output.editable
 
     calls = []
-    monkeypatch.setattr("vg2c.runtime.job.render_html", lambda path, **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        "vg2c.runtime.job.render_html", lambda path, **kwargs: calls.append(kwargs)
+    )
     main = translate(source)
     work = main.parent / "output"
     work.mkdir()
@@ -198,6 +241,7 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     # CL_CONFIG is a per-run value rather than an environment variable.
     namespace = {"__file__": str(main), "__name__": "generated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
+
     class ConfiguredJob(JobRuntime):
         def __init__(self, **kwargs):
             super().__init__(**kwargs, values={"CL_CONFIG": "config.csv"})

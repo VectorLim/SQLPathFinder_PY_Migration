@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from vg2c.runtime.file_store import input_path
 from vg2c.runtime.csv_io import _CsvIO
 from vg2c.runtime.values import job_path
 
@@ -56,17 +57,17 @@ def site_values(nodes):
                                                 for char in node)}
 
 
-def csv_chunks(input_file, chunk_file, chunk_size, *, workdir):
+def csv_chunks(input_file, chunk_file, chunk_size, *, workdir, files=None):
     # Adapted from SPFLib/SPFSQL3.py:RunLoopTask (12608-12669); missing input skips.
-    source = job_path(input_file, workdir)
+    source = input_path(input_file, workdir, files)
     if not source.exists():
         return
     if chunk_size <= 0:
         raise ValueError("RUN chunk size must be positive")
     output = job_path(chunk_file, workdir)
-    if output.resolve() == source.resolve():
+    if output.resolve() == job_path(input_file, workdir).resolve():
         raise ValueError("RUN chunk output cannot overwrite its input")
     try:
-        yield from _CsvIO(workdir=workdir).iter_chunks(str(source), str(output), chunk_size)
+        yield from _CsvIO(workdir=workdir, files=files).iter_chunks(str(source), str(output), chunk_size)
     finally:
         output.unlink(missing_ok=True)

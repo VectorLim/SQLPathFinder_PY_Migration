@@ -264,7 +264,7 @@ class _CrosstabUtility:
         return wide
 
     @staticmethod
-    def write_header_list(workdir, reference: str, headers: list[str]) -> None:
+    def write_header_list(workdir, reference: str, headers: list[str], files=None) -> None:
         """Save CTARRAY's narrowly-scoped header dataflow artifact.
 
         SPFUtilities/utils.py Save_CT_Header() (4514-4549) uses
@@ -280,16 +280,16 @@ class _CrosstabUtility:
         path = Path(workdir).resolve() / f"{parts[1]}_{parts[0].upper()}.ini"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\t".join(headers), encoding="utf-8")
+        if files is not None:
+            files.pop(path.resolve(), None)
 
     @classmethod
-    def substitute_header_lists(cls, sql: str, workdir) -> str:
+    def substitute_header_lists(cls, sql: str, workdir, files=None) -> str:
         """Expand source-style numbered CrossTab references before SQL execution.
 
         SPFSQL3.py SubStitute_CT() (4509-4777); leaves nonnumeric legacy
         alias-schema tokens to substitute_sql() for older generated projects.
         """
-        from pathlib import Path
-
         token = re.compile(
             r"(?P<prefix>,\s*)?CrossTab->\[\[\s*(?P<alias>[A-Za-z_]\w*)\s*,\s*"
             r"(?P<instance>\d+)\s*(?:;\s*(?P<function>.*?))?"
@@ -303,7 +303,9 @@ class _CrosstabUtility:
             alias = match.group("alias")
             instance = match.group("instance")
             mode = match.group("mode").upper()
-            path = Path(workdir).resolve() / f"{instance}_{alias.upper()}.ini"
+            from vg2c.runtime.file_store import input_path
+
+            path = input_path(f"{instance}_{alias.upper()}.ini", workdir, files)
             if not path.exists():
                 raise FileNotFoundError(f"CrossTab header metadata missing: {path}")
             columns = [name.strip() for name in path.read_text(encoding="utf-8").split("\t") if name.strip()]

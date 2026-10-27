@@ -35,7 +35,10 @@ def test_generated_script_never_imports_vg2c(tmp_path, fixture_name: str) -> Non
     output = translate(source)
     generated = output.read_text(encoding="utf-8")
 
-    assert all(line.strip().startswith("from vg2c.runtime import ") for line in _vg2c_import_lines(generated))
+    assert all(
+        line.strip().startswith("from vg2c.runtime import ")
+        for line in _vg2c_import_lines(generated)
+    )
     assert "PipelineContext" not in generated
 
 
@@ -59,7 +62,8 @@ def test_aries_only_fixture_omits_other_readers(tmp_path) -> None:
 
     generated = translate(source).read_text(encoding="utf-8")
 
-    assert "AriesReader(" in generated
+    assert "node='KM.ARIES'" in generated
+    assert "AriesReader" not in generated
     assert "MarsReader" not in generated
     assert "OracleReader" not in generated
     assert "class SqliteReader" not in generated
@@ -71,7 +75,7 @@ def test_sqlite_only_fixture_embeds_reader_and_omits_external_readers(tmp_path) 
 
     generated = translate(source).read_text(encoding="utf-8")
 
-    assert "SqliteReader(" in generated
+    assert "reader=" not in generated
     assert "from vg2c.runtime import " in generated
     assert "class SqliteReader" not in generated
     assert "AriesReader" not in generated
@@ -85,14 +89,16 @@ def test_mixed_mars_and_sqlite_fixture_includes_both_readers(tmp_path) -> None:
 
     generated = translate(source).read_text(encoding="utf-8")
 
-    assert "MarsReader(" in generated
-    assert "SqliteReader(" in generated
+    assert "MarsReader" not in generated and "SqliteReader" not in generated
+    assert "job.sql(" in generated and "reader=" not in generated
     assert "class SqliteReader" not in generated
 
 
 def test_no_db_reader_fixture_omits_all_readers(tmp_path) -> None:
     source = tmp_path / "html_test.txt"
-    source.write_text("<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n:FILE:out.html\n<p>Static report</p>\n")
+    source.write_text(
+        "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n:FILE:out.html\n<p>Static report</p>\n"
+    )
 
     generated = translate(source).read_text(encoding="utf-8")
 

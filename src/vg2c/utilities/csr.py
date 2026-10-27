@@ -1,4 +1,5 @@
 """Compiler-only composition for recognized CSR submission workflows."""
+
 from __future__ import annotations
 
 import re
@@ -7,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from vg2c.emitter.models import BlockEmission
 from vg2c.operands import IfThen, ScopeNode
-from vg2c.utilities._emit_helpers import native_macro_expression, resolve_output_path
+from vg2c.utilities._emit_helpers import native_macro_expression
 from vg2c.utilities.html_report import HtmlReport
 
 if TYPE_CHECKING:
@@ -17,8 +18,9 @@ if TYPE_CHECKING:
 class CsrWorkflow:
     """Own the resolved CSR-to-notification composition for one project."""
 
-    def __init__(self, submissions, blocks, html_report: HtmlReport):
+    def __init__(self, submissions, html_report: HtmlReport):
         self.submissions = {item.block_index: item for item in submissions}
+        self.producers = {item.producer_index for item in submissions}
         self.notifications = {
             index: item
             for item in self.submissions.values()
@@ -29,7 +31,6 @@ class CsrWorkflow:
             for item in self.submissions.values()
             for scope_id in item.history_scope_ids
         }
-        self.blocks = blocks
         self.html_report = html_report
 
     def handles_block(self, block) -> bool:
@@ -38,73 +39,61 @@ class CsrWorkflow:
     def emit_block(self, block, *, macros="macros") -> BlockEmission:
         submission = self.submissions.get(block.index)
         if submission is not None:
-            path = native_macro_expression(
-                resolve_output_path(self.blocks[submission.producer_index]), macros
-            )
-            index = block.index
-            return BlockEmission(
-                lines=(
-                    "# CSR -> AED: direct submission; edit the action and client call together.",
-                    f"csr_requests_{index} = job.csr_requests({path})",
-                    f"if csr_requests_{index}:\n"
-                    f"    request = csr_requests_{index}[0]\n"
-                    "    aed_facility = os.environ.get('AED_FACILITY', AED_FACILITY)\n"
-                    "    aed_action = 'lot_hold'\n"
-                    "    try:\n"
-                    "        aed = AEDClient(facility=aed_facility, "
-                    "mode=os.environ.get('AED_MODE', AED_MODE))\n"
-                    f"        for request in csr_requests_{index}:\n"
-                    "            # Alternative: aed.lot_set_attr(\n"
-                    "            #     lotid=..., attributeid=..., attributevalue=...)\n"
-                    "            response = aed.lot_hold(\n"
-                    "                lotid=request['HOLD_LOT'],\n"
-                    "                operation=os.environ.get("
-                    "'AED_HOLD_OPERATION', AED_HOLD_OPERATION),\n"
-                    "                holdcode=os.environ.get('AED_HOLD_CODE', AED_HOLD_CODE),\n"
-                    "                comment=request['COMMENT'])\n"
-                    "            job.record_aed_result(request, facility=aed_facility, "
-                    "action=aed_action, response=response)\n"
-                    "    except Exception as error:\n"
-                    "        job.record_aed_result(request, facility=aed_facility, "
-                    "action=aed_action, error=error)\n"
-                    f"        job.csr_failure_mail(csr_requests_{index})\n"
-                    "        raise\n"
-                    f"    csr_history_allowed_{index} = aed.mode == 'prod'",
-                ),
-                imports=("import os",),
-                runtime_exports=("AEDClient",),
-            )
+            lines = [
+                f"aed = job.aed({macros}['FAC'])",
+                "comment = job.csr_comment("
+                f"{native_macro_expression(submission.note, macros)}, "
+                f"ccb={native_macro_expression(submission.ccb, macros)})",
+                f"for lot in job.csr_lots("
+                f"{native_macro_expression(submission.input_file, macros)}, "
+                f"{submission.lot_column!r}):",
+            ]
+            if submission.legacy_fields:
+                lines.append(
+                    "    # Legacy CSR fields: "
+                    + ", ".join(f"{k}={v}" for k, v in submission.legacy_fields)
+                )
+            if submission.hold:
+                lines += [
+                    "    # Supply the confirmed AED hold operation and hold code.",
+                    "    aed.lot_hold(lotid=lot, operation='', holdcode='', comment=comment)",
+                ]
+            if submission.contain:
+                lines.append(
+                    "    aed.lot_contain(lotid=lot, operation='', reference_number='')"
+                )
+            return BlockEmission(lines=tuple(lines))
 
         if block.index not in self.notifications:
             raise ValueError(f"Block {block.index} is not part of a CSR workflow")
         directives, body = self.html_report.prepare_layout(block)
         body = re.sub(r"(?is)<p\b[^>]*>\s*Lot on hold\b.*?</p>", "", body)
-        body = '<p>${AED_OUTCOME}</p><pre>${AED_DETAILS}</pre>\n' + body
+        body = "<p>${AED_OUTCOME}</p>\n" + body
         emission = self.html_report.emit_layout(
             block,
             directives,
             body,
             macros=macros,
-            extra_values=(("AED_OUTCOME", "job.csr_status"), ("AED_DETAILS", "job.csr_details")),
+            extra_values=(("AED_OUTCOME", "job.csr_status"),),
         )
         call = str(emission.lines[0])
         output = directives.get("FILE", "report.html")
-        recipient = native_macro_expression(output[len("EMAIL:"):], macros)
+        recipient = native_macro_expression(output[len("EMAIL:") :], macros)
         title = directives.get("TITLE", "CSR AED outcome")
         return replace(
             emission,
             lines=(
                 f"csr_report = {call}",
                 f"job.send_mail(to={recipient}, subject={title!r} "
-                "+ ' - ' + job.csr_status, body=str(csr_report), attachments=['AED_results.csv'])",
+                "+ ' - ' + job.csr_status, body=str(csr_report))",
             ),
         )
 
     def condition_header(self, scope_id, base_header: str) -> str:
-        block_index = self.history.get(scope_id)
-        if block_index is None:
+        if scope_id not in self.history:
             return base_header
-        return f"if csr_history_allowed_{block_index} and ({base_header[3:-1]}):"
+        # Test mode skips AED, so it must not record lots as handled.
+        return f"if job.enabled('csr') and ({base_header[3:-1]}):"
 
     def emit_scope(
         self,
@@ -119,10 +108,20 @@ class CsrWorkflow:
         payload = node.control_payload
         if not isinstance(payload, IfThen):
             return False
-        prelude = self.scope_prelude(node.scope_id)
-        if node.scope_id not in self.history and not prelude:
+        production_gate = (
+            payload.lhs.upper() in {"VAR(<<<DCSR>>>)", "VAR(<<<DMWF>>>)"}
+            and payload.op == "EQS"
+            and payload.rhs.upper() == "Y"
+            and payload.conj is None
+        )
+        if node.scope_id not in self.history and not production_gate:
             return False
-        base_header = payload.render_header(node.scope_id, macros=macros)
+        header = self.condition_header(
+            node.scope_id, payload.render_header(node.scope_id, macros=macros)
+        )
+        if production_gate:
+            operation = "csr" if payload.lhs.upper() == "VAR(<<<DCSR>>>)" else "mms"
+            header = f"if job.enabled({operation!r}) and {header[3:-1]}:"
         payload.emit_scope(
             writer,
             walk,
@@ -130,29 +129,6 @@ class CsrWorkflow:
             macros=macros,
             imports=imports,
             runtime_imports=runtime_imports,
-            header_override=self.condition_header(node.scope_id, base_header),
-            prelude=prelude,
+            header_override=header,
         )
         return True
-
-    def scope_prelude(self, scope_id) -> tuple[str, ...]:
-        return tuple(
-            line
-            for submission in self.submissions.values()
-            if submission.signal_scope_id == scope_id
-            for line in (
-                f"csr_history_allowed_{submission.block_index} = True",
-                "job.begin_csr()",
-            )
-        )
-
-    def settings_source(self) -> str:
-        if not self.submissions:
-            return ""
-        return (
-            "# Editable AED defaults; matching environment variables override these at run time.\n"
-            "# Set request parameters explicitly; they are absent from the VG2 payload.\n"
-            "AED_FACILITY = None\nAED_HOLD_OPERATION = None\nAED_HOLD_CODE = None\n"
-            "# None uses ENV_MODE, which defaults to test (no manufacturing writes).\n"
-            "AED_MODE = None\n\n"
-        )

@@ -30,7 +30,7 @@ def test_generated_run_is_parameterless_and_uses_relocated_project_output(tmp_pa
     assert "def run():" in text
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
-    assert "job = JobRuntime.from_script(__file__)" in text
+    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in text
     assert "project_dir =" not in text
     assert "workdir =" not in text
     assert "BASE_DIR =" not in text

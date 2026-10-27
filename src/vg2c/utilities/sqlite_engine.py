@@ -51,7 +51,10 @@ class SqliteEngine(EmitterUtility):
         if engine.upper() not in {"VA"} and oledb.upper() not in {"SQLPLUS"}:
             return None
 
-        if any(SqliteEngine._node_matches(node, token) for token in ("MARS", "OASYS", "ARIES")):
+        if any(
+            SqliteEngine._node_matches(node, token)
+            for token in ("MARS", "OASYS", "ARIES")
+        ):
             return (
                 Kind.SQL_QUERY,
                 "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
@@ -61,7 +64,11 @@ class SqliteEngine(EmitterUtility):
     @staticmethod
     def _node_matches(node_value: str, token: str) -> bool:
         node = node_value.upper().strip()
-        return node.endswith(token) or node.endswith(f".{token}") or f"<<<{token}>>>" in node
+        return (
+            node.endswith(token)
+            or node.endswith(f".{token}")
+            or f"<<<{token}>>>" in node
+        )
 
     @staticmethod
     def _format_sql_literal(sql: str) -> str:
@@ -77,7 +84,9 @@ class SqliteEngine(EmitterUtility):
     def extract_globals(cls, block) -> dict[str, object]:
         from vg2c.utilities._sql_globals import extract_sql_globals
 
-        return {item.key: item.value for item in extract_sql_globals(cls._sql_source(block))}
+        return {
+            item.key: item.value for item in extract_sql_globals(cls._sql_source(block))
+        }
 
     @classmethod
     def _extract_sql_text(cls, block, global_refs=None) -> CodeExpr:
@@ -123,7 +132,9 @@ class SqliteEngine(EmitterUtility):
             cursor = end
         if sql[cursor:]:
             parts.append(repr(sql[cursor:]))
-        return CodeExpr(" + ".join(parts), global_names=tuple(dict.fromkeys(references)))
+        return CodeExpr(
+            " + ".join(parts), global_names=tuple(dict.fromkeys(references))
+        )
 
     @staticmethod
     def global_sql(value, numeric: bool = False) -> str:
@@ -163,7 +174,7 @@ class SqliteEngine(EmitterUtility):
         for binding in node.split("@@@@@"):
             if not binding.upper().startswith(prefix):
                 raise ValueError("DuckDB /NODE entries must start with DUCKDB:")
-            binding = binding[len(prefix):]
+            binding = binding[len(prefix) :]
             path, separator, table_name = binding.rpartition(":")
             if not separator or not path or not table_name:
                 raise ValueError("DuckDB /NODE entries must be <file>:<table>")
@@ -185,24 +196,33 @@ class SqliteEngine(EmitterUtility):
     def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
         reader = block.reader
         imports = ()
+        # JobRuntime.sql infers these from the node: none -> SQLite, ARIES/MARS -> datasyncx.
+        inferred = reader.utility_name == "sqlite_reader" or (
+            reader.module == "datasyncx"
+            and reader.name in {"AriesReader", "MarsReader"}
+            and not block.reader_kwargs
+        )
         if reader.utility_name == "sqlite_reader":
-            runtime_exports = ("SqliteReader",)
+            runtime_exports = ()
         elif reader.utility_name == "duckdb_reader":
             runtime_exports = ("DuckDbReader",)
         else:
-            imports = (f"from {reader.module} import {reader.name}",)
+            if not inferred:
+                imports = (f"from {reader.module} import {reader.name}",)
             runtime_exports = ("OracleClient",)
 
         name = f"sql/query_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.sql"
         sql = cls._sql_source(block)
-        kwargs = {
-            "reader": CodeExpr(
-                f"{reader.name}(" + ", ".join(
+        kwargs = {}
+        if not inferred:
+            kwargs["reader"] = CodeExpr(
+                f"{reader.name}("
+                + ", ".join(
                     f"{key}={value!r}" for key, value in block.reader_kwargs.items()
-                ) + ")"
-            ),
-            "output": resolve_output_path(block),
-        }
+                )
+                + ")"
+            )
+        kwargs["output"] = resolve_output_path(block)
         if block.kind in {Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY}:
             inputs = (
                 cls._extract_table_inputs(block)
@@ -224,7 +244,12 @@ class SqliteEngine(EmitterUtility):
                 # SQL owns both its projection and any original /HEADERS override.
                 # Preserve ScriptHost's by-name output semantics without exposing
                 # an extra header= argument or a separate JSON sidecar in main.py.
-                sql = "-- vg2c-output-headers: " + json.dumps(header, ensure_ascii=False) + "\n" + sql
+                sql = (
+                    "-- vg2c-output-headers: "
+                    + json.dumps(header, ensure_ascii=False)
+                    + "\n"
+                    + sql
+                )
 
         definition = UtilitySpec.operation_definition("ctx", "run_query")
         sql_definition = definition.parameter("sql")
@@ -242,7 +267,9 @@ class SqliteEngine(EmitterUtility):
             definition,
             function="job.sql",
             args=(CodeExpr(repr(name)),),
-            kwargs={key: native_argument(value, macros) for key, value in kwargs.items()},
+            kwargs={
+                key: native_argument(value, macros) for key, value in kwargs.items()
+            },
         )
         external = ExternalParameter(
             definition=sql_definition,

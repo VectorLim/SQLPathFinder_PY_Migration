@@ -86,7 +86,7 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
     assert (tmp_path / "workflow" / "output" / "copied.txt").read_text() == "Hello Bob"
     assert "job_entrypoint" not in result.emitted.source
     assert "def run():" in result.emitted.source
-    assert "job = JobRuntime.from_script(__file__)" in result.emitted.source
+    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in result.emitted.source
     assert "job.run_python('python/step_" in result.emitted.source
     assert any(name.startswith("python/") for name, _ in result.emitted.assets)
     assert "ctx" not in result.emitted.source

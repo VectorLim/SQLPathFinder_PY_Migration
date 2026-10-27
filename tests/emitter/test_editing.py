@@ -91,8 +91,7 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
     step = next(
         item
         for item in tree.body
-        if isinstance(item, ast.FunctionDef)
-        and item.name == "run"
+        if isinstance(item, ast.FunctionDef) and item.name == "run"
     )
     call = next(
         item
@@ -106,7 +105,7 @@ def test_omitted_default_and_supplied_value_rebuild_one_call(tmp_path):
     keywords = {item.arg: item.value for item in call.keywords}
     assert ast.literal_eval(keywords["node"]) == "TEST"
     assert ast.literal_eval(keywords["output"]) == "changed.csv"
-    assert isinstance(keywords["reader"], ast.Call)
+    assert "reader" not in keywords
     assert project_changes(result, []).source == result.emitted.source
     assert not project_changes(result, [SemanticChange(node.id, True)]).valid
 

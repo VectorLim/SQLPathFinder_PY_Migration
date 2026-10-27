@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from tests.fixtures.generated_job import capture_jobs
 from vg2c import compile_document, translate
 from vg2c.runtime import JobRuntime, SqliteReader
 
@@ -107,9 +108,9 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     tree = ast.parse(result.source)
     assert "job_entrypoint" not in result.source
     assert "def run():" in result.source
-    assert "job = JobRuntime.from_script(__file__)" in result.source
+    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in result.source
     assert "job.sql(" in result.source
-    assert "job.write_file(" in result.source
+    assert "job.update_file(" in result.source
     assert "job.row_count(" in result.source
     assert "workdir=workdir" not in result.source
     assert "values=job_values" not in result.source
@@ -126,5 +127,6 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     work.mkdir()
     namespace = {"__file__": str(main), "__name__": "generated"}
     exec(main.read_text(), namespace)
+    capture_jobs(namespace)
     namespace["run"]()
-    assert (work / "label.txt").read_text() == "1"
+    assert namespace["_job"].read_file("label.txt") == "1"

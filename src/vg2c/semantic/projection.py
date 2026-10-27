@@ -13,6 +13,7 @@ from vg2c.semantic.symbols import (
     apply_condition_symbol_validation,
     build_symbols,
 )
+from vg2c.utilities.rows_in_file import inline_row_count_conditions
 
 if TYPE_CHECKING:
     from vg2c.compilation import CompilationResult
@@ -34,7 +35,9 @@ def project_semantics(
     operations: list[WorkflowOperation] = []
     handled_blocks: set[int] = set()
 
-    def visit(node: ScopeNode, parent_operation: str | None = None, branch=None) -> None:
+    def visit(
+        node: ScopeNode, parent_operation: str | None = None, branch=None
+    ) -> None:
         next_parent = parent_operation
         next_branch = branch
         if node.kind in {"if", "macro", "loop"}:
@@ -71,11 +74,12 @@ def project_semantics(
                     values,
                 )
                 leaf_ops = [
-                    replace(operation, scope_id=node.scope_id)
-                    for operation in leaf_ops
+                    replace(operation, scope_id=node.scope_id) for operation in leaf_ops
                 ]
                 if leaf_ops:
-                    leaf_ops[0] = replace(leaf_ops[0], comments=_source_comments(block.raw))
+                    leaf_ops[0] = replace(
+                        leaf_ops[0], comments=_source_comments(block.raw)
+                    )
                 operations.extend(leaf_ops)
                 if leaf_ops:
                     handled_blocks.add(block.index)
@@ -98,7 +102,9 @@ def project_semantics(
 
     symbols = build_symbols(result, operations, values)
     operations = apply_condition_symbol_validation(operations, symbols)
-    bindings = tuple(binding for operation in operations for binding in operation.bindings)
+    bindings = tuple(
+        binding for operation in operations for binding in operation.bindings
+    )
     return tuple(operations), bindings, symbols
 
 
@@ -136,5 +142,10 @@ def _control_source_ranges(result: CompilationResult) -> dict[int, SourceRange]:
         for child in node.children:
             visit(child, macros)
 
-    visit(result.resolved.scope_tree)
+    visit(
+        inline_row_count_conditions(
+            result.resolved.scope_tree,
+            {block.index: block for block in result.resolved.blocks},
+        )[0]
+    )
     return ranges

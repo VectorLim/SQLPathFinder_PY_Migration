@@ -41,38 +41,46 @@ _OPERATOR_TABLE: dict[str, tuple[str, str]] = {
 }
 
 _BARE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_INT_LITERAL_RE = re.compile(r"[+-]?\d+")
 
 
-def _int_expr(expr: str) -> str:
-    return f"int({expr})"
-
-
-def _operand_expr(operand: str, numeric: bool, allow_bare_macro: bool) -> str:
-    """Render a single condition operand as a Python expression string."""
+def _operand_macro(operand: str, numeric: bool) -> str | None:
+    """Return the macro name a condition operand reads, or None for a literal."""
     # Local import to avoid circular dependency at module load time.
     from vg2c.utilities._runtime_helpers import normalize_macro_name
     from vg2c.utilities.macro_control import MacroControl
 
     value = operand.strip()
-
-    if not value:
-        return _int_expr("0") if numeric else repr("")
-
     if value.startswith("VAR(") and value.endswith(")"):
-        base = MacroControl.named.render(normalize_macro_name(value[4:-1].strip()))
-        return _int_expr(base) if numeric else base
+        return normalize_macro_name(value[4:-1])
+    if MacroControl.NAMED_PLACEHOLDER_RE.fullmatch(value) or (
+        numeric and _BARE_IDENT_RE.match(value)
+    ):
+        return normalize_macro_name(value)
+    return None
 
-    if MacroControl.NAMED_PLACEHOLDER_RE.fullmatch(value):
-        base = MacroControl.named.render(normalize_macro_name(value))
-        return _int_expr(base) if numeric else base
 
-    if allow_bare_macro and _BARE_IDENT_RE.match(value):
-        base = MacroControl.named.render(normalize_macro_name(value))
-        return _int_expr(base) if numeric else base
+def _operand_expr(
+    operand: str, numeric: bool, inline: Mapping[str, str] | None = None
+) -> str:
+    """Render a single condition operand as a Python expression string."""
+    from vg2c.utilities.macro_control import MacroControl
 
-    if numeric:
-        return _int_expr(repr(value))
-    return repr(value)
+    value = operand.strip()
+    if not value:
+        return "0" if numeric else repr("")
+
+    name = _operand_macro(value, numeric)
+    if name is None:
+        if not numeric:
+            return repr(value)
+        if _INT_LITERAL_RE.fullmatch(value):
+            return str(int(value))
+        return f"int({value!r})"
+    if numeric and inline and name in inline:
+        return inline[name]
+    base = MacroControl.named.render(name)
+    return f"int({base})" if numeric else base
 
 
 # ---------------------------------------------------------------------------

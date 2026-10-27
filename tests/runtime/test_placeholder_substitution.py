@@ -38,4 +38,4 @@ def test_mars_placeholder_in_emitted_sql():
 
     assert "from vg2c.runtime import" in e.source
     assert "DATASYNCX_READER_MAP" not in source
-    assert "reader=MarsReader" in e.source
+    assert "reader=" not in e.source and "MarsReader" not in e.source

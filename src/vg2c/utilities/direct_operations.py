@@ -3,6 +3,7 @@
 The name 'ctx' is a historical metadata identity consumed by the compiler's
 edit/source-map model. Emitted jobs invoke JobRuntime, never this class.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,7 +22,9 @@ class DirectOperationMetadata(UtilitySpec):
         summary="{path}",
         file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),),
     )
-    def write_file(self, path: str, template: str, vars: dict[str, str] | None = None) -> None:
+    def write_file(
+        self, path: str, template: str, vars: dict[str, str] | None = None
+    ) -> None:
         raise NotImplementedError("Compiler-only metadata; use JobRuntime.write_file")
 
     @emittable(
@@ -29,16 +32,24 @@ class DirectOperationMetadata(UtilitySpec):
         summary="Output: {output}",
         file_effects=(
             FileEffectDefinition(
-                "query", "transform", inputs=("inputs",), outputs=("output",),
-                input_base="runtime-search", input_format="table-binding",
+                "query",
+                "transform",
+                inputs=("inputs",),
+                outputs=("output",),
+                input_base="runtime-search",
+                input_format="table-binding",
             ),
         ),
         parameter_capabilities={"sql": ("structured-sql",)},
-        artifact_roles={"output": ArtifactRole("output"), "inputs": ArtifactRole("input", many=True)},
+        artifact_roles={
+            "output": ArtifactRole("output"),
+            "inputs": ArtifactRole("input", many=True),
+        },
         parameter_visibility={"reader": "internal"},
         parameter_schemas={
             "crosstab": ValueSchema(
-                "object", nullable=True,
+                "object",
+                nullable=True,
                 properties=(
                     ("row_keys", ValueSchema("list", items=ValueSchema("string"))),
                     ("header_key", ValueSchema("string")),
@@ -49,7 +60,10 @@ class DirectOperationMetadata(UtilitySpec):
         },
     )
     def run_query(
-        self, sql: str, output: str, reader: Any,
+        self,
+        sql: str,
+        output: str,
+        reader: Any = None,
         inputs: list[str | tuple[str, str]] | None = None,
         header: list[str] | None = None,
         crosstab: dict | None = None,

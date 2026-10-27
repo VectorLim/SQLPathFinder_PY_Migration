@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from dataclasses import replace
+from pathlib import Path, PureWindowsPath
 
-from vg2c.emitter.models import BlockEmission, CodeExpr
-from vg2c.emitter.operations import emittable
+from vg2c.emitter.models import BlockEmission, CodeExpr, ExternalParameter
+from vg2c.emitter.operations import EmittableOperation, emittable
 from vg2c.runtime.files import copy_file, delete_files, rename_file, write_file
 from vg2c.kind import Kind
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
     list_code_expr,
     lower_native_call,
+    native_argument,
     resolve_output_path,
     split_utility_command,
     to_code_expr,
@@ -46,7 +48,7 @@ class FileSystemOps(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
+    def emit_block(cls, block, *, macros: str = "macros", file_asset=None) -> BlockEmission:
         if block.kind is Kind.FS_COPY:
             return cls._emit_copy_block(block, macros)
         if block.kind is Kind.FS_DELETE:
@@ -54,16 +56,39 @@ class FileSystemOps(EmitterUtility):
 
         from vg2c.utilities.direct_operations import DirectOperationMetadata
 
-        stmt = lower_native_call(
-            DirectOperationMetadata.write_file.render(
-                path=resolve_output_path(block),
-                # ScriptHost parseTaskOptions lstrips SPFTaskCommand (SPFSQL3.py:1824).
-                template=block.resolved_body.lstrip(),
-            ),
-            function="job.write_file",
-            macros=macros,
+        path = resolve_output_path(block)
+        # ScriptHost parseTaskOptions lstrips SPFTaskCommand (SPFSQL3.py:1824).
+        body = block.resolved_body.lstrip()
+        asset = file_asset or cls.asset_name(block)
+        original = DirectOperationMetadata.operation_definition("ctx", "write_file")
+        template = original.parameter("template")
+        definition = replace(original, parameters=tuple(
+            replace(item, name="asset", display_label="File asset")
+            if item.name == "template" else item for item in original.parameters
+        ))
+        method = "update_file" if "<<<" in body else "load_file"
+        stmt = EmittableOperation.render_method_call(
+            definition, function=f"job.{method}",
+            kwargs={"path": native_argument(path, macros), "asset": asset},
         )
-        return BlockEmission((stmt,))
+        return BlockEmission(
+            (stmt,), assets=((asset, body),),
+            external_parameters=(ExternalParameter(
+                definition=template, value=body, editor_type="multiline",
+                read_only_reason=f"Edit the original template in {asset}.",
+            ),),
+        )
+
+    @staticmethod
+    def asset_name(block):
+        path = resolve_output_path(block)
+        # Runtime filenames cannot be used as Windows asset filenames.
+        if "<<<" in path:
+            return f"files/step_{block.index:04d}.txt"
+        relative = PureWindowsPath(path)
+        if relative.is_absolute() or relative.drive or ".." in relative.parts:
+            relative = PureWindowsPath(relative.name)
+        return "files/" + relative.as_posix().lstrip("/")
 
     @staticmethod
     def _utility_argv(block) -> list[str]:
@@ -83,6 +108,8 @@ class FileSystemOps(EmitterUtility):
         else:
             raise ValueError(f"Unsupported filesystem copy utility: {basename}")
         target = "job.rename_file" if "spfrename" in basename else "job.copy_file"
+        if "robocopy" in basename and len(argv) > 3 and "<<<MIPPATH>>>" in argv[3].upper():
+            target = "job.submit_mms"
         return BlockEmission(
             (lower_native_call(stmt, function=target, macros=macros),),
         )

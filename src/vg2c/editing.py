@@ -15,6 +15,11 @@ from vg2c.operands import IfThen, RunLoop, StartMacro
 from vg2c.semantic.models import EditableBinding, WorkflowOperation
 from vg2c.semantic.projection import project_semantics
 from vg2c.semantic.symbols import condition_symbol_token
+from vg2c.utilities.rows_in_file import (
+    RowsInFile,
+    inline_row_count_conditions,
+    reads_macro,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,13 +29,13 @@ class SemanticChange:
     symbol_id: str | None = None
     reset: bool = False
 
+
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
     code: str
     message: str
     binding_id: str | None = None
     level: Literal["warning", "error"] = "error"
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +97,9 @@ def project_changes(
         binding_id = change.binding_id
         if binding_id in seen:
             if binding_id.startswith("global:"):
-                if seen[binding_id] == repr((change.reset, change.value, change.symbol_id)):
+                if seen[binding_id] == repr(
+                    (change.reset, change.value, change.symbol_id)
+                ):
                     continue
                 issues.append(
                     ValidationIssue(
@@ -132,28 +139,37 @@ def project_changes(
 
         if change.symbol_id is not None:
             if change.reset or change.value is not None:
-                issues.append(ValidationIssue(
-                    code="ambiguous-symbol-change",
-                    message="Choose a literal value or a symbol, not both.",
-                    binding_id=binding_id,
-                ))
+                issues.append(
+                    ValidationIssue(
+                        code="ambiguous-symbol-change",
+                        message="Choose a literal value or a symbol, not both.",
+                        binding_id=binding_id,
+                    )
+                )
                 continue
             symbol = symbols.get(change.symbol_id)
             if symbol is None or symbol.kind == "unresolved":
-                issues.append(ValidationIssue(
-                    code="unknown-symbol",
-                    message="Selected symbol is not available in this document.",
-                    binding_id=binding_id,
-                ))
+                issues.append(
+                    ValidationIssue(
+                        code="unknown-symbol",
+                        message="Selected symbol is not available in this document.",
+                        binding_id=binding_id,
+                    )
+                )
                 continue
             if binding.source_kind != "condition" or binding.name not in {
-                "lhs", "rhs", "lhs2", "rhs2"
+                "lhs",
+                "rhs",
+                "lhs2",
+                "rhs2",
             }:
-                issues.append(ValidationIssue(
-                    code="ineligible-symbol",
-                    message="This binding cannot use the selected symbol.",
-                    binding_id=binding_id,
-                ))
+                issues.append(
+                    ValidationIssue(
+                        code="ineligible-symbol",
+                        message="This binding cannot use the selected symbol.",
+                        binding_id=binding_id,
+                    )
+                )
                 continue
             operator_name = "op2" if binding.name.endswith("2") else "op"
             operator_id = f"{binding.owner_operation_id}:{operator_name}"
@@ -167,9 +183,13 @@ def project_changes(
             try:
                 value = condition_symbol_token(symbol, operator)
             except ValueError as exc:
-                issues.append(ValidationIssue(
-                    code="ineligible-symbol", message=str(exc), binding_id=binding_id
-                ))
+                issues.append(
+                    ValidationIssue(
+                        code="ineligible-symbol",
+                        message=str(exc),
+                        binding_id=binding_id,
+                    )
+                )
                 continue
         else:
             value = binding.value if change.reset else change.value
@@ -205,7 +225,9 @@ def project_changes(
         elif binding.source_kind == "rows-in-file" and binding.source_range is not None:
             span = (binding.source_range.start_offset, binding.source_range.end_offset)
             replacements[span] = repr(value)
-        elif binding.source_kind == "sql-file-list" and binding.source_range is not None:
+        elif (
+            binding.source_kind == "sql-file-list" and binding.source_range is not None
+        ):
             span = (binding.source_range.start_offset, binding.source_range.end_offset)
             replacements[span] = repr(value)
 
@@ -214,13 +236,20 @@ def project_changes(
         if operation.kind != "condition":
             continue
         by_name = {binding.name: binding for binding in operation.bindings}
-        for operator_name, operand_names in (("op", ("lhs", "rhs")), ("op2", ("lhs2", "rhs2"))):
+        for operator_name, operand_names in (
+            ("op", ("lhs", "rhs")),
+            ("op2", ("lhs2", "rhs2")),
+        ):
             operator_binding = by_name.get(operator_name)
             if operator_binding is None or operator_binding.id not in accepted_values:
                 continue
             for operand_name in operand_names:
                 operand = by_name.get(operand_name)
-                if operand is None or operand.id in accepted_values or operand.symbol_id is None:
+                if (
+                    operand is None
+                    or operand.id in accepted_values
+                    or operand.symbol_id is None
+                ):
                     continue
                 symbol = symbols.get(operand.symbol_id)
                 if symbol is not None and symbol.kind != "unresolved":
@@ -321,8 +350,10 @@ def _project_omitted_parameters(
                 if parameter.name == "sql" and parameter.source_range is not None:
                     nested = [
                         (
-                            binding.source_range.start_offset - parameter.source_range.start_offset,
-                            binding.source_range.end_offset - parameter.source_range.start_offset,
+                            binding.source_range.start_offset
+                            - parameter.source_range.start_offset,
+                            binding.source_range.end_offset
+                            - parameter.source_range.start_offset,
                             repr(values[binding.id]),
                         )
                         for binding in semantic_bindings
@@ -334,7 +365,9 @@ def _project_omitted_parameters(
                     for start, end, replacement in sorted(nested, reverse=True):
                         source = source[:start] + replacement + source[end:]
                 value = (
-                    CodeExpr(_serialize_parameter(parameter, parameter_values[parameter.id]))
+                    CodeExpr(
+                        _serialize_parameter(parameter, parameter_values[parameter.id])
+                    )
                     if parameter.id in parameter_values
                     and not parameter.id.startswith("global:")
                     else CodeExpr(source)
@@ -346,7 +379,9 @@ def _project_omitted_parameters(
             kwargs.update(
                 (
                     parameter.name,
-                    CodeExpr(_serialize_parameter(parameter, parameter_values[parameter.id])),
+                    CodeExpr(
+                        _serialize_parameter(parameter, parameter_values[parameter.id])
+                    ),
                 )
                 for parameter in omitted
             )
@@ -358,14 +393,26 @@ def _project_omitted_parameters(
             }
             replacements.clear()
             replacements.update(replacements_copy)
-            statement = ast.parse(result.emitted.source[span.start_offset:span.end_offset]).body[0]
-            if invocation.operation.id == "macro.set_named" and isinstance(statement, ast.Assign):
+            statement = ast.parse(
+                result.emitted.source[span.start_offset : span.end_offset]
+            ).body[0]
+            if invocation.operation.id == "macro.set_named" and isinstance(
+                statement, ast.Assign
+            ):
                 replacement = f"{ast.unparse(statement.targets[0].value)}[{args[0].source}] = {args[1].source}"
             else:
-                replacement = str(EmittableOperation.render_method_call(
-                    invocation.operation, function=ast.unparse(statement.value.func), args=tuple(args), kwargs=kwargs))
+                replacement = str(
+                    EmittableOperation.render_method_call(
+                        invocation.operation,
+                        function=ast.unparse(statement.value.func),
+                        args=tuple(args),
+                        kwargs=kwargs,
+                    )
+                )
                 if isinstance(statement, ast.Assign):
-                    replacement = ast.unparse(statement.targets[0]) + " = " + replacement
+                    replacement = (
+                        ast.unparse(statement.targets[0]) + " = " + replacement
+                    )
             replacements[(span.start_offset, span.end_offset)] = replacement
 
 
@@ -376,12 +423,35 @@ def _project_control_replacements(
     replacements: dict[tuple[int, int], str],
 ) -> None:
     blocks = {block.index: block for block in result.resolved.blocks}
+    tree, _ = inline_row_count_conditions(result.resolved.scope_tree, blocks)
     contexts = {}
+    payloads = {}
+    count_sources = {}
+
     def visit(node, macros="macros"):
         contexts[node.start_index] = (node.scope_id, macros)
+        if node.kind in {"if", "macro", "loop"}:
+            payloads[node.start_index] = node.control_payload
+        for previous, child in zip(node.children, node.children[1:]):
+            if (
+                isinstance(child.control_payload, IfThen)
+                and child.control_payload.row_count
+            ):
+                count_sources[child.start_index] = previous.block_index
         for child in node.children:
             visit(child, macros)
-    visit(result.resolved.scope_tree)
+
+    visit(tree)
+    count_operations = {
+        operation.block_index: operation
+        for operation in operations
+        if operation.kind == "check-row-count"
+    }
+    owners = {
+        binding.id: operation.id
+        for operation in operations
+        for binding in operation.bindings
+    }
     for operation in operations:
         if operation.kind not in {"condition", "macro-loop", "chunk-loop"}:
             continue
@@ -390,23 +460,51 @@ def _project_control_replacements(
             for binding in operation.bindings
             if binding.id in values
         }
-        if not changed or operation.source_range is None:
-            continue
-        payload = blocks[operation.block_index].control_payload
-        if isinstance(payload, IfThen):
-            payload = replace(payload, **changed)
-        elif isinstance(payload, StartMacro):
-            payload = replace(payload, **changed)
-        elif isinstance(payload, RunLoop):
-            payload = replace(payload, **changed)
+        payload = payloads.get(operation.block_index)
+        count = count_operations.get(count_sources.get(operation.block_index))
+        count_changed = (
+            {
+                binding.name: values[binding.id]
+                for binding in count.bindings
+                if binding.id in values
+            }
+            if count
+            else {}
+        )
+        if isinstance(payload, IfThen) and payload.row_count:
+            target, path = payload.row_count
+            # Edits elsewhere may start reading the macro this IF no longer assigns.
+            read_elsewhere = any(
+                owners.get(binding_id) not in {operation.id, count and count.id}
+                and reads_macro(str(value), target)
+                for binding_id, value in values.items()
+            )
         else:
+            read_elsewhere = False
+        if (
+            not (changed or count_changed or read_elsewhere)
+            or operation.source_range is None
+        ):
             continue
+        if not isinstance(payload, (IfThen, StartMacro, RunLoop)):
+            continue
+        payload = replace(payload, **changed)
+        scope_id, macros = contexts[operation.block_index]
+        prefix = ""
+        if isinstance(payload, IfThen) and payload.row_count:
+            target = str(count_changed.get("target", target)).upper()
+            path = count_changed.get("path", path)
+            payload = replace(payload, row_count=(target, path))
+            if read_elsewhere or target not in payload.inlinable_macros():
+                payload = replace(payload, row_count=None)
+                start = operation.source_range.start_offset
+                indent = result.emitted.source[
+                    result.emitted.source.rfind("\n", 0, start) + 1 : start
+                ]
+                prefix = f"{RowsInFile.assignment(target, path, macros)}\n{indent}"
         replacements[
             (operation.source_range.start_offset, operation.source_range.end_offset)
-        ] = payload.render_header(
-            contexts[operation.block_index][0],
-            macros=contexts[operation.block_index][1],
-        )
+        ] = prefix + payload.render_header(scope_id, macros=macros)
 
 
 def _project_embedded_python(
@@ -419,7 +517,9 @@ def _project_embedded_python(
     for operation in operations:
         if operation.kind != "embedded-python" or operation.source_range is None:
             continue
-        binding = next((item for item in operation.bindings if item.name == "source"), None)
+        binding = next(
+            (item for item in operation.bindings if item.name == "source"), None
+        )
         if binding is None or binding.id not in values:
             continue
         source = values[binding.id]
@@ -428,8 +528,11 @@ def _project_embedded_python(
         step = steps.get(operation.block_index)
         if step is None:
             continue
-        indent = step.source[:len(step.source) - len(step.source.lstrip())]
-        rebuilt = "\n".join(indent + line if line.strip() else "" for line in (source or "pass").splitlines())
+        indent = step.source[: len(step.source) - len(step.source.lstrip())]
+        rebuilt = "\n".join(
+            indent + line if line.strip() else ""
+            for line in (source or "pass").splitlines()
+        )
         replacements[
             (operation.source_range.start_offset, operation.source_range.end_offset)
         ] = rebuilt
@@ -484,12 +587,16 @@ def _validate_changed_controls(
         if operation.kind == "macro-loop":
             binding = operation.bindings[0]
             if bool(values.get(binding.id, binding.value)) != bool(binding.default):
-                issues.append(ValidationIssue(code="macro-shape-change", message="Changing between static and CSV macro scopes requires regeneration from source.", binding_id=binding.id))
+                issues.append(
+                    ValidationIssue(
+                        code="macro-shape-change",
+                        message="Changing between static and CSV macro scopes requires regeneration from source.",
+                        binding_id=binding.id,
+                    )
+                )
 
 
-def _validate_binding(
-    binding: EditableBinding, value: Any
-) -> ValidationIssue | None:
+def _validate_binding(binding: EditableBinding, value: Any) -> ValidationIssue | None:
     if not binding.editable:
         return ValidationIssue(
             code="read-only-binding",
@@ -499,9 +606,18 @@ def _validate_binding(
     if binding.source_kind == "sql-file-list" and isinstance(value, str):
         normalized = value.replace("\\", "/")
         path = PurePosixPath(normalized)
-        if (not normalized or path.is_absolute() or ".." in path.parts
-            or "'" in normalized or '"' in normalized
-            or (len(normalized) >= 2 and normalized[0].isalpha() and normalized[1] == ":")):
+        if (
+            not normalized
+            or path.is_absolute()
+            or ".." in path.parts
+            or "'" in normalized
+            or '"' in normalized
+            or (
+                len(normalized) >= 2
+                and normalized[0].isalpha()
+                and normalized[1] == ":"
+            )
+        ):
             return ValidationIssue(
                 code="invalid-workspace-path",
                 message="File-list paths must be relative to the server workspace.",

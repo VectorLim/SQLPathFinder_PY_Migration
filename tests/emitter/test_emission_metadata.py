@@ -96,13 +96,13 @@ def test_emitter_records_owned_invocation_parameters_and_spans(tmp_path):
     assert parameters["inputs"].value == ["ww_yield.csv"]
     assert parameters["inputs"].artifact_role is not None
     assert parameters["inputs"].artifact_role.direction == "input"
-    assert parameters["reader"].editable is False
+    assert "reader" not in parameters or parameters["reader"].source_range is None
 
     for parameter in invocation.parameters:
         span = parameter.source_range
         if span is None:
-            assert (
-                parameter.definition is not None and (not parameter.definition.required or not parameter.editable)
+            assert parameter.definition is not None and (
+                not parameter.definition.required or not parameter.editable
             )
             assert parameter.value == parameter.definition.default
             continue
@@ -173,8 +173,12 @@ def test_parameter_identity_ignores_unrelated_call_order():
 
 
 def test_same_operation_requires_distinct_semantic_keys_and_is_order_stable():
-    first = DirectOperationMetadata.write_file.render("a.txt", "first").with_key("primary")
-    second = DirectOperationMetadata.write_file.render("b.txt", "second").with_key("secondary")
+    first = DirectOperationMetadata.write_file.render("a.txt", "first").with_key(
+        "primary"
+    )
+    second = DirectOperationMetadata.write_file.render("b.txt", "second").with_key(
+        "secondary"
+    )
 
     forward = build_step_emission(
         function_name="step_0002_example",
@@ -253,7 +257,9 @@ def test_code_expr_is_explicit_and_never_reparsed_for_editability():
 
 def test_utility_catalog_is_derived_from_registered_emittable_methods():
     ensure_utility_checks_loaded()
-    definitions = {item.id: item for item in DirectOperationMetadata.operation_definitions()}
+    definitions = {
+        item.id: item for item in DirectOperationMetadata.operation_definitions()
+    }
 
     run_query = definitions["ctx.run_query"]
     assert [parameter.name for parameter in run_query.parameters][:4] == [

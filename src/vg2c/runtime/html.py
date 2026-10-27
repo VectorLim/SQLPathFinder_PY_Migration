@@ -17,6 +17,7 @@ import tempfile
 from vg2c.runtime.html_format import build_css, format_cell, parse_alignment
 from vg2c.runtime.csv_io import _CsvIO
 from vg2c.runtime.values import job_path, substitute
+from vg2c.runtime.file_store import input_path
 
 
 @dataclass(frozen=True)
@@ -132,12 +133,12 @@ def _validate_slots(source):
     parser.close()
 
 
-def _rows(report, *, workdir, values, macros, sorting=()):
-    path = job_path(substitute(report.input_file, values=values, macros=macros), workdir)
+def _rows(report, *, workdir, values, macros, sorting=(), files=None):
+    path = input_path(substitute(report.input_file, values=values, macros=macros), workdir, files)
     if not path.is_file():
         raise FileNotFoundError(f"Report input CSV does not exist: {path}")
     rows = ({key.lower(): value for key, value in row.items() if key}
-            for row in _CsvIO(workdir=workdir).iter(str(path)))
+            for row in _CsvIO(workdir=workdir, files=files).iter(str(path)))
     spans = {}
     if sorting:
         rows = list(rows)
@@ -271,8 +272,8 @@ def _literal_declaration_attributes(source):
     return source
 
 
-def _csv_headers(report, *, workdir, values, macros):
-    path = job_path(substitute(report.input_file, values=values, macros=macros), workdir)
+def _csv_headers(report, *, workdir, values, macros, files=None):
+    path = input_path(substitute(report.input_file, values=values, macros=macros), workdir, files)
     if not path.is_file():
         raise FileNotFoundError(f"Report input CSV does not exist: {path}")
     with path.open(newline="", encoding="utf-8", errors="replace") as stream:
@@ -349,7 +350,7 @@ def _columns_from_html(table, headers, *, values, macros, source):
     return selected, alignments, edits
 
 
-def _render_report_tables(source, reports, *, workdir, values, macros):
+def _render_report_tables(source, reports, *, workdir, values, macros, files=None):
     parser = _ReportTables(source)
     parser.feed(source)
     parser.close()
@@ -363,7 +364,7 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         if name not in reports:
             raise ValueError(f"Undefined HTML report {name!r}")
         report = reports[name]
-        headers = _csv_headers(report, workdir=workdir, values=values, macros=macros)
+        headers = _csv_headers(report, workdir=workdir, values=values, macros=macros, files=files)
         try:
             sorting = json.loads(table["sort"])
         except json.JSONDecodeError as exc:
@@ -389,7 +390,7 @@ def _render_report_tables(source, reports, *, workdir, values, macros):
         edits.append((start, end, _literal_dollars(source[start:end], ())))
         lines = _rows(replace(report, columns=tuple(columns),
                               alignment=tuple(alignments)),
-                      workdir=workdir, values=values, macros=macros, sorting=sorting)
+                      workdir=workdir, values=values, macros=macros, sorting=sorting, files=files)
         slot = f"VG2C_DYNAMIC_ROWS_{len(generated_rows) + 1}"
         while "${" + slot + "}" in source:
             slot += "_NEXT"
@@ -447,7 +448,7 @@ def _write_atomic(path, content):
 
 def render_html(template_path, *, output, workdir, reports=None, values=None, macros=None,
                 styles=None, css_file=None, embed_css=False, instance=None,
-                used_reports=None):
+                used_reports=None, files=None):
     """Read editable assets at layout time and escape data in one Template pass."""
     template_path = job_path(template_path, workdir)
     source = template_path.read_text(encoding="utf-8")
@@ -465,7 +466,7 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     # Parse user-editable data-field/data-pattern attributes before escaping
     # template dollars, so CSV fields such as A$B retain their exact identity.
     source, declarative_used, generated_rows = _render_report_tables(
-        source, reports, workdir=workdir, values=values, macros=macros
+        source, reports, workdir=workdir, values=values, macros=macros, files=files
     )
     source = _literal_dollars(source, legacy_names)
     _validate_slots(source)
@@ -494,7 +495,7 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
     for name, report in reports.items():
         slot = f"{name}_ROWS"
         if slot in slots:
-            replacements[slot] = _rows(report, workdir=workdir, values=values, macros=macros)
+            replacements[slot] = _rows(report, workdir=workdir, values=values, macros=macros, files=files)
     missing_rows = {slot for slot in slots if slot.endswith("_ROWS")} - replacements.keys()
     if missing_rows:
         raise ValueError(f"Missing CSV reports for {sorted(missing_rows)}")
@@ -510,6 +511,7 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
         css_path = Path(substitute(str(css_file), values=values, macros=macros))
         if not css_path.is_absolute():
             css_path = template_path.parent / css_path
+        css_path = input_path(css_path, workdir, files)
         if not css_path.is_file():
             raise FileNotFoundError(f"Required HTML stylesheet not found: {css_path}")
         content = css_path.read_text(encoding="utf-8")
@@ -521,7 +523,7 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
             css_output = destination.parent / css_path.name
             if css_output.resolve() == destination.resolve():
                 raise ValueError("CSS and HTML output paths collide")
-            if css_output.resolve() != css_path.resolve():
+            if css_output.resolve() != job_path(str(css_path), workdir).resolve():
                 css_copy = (css_output, content)
             css = f'<link rel="stylesheet" type="text/css" href="{escape(css_path.name, quote=True)}" />'
     elif styles:
@@ -537,7 +539,11 @@ def render_html(template_path, *, output, workdir, reports=None, values=None, ma
             raise ValueError("CSS requires an HTML head or VG2C_CSS slot")
     if css_copy:
         _write_atomic(*css_copy)
+        if files is not None:
+            files.pop(css_copy[0].resolve(), None)
     _write_atomic(destination, result)
+    if files is not None:
+        files.pop(destination.resolve(), None)
     if used_reports is not None:
         used_reports.update(declarative_used)
         used_reports.update(name for name in reports if f"{name}_ROWS" in slots)

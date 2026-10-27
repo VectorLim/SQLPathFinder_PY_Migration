@@ -10,14 +10,16 @@ from typing import Any
 import pandas
 
 from vg2c.runtime.values import resolve_path
+from vg2c.runtime.file_store import input_path
 
 
 class _CsvIO:
     """Read and write CSV files relative to the runtime script directory."""
 
 
-    def __init__(self, *, workdir: str | Path | None = None) -> None:
+    def __init__(self, *, workdir: str | Path | None = None, files=None) -> None:
         self.workdir = workdir
+        self.files = files
 
     # ------------------------------------------------------------------
     # Read
@@ -25,7 +27,7 @@ class _CsvIO:
 
     def iter(self, name: str) -> Iterator[dict[str, str]]:
         """Yield each data row as a dict keyed by header names."""
-        path = resolve_path(name, workdir=self.workdir)
+        path = input_path(name, self.workdir, self.files) if self.workdir is not None else resolve_path(name)
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.DictReader(fh, delimiter=self._delimiter_for(str(path)))
             yield from reader
@@ -51,7 +53,7 @@ class _CsvIO:
             if windows_path.drive or windows_path.root:
                 raise ValueError(f"Windows absolute CSV-list path is unsupported: {path!r}")
             path = str(Path(*windows_path.parts))
-        resolved_path = resolve_path(path, workdir=self.workdir)
+        resolved_path = input_path(path, self.workdir, self.files) if self.workdir is not None else resolve_path(path)
 
         with resolved_path.open(newline="", encoding="utf-8", errors="replace") as fh:
             reader = csv.reader(fh, delimiter=self._delimiter_for(path))
@@ -124,7 +126,7 @@ class _CsvIO:
 
     def row_count(self, name: str) -> int:
         """Count data rows (excludes header); 0 if file missing."""
-        path = resolve_path(name, workdir=self.workdir)
+        path = input_path(name, self.workdir, self.files) if self.workdir is not None else resolve_path(name)
         if not path.exists():
             return 0
         with path.open(newline="", encoding="utf-8", errors="replace") as fh:
@@ -142,7 +144,7 @@ class _CsvIO:
         """
         if chunk_size <= 0:
             chunk_size = 1
-        in_path = resolve_path(input_name, workdir=self.workdir)
+        in_path = input_path(input_name, self.workdir, self.files) if self.workdir is not None else resolve_path(input_name)
         out_path = resolve_path(chunk_name, for_write=True, workdir=self.workdir)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with in_path.open(newline="", encoding="utf-8", errors="replace") as fh:
@@ -152,22 +154,24 @@ class _CsvIO:
             for row in reader:
                 batch.append(row)
                 if len(batch) >= chunk_size:
-                    self._write_chunk(out_path, header, batch)
+                    self._write_chunk(out_path, header, batch, files=self.files)
                     yield out_path
                     batch = []
             if batch:
-                self._write_chunk(out_path, header, batch)
+                self._write_chunk(out_path, header, batch, files=self.files)
                 yield out_path
 
     @staticmethod
     def _write_chunk(
-        path: Path, header: list[str] | None, rows: list[list[str]]
+        path: Path, header: list[str] | None, rows: list[list[str]], *, files=None
     ) -> None:
         with path.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh, delimiter=_CsvIO._delimiter_for(str(path)))
             if header is not None:
                 writer.writerow(header)
             writer.writerows(rows)
+        if files is not None:
+            files.pop(path.resolve(), None)
 
     # ------------------------------------------------------------------
     # Write
@@ -183,6 +187,8 @@ class _CsvIO:
         - a Path           -> copied verbatim
         """
         path = resolve_path(name, for_write=True, workdir=self.workdir)
+        if self.files is not None:
+            self.files.pop(path.resolve(), None)
         path.parent.mkdir(parents=True, exist_ok=True)
         delimiter = self._delimiter_for(str(path))
 

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
 from vg2c.runtime.values import substitute
 
 
-class MacroStore(Mapping[str, object]):
+class MacroStore(Mapping[str, Any]):
     """One per-run macro store.
 
     Names are case-insensitive. Missing named lookups return None. Existing
@@ -19,17 +20,24 @@ class MacroStore(Mapping[str, object]):
     between independent jobs.
     """
 
-    def __init__(self, *, values: Mapping | None = None, initial: Mapping | None = None):
-        self._values = {str(key).upper(): value for key, value in (values or {}).items()}
-        self._frames: list[dict[str, object]] = [self._normalize(initial)]
+    def __init__(
+        self, *, values: Mapping | None = None, initial: Mapping | None = None
+    ):
+        self._values = {
+            str(key).upper(): value for key, value in (values or {}).items()
+        }
+        self._frames: list[dict[str, Any]] = [self._normalize(initial)]
 
     @staticmethod
-    def _normalize(mapping: Mapping | None) -> dict[str, object]:
-        return {str(key).upper(): value for key, value in (mapping or {}).items()
-                if key is not None}
+    def _normalize(mapping: Mapping | None) -> dict[str, Any]:
+        return {
+            str(key).upper(): value
+            for key, value in (mapping or {}).items()
+            if key is not None
+        }
 
-    def _snapshot(self) -> dict[str, object]:
-        result: dict[str, object] = {}
+    def _snapshot(self) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for frame in self._frames:
             result.update(frame)
         return result
@@ -37,11 +45,15 @@ class MacroStore(Mapping[str, object]):
     def __getitem__(self, name: str) -> str | None:
         # Use the existing, single token resolver (including its diagnostics).
         key = str(name).strip().upper()
-        if key not in self and not key.startswith(("SPF-", "SPF$", "!")) and key != "SPF_DATETIME":
+        if (
+            key not in self
+            and not key.startswith(("SPF-", "SPF$", "!"))
+            and key != "SPF_DATETIME"
+        ):
             return None
         return substitute(f"<<<{key}>>>", values=self._values, macros=self._snapshot())
 
-    def __setitem__(self, name: str, value: object) -> None:
+    def __setitem__(self, name: str, value: Any) -> None:
         self._frames[-1][str(name).upper()] = value
 
     def __iter__(self) -> Iterator[str]:
@@ -50,7 +62,7 @@ class MacroStore(Mapping[str, object]):
     def __len__(self) -> int:
         return len(self._snapshot())
 
-    def __contains__(self, name: object) -> bool:
+    def __contains__(self, name: Any) -> bool:
         key = str(name).strip().upper()
         return key in self._snapshot() or key in self._values
 

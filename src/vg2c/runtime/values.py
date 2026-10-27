@@ -96,10 +96,12 @@ def substitute(text: str, *, values: Mapping | None = None, macros: Mapping | No
     return result
 
 
-def read_macro_row(path: str | Path, *, workdir: str | Path) -> dict[str, str] | None:
+def read_macro_row(path: str | Path, *, workdir: str | Path, files=None) -> dict[str, str] | None:
     # Adapted from scripthost-utilities-decompiled/SPSQL3_py/SPFLib/SPFSQL3.py:12491-12515;
     # test_direct_runtime.py covers first-row/zero-row behavior; no child execution here.
-    with job_path(path, workdir).open(newline="", encoding="utf-8", errors="replace") as stream:
+    from vg2c.runtime.file_store import input_path
+
+    with input_path(path, workdir, files).open(newline="", encoding="utf-8", errors="replace") as stream:
         row = next(csv.DictReader(stream), None)
         if row is None:
             return None

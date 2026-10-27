@@ -72,7 +72,9 @@ def test_source_comments_attach_to_visible_operation_once(tmp_path):
     assert operations[0].comments == ("Review this output before sending",)
 
 
-def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(tmp_path):
+def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
+    tmp_path,
+):
     result = _compile(tmp_path, _condition_source())
     model = project_document(result)
     condition = next(op for op in model.operations if op.kind == "condition")
@@ -102,10 +104,10 @@ def test_condition_uses_authoritative_operator_table_and_supports_compound_edit(
     )
     assert projected.valid
     assert (
-        "int(macros['COUNT']) <= int('0') and "
-        "int(macros['COUNT']) != int('10')"
+        "if int(macros['COUNT']) <= 0 and int(macros['COUNT']) != 10:"
         in projected.source
     )
+    assert "macros['COUNT'] = str(job.row_count('input.csv'))" in projected.source
 
 
 def test_condition_rejects_unresolved_manual_symbol_without_rewriting_source(tmp_path):
@@ -196,9 +198,7 @@ print("before")
     )
     source = operation.bindings[0]
 
-    projected = project_changes(
-        result, [SemanticChange(source.id, 'print("after")')]
-    )
+    projected = project_changes(result, [SemanticChange(source.id, 'print("after")')])
     assert projected.valid
     assert 'print("after")' in projected.source
 
@@ -208,8 +208,10 @@ print("before")
 
 
 def test_literal_recipients_are_owned_by_each_semantic_operation(tmp_path):
-    mail = ('<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
-            '"person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n')
+    mail = (
+        '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
+        '"person@example.com" "Report" "Body"\n</OPTIONS>\n<---- New Query ---->\n'
+    )
     result = _compile(tmp_path, mail + mail)
     model = project_document(result)
     operations = [op for op in model.operations if op.display_name == "Send Email"]
@@ -248,14 +250,18 @@ def test_macro_placeholder_reference_is_captured_before_python_rendering(tmp_pat
     ("code", "symbol", "operand_type"),
     CONDITION_OPERATORS,
 )
-def test_all_condition_operators_keep_authoritative_rendering(code, symbol, operand_type):
+def test_all_condition_operators_keep_authoritative_rendering(
+    code, symbol, operand_type
+):
     lhs = "VAR(COUNT)" if operand_type == "string" else "COUNT"
-    expression = IfThen(lhs, code, "10", None, None, None, None, "")._build_condition_expr()
+    expression = IfThen(
+        lhs, code, "10", None, None, None, None, ""
+    )._build_condition_expr()
 
     assert f" {symbol} " in expression
     assert "ctx.macro.named('COUNT')" in expression
     if operand_type == "numeric":
-        assert expression == f"int(ctx.macro.named('COUNT')) {symbol} int('10')"
+        assert expression == f"int(ctx.macro.named('COUNT')) {symbol} 10"
     else:
         assert expression == f"ctx.macro.named('COUNT') {symbol} '10'"
 
@@ -269,8 +275,7 @@ def test_condition_operand_characterization_covers_placeholder_literal_empty_and
 
     compound = IfThen("VAR(A)", "EQS", "x", "OR", "B", "GT", "1", "")
     assert compound._build_condition_expr() == (
-        "ctx.macro.named('A') == 'x' or "
-        "int(ctx.macro.named('B')) > int('1')"
+        "ctx.macro.named('A') == 'x' or " "int(ctx.macro.named('B')) > 1"
     )
 
 
@@ -298,21 +303,24 @@ def test_symbol_identity_resolves_for_each_condition_operator(tmp_path):
     bindings = {binding.name: binding for binding in condition.bindings}
     count = next(symbol for symbol in model.symbols if symbol.display_name == "COUNT")
 
-    for operator, token in (("GT", 'COUNT'), ("EQS", 'VAR(COUNT)')):
-        projection = project_changes(result, [
-            SemanticChange(bindings["op"].id, operator),
-            SemanticChange(bindings["rhs"].id, symbol_id=count.id),
-        ])
+    for operator, token in (("GT", "COUNT"), ("EQS", "VAR(COUNT)")):
+        projection = project_changes(
+            result,
+            [
+                SemanticChange(bindings["op"].id, operator),
+                SemanticChange(bindings["rhs"].id, symbol_id=count.id),
+            ],
+        )
         assert projection.valid
         assert projection.effective_values[bindings["rhs"].id] == token
         assert "macros['COUNT']" in projection.source
 
-    assert not project_changes(result, [
-        SemanticChange(bindings["rhs"].id, "literal", symbol_id=count.id)
-    ]).valid
-    assert not project_changes(result, [
-        SemanticChange(bindings["rhs"].id, symbol_id="symbol:MISSING")
-    ]).valid
+    assert not project_changes(
+        result, [SemanticChange(bindings["rhs"].id, "literal", symbol_id=count.id)]
+    ).valid
+    assert not project_changes(
+        result, [SemanticChange(bindings["rhs"].id, symbol_id="symbol:MISSING")]
+    ).valid
 
     operator_only = project_changes(result, [SemanticChange(bindings["op"].id, "EQS")])
     assert operator_only.valid
@@ -330,6 +338,7 @@ def test_rows_in_file_target_macro_is_editable(tmp_path):
 
     assert projected.valid
     assert "macros['TOTAL'] = str(job.row_count('input.csv'))" in projected.source
+    assert "if int(macros['COUNT']) > 0:" in projected.source
 
 
 def test_repeated_identical_condition_headers_keep_distinct_edit_ranges(tmp_path):
@@ -381,8 +390,93 @@ second
     projected = project_changes(result, [SemanticChange(rhs.id, "1")])
 
     assert projected.valid
-    assert projected.source.count("int(macros['COUNT']) > int('0')") == 1
-    assert projected.source.count("int(macros['COUNT']) > int('1')") == 1
+    assert projected.source.count("if int(macros['COUNT']) > 0:") == 1
+    assert projected.source.count("if int(macros['COUNT']) > 1:") == 1
+
+
+def _blocks(*blocks: str | tuple[str, str]) -> str:
+    text = ""
+    for block in blocks:
+        options, body = block if isinstance(block, tuple) else (block, "")
+        text += f"<OPTIONS>\n{options}\n</OPTIONS>\n{body}\n<---- New Query ---->\n"
+    return text
+
+
+_COUNT = '/UTILITIES={ROWS-IN-FILE} "input.csv" "COUNT" "N"'
+_IF_COUNT = '/UTILITIES={IF-THEN} "COUNT" "GT" "0" "" "" "" ""'
+_END_IF = "/UTILITIES={END-IF}"
+_ASSIGNED = "macros['COUNT'] = str(job.row_count('input.csv'))"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "absent"),
+    [
+        (
+            _blocks(_COUNT, _IF_COUNT, _END_IF),
+            ("if job.row_count('input.csv') > 0:",),
+            ("macros['COUNT']",),
+        ),
+        (
+            _blocks(
+                _COUNT,
+                '/UTILITIES={IF-THEN} "VAR(COUNT)" "EQS" "0" "" "" "" ""',
+                _END_IF,
+            ),
+            (_ASSIGNED, "if macros['COUNT'] == '0':"),
+            (),
+        ),
+        (
+            _blocks(_COUNT, "/WRITE-FILE=Y\n/CSV=between.txt", _IF_COUNT, _END_IF),
+            (_ASSIGNED, "if int(macros['COUNT']) > 0:"),
+            (),
+        ),
+        (
+            _blocks(
+                _COUNT,
+                _IF_COUNT,
+                ("/WRITE-FILE=Y\n/CSV=out.txt", "<<<COUNT>>>"),
+                _END_IF,
+            ),
+            (_ASSIGNED, "if int(macros['COUNT']) > 0:"),
+            (),
+        ),
+        (
+            _blocks(
+                _COUNT,
+                '/UTILITIES={IF-THEN} "COUNT" "GT" "0" "AND" "COUNT" "LT" "9"',
+                _END_IF,
+            ),
+            (_ASSIGNED, "if int(macros['COUNT']) > 0 and int(macros['COUNT']) < 9:"),
+            (),
+        ),
+    ],
+    ids=["inlined", "string-compare", "not-adjacent", "read-later", "read-twice"],
+)
+def test_row_count_inlines_only_into_sole_adjacent_numeric_read(
+    tmp_path, source, expected, absent
+):
+    code = _compile(tmp_path, source).emitted.source
+    for text in expected:
+        assert text in code
+    for text in absent:
+        assert text not in code
+
+
+def test_inlined_condition_keeps_editable_header_range_and_path(tmp_path):
+    result = _compile(tmp_path, _condition_source())
+    model = project_document(result)
+    condition = next(op for op in model.operations if op.kind == "condition")
+    span = condition.source_range
+    assert (
+        result.emitted.source[span.start_offset : span.end_offset]
+        == "if job.row_count('input.csv') > 0:"
+    )
+
+    row_count = next(op for op in model.operations if op.kind == "check-row-count")
+    path = next(binding for binding in row_count.bindings if binding.name == "path")
+    projected = project_changes(result, [SemanticChange(path.id, "other.csv")])
+    assert projected.valid
+    assert "if job.row_count('other.csv') > 0:" in projected.source
 
 
 def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_path):
@@ -390,11 +484,10 @@ def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_pat
         tmp_path,
         '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
         '"person@example.com" "Report" "Body"\n</OPTIONS>\n'
-        '<---- New Query ---->\n',
+        "<---- New Query ---->\n",
     )
     operation = next(
-        op for op in project_document(result).operations
-        if "email" in op.capabilities
+        op for op in project_document(result).operations if "email" in op.capabilities
     )
     bindings = {binding.name: binding for binding in operation.bindings}
 
@@ -411,7 +504,6 @@ def test_email_contract_declares_bulk_toggle_and_attachment_capabilities(tmp_pat
     )
     assert projected.valid
     assert "enabled=False" in projected.source
-
 
 
 def test_required_parameter_default_is_generated_reset_value(tmp_path):
@@ -450,10 +542,13 @@ second line
 """,
     )
     operation = next(
-        item for item in project_document(result).operations
+        item
+        for item in project_document(result).operations
         if item.display_name == "Write File"
     )
-    template = next(binding for binding in operation.bindings if binding.name == "template")
+    template = next(
+        binding for binding in operation.bindings if binding.name == "template"
+    )
 
     assert "multiline" in template.capabilities
     assert "\n" in str(template.value)

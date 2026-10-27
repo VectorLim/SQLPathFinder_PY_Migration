@@ -17,12 +17,13 @@ def test_generated_runtime_imports_are_deduplicated(tmp_path):
     tree = ast.parse(compile_document(source).emitted.source)
     imported = [
         alias.name
-        for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime"
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "vg2c.runtime"
         for alias in node.names
     ]
     assert imported.count("JobRuntime") == 1
     assert "job_entrypoint" not in imported
-    assert imported.count("SqliteReader") == 1
+    assert "SqliteReader" not in imported
 
 
 def test_compiler_metadata_registry_retains_direct_sql_contract():

@@ -33,7 +33,8 @@ def test_vietnam_fixture_original_local_write_block_runs_without_external_servic
     namespace = runpy.run_path(str(main), run_name="safe_original_fixture_block")
     namespace["run"]()
 
-    written = workdir / "path.csv"
+    written = main.parent / "files/path.csv"
+    assert not (workdir / "path.csv").exists()
     assert written.is_file()
     # ScriptHost parseTaskOptions lstrips SPFTaskCommand before WRITE-FILE.
     # Keep the parser's existing removal of one trailing structural LF.

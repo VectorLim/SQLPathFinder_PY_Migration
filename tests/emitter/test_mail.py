@@ -18,6 +18,7 @@ def test_mail_service_delegates_to_shared_runtime(monkeypatch, tmp_path):
 
 
 def test_generated_email_uses_job_workdir(monkeypatch, tmp_path):
+    monkeypatch.setenv("ENV_MODE", "prod")
     source = tmp_path / "email.txt"
     source.write_text(
         '<OPTIONS>\n/UTILITIES="SQLPathFinder_Email.va" '
@@ -35,5 +36,7 @@ def test_generated_email_uses_job_workdir(monkeypatch, tmp_path):
     workdir = tmp_path / "output"
     namespace["run"]()
     assert calls == [
-        (("user@intel.com", "Report", "body.htm", ["report.csv"], None, True), {"workdir": workdir})
+        (("user@intel.com", "Report", "body.htm", ["report.csv"], None, True),
+         {"files": {}, "workdir": workdir, "env_mode": "prod",
+          "test_mode_excluded": frozenset({"csr", "email", "mms"})})
     ]

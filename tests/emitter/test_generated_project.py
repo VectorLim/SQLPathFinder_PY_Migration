@@ -10,6 +10,7 @@ import pandas as pd
 
 import pytest
 
+from tests.fixtures.generated_job import capture_jobs
 from vg2c import compile_document, translate
 
 
@@ -19,7 +20,13 @@ SQL = '<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n</OPTIONS>\n-- preserved comm
 def load_job(path):
     namespace = {"__file__": str(path), "__name__": "generated_job"}
     exec(compile(path.read_text(), str(path), "exec"), namespace)
-    return namespace["run"]
+    capture_jobs(namespace)
+
+    def run():
+        namespace["run"]()
+        return namespace["_job"]
+
+    return run
 
 
 @pytest.mark.parametrize("command", [
@@ -129,11 +136,13 @@ def test_authored_python_top_level_return_has_explicit_diagnostic(tmp_path):
         compile_document(source)
 
 
-def test_retired_aed_directive_is_an_unsupported_utility(tmp_path):
+def test_retired_aed_directive_is_skipped_as_unsupported(tmp_path):
     source = tmp_path / "aed.txt"
     source.write_text(block('/UTILITIES={AED} "candidates.csv"'))
-    with pytest.raises(ValueError, match="[Uu]nclassified|[Uu]nsupported"):
-        translate(source)
+    result = compile_document(source)
+    assert any(item.code == "skipped-block" for item in result.diagnostics)
+    assert "csr_submission" not in result.emitted.source
+    assert translate(source).is_file()
 
 @pytest.mark.parametrize("lots", [["example"], []])
 def test_generated_backend_nodes_expand_config_macros(tmp_path, monkeypatch, lots):
@@ -289,9 +298,9 @@ def test_loop_html_and_file_macro_arguments_use_brackets(tmp_path):
     work = main.parent / "output"
     work.mkdir()
     (work / "config.csv").write_text("END,LABEL,CANDIDATE\n2,<Safe &>,candidates.csv\n")
-    load_job(main)()
-    assert (work / "data/candidates.csv").read_text().strip() == "<Safe &>"
-    assert [path.name for path in sorted(work.glob("loop_*.txt"))] == [
+    job = load_job(main)()
+    assert job.read_file("data/candidates.csv").strip() == "<Safe &>"
+    assert [path.name for path in sorted(job.files) if path.name.startswith("loop_")] == [
         "loop_0.txt", "loop_1.txt", "loop_2.txt",
     ]
     assert "&lt;Safe &amp;&gt;" in (work / "result.html").read_text()

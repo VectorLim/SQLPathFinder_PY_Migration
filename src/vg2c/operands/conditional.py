@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from vg2c.operands.base import (
     ScopeIdSource,
     ScopeNode,
     _operand_expr,
+    _operand_macro,
     _quoted_args,
     emit_children,
 )
@@ -34,6 +36,8 @@ class IfThen:
     op2: str | None
     rhs2: str | None
     prompt_text: str
+    # (macro, csv path) of a ROWS-IN-FILE folded into this condition.
+    row_count: tuple[str, str] | None = None
 
     # ------------------------------------------------------------------
     # Option / expression parsing
@@ -150,24 +154,54 @@ class IfThen:
     # Emission
     # ------------------------------------------------------------------
 
+    def _clauses(self):
+        """Yield (python_operator, numeric, lhs, rhs) for each comparison."""
+        yield (*_OPERATOR_TABLE.get(self.op, ("==", "string")), self.lhs, self.rhs)
+        if self.conj and self.lhs2 and self.op2 and self.rhs2:
+            yield (
+                *_OPERATOR_TABLE.get(self.op2, ("==", "string")),
+                self.lhs2,
+                self.rhs2,
+            )
+
+    def _reads(self):
+        """Yield (clause_index, numeric, macro) for every operand that reads a macro."""
+        for index, (_, op_type, *operands) in enumerate(self._clauses()):
+            numeric = op_type == "numeric"
+            for operand in operands:
+                if name := _operand_macro(operand, numeric):
+                    yield index, numeric, name
+
+    def macro_reads(self) -> set[str]:
+        return {name for *_, name in self._reads()}
+
+    def inlinable_macros(self) -> set[str]:
+        """Macros read exactly once, numerically, in the always-evaluated first comparison."""
+        reads = list(self._reads())
+        counts = Counter(name for *_, name in reads)
+        return {
+            name
+            for index, numeric, name in reads
+            if index == 0 and numeric and counts[name] == 1
+        }
+
     def _build_condition_expr(self) -> str:
         """Build a Python boolean expression from this IfThen payload."""
-        op_symbol, op_type = _OPERATOR_TABLE.get(self.op, ("==", "string"))
-        numeric = op_type == "numeric"
+        from vg2c.utilities.rows_in_file import RowsInFile
 
-        lhs = _operand_expr(self.lhs, numeric, numeric)
-        rhs = _operand_expr(self.rhs, numeric, numeric)
-        expr = f"{lhs} {op_symbol} {rhs}"
-
-        if self.conj and self.lhs2 and self.op2 and self.rhs2:
-            op2_symbol, op2_type = _OPERATOR_TABLE.get(self.op2, ("==", "string"))
-            numeric2 = op2_type == "numeric"
-            lhs2 = _operand_expr(self.lhs2, numeric2, numeric2)
-            rhs2 = _operand_expr(self.rhs2, numeric2, numeric2)
-            conj_op = " and " if self.conj.upper() == "AND" else " or "
-            expr += f"{conj_op}{lhs2} {op2_symbol} {rhs2}"
-
-        return expr
+        inline = {}
+        if self.row_count is not None:
+            target, path = self.row_count
+            inline[target] = RowsInFile.call(path)
+        parts = []
+        for symbol, op_type, lhs, rhs in self._clauses():
+            numeric = op_type == "numeric"
+            parts.append(
+                f"{_operand_expr(lhs, numeric, inline)} {symbol} "
+                f"{_operand_expr(rhs, numeric, inline)}"
+            )
+        conj_op = " and " if (self.conj or "").upper() == "AND" else " or "
+        return conj_op.join(parts)
 
     def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
         """Render the direct Python condition used by the native emitter."""
@@ -185,7 +219,6 @@ class IfThen:
         imports: set[str],
         runtime_imports: set[str],
         header_override: str | None = None,
-        prelude: tuple[str, ...] = (),
     ) -> None:
         """Emit an if/else block from this IfThen payload."""
         if_branch: ScopeNode | None = None
@@ -196,10 +229,10 @@ class IfThen:
             elif child.kind == "else-branch":
                 else_branch = child
 
-        writer.write(header_override or self.render_header(node.scope_id, macros=macros))
+        writer.write(
+            header_override or self.render_header(node.scope_id, macros=macros)
+        )
         writer.push_indent()
-        for line in prelude:
-            writer.write(line)
         emit_children(
             writer,
             walk,

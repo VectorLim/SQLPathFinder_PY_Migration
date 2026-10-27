@@ -10,6 +10,7 @@ import sqlite3
 
 import pandas as pd
 
+from vg2c.runtime.file_store import input_path
 from vg2c.runtime.values import resolve_path
 from vg2c.runtime.csv_io import _CsvIO
 from vg2c.runtime.crosstab import _CrosstabUtility
@@ -44,9 +45,9 @@ class _SqliteReader:
 
     @staticmethod
     def _load_csv_as_table(
-        conn: sqlite3.Connection, csv_path: str, table_name: str | None = None, *, workdir=None
+        conn: sqlite3.Connection, csv_path: str, table_name: str | None = None, *, workdir=None, files=None
     ) -> str:
-        path = resolve_path(csv_path, workdir=workdir)
+        path = input_path(csv_path, workdir, files) if workdir is not None else resolve_path(csv_path)
         table_name = table_name or path.stem
         table_ident = _quote_identifier(table_name)
 
@@ -99,7 +100,7 @@ class _SqliteReader:
             statements.append(tail)
         return statements
 
-    def execute(self, sql: str, inputs: list[str | tuple[str, str]], *, params=None, workdir=None) -> pd.DataFrame:
+    def execute(self, sql: str, inputs: list[str | tuple[str, str]], *, params=None, workdir=None, files=None) -> pd.DataFrame:
         stmts = self._split_statements(sql)
         if params and len(stmts) != 1:
             raise ValueError("SQL binds require exactly one statement")
@@ -113,7 +114,7 @@ class _SqliteReader:
                     csv_path, table_name = input_spec
                 else:
                     csv_path, table_name = input_spec, None
-                self._load_csv_as_table(conn, csv_path, table_name, workdir=workdir)
+                self._load_csv_as_table(conn, csv_path, table_name, workdir=workdir, files=files)
 
             if not stmts:
                 return pd.DataFrame()

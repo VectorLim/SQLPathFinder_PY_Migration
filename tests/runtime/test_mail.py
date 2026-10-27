@@ -10,6 +10,11 @@ import pytest
 from vg2c.runtime import JobRuntime, send_mail
 
 
+@pytest.fixture(autouse=True)
+def production_mode(monkeypatch):
+    monkeypatch.setenv("ENV_MODE", "prod")
+
+
 @pytest.fixture
 def delivery(monkeypatch):
     calls = []

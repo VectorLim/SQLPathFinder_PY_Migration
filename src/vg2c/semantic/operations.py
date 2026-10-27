@@ -11,8 +11,7 @@ from vg2c.operands import ForLoop, IfThen, RunLoop, ScopeNode, SiteLoop, StartMa
 from vg2c.operands.base import _OPERATOR_TABLE
 from vg2c.semantic.models import EditableBinding, WorkflowOperation
 from vg2c.semantic.sql_bindings import sql_file_list_bindings
-from vg2c.utilities._emit_helpers import resolve_output_path, split_utility_command
-from vg2c.utilities._runtime_helpers import strip_quotes
+from vg2c.utilities.rows_in_file import RowsInFile
 from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 
 if TYPE_CHECKING:
@@ -59,9 +58,7 @@ def project_control_operation(
             capability = (
                 "condition-operator"
                 if name in {"op", "op2"}
-                else "condition-connector"
-                if name == "conj"
-                else "symbol-or-literal"
+                else "condition-connector" if name == "conj" else "symbol-or-literal"
             )
             bindings.append(
                 EditableBinding(
@@ -117,16 +114,34 @@ def project_control_operation(
             capabilities=("file-input",),
             block_index=block.index,
             source_range=source_range,
-            file_effects=(FileEffectDefinition(
-                "macro-input", "read", inputs=("csv_path",),
-                reason="Macro rows are loaded from this file.",
-            ),) if binding.value else (),
+            file_effects=(
+                (
+                    FileEffectDefinition(
+                        "macro-input",
+                        "read",
+                        inputs=("csv_path",),
+                        reason="Macro rows are loaded from this file.",
+                    ),
+                )
+                if binding.value
+                else ()
+            ),
         )
 
     if isinstance(payload, RunLoop):
         specs = (
-            ("input_csv_path", "Input file", ValueSchema("string", path=True), ("file-input",)),
-            ("chunk_csv_path", "Chunk file", ValueSchema("string", path=True), ("file-output",)),
+            (
+                "input_csv_path",
+                "Input file",
+                ValueSchema("string", path=True),
+                ("file-input",),
+            ),
+            (
+                "chunk_csv_path",
+                "Chunk file",
+                ValueSchema("string", path=True),
+                ("file-output",),
+            ),
             ("chunk_size", "Chunk size", ValueSchema("integer"), ()),
         )
         bindings = tuple(
@@ -155,26 +170,49 @@ def project_control_operation(
             capabilities=("file-input", "file-output"),
             block_index=block.index,
             source_range=source_range,
-            file_effects=(FileEffectDefinition(
-                "chunks", "transform", inputs=("input_csv_path",),
-                outputs=("chunk_csv_path",), in_loop=True,
-                reason="Each iteration reads the input and materializes the current chunk file.",
-            ),),
+            file_effects=(
+                FileEffectDefinition(
+                    "chunks",
+                    "transform",
+                    inputs=("input_csv_path",),
+                    outputs=("chunk_csv_path",),
+                    in_loop=True,
+                    reason="Each iteration reads the input and materializes the current chunk file.",
+                ),
+            ),
         )
 
     if isinstance(payload, (ForLoop, SiteLoop)):
         name = "args" if isinstance(payload, ForLoop) else "nodes"
         value = list(payload.args) if isinstance(payload, ForLoop) else payload.nodes
         binding = EditableBinding(
-            id=f"{operation_id}:{name}", owner_operation_id=operation_id, name=name, display_label="Loop values",
-            schema=ValueSchema("list", items=ValueSchema("string")) if isinstance(payload, ForLoop) else ValueSchema("string"),
-            value=value, default=value, editable=False,
-            read_only_reason="Regenerate from source to change the native FOR/SITE loop contract.", source_kind="loop")
+            id=f"{operation_id}:{name}",
+            owner_operation_id=operation_id,
+            name=name,
+            display_label="Loop values",
+            schema=(
+                ValueSchema("list", items=ValueSchema("string"))
+                if isinstance(payload, ForLoop)
+                else ValueSchema("string")
+            ),
+            value=value,
+            default=value,
+            editable=False,
+            read_only_reason="Regenerate from source to change the native FOR/SITE loop contract.",
+            source_kind="loop",
+        )
         return WorkflowOperation(
-            id=operation_id, kind="for-loop" if isinstance(payload, ForLoop) else "site-loop",
-            display_name="FOR" if isinstance(payload, ForLoop) else "SITE", parent_operation_id=parent_operation_id,
-            branch=branch, source_span=block.span, bindings=(binding,), block_index=block.index,
-            source_range=source_range, file_effects=())
+            id=operation_id,
+            kind="for-loop" if isinstance(payload, ForLoop) else "site-loop",
+            display_name="FOR" if isinstance(payload, ForLoop) else "SITE",
+            parent_operation_id=parent_operation_id,
+            branch=branch,
+            source_span=block.span,
+            bindings=(binding,),
+            block_index=block.index,
+            source_range=source_range,
+            file_effects=(),
+        )
 
     return WorkflowOperation(
         id=operation_id,
@@ -186,10 +224,13 @@ def project_control_operation(
         validation_state="unsupported",
         block_index=block.index,
         source_range=source_range,
-        file_effects=(FileEffectDefinition(
-            "unknown", "unknown",
-            reason="No declared file effects are available for this operation.",
-        ),),
+        file_effects=(
+            FileEffectDefinition(
+                "unknown",
+                "unknown",
+                reason="No declared file effects are available for this operation.",
+            ),
+        ),
     )
 
 
@@ -203,47 +244,71 @@ def project_leaf_operations(
     step = result.emitted.step_for_block(block.index)
 
     submission = next(
-        (item for item in result.resolved.csr_submissions if item.block_index == block.index),
+        (
+            item
+            for item in result.resolved.csr_submissions
+            if item.block_index == block.index
+        ),
         None,
     )
+    if any(
+        item.producer_index == block.index for item in result.resolved.csr_submissions
+    ):
+        return []
     if submission is not None:
-        producer = next(
-            item for item in result.resolved.blocks if item.index == submission.producer_index
-        )
         operation_id = f"block-{block.index}:csr-submission"
         bindings = tuple(
             EditableBinding(
-                id=f"{operation_id}:{name}", owner_operation_id=operation_id,
-                name=name, display_label=label, schema=ValueSchema("string", path=True),
-                value=value, default=value, editable=False,
-                read_only_reason="Edit the generated Python or regenerate from the VG2 source.",
-                capabilities=(capability,), source_kind="csr",
+                id=f"{operation_id}:{name}",
+                owner_operation_id=operation_id,
+                name=name,
+                display_label=label,
+                schema=ValueSchema("string", path=True),
+                value=value,
+                default=value,
+                editable=False,
+                read_only_reason=(
+                    "Edit the generated project assets or regenerate from the VG2 source."
+                ),
+                capabilities=(capability,),
+                source_kind="csr",
             )
             for name, label, value, capability in (
-                ("input_file", "CSR requests", resolve_output_path(producer), "file-input"),
-                ("output_file", "AED results", "AED_results.csv", "file-output"),
+                ("input_file", "CSR lots", submission.input_file, "file-input"),
+                ("config_file", "Shared environment", ".env", "file-input"),
             )
         )
-        return [WorkflowOperation(
-            id=operation_id, kind="csr-submission", display_name="CSR → AED",
-            parent_operation_id=parent_operation_id, branch=branch,
-            source_span=block.span, summary=f"{resolve_output_path(producer)} → AED_results.csv",
-            bindings=bindings, capabilities=("file-input", "file-output"),
-            block_index=block.index, source_range=step.source_range if step else None,
-            file_effects=(
-                FileEffectDefinition(
-                    "read", "read", inputs=("input_file",), input_base="script-directory",
-                    reason="Read CSR requests; write results when an action is attempted.",
+        return [
+            WorkflowOperation(
+                id=operation_id,
+                kind="csr-submission",
+                display_name="CSR → AED",
+                parent_operation_id=parent_operation_id,
+                branch=branch,
+                source_span=block.span,
+                summary=f"{submission.input_file} → AED",
+                bindings=bindings,
+                capabilities=("file-input",),
+                block_index=block.index,
+                source_range=step.source_range if step else None,
+                file_effects=(
+                    FileEffectDefinition(
+                        "read",
+                        "read",
+                        inputs=("input_file", "config_file"),
+                        input_base="script-directory",
+                        reason="Read CSR lots and optional shared environment (mode/credentials).",
+                    ),
                 ),
-                FileEffectDefinition(
-                    "write", "write", outputs=("output_file",), conditional=True,
-                    reason="Read CSR requests; write results when an action is attempted.",
-                ),
-            ),
-        )]
+            )
+        ]
 
     if block.kind is Kind.ROWS_IN_FILE:
-        return [_rows_in_file_operation(result, block, step, parent_operation_id, branch, values)]
+        return [
+            _rows_in_file_operation(
+                result, block, step, parent_operation_id, branch, values
+            )
+        ]
 
     if block.kind is Kind.PYTHON_EMBED:
         operation_id = f"block-{block.index}:embedded-python"
@@ -272,10 +337,13 @@ def project_leaf_operations(
                 capabilities=("embedded-python",),
                 block_index=block.index,
                 source_range=step.source_range if step else None,
-                file_effects=(FileEffectDefinition(
-                    "unknown", "unknown",
-                    reason="Embedded Python may perform arbitrary file operations.",
-                ),),
+                file_effects=(
+                    FileEffectDefinition(
+                        "unknown",
+                        "unknown",
+                        reason="Embedded Python may perform arbitrary file operations.",
+                    ),
+                ),
             )
         ]
 
@@ -308,14 +376,25 @@ def project_leaf_operations(
                         name=parameter.name,
                         display_label=(
                             definition_parameter.display_label
-                            if definition_parameter else parameter.name.replace("_", " ").title()
+                            if definition_parameter
+                            else parameter.name.replace("_", " ").title()
                         ),
-                        schema=definition_parameter.schema if definition_parameter else None,
+                        schema=(
+                            definition_parameter.schema
+                            if definition_parameter
+                            else None
+                        ),
                         value=binding_value,
                         default=parameter.value,
-                        required=definition_parameter.required if definition_parameter else True,
+                        required=(
+                            definition_parameter.required
+                            if definition_parameter
+                            else True
+                        ),
                         visibility=(
-                            definition_parameter.visibility if definition_parameter else "normal"
+                            definition_parameter.visibility
+                            if definition_parameter
+                            else "normal"
                         ),
                         capabilities=tuple(dict.fromkeys(capabilities)),
                         validation_state="valid" if parameter.editable else "warning",
@@ -330,9 +409,7 @@ def project_leaf_operations(
                     )
                 )
             if definition.id == "ctx.run_query":
-                bindings.extend(
-                    sql_file_list_bindings(block, invocation, values)
-                )
+                bindings.extend(sql_file_list_bindings(block, invocation, values))
             operations.append(
                 WorkflowOperation(
                     id=invocation.id,
@@ -375,10 +452,13 @@ def project_leaf_operations(
             validation_state="unsupported",
             block_index=block.index,
             source_range=step.source_range if step else None,
-            file_effects=(FileEffectDefinition(
-                "unknown", "unknown",
-                reason="No declared file effects are available for this operation.",
-            ),),
+            file_effects=(
+                FileEffectDefinition(
+                    "unknown",
+                    "unknown",
+                    reason="No declared file effects are available for this operation.",
+                ),
+            ),
         )
     ]
 
@@ -392,9 +472,8 @@ def _rows_in_file_operation(
     values: dict[str, Any],
 ) -> WorkflowOperation:
     operation_id = f"block-{block.index}:rows-in-file"
-    argv = split_utility_command(block.resolved_options.lookup.get("UTILITIES", ""))
-    path = strip_quotes(argv[1]) if len(argv) > 1 else ""
-    target = strip_quotes(argv[2]).upper() if len(argv) > 2 else ""
+    path = RowsInFile.path(block)
+    target = RowsInFile.target(block)
 
     target_parameter = None
     if step is not None:
@@ -403,13 +482,20 @@ def _rows_in_file_operation(
                 parameter
                 for invocation in step.invocations
                 for parameter in invocation.parameters
-                if invocation.operation.id == "macro.set_named" and parameter.name == "name"
+                if invocation.operation.id == "macro.set_named"
+                and parameter.name == "name"
             ),
             None,
         )
-    target_id = target_parameter.id if target_parameter is not None else f"{operation_id}:target"
+    target_id = (
+        target_parameter.id
+        if target_parameter is not None
+        else f"{operation_id}:target"
+    )
     path_id = f"{operation_id}:path"
-    path_range = _row_count_path_range(result.emitted.source, step.source_range if step else None, path)
+    path_range = _row_count_path_range(
+        result.emitted.source, step.source_range if step else None, path
+    )
     bindings = (
         EditableBinding(
             id=path_id,
@@ -448,10 +534,14 @@ def _rows_in_file_operation(
         capabilities=("file-input", "symbol-definition"),
         block_index=block.index,
         source_range=step.source_range if step else None,
-        file_effects=(FileEffectDefinition(
-            "row-count", "observe", inputs=("path",),
-            reason="Row count observes this input file and stores the count in a symbol.",
-        ),),
+        file_effects=(
+            FileEffectDefinition(
+                "row-count",
+                "observe",
+                inputs=("path",),
+                reason="Row count observes this input file and stores the count in a symbol.",
+            ),
+        ),
     )
 
 
@@ -489,12 +579,18 @@ def _condition_summary(bindings: list[EditableBinding]) -> str:
     def clause(left: str, op: str, right: str) -> str:
         if not by_name.get(left) or not by_name.get(op):
             return ""
-        operator = _OPERATOR_TABLE.get(str(by_name[op]), (str(by_name[op]), "string"))[0]
+        operator = _OPERATOR_TABLE.get(str(by_name[op]), (str(by_name[op]), "string"))[
+            0
+        ]
         return f"{_summary_value(by_name[left])} {operator} {_summary_value(by_name.get(right))}"
 
     first = clause("lhs", "op", "rhs")
     second = clause("lhs2", "op2", "rhs2")
-    return f"{first} {by_name['conj']} {second}" if second and by_name.get("conj") else first
+    return (
+        f"{first} {by_name['conj']} {second}"
+        if second and by_name.get("conj")
+        else first
+    )
 
 
 def _row_count_path_range(
@@ -516,5 +612,7 @@ def _row_count_path_range(
 
 
 def _control_operation_id(node: ScopeNode) -> str:
-    suffix = {"if": "condition", "macro": "macro", "loop": "loop"}.get(node.kind, node.kind)
+    suffix = {"if": "condition", "macro": "macro", "loop": "loop"}.get(
+        node.kind, node.kind
+    )
     return f"block-{node.start_index}:control:{suffix}"
