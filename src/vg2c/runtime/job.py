@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import csv
+from collections.abc import Callable, Mapping
 from functools import wraps
 from pathlib import Path, PureWindowsPath
+from typing import Concatenate, ParamSpec, TypeVar, cast
 
 from vg2c.runtime.file_store import input_path
-from vg2c.runtime.aed_client import AEDClient
-from vg2c.runtime.csr import csr_comment, csr_lots
+from vg2c.runtime.aed_client import AEDClient, identifier
 from vg2c.runtime.environment import DEFAULT_TEST_MODE_EXCLUDED, read_environment
-from vg2c.runtime.append import smart_append
 from vg2c.runtime.controls import csv_chunks
 from vg2c.runtime.files import (
     copy_file,
@@ -18,23 +18,44 @@ from vg2c.runtime.files import (
     rename_file,
     row_count,
     run_program,
+    smart_append,
     wait_file,
     write_file,
 )
 from vg2c.runtime.html import _write_atomic, csv_report, render_html
-from vg2c.runtime.values import job_path, substitute
 from vg2c.runtime.macros import MacroStore
 from vg2c.runtime.mail import send_mail
 from vg2c.runtime.query import execute_sql
-from vg2c.runtime.values import read_macro_row, snapshot_values
-
-
-from collections.abc import Callable
-from functools import wraps
-from typing import Concatenate, ParamSpec, TypeVar, cast
+from vg2c.runtime.values import job_path, read_macro_row, snapshot_values, substitute
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def csr_lots(path, column, *, workdir, files=None):
+    """Return the distinct lot IDs of one CSV column (header matched case-insensitively)."""
+    with input_path(path, workdir, files).open(
+        encoding="utf-8-sig", newline=""
+    ) as stream:
+        reader = csv.DictReader(stream, strict=True)
+        names = {name.strip().casefold(): name for name in reader.fieldnames or []}
+        key = names.get(column.casefold())
+        if key is None:
+            raise ValueError(f"CSR input {path} has no {column!r} column")
+        lots = []
+        for row in reader:
+            lot = (row.get(key) or "").strip()
+            if None in row or not lot:
+                raise ValueError(f"CSR input {path} has a row without a lot")
+            lots.append(identifier(lot, "CSR lot"))
+    return list(dict.fromkeys(lots))
+
+
+def csr_comment(note, ccb):
+    """Build the legacy CSR hold comment; a CCB number is mandatory."""
+    if not str(ccb).strip():
+        raise ValueError("CSR requests require a CCB number")
+    return f"{note}\nCCB: {ccb}"
 
 
 def operation(
@@ -182,43 +203,6 @@ class JobRuntime:
             input_file,
             output_file=output_file,
             table_template=self.asset_path(template),
-        )
-
-    def report_spec(self, path):
-        """Read an editable long HTML column schema when the report is defined.
-
-        Source options are kept distinct: CSV fields, presentation labels,
-        alignment and output name (utils.py:9324-9378).
-        """
-        data = self.table_spec(path)
-        allowed = {"input_file", "columns", "headers", "alignment", "output_file"}
-        if not isinstance(data, dict) or set(data) - allowed:
-            raise ValueError(
-                f"Invalid HTML report definition {path}: unexpected fields"
-            )
-        if not isinstance(data.get("input_file"), str):
-            raise ValueError(
-                f"HTML report definition {path} requires input_file string"
-            )
-        for key in ("columns", "headers", "alignment"):
-            if not isinstance(data.get(key), list) or not all(
-                isinstance(value, str) for value in data[key]
-            ):
-                raise ValueError(
-                    f"HTML report definition {path} requires {key} string list"
-                )
-        if data.get("output_file") is not None and not isinstance(
-            data["output_file"], str
-        ):
-            raise ValueError(
-                f"HTML report definition {path} requires output_file string or null"
-            )
-        return csv_report(
-            data["input_file"],
-            columns=data["columns"],
-            headers=data["headers"],
-            alignment=data["alignment"],
-            output_file=data.get("output_file"),
         )
 
     @operation("sql")

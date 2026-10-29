@@ -54,10 +54,7 @@ prefix; sort fields without row spans still establish group boundaries.
 Legacy browser/delivery/security/chart integration settings produce explicit
 `local-html-only` diagnostics; the local renderer does not implement those services.
 
-The core Python editing/reorder APIs retain invocation identities and source
-ranges for direct calls. SQL and report definitions exposed through these APIs
-are read-only through Python offsets: edit their external assets or regenerate
-from VG2. Literal values belong to their individual calls rather than shared
+Literal values belong to their individual calls rather than shared
 generated globals. Embedded Python must use explicit runtime functions and
 `workdir`; the retired `ctx` API and top-level return/yield have diagnostics.
 
@@ -67,11 +64,9 @@ changed working directory, parameterless `run()`, SQLite, crosstab/CTARRAY,
 editable SQL/HTML/CSS, linked/embedded styles, Unicode and failure handling.
 This is **not** certification of private DataSyncX/Oracle/AED services or the original
 ScriptHost engine: those require their target infrastructure and credentials.
-The old `MacroState`, `PipelineContext` and runtime HTML preview/rendering engines
-and the unused source-embedding pipeline have been retired. Compiler-only operation
-metadata and HTML parsing remain because they are necessary to translate VG2 and
-preserve editing/source offsets. The optional visual editor and its legacy HTML
-preview are not a supported Session 05 release gate; HPC/JMP/JSL remain unsupported.
+The old `MacroState`, `PipelineContext` and runtime HTML preview/rendering engines,
+the unused source-embedding pipeline, the visual editor (`vg2c_ui`) and its
+semantic editing/workflow layer have been retired. HPC/JMP/JSL remain unsupported.
 
 ---
 
@@ -270,24 +265,19 @@ credentials; offline tests do not establish live API access.
 graph TD
     A[VG2 Source File] --> B[Parse & Classify]
     B --> C[Resolve]
-    C --> D[Analyze Dataflow]
-    D --> E[Dispatch]
-    E --> F[Emit Native Python + SQL/HTML Assets + Metadata]
+    C --> E[Dispatch]
+    E --> F[Emit Native Python + SQL/HTML Assets + Step Source Map]
     F --> G[CompilationResult]
-    G --> H[Thin UI API / Serialization]
-    H --> I[React Presentation]
+    G --> H[translate / CLI project writer]
+    G --> I[Windows companion preview]
 
     subgraph Utilities
-        J[UtilitySpec / @emittable metadata] -. definitions & capabilities .-> F
+        J[UtilitySpec / @emittable call rendering] -. definitions .-> F
         J -. direct vg2c.runtime calls .-> F
     end
 ```
 
-`CompilationResult` and the compiler-stage objects are the authoritative semantic chain. The emitter records utility invocations, editable parameters, stable identities, artifact roles, capabilities, and exact generated-source spans while it generates Python. The UI API serializes those compiler-owned results and handles persistence/workspace security; React renders the returned metadata and sends edit intent back to core APIs rather than reconstructing SQL or dataflow semantics locally.
-
-Workflow file effects are declared with their operations and bound by one shared
-implementation. Document assembly, workspace analysis and reorder analysis have
-separate owners; see the [responsibility and redundancy map](docs/workflow-responsibilities.md).
+`CompilationResult` and the compiler-stage objects are the authoritative chain. The emitter records per-step source ranges and asset-producing parameters while it generates Python; the companion uses them to map source blocks to generated code and assets.
 
 Native scope payloads own their generated headers and bodies for macro, conditional, and loop scopes; the project emitter walks the resolved scope tree and assembles imports, assets, and source maps. HTML report emission belongs to a per-translation `HtmlReport`, while CSR submission and history policy belongs to a per-translation `CsrWorkflow`. Generated jobs call the installed `vg2c.runtime` APIs, which own file, SQL, email, and control behavior at execution time.
 
@@ -379,47 +369,6 @@ vg2c .
 vg2c path\to\inputs path\to\outputs
 vg2c --build
 ```
-
-## Visual editor
-
-Install the optional local-app dependencies and frontend packages:
-
-```powershell
-python -m pip install -e ".[ui]"
-Set-Location src/vg2c_ui/frontend
-npm install
-```
-
-For development, run the API and Vite in separate terminals from the repository root:
-
-```powershell
-vg2c-ui --data-dir .\data
-npm --prefix src/vg2c_ui/frontend run dev
-```
-
-For a single local server, build the frontend once, then start `vg2c-ui`:
-
-```powershell
-npm --prefix src/vg2c_ui/frontend run build
-vg2c-ui .
-```
-
-The Vite build writes the packaged frontend to `src/vg2c_ui/static`. The server only accepts source/output paths within the workspace passed to `vg2c-ui`.
-
-Utility names, methods, parameters, annotations, defaults, `Literal` choices, return types, documentation, artifact roles, and editor capabilities come from the actual compiler utility definitions. Ordinary utilities therefore use the generic React parameter editor without utility-specific frontend code. Specialized editors are selected by explicit capabilities such as `structured-sql`.
-
-Edits use a preview/apply flow backed by `vg2c.editing`, with compiler-owned value validation, generated-source spans, syntax validation, revision/hash conflict checks, and atomic persistence. Structured SQL parsing/transformation lives in `vg2c.sql_editor`. Draft and cross-document producer/consumer relationships are projected through `vg2c.dataflow`, including unsaved changes in inactive tabs.
-
-The frontend contracts are generated from the Python transport models. Run:
-
-```powershell
-npm --prefix src/vg2c_ui/frontend run generate:contracts
-npm --prefix src/vg2c_ui/frontend run test
-```
-
-The current API surface uses focused routes for document open/translation, change preview/apply, workspace projection, CSV preview, and structured SQL inspect/actions. There is no generic arbitrary-Python replacement or legacy `/api/commands` compatibility route.
-
-Use **Translate** to regenerate Python from VG2. Use **Open** to reopen an existing generated workflow and retain previously applied visual-editor values when its sidecar still matches the source/output hashes.
 
 ## SQLPathFinder companion (Windows)
 

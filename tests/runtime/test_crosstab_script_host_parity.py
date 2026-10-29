@@ -192,29 +192,6 @@ def test_many_runtime_keys_no_crosstab_json(tmp_path):
     )
 
 
-def test_pivot_editing_binding_has_correct_range(tmp_path):
-    from vg2c.editing import SemanticChange, project_changes
-
-    source = _script(tmp_path)
-    compiled = compile_document(source)
-    invocation = next(
-        item for step in compiled.emitted.steps for item in step.invocations
-        if item.operation.id == "ctx.run_query"
-    )
-    bound = {p.name: p for p in invocation.parameters}
-    for name in ("pivot_columns", "pivot_values"):
-        p = bound[name]
-        assert p.editable and p.source_range is not None
-        span = p.source_range
-        assert compiled.emitted.source[span.start_offset:span.end_offset] == p.source
-    edited = project_changes(
-        compiled, [SemanticChange(bound["pivot_columns"].id, "category")]
-    )
-    assert edited.valid
-    assert "pivot_columns='category'" in edited.source
-    assert "pivot_values='reading'" in edited.source
-
-
 def test_checked_in_source_derived_basic_csv_fixture():
     """SPFUtilities/utils.py:4070-4088, 4137-4218, 4280-4512.
 
@@ -256,7 +233,6 @@ def test_header_token_alias_modes_keep_source_style(tmp_path):
 
 
 def test_distinct_header_metadata_workdirs(tmp_path):
-    from pathlib import Path
 
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()

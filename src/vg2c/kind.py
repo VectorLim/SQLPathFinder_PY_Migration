@@ -20,24 +20,3 @@ class Kind(str, Enum):  # noqa: UP042 - preserve existing Enum string semantics
     SMART_APPEND = "SMART_APPEND"
     UNKNOWN = "UNKNOWN"
 
-    @property
-    def is_csv_producer(self) -> bool:
-        """Return True if this kind is an explicit CSV producer."""
-        return self in {
-            Kind.SQL_QUERY,
-            Kind.SQLITE_QUERY,
-            Kind.DUCKDB_QUERY,
-            Kind.WRITE_FILE,
-            Kind.PYTHON_EMBED,
-        }
-
-    @property
-    def is_external_utility(self) -> bool:
-        """Return True if this kind represents an external utility/system command block."""
-        return self in {
-            Kind.EMAIL,
-            Kind.EXTERNAL_RUN,
-            Kind.FS_COPY,
-            Kind.FS_DELETE,
-            Kind.WAIT_FILE,
-        }

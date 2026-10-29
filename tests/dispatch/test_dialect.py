@@ -3,75 +3,40 @@ from __future__ import annotations
 import pytest
 
 from vg2c.dispatch.base import DialectHandler
-from vg2c.dispatch.models import ReaderSpec
-from vg2c.kind import Kind
+from vg2c.dispatch.dialects import (
+    AriesDialect,
+    DuckDbDialect,
+    MarsDialect,
+    OasysDialect,
+    SqliteDialect,
+)
 
 
 @pytest.mark.parametrize(
-    "kind, expected",
+    "node, engine, oledb, expected",
     [
-        (Kind.SQL_QUERY, None),
-        (
-            Kind.SQLITE_QUERY,
-            ReaderSpec(
-                module="vg2c.utilities.sqlite_reader",
-                name="SqliteReader",
-                utility_name="sqlite_reader",
-            ),
-        ),
-        (
-            Kind.DUCKDB_QUERY,
-            ReaderSpec(
-                module="vg2c.utilities.duckdb_reader",
-                name="DuckDbReader",
-                utility_name="duckdb_reader",
-            ),
-        ),
+        ("ARIES_PROD", "VA", "", AriesDialect),
+        ("DUCKDB:data.tab:t0", "DuckDB", "DuckDB", DuckDbDialect),
+        ("SITE.MARS", "", "SQLPLUS", MarsDialect),
+        ("<<<MARS>>>", "VA", "", MarsDialect),
+        ("OASYS_DB", "VA", "", OasysDialect),
+        (".\\", "SQLite", "SQLite", SqliteDialect),
+        ("", "", "", None),
+        ("ARIES_PROD", "", "", None),
     ],
 )
-def test_resolve_reader_sql_bearing(kind: Kind, expected: ReaderSpec | None) -> None:
-    assert DialectHandler.resolve_reader(kind) == expected
+def test_signals_select_dialect(node, engine, oledb, expected) -> None:
+    assert DialectHandler.derive_handler_from_signals(node, engine, oledb) is expected
 
 
-@pytest.mark.parametrize(
-    "kind",
-    [
-        Kind.WRITE_FILE,
-        Kind.EMAIL,
-        Kind.MACRO_CONTROL,
-        Kind.HTML_REPORT,
-        Kind.UNKNOWN,
-    ],
-)
-def test_resolve_reader_non_sql_returns_none(kind: Kind) -> None:
-    assert DialectHandler.resolve_reader(kind) is None
+def test_substitution_is_identity_unless_overridden() -> None:
+    assert SqliteDialect.substitute("select @[]@x") == "select @[]@x"
+    assert MarsDialect.substitute("from @[]@tbl") == "from @[]@.tbl"
+    assert OasysDialect.substitute("from @OASYSSCHEMA@tbl") == "from tbl"
 
 
-def test_sql_bearing_kinds_coverage() -> None:
-    sql_bearing_kinds = DialectHandler.sql_bearing_kinds()
-    assert Kind.SQL_QUERY in sql_bearing_kinds
-    assert Kind.SQLITE_QUERY in sql_bearing_kinds
-    assert Kind.DUCKDB_QUERY in sql_bearing_kinds
-    assert Kind.WRITE_FILE not in sql_bearing_kinds
-
-
-def test_derive_from_signals_sqlite_by_engine() -> None:
-    reader = DialectHandler.derive_reader_from_signals(
-        node=".\\", engine="SQLite", oledb="SQLite"
-    )
-    assert reader is not None
-    assert reader.name == "SqliteReader"
-    assert reader.utility_name == "sqlite_reader"
-
-
-def test_derive_from_signals_duckdb_by_engine() -> None:
-    reader = DialectHandler.derive_reader_from_signals(
-        node="DUCKDB:data.tab:t0", engine="DuckDB", oledb="DuckDB"
-    )
-    assert reader is not None
-    assert reader.name == "DuckDbReader"
-    assert reader.utility_name == "duckdb_reader"
-
-
-def test_derive_from_signals_no_signals_returns_none() -> None:
-    assert DialectHandler.derive_reader_from_signals(node="", engine="", oledb="") is None
+def test_local_readers_share_runtime_adapter_module() -> None:
+    assert DuckDbDialect.reader.module == "vg2c.utilities.runtime_adapters"
+    assert DuckDbDialect.reader.utility_name == "duckdb_reader"
+    assert SqliteDialect.reader.module == "vg2c.utilities.runtime_adapters"
+    assert SqliteDialect.reader.utility_name == "sqlite_reader"

@@ -5,10 +5,9 @@ Runtime macro storage and substitution belong exclusively to vg2c.runtime.MacroS
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 
-from vg2c.emitter.models import BlockEmission, RenderedCall, SourceRange
-from vg2c.emitter.operations import EmittableOperation, emittable
+from vg2c.emitter.models import BlockEmission, RenderedCall
+from vg2c.emitter.operations import emittable
 from vg2c.kind import Kind
 from vg2c.runtime.values import NAMED_MACRO_RE
 from vg2c.utilities._base import EmitterUtility
@@ -17,7 +16,6 @@ from vg2c.utilities._emit_helpers import native_call_arguments
 
 class MacroControl(EmitterUtility):
     utility_name = "macro"
-    semantic_visibility = "internal"
     handles = (Kind.MACRO_CONTROL,)
 
     PLACEHOLDER_RE = re.compile(r"<<<(.+?)>>>|<<>>", re.DOTALL)
@@ -42,14 +40,7 @@ class MacroControl(EmitterUtility):
         arguments, _ = native_call_arguments(call, macros)
         name, value = arguments
         source = f"{macros}[{name.source}] = {value.source}"
-        rendered = EmittableOperation.render_method_call(call.definition, args=arguments)
-        start = len(macros) + 1
-        value_start = start + len(name.source) + 4
-        tracked = tuple(
-            replace(argument, source_range=SourceRange(offset, offset + len(argument.source)))
-            for argument, offset in zip(rendered.arguments, (start, value_start), strict=True)
-        )
-        return RenderedCall(source, call.definition, tracked)
+        return source
 
     @emittable
     def named(self, name: str) -> str:

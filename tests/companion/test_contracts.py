@@ -38,7 +38,7 @@ def _fake_result():
         0: SimpleNamespace(
             block_index=0,
             source_range=SourceRange(10, 20),
-            parameters=(SimpleNamespace(artifact_role=object(), value="sql/query.sql"),),
+            parameters=(SimpleNamespace(artifact_role=True, value="sql/query.sql"),),
         ),
         1: SimpleNamespace(block_index=1, source_range=SourceRange(30, 40), parameters=()),
     }

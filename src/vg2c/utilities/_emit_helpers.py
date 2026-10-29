@@ -11,13 +11,11 @@ from typing import Any
 from vg2c.emitter.models import CodeExpr, RenderedCall
 from vg2c.emitter.operations import EmittableOperation
 from vg2c.kind import Kind
-from vg2c.runtime.sql_text import SqlGetCsvListCall, scan_sql_get_csv_list_calls
-from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
+from vg2c.runtime.values import normalize_macro_name, strip_quotes
 
 __all__ = [
     "parse_table_binding",
     "resolve_output_path",
-    "scan_sql_get_csv_list_calls",
     "extract_crosstab_options",
     "split_utility_command",
     "to_code_expr",
@@ -153,27 +151,17 @@ def to_code_expr(value: str | None) -> CodeExpr:
         return CodeExpr("None")
     text = strip_quotes(value)
     source = placeholders_to_python_expr(text)
-    symbol_names = tuple(
-        dict.fromkeys(
-            normalize_macro_name(match.group(1))
-            for match in MacroControl.PLACEHOLDER_RE.finditer(text)
-            if match.group(1) is not None
-        )
-    )
     if MacroControl.PLACEHOLDER_RE.search(text):
-        return CodeExpr(source, symbol_names=symbol_names)
+        return CodeExpr(source)
     return CodeExpr(source, text)
 
 
 def list_code_expr(values: list[str]) -> CodeExpr:
     items = [to_code_expr(value) for value in values]
     source = "[" + ", ".join(item.source for item in items) + "]"
-    symbol_names = tuple(
-        dict.fromkeys(name for item in items for name in item.symbol_names)
-    )
     if all(item.has_value for item in items):
-        return CodeExpr(source, [item.value for item in items], symbol_names=symbol_names)
-    return CodeExpr(source, symbol_names=symbol_names)
+        return CodeExpr(source, [item.value for item in items])
+    return CodeExpr(source)
 
 
 class _Expressions(ast.NodeTransformer):
@@ -220,17 +208,13 @@ def native_argument(value, macros):
     from vg2c.utilities.macro_control import MacroControl
 
     source = value.source if isinstance(value, CodeExpr) else repr(value)
-    names = []
     dynamic = False
     for node in ast.walk(ast.parse(source, mode="eval")):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             if MacroControl.PLACEHOLDER_RE.search(node.value):
                 dynamic = True
-                names.extend(to_code_expr(node.value).symbol_names)
     if dynamic:
-        return CodeExpr(
-            native_expression(source, macros), symbol_names=tuple(dict.fromkeys(names))
-        )
+        return CodeExpr(native_expression(source, macros))
     return value
 
 
@@ -239,11 +223,7 @@ def native_call_arguments(call: RenderedCall, macros: str):
     kwargs = {}
     for argument in call.arguments:
         value = native_argument(
-            CodeExpr(
-                argument.source,
-                argument.value,
-                symbol_names=argument.symbol_names,
-            ),
+            CodeExpr(argument.source, argument.value),
             macros,
         )
         value = replace(value, source=native_expression(value.source, macros))

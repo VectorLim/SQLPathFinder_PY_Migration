@@ -33,8 +33,7 @@ dev = [
 
 [project.scripts]
 vg2c = "vg2c.cli:main"
-vg2c-ui = "vg2c_ui.__main__:main"
-vg2c-companion = "vg2c_companion.cli:main"
+vg2c-companion = "vg2c_companion.__main__:main"
 
 [tool.uv.sources]
 datasyncx = { git = "https://mfg-github.mfg.intel.com/intel-manufacturing/applications.manufacturing.analytics.atm.datasyncx", tag = "1.1.6" }
@@ -52,7 +51,6 @@ package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.package-data]
-vg2c_ui = ["static/*", "static/assets/*"]
 vg2c_companion = ["observer.cs"]
 
 [tool.setuptools.packages.find]

@@ -1,6 +1,4 @@
 """Source-derived Session 04 report/CSS asset and lifecycle regressions."""
-from pathlib import Path
-
 import pytest
 
 from vg2c import translate

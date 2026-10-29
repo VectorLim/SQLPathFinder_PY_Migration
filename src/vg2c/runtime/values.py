@@ -19,6 +19,13 @@ def strip_quotes(value: str) -> str:
     return value
 
 
+def normalize_macro_name(raw: str) -> str:
+    name = raw.strip()
+    if name.startswith("<<<") and name.endswith(">>>"):
+        name = name[3:-3]
+    return name.strip().upper()
+
+
 def resolve_path(name: str | Path, *, for_write: bool = False, workdir: str | Path | None = None) -> Path:
     """Resolve runtime paths without loading compiler utilities."""
     path = Path(name)

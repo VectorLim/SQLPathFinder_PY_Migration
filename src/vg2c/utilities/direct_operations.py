@@ -8,57 +8,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from vg2c.emitter.models import ArtifactRole
 from vg2c.emitter.operations import emittable
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utility_metadata import FileEffectDefinition, ValueSchema
 
 
 class DirectOperationMetadata(UtilitySpec):
     utility_name = "ctx"
 
-    @emittable(
-        display_name="Write File",
-        summary="{path}",
-        file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),),
-    )
+    @emittable
     def write_file(
         self, path: str, template: str, vars: dict[str, str] | None = None
     ) -> None:
         raise NotImplementedError("Compiler-only metadata; use JobRuntime.write_file")
 
-    @emittable(
-        display_name="Run Query",
-        summary="Output: {output}",
-        file_effects=(
-            FileEffectDefinition(
-                "query",
-                "transform",
-                inputs=("inputs",),
-                outputs=("output",),
-                input_base="runtime-search",
-                input_format="table-binding",
-            ),
-        ),
-        parameter_capabilities={"sql": ("structured-sql",)},
-        artifact_roles={
-            "output": ArtifactRole("output"),
-            "inputs": ArtifactRole("input", many=True),
-        },
-        parameter_visibility={"reader": "internal"},
-        parameter_schemas={
-            "crosstab": ValueSchema(
-                "object",
-                nullable=True,
-                properties=(
-                    ("row_keys", ValueSchema("list", items=ValueSchema("string"))),
-                    ("header_key", ValueSchema("string")),
-                    ("value_key", ValueSchema("string")),
-                ),
-                required_keys=("row_keys", "header_key", "value_key"),
-            ),
-        },
-    )
+    @emittable(artifact_roles={"output": True, "inputs": True})
     def run_query(
         self,
         sql: str,

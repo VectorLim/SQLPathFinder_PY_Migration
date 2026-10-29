@@ -2,8 +2,26 @@
 
 from __future__ import annotations
 
+import queue
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeVar
+
+_QueueItem = TypeVar("_QueueItem")
+
+
+def replace_oldest(items: queue.Queue[_QueueItem], item: _QueueItem) -> None:
+    """Enqueue *item*, discarding the oldest entry when the bounded queue is full."""
+    try:
+        items.put_nowait(item)
+        return
+    except queue.Full:
+        pass
+    with suppress(queue.Empty):
+        items.get_nowait()
+    with suppress(queue.Full):
+        items.put_nowait(item)
 
 
 @dataclass(frozen=True, slots=True)

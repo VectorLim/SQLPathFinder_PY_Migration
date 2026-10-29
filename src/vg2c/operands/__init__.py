@@ -9,9 +9,6 @@ plus the shared scope-tree primitives, and defines the
 from __future__ import annotations
 
 from vg2c.operands.base import (
-    MacroFrame,
-    ParseChildrenFn,
-    ScopeIdSource,
     ScopeNode,
 )
 from vg2c.operands.conditional import Else, EndIf, IfThen
@@ -31,10 +28,7 @@ __all__ = [
     "ForLoop",
     "SiteLoop",
     "MacroControlPayload",
-    "MacroFrame",
-    "ParseChildrenFn",
     "RunLoop",
-    "ScopeIdSource",
     "ScopeNode",
     "StartMacro",
 ]

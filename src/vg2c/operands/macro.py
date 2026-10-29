@@ -13,6 +13,7 @@ from vg2c.operands.base import (
     ScopeIdSource,
     ScopeNode,
     _quoted_args,
+    build_delimited_scope,
     emit_children,
 )
 
@@ -47,45 +48,16 @@ class StartMacro:
         parse_children: ParseChildrenFn,
     ) -> tuple[ScopeNode, int]:
         """Build a 'macro' ScopeNode, consuming blocks until {END-MACRO}."""
-        start_block = blocks[start_i]
-        children, i, end_token = parse_children(
-            blocks, start_i + 1, {"END-MACRO"}, state
-        )
-
-        if end_token != "END-MACRO":
-            loc = (
-                f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
-            )
-            log.error(
-                f"[unclosed-macro] {loc} (block {start_block.index}): "
-                "Found {START-MACRO} without a matching {END-MACRO}; implicitly closed at EOF."
-            )
-            end_index = blocks[-1].index if blocks else start_block.index
-            return (
-                ScopeNode(
-                    scope_id=state.new_scope_id(),
-                    kind="macro",
-                    start_index=start_block.index,
-                    end_index=end_index,
-                    children=tuple(children),
-                    block_index=None,
-                    control_payload=self,
-                ),
-                i,
-            )
-
-        end_index = blocks[i].index
-        return (
-            ScopeNode(
-                scope_id=state.new_scope_id(),
-                kind="macro",
-                start_index=start_block.index,
-                end_index=end_index,
-                children=tuple(children),
-                block_index=None,
-                control_payload=self,
-            ),
-            i + 1,
+        return build_delimited_scope(
+            self,
+            blocks,
+            start_i,
+            state,
+            parse_children,
+            kind="macro",
+            opening_token="START-MACRO",
+            closing_token="END-MACRO",
+            log_error=log.error,
         )
 
     def render_header(self, scope_id: int, *, macros: str = "macros") -> str:

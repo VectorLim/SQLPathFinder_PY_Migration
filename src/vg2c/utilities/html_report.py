@@ -12,7 +12,7 @@ from dataclasses import replace
 from html import escape
 from typing import Any
 
-from vg2c.emitter.models import BlockEmission, CodeExpr, ExternalParameter, RenderedCall
+from vg2c.emitter.models import BlockEmission, CodeExpr, RenderedCall
 from vg2c.emitter.operations import EmittableOperation, emittable
 from vg2c.kind import Kind
 from vg2c.runtime.html_format import build_css
@@ -196,33 +196,6 @@ tr th {{ background-color:#f5f5f5; }}
     def _tracked(cls, lines, definition):
         return RenderedCall("\n".join(lines), definition, ())
 
-    def _external_parameters(self, block, method):
-        definition = UtilitySpec.operation_definition("html_report", method)
-        if definition is None:
-            return ()
-        metadata = {"template": block.resolved_body}
-        metadata.update({name: block.resolved_options.lookup.get(option) for name, option in
-                         {"id": "ID", "instance": "INSTANCE", "prompt_text": "PROMPT-TEXT",
-                          "app_server_default": "APP_SERVER_DEFAULT", "outlook": "OUTLOOK",
-                          "json_only": "JSON-ONLY", "chart_instance": "CHART-INSTANCE"}.items()
-                         if definition.parameter(name) is not None})
-        reason = (
-            "Report definitions and shells are external assets; edit the project assets or "
-            "regenerate from source."
-        )
-        parameters = []
-        for name, value in metadata.items():
-            parameter = definition.parameter(name)
-            if parameter is None:
-                continue
-            parameters.append(ExternalParameter(
-                definition=parameter,
-                value=value,
-                editor_type="multiline" if name == "template" else "string",
-                read_only_reason=reason,
-            ))
-        return tuple(parameters)
-
     @staticmethod
     def _render_layout_call(*args, macros="macros", **kwargs):
         definition = HtmlReport._operation_definition("layout")
@@ -230,7 +203,6 @@ tr th {{ background-color:#f5f5f5; }}
             definition.parameter("template"),
             name="template_path",
             position=0,
-            display_label="HTML asset",
         )
         definition = replace(
             definition,
@@ -249,22 +221,21 @@ tr th {{ background-color:#f5f5f5; }}
     def emit_block(self, block, *, macros="macros") -> BlockEmission:
         report_type = block.resolved_options.lookup.get("REPORT", "").upper()
         method = report_type.removeprefix("HTML-").lower()
-        external_parameters = self._external_parameters(block, method)
         if report_type == "HTML-DELETE":
             # SPFSQL3.py:20244-20250 deletes consumed spec files, not CSS.
             definition = self._operation_definition(method)
             call = self._tracked(["job.delete_html()"], definition)
-            return BlockEmission((call,), external_parameters=external_parameters)
+            return BlockEmission((call,))
         if report_type == "HTML-RUN":
-            return self._emit_run(block, macros, external_parameters, method)
+            return self._emit_run(block, macros, method)
         if report_type == "HTML-DEFER":
-            return self._emit_defer(block, macros, external_parameters, method)
+            return self._emit_defer(block, macros, method)
         if report_type == "HTML-LAYOUT":
             directives, body = self.prepare_layout(block)
             return self.emit_layout(block, directives, body, macros=macros)
         raise ValueError(f"Unsupported report type {report_type}")
 
-    def _emit_run(self, block, macros, external_parameters, method):
+    def _emit_run(self, block, macros, method):
         # SPFSQL3.py:20083-20100: CSS and HTML have immediate effects.
         rows = list(self._iter_rows(block.resolved_body))
         # The first TYPE/KEY/COL1... row is the spec header, not the report type.
@@ -276,7 +247,6 @@ tr th {{ background-color:#f5f5f5; }}
             if not logical_name:
                 return BlockEmission(
                     (self._tracked(["pass"], definition),),
-                    external_parameters=external_parameters,
                 )
             if "<<<" in logical_name:
                 raise ValueError(
@@ -287,7 +257,6 @@ tr th {{ background-color:#f5f5f5; }}
             return BlockEmission(
                 (self._tracked([f"job.define_css({logical_name!r}, {name!r})"], definition),),
                 assets=((name, build_css(styles) + "\n"),),
-                external_parameters=external_parameters,
             )
         if kind == "HTML":
             options = self._report_options(block)
@@ -309,17 +278,15 @@ tr th {{ background-color:#f5f5f5; }}
                 (call,),
                 runtime_exports=("csv_report",),
                 assets=((name, shell),),
-                external_parameters=external_parameters,
             )
         if kind == "KEY":
             # SPFSQL3.py:20095-20109 dispatches only CSS/HTML/HTMLI5.
             return BlockEmission(
                 (self._tracked(["pass"], definition),),
-                external_parameters=external_parameters,
             )
         raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS, HTML or KEY")
 
-    def _emit_defer(self, block, macros, external_parameters, method):
+    def _emit_defer(self, block, macros, method):
         options = self._report_options(block)
         report_id = block.resolved_options.lookup.get("ID", "")
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", report_id):
@@ -348,7 +315,6 @@ tr th {{ background-color:#f5f5f5; }}
             (call,),
             runtime_exports=("csv_report",),
             assets=assets,
-            external_parameters=external_parameters,
         )
 
     def prepare_layout(self, block):
@@ -437,17 +403,16 @@ tr th {{ background-color:#f5f5f5; }}
         return BlockEmission(
             (call,),
             assets=((name, source),),
-            external_parameters=self._external_parameters(block, "layout"),
         )
 
-    @emittable(display_name="Start HTML Report", file_effects=())
+    @emittable
     def run(
         self, instance: str | None = None, prompt_text: str | None = None,
         app_server_default: str | None = None, template: str | None = None,
     ) -> None:
         raise NotImplementedError("Compiler metadata only; use JobRuntime.html")
 
-    @emittable(display_name="Define HTML Report Section", file_effects=())
+    @emittable
     def defer(
         self, id: str, instance: str | None = None,
         prompt_text: str | None = None, app_server_default: str | None = None,
@@ -455,14 +420,11 @@ tr th {{ background-color:#f5f5f5; }}
     ) -> None:
         raise NotImplementedError("Compiler metadata only; use JobRuntime.report")
 
-    @emittable(display_name="Clear HTML Report State", file_effects=())
+    @emittable
     def delete(self, instance: str | None = None) -> None:
         raise NotImplementedError("Compiler metadata only; use JobRuntime.delete_html")
 
-    @emittable(
-        display_name="Generate HTML Report", capabilities=("html-preview",),
-        parameter_visibility={"ctx": "internal"}, file_effects=(),
-    )
+    @emittable
     def layout(
         self, ctx: Any, template: str, outlook: str | None = None,
         instance: str | None = None, json_only: str | None = None,

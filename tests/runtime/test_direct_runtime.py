@@ -32,7 +32,6 @@ print(json.dumps(sorted(sys.modules)))
         "vg2c.frontend",
         "vg2c.resolver",
         "vg2c.compilation",
-        "vg2c.utility_metadata",
         "vg2c_ui",
         "scripthost_portable",
     )

@@ -19,14 +19,14 @@ def test_sqlite_workflow_uses_runtime_reader_not_embedded_classes():
     assert "def step_" not in source and "ctx" not in source
 
 
-def test_query_and_html_core_metadata_survive_legacy_cleanup():
+def test_operation_definitions_retain_rendering_inputs_and_artifact_markers():
     ensure_utility_checks_loaded()
     query = UtilitySpec.operation_definition("ctx", "run_query")
     html = UtilitySpec.operation_definition("html_report", "layout")
     macro = UtilitySpec.operation_definition("macro", "set_named")
     assert (
         query is not None
-        and query.parameter("output").artifact_role.direction == "output"
+        and query.parameter("output").artifact_role is True
     )
     assert html is not None and html.parameter("template") is not None
     assert macro is not None and macro.parameter("name") is not None

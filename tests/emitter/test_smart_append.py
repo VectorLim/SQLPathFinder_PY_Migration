@@ -10,7 +10,7 @@ from vg2c import compile_document
 from vg2c.frontend import classify, parse
 from vg2c.kind import Kind
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utilities.smart_append import SmartAppend
+from vg2c.utilities.csv_io import SmartAppend
 
 
 def _options(utilities: str = "") -> SimpleNamespace:

@@ -1,6 +1,5 @@
 from vg2c.dispatch import dialects as _dialects  # noqa: F401
 from vg2c.dispatch.base import DialectHandler
-from vg2c.dispatch.filter_detector import detect_filters
 from vg2c.dispatch.models import (
     DispatchedBlock,
     DispatchedProgram,
@@ -52,15 +51,6 @@ def dispatch(
         rewritten_sql = handler.substitute(body=source_body(block))
         reader_target = handler.build_reader_target(block)
 
-        if block.kind is Kind.SQLITE_QUERY:
-            suffix = "sqlite_query"
-        elif block.kind is Kind.DUCKDB_QUERY:
-            suffix = "duckdb_query"
-        else:
-            suffix = "sql_query"
-        step_name = f"step_{block.index:04d}_{suffix}"
-        sql_filters = detect_filters(rewritten_sql, step_name)
-
         dispatched.append(
             DispatchedBlock(
                 resolved=block,
@@ -68,8 +58,6 @@ def dispatch(
                 reader_kwargs=handler.reader_kwargs,
                 reader_target=reader_target,
                 rewritten_sql=rewritten_sql,
-                step_name=step_name,
-                sql_filters=tuple(sql_filters),
             )
         )
 

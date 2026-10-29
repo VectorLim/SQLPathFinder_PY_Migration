@@ -2,10 +2,9 @@ from dataclasses import replace
 
 from vg2c import compile_document
 from vg2c.emitter import emit
-from vg2c.workflow import project_document
 
 
-def test_scope_sibling_order_controls_generated_execution_and_semantic_order(tmp_path):
+def test_scope_sibling_order_controls_generated_execution_order(tmp_path):
     source = tmp_path / "script.txt"
     source.write_text(
         "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=first.txt\n</OPTIONS>\nfirst\n"
@@ -24,8 +23,4 @@ def test_scope_sibling_order_controls_generated_execution_and_semantic_order(tmp
 
     run_body = result.emitted.source.split("def run():", 1)[1]
     assert run_body.index("second.txt") < run_body.index("first.txt")
-    operations = project_document(result).operations
-    assert [item.block_index for item in operations] == [1, 0]
-    workflow = project_document(result)
-    assert [item.block_index for item in workflow.operations] == [1, 0]
-    assert [item.block_index for item in workflow.effects] == [1, 0]
+

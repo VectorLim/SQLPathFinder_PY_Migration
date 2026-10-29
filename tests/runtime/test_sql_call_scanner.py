@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vg2c.utilities._emit_helpers import scan_sql_get_csv_list_calls
+from vg2c.runtime.sql_text import scan_sql_get_csv_list_calls
 
 
 def test_column_by_name_parsed_as_string() -> None:

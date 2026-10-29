@@ -95,7 +95,7 @@ def test_from_script_binds_project_and_output_with_fresh_state(tmp_path):
     assert "LABEL" not in dict(second.macros.items())
 
 
-def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
+def test_emitted_calls_avoid_context_kwargs_and_preserve_step_ranges(tmp_path):
     source = tmp_path / "sample.txt"
     source.write_text(
         _block('/ENGINE=SQLite\n/CSV=rows.csv', "select 3 as ID;")
@@ -116,11 +116,6 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_metadata(tmp_path):
     assert "values=job_values" not in result.source
     for step in result.steps:
         assert result.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
-        for invocation in step.invocations:
-            assert result.source[invocation.source_range.start_offset:invocation.source_range.end_offset]
-            for param in invocation.parameters:
-                if param.source_range:
-                    assert result.source[param.source_range.start_offset:param.source_range.end_offset] == param.source
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
     main = translate(source)
     work = main.parent / "output"

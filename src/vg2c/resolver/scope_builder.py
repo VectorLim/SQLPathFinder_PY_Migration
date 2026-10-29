@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
 from vg2c.frontend.models import ClassifiedBlock
@@ -12,12 +13,14 @@ from vg2c.operands import (
     EndLoop,
     EndMacro,
     IfThen,
+    MacroControlPayload,
     RunLoop,
     ForLoop,
     SiteLoop,
     ScopeNode,
     StartMacro,
 )
+from vg2c.resolver.models import ResolvedBlock
 
 log = Logger.getLogger("vg2c.resolver.scope_builder")
 
@@ -83,6 +86,57 @@ def build_scope_tree(
         control_payload=None,
     )
     return root
+
+
+def resolve_macros(
+    blocks: list[ClassifiedBlock],
+    scope_tree: ScopeNode,
+) -> list[ResolvedBlock]:
+    indices = sorted({block.index for block in blocks})
+    scope_for_block = {index: 0 for index in indices}
+    depth_for_block = {index: -1 for index in indices}
+    payload_by_index: dict[int, MacroControlPayload] = {}
+
+    def visit(node: ScopeNode, depth: int) -> None:
+        first = bisect_left(indices, node.start_index)
+        stop = bisect_right(indices, node.end_index)
+        for index in indices[first:stop]:
+            if depth >= depth_for_block[index]:
+                scope_for_block[index] = node.scope_id
+                depth_for_block[index] = depth
+
+        if (
+            node.kind == "leaf"
+            and node.block_index is not None
+            and node.control_payload is not None
+            and node.block_index in scope_for_block
+        ):
+            payload_by_index[node.block_index] = node.control_payload
+
+        if (
+            node.kind in {"macro", "loop", "if", "else-branch"}
+            and node.control_payload is not None
+            and node.start_index in scope_for_block
+        ):
+            payload_by_index[node.start_index] = node.control_payload
+
+        for child in node.children:
+            visit(child, depth + 1)
+
+    visit(scope_tree, 0)
+
+    resolved: list[ResolvedBlock] = []
+    for block in blocks:
+        resolved.append(
+            ResolvedBlock(
+                classified=block,
+                resolved_options=block.options,
+                resolved_body=block.body,
+                control_payload=payload_by_index.get(block.index),
+                scope_id=scope_for_block.get(block.index, 0),
+            )
+        )
+    return resolved
 
 
 def _parse_children(

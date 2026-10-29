@@ -1,13 +1,6 @@
 from pathlib import Path
 
 from vg2c import compile_document, translate
-from vg2c.emitter import (
-    DEPENDENCIES_END,
-    STEPS_END,
-    STEPS_START,
-    WORKFLOW_END,
-    WORKFLOW_START,
-)
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 
@@ -42,14 +35,13 @@ def test_emitter_regions_are_ordered_and_translate_stays_compatible(tmp_path):
     assert list(output.parent.glob("sql/*.sql"))
 
 
-def test_generated_script_settings_follow_imports_and_precede_dependencies(tmp_path):
+def test_generated_script_layout_orders_imports_and_job_runtime(tmp_path):
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "script_short.txt").read_text())
     generated = translate(source).read_text()
     assert generated.index("from vg2c.runtime import") < generated.index("def run():") < generated.index("job = JobRuntime.from_script(")
     assert "BASE_DIR" not in generated
     assert "WORK_DIR" not in generated
-    assert "VG2C_SQL_GET_CSV_LIST_CHUNK_SIZE" not in generated
 
 
 def test_emitted_script_seeds_node_default_from_literal_site(tmp_path):

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from vg2c.kind import Kind
-from vg2c.utilities.wait_file import WaitFile
+from vg2c.utilities.fs_ops import WaitFile
 
 
 def _opts(utilities: str = "") -> SimpleNamespace:
@@ -95,7 +95,7 @@ class TestPollRuntime:
             if call_count == 1:
                 target.touch()
 
-        with patch("vg2c.utilities.wait_file.time.sleep", side_effect=_fake_sleep):
+        with patch("vg2c.runtime.files.time.sleep", side_effect=_fake_sleep):
             result = WaitFile().poll(target, timeout=60, interval=1)
 
         assert result is True
@@ -111,10 +111,10 @@ class TestPollRuntime:
 
         with (
             patch(
-                "vg2c.utilities.wait_file.time.monotonic",
+                "vg2c.runtime.files.time.monotonic",
                 side_effect=_fast_monotonic,
             ),
-            patch("vg2c.utilities.wait_file.time.sleep"),
+            patch("vg2c.runtime.files.time.sleep"),
         ):
             result = WaitFile().poll(target, timeout=30, interval=1)
 

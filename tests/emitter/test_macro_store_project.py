@@ -91,19 +91,6 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
             code[step.source_range.start_offset : step.source_range.end_offset]
             == step.source
         )
-        for invocation in step.invocations:
-            snippet = code[
-                invocation.source_range.start_offset : invocation.source_range.end_offset
-            ]
-            assert "(" in snippet and ")" in snippet
-            for parameter in invocation.parameters:
-                if parameter.source_range is not None:
-                    assert (
-                        code[
-                            parameter.source_range.start_offset : parameter.source_range.end_offset
-                        ]
-                        == parameter.source
-                    )
 
     main = translate(source)
     for label in ["first", "second"]:
@@ -165,7 +152,6 @@ def test_macro_discovery_in_all_argument_values(value, expected):
     expression = native_argument(value, "macros")
     assert isinstance(expression, CodeExpr)
     assert not expression.has_value
-    assert expression.symbol_names
     macros = MacroStore(
         initial={
             "dEmail": "recipient@example.com",
@@ -189,13 +175,6 @@ def test_native_macro_assignment_tracks_nested_row_count_arguments():
     )
 
     assert str(assignment) == "macros['COUNT'] = str(job.row_count(macros['ROW_FILE']))"
-    for argument in assignment.arguments:
-        assert (
-            str(assignment)[
-                argument.source_range.start_offset : argument.source_range.end_offset
-            ]
-            == argument.source
-        )
 
 
 def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
@@ -219,14 +198,6 @@ def test_generated_sql_and_html_options_discover_macros(tmp_path, monkeypatch):
     assert "inputs=[(macros['INPUT'], 'T0')]" in code
     assert "output='EMAIL:' + macros['DEMAIL']" in code
     assert "css_file=macros['STYLE']" in code
-    sql_output = next(
-        parameter
-        for step in emitted.steps
-        for parameter in step.parameters
-        if parameter.name == "output" and parameter.symbol_names == ("RESULT",)
-    )
-    assert not sql_output.editable
-
     calls = []
     monkeypatch.setattr(
         "vg2c.runtime.job.render_html", lambda path, **kwargs: calls.append(kwargs)

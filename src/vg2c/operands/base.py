@@ -4,7 +4,7 @@ Contains:
 
 * Private helpers reused by all operand modules (``_quoted_args``,
   ``_operand_expr`` and its operator table).
-* Structural types (``ScopeIdSource``, ``ParseChildrenFn``, ``MacroFrame``)
+* Structural types (``ScopeIdSource``, ``ParseChildrenFn``)
   that operand payloads consume when building the scope tree.
 * ``ScopeNode`` — the recursive scope-tree node. It refers to
   ``MacroControlPayload`` only via a ``TYPE_CHECKING`` forward reference,
@@ -16,9 +16,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Protocol
 
-from vg2c.frontend.models import ClassifiedBlock, SourceSpan
+from vg2c.frontend.models import ClassifiedBlock
 
 if TYPE_CHECKING:
     from vg2c.emitter.indent_writer import IndentWriter
@@ -47,7 +47,7 @@ _INT_LITERAL_RE = re.compile(r"[+-]?\d+")
 def _operand_macro(operand: str, numeric: bool) -> str | None:
     """Return the macro name a condition operand reads, or None for a literal."""
     # Local import to avoid circular dependency at module load time.
-    from vg2c.utilities._runtime_helpers import normalize_macro_name
+    from vg2c.runtime.values import normalize_macro_name
     from vg2c.utilities.macro_control import MacroControl
 
     value = operand.strip()
@@ -98,14 +98,8 @@ def _quoted_args(value: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-class ScopeIdSource:
-    """Protocol-style duck type expected by ``build_scope`` methods.
-
-    ``scope_builder._ScopeBuilderState`` satisfies this interface.
-    """
-
-    def new_scope_id(self) -> int:  # pragma: no cover
-        raise NotImplementedError
+class ScopeIdSource(Protocol):
+    def new_scope_id(self) -> int: ...
 
 
 # Recursive parse_children callable injected into ``build_scope``.
@@ -118,22 +112,6 @@ ParseChildrenFn = Callable[
     ],
     "tuple[list[ScopeNode], int, str | None]",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Macro-frame payload (runtime metadata used by the emitter)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class MacroFrame:
-    frame_id: int
-    kind: Literal["row-iter", "if", "static-vars"]
-    csv_path: str | None
-    csv_headers: tuple[str, ...] | None
-    named_vars: Mapping[str, str]
-    positional_cursor: int
-    source_span: SourceSpan
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +167,46 @@ class ScopeNode:
         # Transparent nodes: program, if-branch, else-branch.
         for child in self.children:
             walk(child, macros)
+
+
+def build_delimited_scope(
+    payload: MacroControlPayload,
+    blocks: list[ClassifiedBlock],
+    start_i: int,
+    state: ScopeIdSource,
+    parse_children: ParseChildrenFn,
+    *,
+    kind: Literal["macro", "loop"],
+    opening_token: str,
+    closing_token: str,
+    log_error: Callable[[str], None],
+) -> tuple[ScopeNode, int]:
+    """Build a scope consuming blocks until ``closing_token`` (bare, e.g. ``END-LOOP``)."""
+    start_block = blocks[start_i]
+    children, i, end_token = parse_children(
+        blocks, start_i + 1, {closing_token}, state
+    )
+    closed = end_token == closing_token
+    if closed:
+        end_index, next_i = blocks[i].index, i + 1
+    else:
+        loc = f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
+        log_error(
+            f"[unclosed-{kind}] {loc} (block {start_block.index}): "
+            f"Found {{{opening_token}}} without a matching {{{closing_token}}}; "
+            "implicitly closed at EOF."
+        )
+        end_index, next_i = (blocks[-1].index if blocks else start_block.index), i
+    node = ScopeNode(
+        scope_id=state.new_scope_id(),
+        kind=kind,
+        start_index=start_block.index,
+        end_index=end_index,
+        children=tuple(children),
+        block_index=None,
+        control_payload=payload,
+    )
+    return node, next_i
 
 
 def emit_children(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from vg2c import CompilationResult, compile_document
+from .models import replace_oldest
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +64,7 @@ class CompilationWorker:
             identity = self._latest
         request = (identity, Path(source_path), source_text)
         with self._queue_lock:
-            self._replace_queue(request)
+            replace_oldest(self._queue, request)
         return identity
 
     def close(self) -> None:
@@ -72,23 +73,8 @@ class CompilationWorker:
                 return
             self._closed = True
         with self._queue_lock:
-            self._replace_queue(None)
+            replace_oldest(self._queue, None)
         self._thread.join(timeout=2)
-
-    def _replace_queue(self, request: tuple[int, Path, str] | None) -> None:
-        try:
-            self._queue.put_nowait(request)
-            return
-        except queue.Full:
-            pass
-        try:
-            self._queue.get_nowait()
-        except queue.Empty:
-            pass
-        try:
-            self._queue.put_nowait(request)
-        except queue.Full:
-            pass
 
     def _run(self) -> None:
         while True:

@@ -99,7 +99,7 @@ def test_retired_context_in_embedded_python_has_explicit_diagnostic(tmp_path):
         compile_document(path)
 
 
-def test_repeat_compilation_is_identical_and_metadata_slices_match(tmp_path):
+def test_repeat_compilation_is_identical_and_step_ranges_match_source():
     fixture = Path(__file__).parents[1] / "fixtures/script_short.txt"
     first = compile_document(fixture).emitted
     second = compile_document(fixture).emitted
@@ -109,14 +109,6 @@ def test_repeat_compilation_is_identical_and_metadata_slices_match(tmp_path):
             first.source[step.source_range.start_offset : step.source_range.end_offset]
             == step.source
         )
-        for invocation in step.invocations:
-            for parameter in invocation.parameters:
-                span = parameter.source_range
-                if span is None:
-                    assert parameter.definition is not None
-                    assert not parameter.definition.required or not parameter.editable
-                    continue
-                assert first.source[span.start_offset : span.end_offset] == parameter.source
 
 
 def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp_path):

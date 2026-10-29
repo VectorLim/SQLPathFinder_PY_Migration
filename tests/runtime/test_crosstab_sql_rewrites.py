@@ -3,7 +3,7 @@ import pytest
 
 from vg2c.runtime import SqliteReader
 from vg2c.runtime.query import run_query
-from vg2c.utilities.crosstab import CrosstabUtility
+from vg2c.utilities.runtime_adapters import CrosstabUtility
 
 
 def test_substitute_sql_expands_crosstab_projection():

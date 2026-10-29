@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from vg2c.utilities.oracle_client import OracleClient
+from vg2c.utilities.runtime_adapters import OracleClient
 
 
 def test_home_mode_leaves_existing_setup_untouched(monkeypatch):

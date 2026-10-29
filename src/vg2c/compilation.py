@@ -31,7 +31,6 @@ class CompilationDiagnostic:
 class CompilationResult:
     """Authoritative result of the complete compiler semantic chain."""
 
-    input_path: Path
     dispatched: DispatchedProgram
     emitted: EmittedScript
     diagnostics: tuple[CompilationDiagnostic, ...]
@@ -78,7 +77,6 @@ def compile_document(input_path: Path) -> CompilationResult:
         compiler_logger.removeHandler(handler)
 
     return CompilationResult(
-        input_path=input_path.resolve(),
         dispatched=dispatched,
         emitted=emitted,
         diagnostics=tuple(handler.items),

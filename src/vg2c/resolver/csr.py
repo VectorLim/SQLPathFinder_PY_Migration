@@ -9,7 +9,7 @@ import re
 from vg2c.kind import Kind
 from vg2c.operands import IfThen
 from vg2c.utilities._emit_helpers import parse_table_binding, split_utility_command
-from vg2c.utilities._runtime_helpers import strip_quotes
+from vg2c.runtime.values import strip_quotes
 
 _SELECT = re.compile(
     r"\s*SELECT\s+(?:DISTINCT\s+)?(?P<items>.*?)\s+FROM\s+\[?(?P<table>\w+)\]?"

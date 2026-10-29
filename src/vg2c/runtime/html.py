@@ -26,7 +26,6 @@ class CSVReport:
     columns: tuple[str, ...]
     headers: tuple[str, ...] = ()
     alignment: tuple[str, ...] = ()
-    formats: tuple[str, ...] = ()
     output_file: str | None = None
     table_template: str | None = None
 
@@ -37,7 +36,7 @@ def csv_report(input_file, *, columns=(), headers=None, alignment=None, formats=
     if any(formats or ()):
         raise ValueError("Active column formats require validated ScriptHost parity")
     return CSVReport(str(input_file), tuple(columns), tuple(headers or ()),
-                     tuple(alignment or ()), tuple(formats or ()), output_file,
+                     tuple(alignment or ()), output_file,
                      str(table_template) if table_template is not None else None)
 
 

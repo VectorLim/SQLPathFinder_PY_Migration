@@ -49,10 +49,8 @@ class ParsedBlock:
 @dataclass(frozen=True, slots=True)
 class ClassifiedBlock(ParsedBlock):
     kind: Kind
-    reason: str
 
     def __init__(self, parsed: ParsedBlock, kind: Kind, reason: str) -> None:
         copy_dataclass_fields(parsed, self, ParsedBlock)
         object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "reason", reason)
 

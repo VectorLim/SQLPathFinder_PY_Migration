@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from vg2c.runtime import AEDClient
-from vg2c.runtime.csr import csr_comment, csr_lots
+from vg2c.runtime.job import csr_comment, csr_lots
 from vg2c.runtime.environment import read_environment
 from vg2c.runtime.job import JobRuntime
 

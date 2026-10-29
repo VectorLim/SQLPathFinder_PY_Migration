@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .compiler import CompilationOutcome, CompilationWorker, runtime_sources
 from .export import export_preview, save_copy
-from .models import EditCopy, NativeSnapshot, ObserverSnapshot
+from .models import EditCopy, NativeSnapshot, ObserverSnapshot, replace_oldest
 from .native import inspect_native
 from .observer import NativeTarget, ObserverClient, ObserverWorker, RefreshResult
 from .source import (
@@ -307,17 +307,7 @@ class CompanionApp:
         self.generated_origin.configure(wraplength=width)
 
     def _queue_result(self, outcome: CompilationOutcome) -> None:
-        try:
-            self._results.put_nowait(outcome)
-        except queue.Full:
-            try:
-                self._results.get_nowait()
-            except queue.Empty:
-                pass
-            try:
-                self._results.put_nowait(outcome)
-            except queue.Full:
-                pass
+        replace_oldest(self._results, outcome)
 
     def _populate_generated_tree(self) -> None:
         for iid in tuple(self._tree_assets):
@@ -904,8 +894,6 @@ class CompanionApp:
             return
         if snapshot.designer_bounds or snapshot.bounds:
             self._position_beside(snapshot.designer_bounds or snapshot.bounds)
-        self._last_pid = snapshot.target_pid
-        self._last_designer_title = snapshot.designer_window_title
         if snapshot.status != "ok":
             self._last_mapping_key = None
             self._clear_selection()

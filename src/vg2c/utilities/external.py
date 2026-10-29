@@ -15,7 +15,6 @@ from vg2c.utilities._emit_helpers import (
     lower_native_call,
     split_utility_command,
 )
-from vg2c.utility_metadata import FileEffectDefinition
 
 
 class ExternalProcess(EmitterUtility):
@@ -78,17 +77,7 @@ class ExternalProcess(EmitterUtility):
             for a in (arg.replace("@EXEDIR@", exedir) for arg in argv)
         ]
 
-    @emittable(
-        display_name="Run External Program",
-        parameter_visibility={"env": "internal"},
-        file_effects=(
-            FileEffectDefinition(
-                "process",
-                "unknown",
-                reason="External process may read, write, or delete files; arguments do not prove effects.",
-            ),
-        ),
-    )
+    @emittable
     def run(
         self,
         argv: list[str],

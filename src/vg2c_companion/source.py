@@ -207,9 +207,10 @@ def _mapping_for_step(result: Any, step: Any, reason: str) -> SourceMapping:
     asset_names = tuple(name for name, _content in result.emitted.assets)
     owned: list[str] = []
     for parameter in step.parameters:
-        if parameter.artifact_role is None or not isinstance(parameter.value, str):
+        value = parameter.value
+        if parameter.artifact_role is None or not isinstance(value, str):
             continue
-        value_name = parameter.value.replace("\\", "/")
+        value_name = value.replace("\\", "/")
         if value_name in asset_names and value_name not in owned:
             owned.append(value_name)
     start, end = step.source_range.start_offset, step.source_range.end_offset

@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import ObserverSnapshot, Selection
+from .models import ObserverSnapshot, Selection, replace_oldest
 
 _PROCESS_NAME = "sqlpathfinder3"
 _MAX_OUTPUT = 300_000
@@ -493,17 +493,7 @@ class ObserverWorker:
             with self._target_lock:
                 if epoch != self._target_epoch:
                     continue
-            try:
-                self._frames.put_nowait((epoch, frame))
-            except queue.Full:
-                try:
-                    self._frames.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
-                    self._frames.put_nowait((epoch, frame))
-                except queue.Full:
-                    pass
+            replace_oldest(self._frames, (epoch, frame))
             self._stop.wait(1)
 
 

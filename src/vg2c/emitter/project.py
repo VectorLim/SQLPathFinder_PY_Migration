@@ -117,7 +117,6 @@ def emit_project(dispatched):
                         writer,
                         block,
                         emission.lines,
-                        external_parameters=emission.external_parameters,
                         functional_kind=(
                             "UNSUPPORTED"
                             if skipped
@@ -190,7 +189,6 @@ def emit_project(dispatched):
     )
     return EmittedScript(
         source=source,
-        imports=tuple(sorted(imports)),
         steps=tuple(finalized),
         assets=tuple(assets.items()),
         scopes=scopes,

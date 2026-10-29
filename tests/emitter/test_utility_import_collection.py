@@ -1,6 +1,5 @@
 """The direct emitter owns runtime imports; legacy source embedding was removed."""
 
-from pathlib import Path
 import ast
 
 from vg2c import compile_document
@@ -26,10 +25,9 @@ def test_generated_runtime_imports_are_deduplicated(tmp_path):
     assert "SqliteReader" not in imported
 
 
-def test_compiler_metadata_registry_retains_direct_sql_contract():
+def test_compiler_operation_definition_retains_artifact_markers():
     ensure_utility_checks_loaded()
     definition = UtilitySpec.operation_definition("ctx", "run_query")
     assert definition is not None
-    assert definition.parameter("inputs").artifact_role.direction == "input"
-    assert definition.parameter("output").artifact_role.direction == "output"
-    assert definition.parameter("reader").visibility == "internal"
+    assert definition.parameter("inputs").artifact_role is True
+    assert definition.parameter("output").artifact_role is True

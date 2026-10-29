@@ -20,11 +20,8 @@ class UtilitySpec(ABC):
 
     utility_name: ClassVar[str]
     handles: ClassVar[tuple[Kind, ...]] = ()
-    script_settings: ClassVar[tuple[tuple[str, object, str], ...]] = ()
-    semantic_visibility: ClassVar[str] = "normal"
     _registry: ClassVar[dict[str, type[UtilitySpec]]] = {}
     _emit_handlers: ClassVar[dict[Kind, type[UtilitySpec]]] = {}
-    _script_settings: ClassVar[dict[str, tuple[object, str]]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -43,24 +40,6 @@ class UtilitySpec(ABC):
 
         UtilitySpec._registry[name] = cls
 
-        for setting in cls.__dict__.get("script_settings", ()):
-            if not isinstance(setting, tuple) or len(setting) != 3:
-                raise ValueError(
-                    f"{cls.__name__}: script settings must be (name, default, description) tuples"
-                )
-            setting_name, default, description = setting
-            if not isinstance(setting_name, str) or not setting_name.isidentifier():
-                raise ValueError(f"{cls.__name__}: invalid script setting name {setting_name!r}")
-            if not isinstance(description, str) or not description.strip():
-                raise ValueError(
-                    f"{cls.__name__}: script setting {setting_name!r} needs a description"
-                )
-            existing_setting = UtilitySpec._script_settings.get(setting_name)
-            value = (default, description)
-            if existing_setting is not None and existing_setting != value:
-                raise ValueError(f"duplicate script setting: {setting_name}")
-            UtilitySpec._script_settings[setting_name] = value
-
         for handled_kind in tuple(getattr(cls, "handles", ())):
             owner = UtilitySpec._emit_handlers.get(handled_kind)
             if owner is not None and owner is not cls:
@@ -70,32 +49,8 @@ class UtilitySpec(ABC):
             UtilitySpec._emit_handlers[handled_kind] = cls
 
     @classmethod
-    def registered(cls) -> tuple[type[UtilitySpec], ...]:
-        """Return loaded utilities in deterministic registration order."""
-        return tuple(cls._registry.values())
-
-    @classmethod
     def for_name(cls, name: str) -> type[UtilitySpec] | None:
         return cls._registry.get(name)
-
-    @classmethod
-    def generated_script_settings(cls) -> tuple[tuple[str, object, str], ...]:
-        """Return deterministic, input-agnostic settings for generated scripts."""
-        return tuple(
-            (name, default, description)
-            for name, (default, description) in sorted(cls._script_settings.items())
-        )
-
-    @classmethod
-    def operation_definitions(cls) -> tuple[UtilityOperationDefinition, ...]:
-        """Enumerate @emittable operations directly from the registered utilities."""
-        definitions: list[UtilityOperationDefinition] = []
-        for utility in cls.registered():
-            for name in utility.__dict__:
-                raw = inspect.getattr_static(utility, name, None)
-                if isinstance(raw, EmittableOperation):
-                    definitions.append(raw.definition(utility))
-        return tuple(definitions)
 
     @classmethod
     def operation_definition(
@@ -110,11 +65,6 @@ class UtilitySpec(ABC):
     @staticmethod
     def emit_block(block: Any, *, macros: str = "macros") -> BlockEmission:
         raise ValueError("Unsupported utility operation")
-
-    @classmethod
-    def extract_globals(cls, block: Any) -> dict[str, object]:
-        """Select configurable literals; extraction remains owned by each utility."""
-        return {}
 
 
 class EmitterUtility(UtilitySpec):

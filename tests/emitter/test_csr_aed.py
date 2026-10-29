@@ -12,7 +12,6 @@ from tests.fixtures.generated_job import capture_jobs
 from vg2c import compile_document, translate
 from vg2c.resolver.csr import csr_request
 from vg2c.runtime import AEDClient
-from vg2c.workflow import project_document
 
 HEADERS = "HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module"
 PRODUCER_SQL = (
@@ -324,7 +323,7 @@ def test_invalid_call_records_failure_and_stops_workflow(
     assert not namespace["_job"].wait_file("after.txt", timeout=0)
 
 
-def test_csr_step_has_source_metadata_and_real_file_dependencies(tmp_path):
+def test_csr_step_has_source_metadata(tmp_path):
     path = tmp_path / "metadata.txt"
     path.write_text(
         (block("/WRITE-FILE=Y\n/CSV=unrelated.txt", "unrelated") + source()).replace(
@@ -334,37 +333,13 @@ def test_csr_step_has_source_metadata_and_real_file_dependencies(tmp_path):
     result = compile_document(path)
     submission = result.resolved.csr_submissions[0]
     step = result.emitted.step_for_block(submission.block_index)
-    model = project_document(result)
-    operation = next(
-        op for op in model.operations if op.block_index == submission.block_index
-    )
-    assert operation.kind == "csr-submission"
-    assert operation.display_name == "CSR → AED"
-    assert operation.validation_state == "valid"
-    assert operation.source_span == result.resolved.blocks[submission.block_index].span
-    assert operation.source_range == step.source_range
     assert step.functional_kind == "CSR_SUBMISSION"
     assert step.function_name.endswith("_csr_submission")
-    generated_step = model.source[
-        operation.source_range.start_offset : operation.source_range.end_offset
+    generated_step = result.emitted.source[
+        step.source_range.start_offset : step.source_range.end_offset
     ]
     assert "job.csr_lots('requests.csv', 'lot')" in generated_step
-    assert all(not binding.editable for binding in operation.bindings)
-    effects = [
-        effect for effect in model.effects if effect.operation_id == operation.id
-    ]
-    assert [effect.kind for effect in effects] == ["read"]
-    assert effects[0].inputs[0].path == "requests.csv"
-    assert effects[0].inputs[1].path == ".env"
     assert result.emitted.step_for_block(submission.producer_index) is None
-    assert not any(
-        op.block_index == submission.producer_index for op in model.operations
-    )
-    assert not any(
-        "CSRPATH" in (endpoint.path or endpoint.expression or "")
-        for effect in effects
-        for endpoint in (*effect.inputs, *effect.outputs)
-    )
 
 
 def test_history_is_gated_by_csr_enablement_without_run_state(tmp_path):

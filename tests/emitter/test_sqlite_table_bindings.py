@@ -6,7 +6,7 @@ from pathlib import Path
 from vg2c import translate
 from vg2c.utilities._emit_helpers import parse_table_binding
 from vg2c.utilities.csv_io import CsvIO
-from vg2c.utilities.sqlite_reader import SqliteReader
+from vg2c.utilities.runtime_adapters import SqliteReader
 
 ROOT = Path(__file__).parents[2]
 

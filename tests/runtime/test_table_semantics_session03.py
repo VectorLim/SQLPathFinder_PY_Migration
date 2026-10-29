@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from vg2c import compile_document, translate
-from vg2c.runtime import JobRuntime, SqliteReader, execute_sql
+from vg2c.runtime import SqliteReader, execute_sql
 from vg2c.runtime.csv_io import _CsvIO as CsvIO
 from vg2c.runtime.crosstab import _CrosstabUtility as CrosstabUtility
 

@@ -64,27 +64,9 @@ def test_script_short_one_sqlite_block(FIXTURES: Path) -> None:
     assert program.dispatched[0].reader.utility_name == "sqlite_reader"
 
 
-def test_script_another_mars_calendar_record(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "script_another.txt")
-    mars_blocks = [block for block in program.dispatched if block.reader.name == "MarsReader"]
-    assert mars_blocks
-    assert any(
-        block.reader_target.record_name == "Calendar"
-        and block.reader_target.record_version == "1.0.0.0"
-        for block in mars_blocks
-    )
-
-
 def test_sql_script_has_mars_oasys_sqlite(FIXTURES: Path) -> None:
     program = _run_pipeline(FIXTURES, "sql_script.txt")
     assert {"MarsReader", "OracleReader", "SqliteReader"} <= _reader_names(program)
-
-
-def test_sql_script_mars_record_metadata(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "sql_script.txt")
-    mars = [block for block in program.dispatched if block.reader.name == "MarsReader"]
-    assert mars
-    assert any(block.reader_target.record_name == "WIP_Lot_History_v2" for block in mars)
 
 
 def test_actual_script_has_mars_aries_sqlite(FIXTURES: Path) -> None:
@@ -92,33 +74,3 @@ def test_actual_script_has_mars_aries_sqlite(FIXTURES: Path) -> None:
     assert {"MarsReader", "AriesReader", "SqliteReader"} <= _reader_names(program)
 
 
-def test_actual_script_record_names_present(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "actual_script.txt")
-    record_names = {
-        block.reader_target.record_name
-        for block in program.dispatched
-        if block.reader_target.record_name
-    }
-    assert "WIP_Lot_History_v2" in record_names or "AT_Metrology" in record_names
-
-
-def test_script_another_site_is_km(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "script_another.txt")
-    mars_blocks = [block for block in program.dispatched if block.reader.name == "MarsReader"]
-    assert mars_blocks
-    assert all(block.reader_target.site == "KM" for block in mars_blocks)
-
-
-def test_sql_script_site_is_km_across_dialects(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "sql_script.txt")
-    non_sqlite = [
-        block for block in program.dispatched if block.reader.name != "SqliteReader"
-    ]
-    assert non_sqlite
-    assert all(block.reader_target.site == "KM" for block in non_sqlite)
-
-
-def test_actual_script_macro_placeholder_node_has_no_site(FIXTURES: Path) -> None:
-    program = _run_pipeline(FIXTURES, "actual_script.txt")
-    assert program.dispatched
-    assert all(block.reader_target.site == "" for block in program.dispatched)

@@ -8,9 +8,6 @@ from collections.abc import Callable
 import pandas as pd
 
 
-__all__ = ["CrosstabUtility"]
-
-
 class _CrosstabUtility:
     # SPFUtilities/utils.py:4120: ScriptHost-entry default. Standalone mode
     # defaults to 1,000,000 and an explicit pivotReadChunkSize can override it;

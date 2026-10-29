@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
+from typing import Any
 
-from vg2c.emitter.models import BlockEmission, CodeExpr, ExternalParameter
+from vg2c.emitter.models import BlockEmission, CodeExpr
 from vg2c.emitter.operations import EmittableOperation, emittable
-from vg2c.runtime.files import copy_file, delete_files, rename_file, write_file
 from vg2c.kind import Kind
+from vg2c.project_paths import project_name
+from vg2c.runtime.files import (
+    copy_file,
+    delete_files,
+    rename_file,
+    wait_file as runtime_wait_file,
+)
+from vg2c.runtime.values import strip_quotes
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import (
     list_code_expr,
@@ -18,8 +27,6 @@ from vg2c.utilities._emit_helpers import (
     split_utility_command,
     to_code_expr,
 )
-from vg2c.utilities._runtime_helpers import resolve_path, strip_quotes
-from vg2c.utility_metadata import FileEffectDefinition
 
 
 class FileSystemOps(EmitterUtility):
@@ -61,9 +68,8 @@ class FileSystemOps(EmitterUtility):
         body = block.resolved_body.lstrip()
         asset = file_asset or cls.asset_name(block)
         original = DirectOperationMetadata.operation_definition("ctx", "write_file")
-        template = original.parameter("template")
         definition = replace(original, parameters=tuple(
-            replace(item, name="asset", display_label="File asset")
+            replace(item, name="asset")
             if item.name == "template" else item for item in original.parameters
         ))
         method = "update_file" if "<<<" in body else "load_file"
@@ -73,10 +79,6 @@ class FileSystemOps(EmitterUtility):
         )
         return BlockEmission(
             (stmt,), assets=((asset, body),),
-            external_parameters=(ExternalParameter(
-                definition=template, value=body, editor_type="multiline",
-                read_only_reason=f"Edit the original template in {asset}.",
-            ),),
         )
 
     @staticmethod
@@ -153,58 +155,123 @@ class FileSystemOps(EmitterUtility):
         items = [p.strip() for p in raw.split(",") if p.strip()]
         return cls.delete.render(paths=list_code_expr(items))
 
-    @emittable(
-        display_name="Copy File",
-        parameter_visibility={"recurse": "internal"},
-        file_effects=(
-            FileEffectDefinition(
-                "copy",
-                "copy",
-                inputs=("src",),
-                outputs=("dst",),
-                input_base="working-directory",
-                output_base="working-directory",
-                reason="File or directory copy; destination interpretation depends on runtime filesystem state.",
-            ),
-        ),
-    )
+    @emittable
     def copy(self, src: str | Path, dst: str | Path, recurse: bool = False) -> None:
         return copy_file(src, dst, workdir=Path.cwd(), recurse=recurse)
 
-    @emittable(
-        display_name="Rename File",
-        file_effects=(
-            FileEffectDefinition(
-                "move",
-                "move",
-                inputs=("src",),
-                outputs=("dst",),
-                input_base="working-directory",
-                output_base="working-directory",
-            ),
-        )
-    )
+    @emittable
     def rename(self, src: str | Path, dst: str | Path) -> None:
         return rename_file(src, dst, workdir=Path.cwd())
 
-    @emittable(
-        display_name="Delete File",
-        file_effects=(
-            FileEffectDefinition(
-                "delete",
-                "delete",
-                inputs=("paths",),
-                input_base="working-directory",
-                reason="Directories are removed only when recurse is enabled.",
-            ),
-        )
-    )
+    @emittable
     def delete(self, paths: list[str | Path], recurse: bool = False) -> None:
         return delete_files(paths, workdir=Path.cwd(), recurse=recurse)
 
-    @emittable(
-        display_name="Write File",
-        file_effects=(FileEffectDefinition("write", "write", outputs=("path",)),)
-    )
-    def write_file(self, path: str | Path, content: str) -> None:
-        return write_file(path, content, workdir=resolve_path(".", for_write=True))
+
+class PythonEmbed(EmitterUtility):
+    """Utility class for directly embedding Python script blocks."""
+
+    utility_name = "python_embed"
+    handles = (Kind.PYTHON_EMBED,)
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        if options.lookup.get("WRITE-FILE", "").upper() != "Y":
+            return None
+
+        csv_value = options.lookup.get("CSV", "")
+        if csv_value.lower().endswith(".py"):
+            return Kind.PYTHON_EMBED, "/WRITE-FILE=Y targeting .py script"
+        return None
+
+    @classmethod
+    def emit_block(cls, block: Any, *, macros: str = "macros") -> BlockEmission:
+        body = ast.parse(block.resolved_body).body
+        if any(isinstance(item, ast.Pass) for item in body):
+            raise ValueError("Unsupported utility operation")
+        if any(
+            isinstance(item, ast.Name) and item.id == "ctx"
+            for statement in body
+            for item in ast.walk(statement)
+        ):
+            raise ValueError(
+                "Embedded Python using the retired ctx API must use explicit runtime functions and workdir"
+            )
+        if any(cls._top_level_exit(statement) for statement in body):
+            raise ValueError("Embedded Python return/yield must be inside an authored function")
+        name = f"python/step_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.py"
+        uses_macros = any(
+            isinstance(item, ast.Name) and item.id == "macros"
+            for statement in body
+            for item in ast.walk(statement)
+        )
+        extra = f", macros={macros}" if uses_macros else ""
+        source = block.resolved_body.rstrip("\n") + "\n"
+        return BlockEmission(
+            (f"job.run_python({name!r}{extra})",),
+            assets=((name, source),),
+        )
+
+    @staticmethod
+    def _top_level_exit(node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return False
+        return isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom)) or any(
+            PythonEmbed._top_level_exit(child) for child in ast.iter_child_nodes(node)
+        )
+
+
+class WaitFile(EmitterUtility):
+    """Poll for a file to appear, up to a configurable timeout (seconds)."""
+
+    utility_name = "wait_file"
+    handles = (Kind.WAIT_FILE,)
+
+    _WAITFILE_NAMES = {"waitfile.va", "waitfile.bat", "waitfile.exe"}
+    _DEFAULT_TIMEOUT = 30
+    _POLL_INTERVAL = 5
+
+    @staticmethod
+    def check(options) -> tuple[Kind, str] | None:
+        text = options.lookup.get("UTILITIES", "").strip()
+        if not text:
+            return None
+        argv = split_utility_command(text)
+        if not argv:
+            return None
+        basename = argv[0].split("/")[-1].split("\\")[-1].lower()
+        if basename in WaitFile._WAITFILE_NAMES:
+            return Kind.WAIT_FILE, "/UTILITIES command maps to WaitFile poll"
+        return None
+
+    @staticmethod
+    def _utility_argv(block) -> list[str]:
+        text = block.resolved_options.lookup.get("UTILITIES", "").strip()
+        return split_utility_command(text)
+
+    @classmethod
+    def emit_block(cls, block, *, macros: str = "macros") -> BlockEmission:
+        argv = cls._utility_argv(block)
+        path_expr = to_code_expr(argv[1] if len(argv) > 1 else "")
+        raw_timeout = (
+            strip_quotes(argv[2]) if len(argv) > 2 else str(cls._DEFAULT_TIMEOUT)
+        )
+        try:
+            timeout_val = int(raw_timeout)
+        except ValueError:
+            timeout_val = cls._DEFAULT_TIMEOUT
+        stmt = lower_native_call(
+            cls.poll.render(path_expr, timeout_val),
+            function="job.wait_file",
+            macros=macros,
+        )
+        return BlockEmission((stmt,))
+
+    @emittable
+    def poll(
+        self,
+        path: str | Path,
+        timeout: int = _DEFAULT_TIMEOUT,
+        interval: int = _POLL_INTERVAL,
+    ) -> bool:
+        return runtime_wait_file(path, timeout, workdir=Path.cwd(), interval=interval)

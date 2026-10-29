@@ -1,7 +1,6 @@
 """Generated jobs run offline from editable assets and an explicit work root."""
 
 import ast
-from pathlib import Path
 import shutil
 import sys
 from types import SimpleNamespace
@@ -107,7 +106,7 @@ def test_sql_asset_preserves_body_comments_and_newlines(tmp_path):
     assert next(main.parent.glob("sql/*.sql")).read_bytes() == body
 
 
-def test_direct_invocation_ranges(tmp_path):
+def test_direct_step_ranges(tmp_path):
     source = tmp_path / "source.txt"
     source.write_text(SQL)
     result = compile_document(source)
@@ -119,19 +118,6 @@ def test_direct_invocation_ranges(tmp_path):
             ]
             == step.source
         )
-        for invocation in step.invocations:
-            snippet = emitted.source[
-                invocation.source_range.start_offset : invocation.source_range.end_offset
-            ]
-            assert snippet.startswith("job.sql(")
-            for parameter in invocation.parameters:
-                if parameter.source_range:
-                    assert (
-                        emitted.source[
-                            parameter.source_range.start_offset : parameter.source_range.end_offset
-                        ]
-                        == parameter.source
-                    )
 
 
 def block(options, body=""):

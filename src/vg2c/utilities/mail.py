@@ -15,8 +15,7 @@ from vg2c.utilities._emit_helpers import (
     split_utility_command,
     to_code_expr,
 )
-from vg2c.utilities._runtime_helpers import strip_quotes
-from vg2c.utility_metadata import FileEffectDefinition
+from vg2c.runtime.values import strip_quotes
 
 
 class MailService(EmitterUtility):
@@ -49,15 +48,6 @@ class MailService(EmitterUtility):
             cls.send.render(**kwargs), function="job.send_mail", macros=macros
         )
         return BlockEmission((call,))
-
-    @classmethod
-    def extract_globals(cls, block: Any) -> dict[str, object]:
-        kwargs = cls._send_kwargs(cls._utility_argv(block), block.resolved_body) or {}
-        return {
-            f"EMAIL_{field.upper()}": kwargs[field].value
-            for field in ("to", "subject")
-            if field in kwargs and kwargs[field].has_value
-        }
 
     @staticmethod
     def _utility_argv(block: Any) -> list[str]:
@@ -107,29 +97,7 @@ class MailService(EmitterUtility):
 
         return None
 
-    @emittable(
-        display_name="Send Email",
-        summary="To: {to} · {subject}",
-        capabilities=("email",),
-        parameter_capabilities={"attachments": ("file-input",)},
-        file_effects=(
-            FileEffectDefinition(
-                "attachments",
-                "read",
-                inputs=("attachments",),
-                input_base="working-directory",
-                reason=(
-                    "Existing attachments are read; message body may also be read "
-                    "from a runtime file."
-                ),
-            ),
-            FileEffectDefinition(
-                "body",
-                "unknown",
-                reason="Message body is literal text or an existing file at runtime.",
-            ),
-        ),
-    )
+    @emittable
     def send(
         self,
         to: str,

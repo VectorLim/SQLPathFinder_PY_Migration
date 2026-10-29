@@ -13,6 +13,7 @@ from vg2c.operands.base import (
     ScopeIdSource,
     ScopeNode,
     _quoted_args,
+    build_delimited_scope,
     emit_children,
 )
 
@@ -56,45 +57,16 @@ class RunLoop:
         parse_children: ParseChildrenFn,
     ) -> tuple[ScopeNode, int]:
         """Build a 'loop' ScopeNode, consuming blocks until {END-LOOP}."""
-        start_block = blocks[start_i]
-        children, i, end_token = parse_children(
-            blocks, start_i + 1, {"END-LOOP"}, state
-        )
-
-        if end_token != "END-LOOP":
-            loc = (
-                f"{start_block.span.file or '<input>'}:{start_block.span.start_line}:1"
-            )
-            log.error(
-                f"[unclosed-loop] {loc} (block {start_block.index}): "
-                "Found {RUN-LOOP} without a matching {END-LOOP}; implicitly closed at EOF."
-            )
-            end_index = blocks[-1].index if blocks else start_block.index
-            return (
-                ScopeNode(
-                    scope_id=state.new_scope_id(),
-                    kind="loop",
-                    start_index=start_block.index,
-                    end_index=end_index,
-                    children=tuple(children),
-                    block_index=None,
-                    control_payload=self,
-                ),
-                i,
-            )
-
-        end_index = blocks[i].index
-        return (
-            ScopeNode(
-                scope_id=state.new_scope_id(),
-                kind="loop",
-                start_index=start_block.index,
-                end_index=end_index,
-                children=tuple(children),
-                block_index=None,
-                control_payload=self,
-            ),
-            i + 1,
+        return build_delimited_scope(
+            self,
+            blocks,
+            start_i,
+            state,
+            parse_children,
+            kind="loop",
+            opening_token="RUN-LOOP",
+            closing_token="END-LOOP",
+            log_error=log.error,
         )
 
     # ------------------------------------------------------------------

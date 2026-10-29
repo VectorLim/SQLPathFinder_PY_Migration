@@ -25,8 +25,7 @@ from vg2c.operands import (
     RunLoop,
     StartMacro,
 )
-from vg2c.resolver.macro_resolver import resolve_macros
-from vg2c.resolver.scope_builder import build_scope_tree
+from vg2c.resolver.scope_builder import build_scope_tree, resolve_macros
 
 
 def _block(

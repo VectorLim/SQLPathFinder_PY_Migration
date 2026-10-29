@@ -13,7 +13,7 @@ from vg2c.operands.base import _operand_macro
 from vg2c.operands.conditional import IfThen
 from vg2c.utilities._base import EmitterUtility
 from vg2c.utilities._emit_helpers import split_utility_command, to_code_expr
-from vg2c.utilities._runtime_helpers import normalize_macro_name, strip_quotes
+from vg2c.runtime.values import normalize_macro_name, strip_quotes
 
 
 class RowsInFile(EmitterUtility):
