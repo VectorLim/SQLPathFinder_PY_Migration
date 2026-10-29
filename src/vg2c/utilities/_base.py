@@ -86,9 +86,7 @@ class EmitterUtility(UtilitySpec):
 
     @classmethod
     @abstractmethod
-    def emit_block(
-        cls, block: Any, *, macros: str = "macros"
-    ) -> BlockEmission:
+    def emit_block(cls, block: Any, *, macros: str = "macros") -> BlockEmission:
         raise NotImplementedError
 
     @classmethod

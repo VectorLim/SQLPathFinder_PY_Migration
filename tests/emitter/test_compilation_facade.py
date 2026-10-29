@@ -39,7 +39,11 @@ def test_generated_script_layout_orders_imports_and_job_runtime(tmp_path):
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "script_short.txt").read_text())
     generated = translate(source).read_text()
-    assert generated.index("from vg2c.runtime import") < generated.index("def run():") < generated.index("job = JobRuntime.from_script(")
+    assert (
+        generated.index("from vg2c.runtime import")
+        < generated.index("def run():")
+        < generated.index("job = JobRuntime.from_script(")
+    )
     assert "BASE_DIR" not in generated
     assert "WORK_DIR" not in generated
 
@@ -65,10 +69,15 @@ def test_emitted_script_omits_node_default_when_no_literal_site(tmp_path):
 
 def test_every_emitted_if_logs_its_source_prompt_and_result(tmp_path):
     import ast
+
     source = tmp_path / "script.txt"
     source.write_text((FIXTURES / "actual_script.txt").read_text())
     generated = translate(source).read_text()
-    run = next(node for node in ast.parse(generated).body if isinstance(node, ast.FunctionDef) and node.name == "run")
+    run = next(
+        node
+        for node in ast.parse(generated).body
+        if isinstance(node, ast.FunctionDef) and node.name == "run"
+    )
     assert sum(isinstance(node, ast.If) for node in ast.walk(run)) == 11
     assert "ctx" not in generated
     assert "Logger.condition" not in generated

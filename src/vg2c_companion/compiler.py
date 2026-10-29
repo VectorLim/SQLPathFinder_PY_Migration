@@ -33,7 +33,9 @@ def runtime_sources() -> dict[str, str]:
     }
 
 
-def compile_source(source_text: str, source_name: str = "preview.txt") -> CompilationResult:
+def compile_source(
+    source_text: str, source_name: str = "preview.txt"
+) -> CompilationResult:
     """Compile a text snapshot through the existing compiler facade."""
     with tempfile.TemporaryDirectory(prefix="vg2c-companion-") as directory:
         path = Path(directory) / Path(source_name).name
@@ -53,7 +55,9 @@ class CompilationWorker:
         self._queue_lock = threading.Lock()
         self._closed = False
         self._latest = 0
-        self._thread = threading.Thread(target=self._run, name="vg2c-preview", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="vg2c-preview", daemon=True
+        )
         self._thread.start()
 
     def submit(self, source_path: Path, source_text: str) -> int:
@@ -84,11 +88,14 @@ class CompilationWorker:
             identity, source_path, source_text = request
             try:
                 result = compile_source(source_text, source_path.name)
-                outcome = CompilationOutcome(identity, source_path, source_text, result=result)
+                outcome = CompilationOutcome(
+                    identity, source_path, source_text, result=result
+                )
             except Exception as exc:  # compiler diagnostics are shown in the companion
-                outcome = CompilationOutcome(identity, source_path, source_text, error=str(exc))
+                outcome = CompilationOutcome(
+                    identity, source_path, source_text, error=str(exc)
+                )
             with self._lock:
                 if self._closed or identity != self._latest:
                     continue
             self._callback(outcome)
-

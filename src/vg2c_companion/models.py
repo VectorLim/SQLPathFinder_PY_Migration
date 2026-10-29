@@ -77,5 +77,3 @@ class EditCopy:
     def source_refreshed(self, identity: int) -> None:
         if identity != self.source_identity:
             self.pending_identity = identity
-
-
