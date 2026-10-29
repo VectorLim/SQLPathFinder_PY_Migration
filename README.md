@@ -32,9 +32,11 @@ under `output`. Each invocation rereads the templates and starts with an empty s
 SQL/CSV, macro rows, reports, email bodies, and file operations read by logical
 filename through that store; `job.read_file(name)` exposes the same content to Python.
 Explicit copy/append and query/report outputs still write their requested results.
-External commands and single email attachments require disk files: static inputs
-are copied to the workdir before external commands, while updated in-memory files require an explicit copy to
-a different output filename before passing that path to the external consumer.
+External commands and single email attachments require disk files. Before external
+commands, static inputs and macro-expanded executables are copied to their logical
+paths under the command's working directory, preserving the original assets.
+Other updated in-memory arguments and email attachments require an explicit copy
+to a different output filename before passing that path to the external consumer.
 
 CSV table inputs and backend node aliases are separate from SQL parameter binds.
 Direct named macro lookups such as `macros["CSRV"]` return `None` when absent.

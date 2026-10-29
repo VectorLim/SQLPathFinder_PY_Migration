@@ -94,19 +94,22 @@ def run_program(argv, *, workdir, cwd=None, env=None, check=False, exedir=None, 
             raise ValueError("@EXEDIR@ requires an explicit executable root")
         argv = [argument.replace("@EXEDIR@", str(Path(exedir).resolve())) for argument in argv]
     resolved_argv = []
-    for argument in argv if files else []:
+    for index, argument in enumerate(argv if files else []):
         candidate = input_path(argument, root, files)
-        if isinstance(candidate, MemoryFile):
+        if isinstance(candidate, MemoryFile) and index != 0:
             raise ValueError(
                 f"External commands require a disk file: {argument!r}; "
                 "explicitly copy the in-memory file to an output path first"
             )
         key = job_path(argument, root).resolve()
         if key in files:
-            if key == candidate.resolve():
+            if not isinstance(candidate, MemoryFile) and key == candidate.resolve():
                 raise ValueError("External commands cannot use a source template as their working file")
             key.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(candidate, key)
+            if isinstance(candidate, MemoryFile):
+                key.write_bytes(candidate.read_bytes())
+            else:
+                shutil.copy2(candidate, key)
             del files[key]
             resolved_argv.append(str(key))
         else:

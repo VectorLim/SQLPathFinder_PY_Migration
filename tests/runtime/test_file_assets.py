@@ -178,6 +178,38 @@ def test_external_program_cannot_modify_static_template(tmp_path, monkeypatch):
     assert (tmp_path / "config.csv").read_text() == "VALUE\n42\n"
 
 
+@pytest.mark.parametrize("cwd", [None, "nested"])
+def test_external_program_materializes_macro_script(tmp_path, monkeypatch, cwd):
+    template = tmp_path / "update.bat"
+    template.write_text("@echo <<<VALUE>>>\n")
+    job = JobRuntime(tmp_path, tmp_path / "work", initial_macros={"VALUE": "fresh"})
+    root = job.workdir / cwd if cwd else job.workdir
+    script = root / "update.bat"
+    script.parent.mkdir(parents=True)
+    script.write_text("stale")
+    logical_path = f"{cwd}/update.bat" if cwd else "update.bat"
+    calls = []
+
+    def external(argv, **kwargs):
+        calls.append(argv)
+        assert argv == [str(script), "literal"]
+        assert kwargs["cwd"] == str(root)
+        assert script.read_text() == "@echo fresh\n"
+        script.write_text("changed by external command")
+        return SimpleNamespace(returncode=7)
+
+    monkeypatch.setattr("vg2c.runtime.files.sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr("vg2c.runtime.files.subprocess.run", external)
+    job.update_file(logical_path, "update.bat")
+    assert job.run_program(["update.bat", "literal"], cwd=cwd) == 7
+    assert len(calls) == 1
+    assert job.read_file(logical_path) == "changed by external command"
+    assert template.read_text() == "@echo <<<VALUE>>>\n"
+    assert script.resolve() not in job.files
+    job.delete_files([logical_path])
+    assert not script.exists()
+
+
 def test_rendered_outputs_replace_file_aliases(tmp_path):
     (tmp_path / "old.txt").write_text("stale")
     (tmp_path / "page.html").write_text("<html><head>${VG2C_CSS}</head><body>fresh</body></html>")
