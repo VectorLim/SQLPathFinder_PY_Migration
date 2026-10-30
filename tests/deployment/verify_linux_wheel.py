@@ -51,8 +51,10 @@ def main(python: Path, wheel: Path) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
         retired = {
-            "vg2c/runtime/aed.py", "vg2c/runtime/aed_updater.py",
-            "vg2c/runtime/csr.py", "vg2c/runtime/append.py",
+            "vg2c/runtime/aed.py",
+            "vg2c/runtime/aed_updater.py",
+            "vg2c/runtime/csr.py",
+            "vg2c/runtime/append.py",
         }
         assert not names.intersection(retired), "Wheel contains retired runtime modules"
         for required in (

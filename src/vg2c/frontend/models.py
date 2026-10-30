@@ -13,7 +13,6 @@ def copy_dataclass_fields(source: object, target: object, base: type) -> None:
         object.__setattr__(target, field.name, getattr(source, field.name))
 
 
-
 @dataclass(frozen=True, slots=True)
 class BlockOptions:
     pairs: tuple[tuple[str, str], ...]
@@ -53,4 +52,3 @@ class ClassifiedBlock(ParsedBlock):
     def __init__(self, parsed: ParsedBlock, kind: Kind) -> None:
         copy_dataclass_fields(parsed, self, ParsedBlock)
         object.__setattr__(self, "kind", kind)
-

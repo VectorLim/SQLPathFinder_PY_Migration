@@ -35,9 +35,13 @@ def record_inline_step(
     if not fragments:
         fragments = [prefix + "pass"]
         writer.write("pass")
-    suffix = functional_kind.lower() if functional_kind else (
-        {Kind.EXTERNAL_RUN: "external", Kind.EMAIL: "email"}.get(
-            block.kind, block.kind.value.lower()
+    suffix = (
+        functional_kind.lower()
+        if functional_kind
+        else (
+            {Kind.EXTERNAL_RUN: "external", Kind.EMAIL: "email"}.get(
+                block.kind, block.kind.value.lower()
+            )
         )
     )
     return StepEmission(

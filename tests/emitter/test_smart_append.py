@@ -18,14 +18,21 @@ def _options(utilities: str = "") -> SimpleNamespace:
 
 
 def _block(utilities: str) -> SimpleNamespace:
-    return SimpleNamespace(kind=Kind.SMART_APPEND, index=5, resolved_options=_options(utilities))
+    return SimpleNamespace(
+        kind=Kind.SMART_APPEND, index=5, resolved_options=_options(utilities)
+    )
 
 
 def test_smartappend_classifies_by_case_insensitive_basename() -> None:
-    result = SmartAppend.check(_options(r'@EXEDIR@\SMARTAPPEND.VA "dest.csv" "source.csv"'))
+    result = SmartAppend.check(
+        _options(r'@EXEDIR@\SMARTAPPEND.VA "dest.csv" "source.csv"')
+    )
 
     assert result is Kind.SMART_APPEND
-    assert SmartAppend.check(_options(r'@EXEDIR@\OtherAppend.va "dest.csv" "source.csv"')) is None
+    assert (
+        SmartAppend.check(_options(r'@EXEDIR@\OtherAppend.va "dest.csv" "source.csv"'))
+        is None
+    )
 
 
 def test_smartappend_emits_destination_before_source() -> None:
@@ -36,7 +43,9 @@ def test_smartappend_emits_destination_before_source() -> None:
     assert emission.lines == ("job.smart_append('HIST.csv', 'data.csv')",)
 
 
-def test_smartappend_writes_header_once_and_appends_data(tmp_path: Path, monkeypatch) -> None:
+def test_smartappend_writes_header_once_and_appends_data(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     source = tmp_path / "source.csv"
     source.write_text("id,value\n1,first\n", encoding="utf-8")
@@ -48,8 +57,14 @@ def test_smartappend_writes_header_once_and_appends_data(tmp_path: Path, monkeyp
     source.write_text("id,value\n", encoding="utf-8")
     append("nested/destination.csv", "source.csv")
 
-    with (tmp_path / "nested" / "destination.csv").open(newline="", encoding="utf-8") as fh:
-        assert list(csv.reader(fh)) == [["id", "value"], ["1", "first"], ["2", "second"]]
+    with (tmp_path / "nested" / "destination.csv").open(
+        newline="", encoding="utf-8"
+    ) as fh:
+        assert list(csv.reader(fh)) == [
+            ["id", "value"],
+            ["1", "first"],
+            ["2", "second"],
+        ]
 
 
 def test_smartappend_is_registered() -> None:

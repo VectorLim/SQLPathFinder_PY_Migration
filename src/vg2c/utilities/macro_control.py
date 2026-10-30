@@ -2,6 +2,7 @@
 
 Runtime macro storage and substitution belong exclusively to vg2c.runtime.MacroStore.
 """
+
 from __future__ import annotations
 
 import re

@@ -3,6 +3,7 @@
 Expected values come from SPFSQL3.py normal QType dispatch and
 SPFUtilities/utils.py PivotTable/pivotDF, not an executed proprietary oracle.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,8 +18,12 @@ from vg2c.runtime.crosstab import _CrosstabUtility
 
 def _script(tmp_path, option_value="CTVALUE", ctrow="unused"):
     path = tmp_path / "source.txt"
-    opts = ["/ENGINE=SQLite", "/CSV=out.csv", "/CTHEADER=metric",
-            f"/{option_value}=reading"]
+    opts = [
+        "/ENGINE=SQLite",
+        "/CSV=out.csv",
+        "/CTHEADER=metric",
+        f"/{option_value}=reading",
+    ]
     if ctrow is not None:
         opts.append(f"/CTROW={ctrow}")
     query = "SELECT '001' AS lot, 'one' AS extra, 'A' AS metric, 'x' AS reading"
@@ -38,7 +43,9 @@ def test_ctvalue_alias_and_ctrow_is_classification_only(tmp_path, value_alias):
     ns = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), ns)
     ns["run"]()
-    assert (main.parent / "output" / "out.csv").read_text() == "LOT,EXTRA,A\n001,one,x\n"
+    assert (
+        main.parent / "output" / "out.csv"
+    ).read_text() == "LOT,EXTRA,A\n001,one,x\n"
 
 
 def test_missing_ctrow_does_not_emit_pivot(tmp_path):
@@ -53,51 +60,76 @@ def test_runtime_row_fields_come_from_query_output(tmp_path):
         "UNION ALL SELECT '001', 'north', 'B', '2' "
         "UNION ALL SELECT '002', 'south', 'B', '3'"
     )
-    execute_sql(sql, reader=SqliteReader(), workdir=tmp_path, output="out.csv",
-                pivot_columns="metric", pivot_values="reading")
+    execute_sql(
+        sql,
+        reader=SqliteReader(),
+        workdir=tmp_path,
+        output="out.csv",
+        pivot_columns="metric",
+        pivot_values="reading",
+    )
     assert (tmp_path / "out.csv").read_text() == (
         "LOT,EXTRA,A,B\n001,north,1,2\n002,south,,3\n"
     )
 
 
 def test_pivot_first_last_are_physical_rows_not_nonnull_first():
-    df = pd.DataFrame({
-        "lot": ["001", "001", "002"],
-        "metric": ["A", "A", "B"],
-        "reading": [None, "later", "z"],
-    })
+    df = pd.DataFrame(
+        {
+            "lot": ["001", "001", "002"],
+            "metric": ["A", "A", "B"],
+            "reading": [None, "later", "z"],
+        }
+    )
     u = _CrosstabUtility()
     first = u.apply(df, pivot_columns="metric", pivot_values="reading")
-    last = u.apply(df, pivot_columns="metric", pivot_values="reading",
-                   duplicate="last")
+    last = u.apply(df, pivot_columns="metric", pivot_values="reading", duplicate="last")
     assert first.loc[first["LOT"] == "001", "A"].iloc[0] == ""
     assert last.loc[last["LOT"] == "001", "A"].iloc[0] == "later"
 
 
 def test_multiple_value_headers_and_pivotdot():
-    df = pd.DataFrame({
-        "lot": ["001", "001"], "metric": ["B", "A"],
-        "reading": ["2", "1"], "limit": ["20", "10"],
-    })
+    df = pd.DataFrame(
+        {
+            "lot": ["001", "001"],
+            "metric": ["B", "A"],
+            "reading": ["2", "1"],
+            "limit": ["20", "10"],
+        }
+    )
     u = _CrosstabUtility()
     result = u.apply(df, pivot_columns="metric", pivot_values=["reading", "limit"])
     assert result.columns.tolist() == [
-        "LOT", "LIMIT@A", "LIMIT@B", "READING@A", "READING@B"
+        "LOT",
+        "LIMIT@A",
+        "LIMIT@B",
+        "READING@A",
+        "READING@B",
     ]
     assert result.iloc[0].tolist() == ["001", "10", "20", "1", "2"]
-    dotted = u.apply(df, pivot_columns="metric", pivot_values=["reading", "limit"],
-                     dot=True)
+    dotted = u.apply(
+        df, pivot_columns="metric", pivot_values=["reading", "limit"], dot=True
+    )
     assert dotted.columns.tolist() == [
-        "lot", "limit.a", "limit.b", "reading.a", "reading.b"
+        "lot",
+        "limit.a",
+        "limit.b",
+        "reading.a",
+        "reading.b",
     ]
 
 
 def test_pivot_preserves_literals_and_missing_value(tmp_path):
-    source = pd.DataFrame({
-        "id": ["001", "001"], "metric": ["A", "B"], "value": ["nan", ""],
-    })
-    frame = _CrosstabUtility().apply(source, pivot_columns="metric",
-                                    pivot_values="value", missing="N/A")
+    source = pd.DataFrame(
+        {
+            "id": ["001", "001"],
+            "metric": ["A", "B"],
+            "value": ["nan", ""],
+        }
+    )
+    frame = _CrosstabUtility().apply(
+        source, pivot_columns="metric", pivot_values="value", missing="N/A"
+    )
     assert frame.loc[0, "ID"] == "001"
     assert frame.loc[0, "A"] == "nan"
     assert frame.loc[0, "B"] == ""
@@ -110,16 +142,27 @@ def test_ctarray_then_downstream_sql_expands_previous_headers(tmp_path):
         "SELECT '001' AS lot, 'x' AS metric, '3' AS value "
         "UNION ALL SELECT '001', 'y', '4'"
     )
-    execute_sql(a, reader=SqliteReader(), workdir=tmp_path, output="wide.csv",
-                pivot_columns="metric", pivot_values="value",
-                pivot_header_ref="a0,4253")
+    execute_sql(
+        a,
+        reader=SqliteReader(),
+        workdir=tmp_path,
+        output="wide.csv",
+        pivot_columns="metric",
+        pivot_values="value",
+        pivot_header_ref="a0,4253",
+    )
     assert (tmp_path / "4253_A0.ini").read_text() == "X\tY"
     b.write_text(
         "SELECT a.lot, CrossTab->[[a0,4253;:Y]] "
         "FROM wide a0 JOIN wide a ON a0.lot = a.lot"
     )
-    execute_sql(b, reader=SqliteReader(), workdir=tmp_path, output="selected.csv",
-                inputs=["wide.csv"])
+    execute_sql(
+        b,
+        reader=SqliteReader(),
+        workdir=tmp_path,
+        output="selected.csv",
+        inputs=["wide.csv"],
+    )
     assert (tmp_path / "selected.csv").read_text().splitlines()[0] == "LOT,X,Y"
 
 
@@ -128,11 +171,21 @@ def test_ctarray_expression_mode_a_and_missing_file(tmp_path):
     sql.write_text("SELECT CrossTab->[[a0,42;sum(|<>|):A]] FROM wide a0")
     (tmp_path / "wide.csv").write_text("X\n1\n")
     with pytest.raises((ValueError, FileNotFoundError), match="42|header|ini"):
-        execute_sql(sql, reader=SqliteReader(), workdir=tmp_path,
-                    output="out.csv", inputs=["wide.csv"])
+        execute_sql(
+            sql,
+            reader=SqliteReader(),
+            workdir=tmp_path,
+            output="out.csv",
+            inputs=["wide.csv"],
+        )
     (tmp_path / "42_A0.ini").write_text("X")
-    execute_sql(sql, reader=SqliteReader(), workdir=tmp_path,
-                output="out.csv", inputs=["wide.csv"])
+    execute_sql(
+        sql,
+        reader=SqliteReader(),
+        workdir=tmp_path,
+        output="out.csv",
+        inputs=["wide.csv"],
+    )
     assert (tmp_path / "out.csv").read_text().splitlines() == ["sum([X])", "1"]
 
 
@@ -143,18 +196,35 @@ def test_legacy_json_configuration_is_reloaded(tmp_path):
         "SELECT '001' AS lot, 'A' AS metric, 'first' AS reading"
     )
     opt = root / "legacy.crosstab.json"
-    opt.write_text(json.dumps({
-        "row_keys": ["lot"], "header_key": "metric", "value_key": "reading",
-    }))
+    opt.write_text(
+        json.dumps(
+            {
+                "row_keys": ["lot"],
+                "header_key": "metric",
+                "value_key": "reading",
+            }
+        )
+    )
     job = JobRuntime(root, tmp_path / "run")
-    job.sql("query.sql", reader=SqliteReader(), output="out.csv",
-            crosstab=job.table_spec("legacy.crosstab.json"))
+    job.sql(
+        "query.sql",
+        reader=SqliteReader(),
+        output="out.csv",
+        crosstab=job.table_spec("legacy.crosstab.json"),
+    )
     assert (tmp_path / "run" / "out.csv").read_text() == "LOT,A\n001,first\n"
-    opt.write_text(json.dumps({"row_keys": ["missing"], "header_key": "metric",
-                               "value_key": "reading"}))
+    opt.write_text(
+        json.dumps(
+            {"row_keys": ["missing"], "header_key": "metric", "value_key": "reading"}
+        )
+    )
     with pytest.raises(ValueError, match="missing"):
-        job.sql("query.sql", reader=SqliteReader(), output="out.csv",
-                crosstab=job.table_spec("legacy.crosstab.json"))
+        job.sql(
+            "query.sql",
+            reader=SqliteReader(),
+            output="out.csv",
+            crosstab=job.table_spec("legacy.crosstab.json"),
+        )
 
 
 def test_legacy_json_shape_and_mixed_api_are_rejected(tmp_path):
@@ -164,12 +234,21 @@ def test_legacy_json_shape_and_mixed_api_are_rejected(tmp_path):
     (root / "bad.json").write_text('{"row_keys": ["x"], "value_key": 3}')
     job = JobRuntime(root, tmp_path / "work")
     with pytest.raises(ValueError, match="header_key|crosstab"):
-        job.sql("query.sql", reader=SqliteReader(), output="x.csv",
-                crosstab=job.table_spec("bad.json"))
+        job.sql(
+            "query.sql",
+            reader=SqliteReader(),
+            output="x.csv",
+            crosstab=job.table_spec("bad.json"),
+        )
     with pytest.raises(ValueError, match="both|mixed|crosstab"):
-        job.sql("query.sql", reader=SqliteReader(), output="x.csv",
-                pivot_columns="x", pivot_values="y",
-                crosstab={"row_keys": ["k"], "header_key": "x", "value_key": "y"})
+        job.sql(
+            "query.sql",
+            reader=SqliteReader(),
+            output="x.csv",
+            pivot_columns="x",
+            pivot_values="y",
+            crosstab={"row_keys": ["k"], "header_key": "x", "value_key": "y"},
+        )
 
 
 def test_many_runtime_keys_no_crosstab_json(tmp_path):
@@ -177,9 +256,11 @@ def test_many_runtime_keys_no_crosstab_json(tmp_path):
     sql = "SELECT " + ", ".join(f"'{i}' AS {k}" for i, k in enumerate(keys))
     sql += ", 'A' AS metric, 'v' AS reading"
     path = tmp_path / "many.txt"
-    path.write_text("<OPTIONS>\n/ENGINE=SQLite\n/CSV=wide.csv\n"
-                    "/CTROW=unused\n/CTHEADER=metric\n/CTVAL=reading\n"
-                    "</OPTIONS>\n" + sql)
+    path.write_text(
+        "<OPTIONS>\n/ENGINE=SQLite\n/CSV=wide.csv\n"
+        "/CTROW=unused\n/CTHEADER=metric\n/CTVAL=reading\n"
+        "</OPTIONS>\n" + sql
+    )
     emitted = compile_document(path).emitted
     assert "pivot_columns=" in emitted.source
     assert not [name for name, _ in emitted.assets if name.endswith(".crosstab.json")]
@@ -210,14 +291,15 @@ def test_checked_in_source_derived_basic_csv_fixture():
 
 
 def test_numeric_pivot_sort_preserves_literal_identifier():
-    rows = pd.DataFrame({
-        "lot": ["2", "10", "001"],
-        "metric": ["A", "A", "A"],
-        "value": ["two", "ten", "one"],
-    })
+    rows = pd.DataFrame(
+        {
+            "lot": ["2", "10", "001"],
+            "metric": ["A", "A", "A"],
+            "value": ["two", "ten", "one"],
+        }
+    )
     result = _CrosstabUtility().apply(
-        rows, pivot_columns="metric", pivot_values="value",
-        sort="lot DESC-1"
+        rows, pivot_columns="metric", pivot_values="value", sort="lot DESC-1"
     )
     assert result["LOT"].tolist() == ["10", "2", "001"]
     assert result["A"].tolist() == ["ten", "two", "one"]

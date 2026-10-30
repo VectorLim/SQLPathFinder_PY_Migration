@@ -55,7 +55,9 @@ class FileSystemOps(EmitterUtility):
         return None
 
     @classmethod
-    def emit_block(cls, block, *, macros: str = "macros", file_asset=None) -> BlockEmission:
+    def emit_block(
+        cls, block, *, macros: str = "macros", file_asset=None
+    ) -> BlockEmission:
         if block.kind is Kind.FS_COPY:
             return cls._emit_copy_block(block, macros)
         if block.kind is Kind.FS_DELETE:
@@ -68,17 +70,22 @@ class FileSystemOps(EmitterUtility):
         body = block.resolved_body.lstrip()
         asset = file_asset or cls.asset_name(block)
         original = DirectOperationMetadata.operation_definition("ctx", "write_file")
-        definition = replace(original, parameters=tuple(
-            replace(item, name="asset")
-            if item.name == "template" else item for item in original.parameters
-        ))
+        definition = replace(
+            original,
+            parameters=tuple(
+                replace(item, name="asset") if item.name == "template" else item
+                for item in original.parameters
+            ),
+        )
         method = "update_file" if "<<<" in body else "load_file"
         stmt = EmittableOperation.render_method_call(
-            definition, function=f"job.{method}",
+            definition,
+            function=f"job.{method}",
             kwargs={"path": native_argument(path, macros), "asset": asset},
         )
         return BlockEmission(
-            (stmt,), assets=((asset, body),),
+            (stmt,),
+            assets=((asset, body),),
         )
 
     @staticmethod
@@ -110,7 +117,11 @@ class FileSystemOps(EmitterUtility):
         else:
             raise ValueError(f"Unsupported filesystem copy utility: {basename}")
         target = "job.rename_file" if "spfrename" in basename else "job.copy_file"
-        if "robocopy" in basename and len(argv) > 3 and "<<<MIPPATH>>>" in argv[3].upper():
+        if (
+            "robocopy" in basename
+            and len(argv) > 3
+            and "<<<MIPPATH>>>" in argv[3].upper()
+        ):
             target = "job.submit_mms"
         return BlockEmission(
             (lower_native_call(stmt, function=target, macros=macros),),
@@ -123,7 +134,9 @@ class FileSystemOps(EmitterUtility):
         if "spfdelete" not in basename:
             raise ValueError(f"Unsupported filesystem delete utility: {basename}")
         stmt = cls._emit_spf_delete(argv)
-        return BlockEmission((lower_native_call(stmt, function="job.delete_files", macros=macros),))
+        return BlockEmission(
+            (lower_native_call(stmt, function="job.delete_files", macros=macros),)
+        )
 
     @classmethod
     def _emit_robocopy(cls, argv: list[str]) -> str:
@@ -198,7 +211,9 @@ class PythonEmbed(EmitterUtility):
                 "Embedded Python using the retired ctx API must use explicit runtime functions and workdir"
             )
         if any(cls._top_level_exit(statement) for statement in body):
-            raise ValueError("Embedded Python return/yield must be inside an authored function")
+            raise ValueError(
+                "Embedded Python return/yield must be inside an authored function"
+            )
         name = f"python/step_{block.index:03d}_{project_name(Path(resolve_output_path(block)).stem)}.py"
         uses_macros = any(
             isinstance(item, ast.Name) and item.id == "macros"

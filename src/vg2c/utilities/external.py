@@ -50,9 +50,7 @@ class ExternalProcess(EmitterUtility):
             raise ValueError("Unsupported utility operation")
 
         stmt = cls._emit_run(argv)
-        call = lower_native_call(
-            stmt, function="job.run_program", macros=macros
-        )
+        call = lower_native_call(stmt, function="job.run_program", macros=macros)
         return BlockEmission((call,))
 
     @classmethod
