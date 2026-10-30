@@ -116,6 +116,17 @@ def test_utf16_offsets_and_duplicate_source_lines_map_to_distinct_steps():
     assert utf16_to_python_offset("😀x", 2) == 1
 
 
+@pytest.mark.parametrize("artifact_role", [False, True])
+def test_source_mapping_requires_an_artifact_marker(artifact_role):
+    result = _fake_result()
+    parameter = result.emitted.step_for_block(0).parameters[0]
+    parameter.artifact_role = artifact_role
+
+    mapping = map_source_offset(result, "first\nsecond\n", 0)
+
+    assert mapping.asset_names == (("sql/query.sql",) if artifact_role else ())
+
+
 def test_dirty_edit_copy_marks_new_source_revision_without_overwrite():
     copy = EditCopy(source_identity=1, text="original generated source")
     copy.source_refreshed(2)
@@ -339,7 +350,14 @@ def test_prepost_query_mapping_uses_compiler_step_ranges():
         min(step.source_range.start_offset for step in members),
         max(step.source_range.end_offset for step in members),
     )
-    assert all(step.source in result.emitted.source[slice(*mapping.generated_range)] for step in members)
+    mapped_source = result.emitted.source[slice(*mapping.generated_range)]
+    first_call = "job.sql('sql/query_000_first.sql', output='first.csv')"
+    second_call = "job.sql('sql/query_001_second.sql', output='second.csv')"
+    assert mapped_source.index(first_call) < mapped_source.index(second_call)
+    for step, statement in zip(members, (first_call, second_call), strict=True):
+        span = step.source_range
+        assert result.emitted.source[span.start_offset:span.end_offset].strip() == statement
+    assert members[0].source_range.end_offset <= members[1].source_range.start_offset
     assert sibling.source_range.start_offset >= mapping.generated_range[1]
 
 
@@ -440,7 +458,10 @@ def test_compiled_prompt_steps_and_html_assets_produce_navigable_ranges():
     assert main.generated_range == child.generated_range
     step = query.emitted.step_for_block(main.block_index)
     assert step is not None
-    assert query.emitted.source[main.generated_range[0]:main.generated_range[1]] == step.source
+    assert main.generated_range == (step.source_range.start_offset, step.source_range.end_offset)
+    assert query.emitted.source[slice(*main.generated_range)].strip() == (
+        "job.sql('sql/query_000_out.sql', output='out.csv')"
+    )
     assert "sql/query_000_out.sql" in {link.name for link in generated_asset_links(query)}
 
     html = compile_source(

@@ -104,11 +104,12 @@ def test_repeat_compilation_is_identical_and_step_ranges_match_source():
     first = compile_document(fixture).emitted
     second = compile_document(fixture).emitted
     assert first == second
-    for step in first.steps:
-        assert (
-            first.source[step.source_range.start_offset : step.source_range.end_offset]
-            == step.source
-        )
+    step, = first.steps
+    assert step.block_index == 0
+    span = step.source_range
+    assert first.source[span.start_offset:span.end_offset] == (
+        "    job.sql('sql/query_000_owner.sql', output='owner.csv', inputs=['ww_yield.csv'])"
+    )
 
 
 def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp_path):

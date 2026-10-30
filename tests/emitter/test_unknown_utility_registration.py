@@ -36,9 +36,17 @@ def test_unsupported_block_is_skipped_between_supported_steps(tmp_path, options,
     assert reason in warnings[0].message
     assert "unsupported source must not execute" not in result.emitted.source
     assert result.emitted.steps[1].functional_kind == "UNSUPPORTED"
-    for step in result.emitted.steps:
+    expected = (
+        "job.load_file(path='before.txt', asset='files/before.txt')",
+        "pass  # Skipped unsupported query block.",
+        "job.load_file(path='after.txt', asset='files/after.txt')",
+    )
+    previous_end = 0
+    for step, statement in zip(result.emitted.steps, expected, strict=True):
         span = step.source_range
-        assert result.emitted.source[span.start_offset:span.end_offset] == step.source
+        assert previous_end <= span.start_offset < span.end_offset
+        assert result.emitted.source[span.start_offset:span.end_offset].strip() == statement
+        previous_end = span.end_offset
 
     main = translate(source)
     namespace = {"__file__": str(main), "__name__": "generated_job"}

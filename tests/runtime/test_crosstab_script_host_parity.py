@@ -204,7 +204,9 @@ def test_checked_in_source_derived_basic_csv_fixture():
     result = _CrosstabUtility().apply(
         frame, pivot_columns="metric", pivot_values="value"
     )
-    assert result.to_csv(index=False) == (folder / "expected_basic.csv").read_text()
+    assert result.to_csv(index=False, lineterminator="\n") == (
+        folder / "expected_basic.csv"
+    ).read_text(encoding="utf-8")
 
 
 def test_numeric_pivot_sort_preserves_literal_identifier():

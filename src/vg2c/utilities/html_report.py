@@ -86,10 +86,10 @@ tr th {{ background-color:#f5f5f5; }}
                     self.layout_references[key] = self.layout_references.get(key, 0) + 1
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         report = options.lookup.get("REPORT")
         if report and report.upper().startswith("HTML-"):
-            return Kind.HTML_REPORT, "/REPORT starts with HTML-"
+            return Kind.HTML_REPORT
         return None
 
     @classmethod

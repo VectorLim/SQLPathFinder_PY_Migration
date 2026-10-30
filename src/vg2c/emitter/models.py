@@ -76,10 +76,8 @@ class EmittedParameter:
 
 @dataclass(frozen=True, slots=True)
 class EmittedStep:
-    function_name: str
     block_index: int
     functional_kind: str
-    source: str
     source_range: SourceRange
     parameters: tuple[EmittedParameter, ...]
 

@@ -26,7 +26,7 @@ class ExternalProcess(EmitterUtility):
     check_priority = -100
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         text = options.lookup.get("UTILITIES", "").strip()
         if not text:
             return None
@@ -35,7 +35,7 @@ class ExternalProcess(EmitterUtility):
             return None
         basename = argv[0].split("/")[-1].split("\\")[-1].lower()
         if "run_python_script" in basename or basename.endswith((".bat", ".exe")):
-            return Kind.EXTERNAL_RUN, "/UTILITIES command maps to external run"
+            return Kind.EXTERNAL_RUN
         return None
 
     @staticmethod

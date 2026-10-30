@@ -26,9 +26,9 @@ class MacroControl(EmitterUtility):
     )
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         if MacroControl._TOKEN.match(options.lookup.get("UTILITIES", "")):
-            return Kind.MACRO_CONTROL, "/UTILITIES is a macro control token"
+            return Kind.MACRO_CONTROL
         return None
 
     @classmethod

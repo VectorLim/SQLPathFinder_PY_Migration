@@ -82,6 +82,18 @@ def test_csv_list_original_windows_relative_path_resolves_under_linux_workdir(tm
     r"C:\internal\production.tab",
     r"\\corporate\share\production.tab",
 ])
-def test_csv_list_does_not_reinterpret_absolute_windows_paths_as_local(tmp_path, name):
+def test_csv_list_does_not_reinterpret_absolute_windows_paths_as_local(tmp_path, name, monkeypatch):
+    from pathlib import PurePosixPath
+
+    monkeypatch.setattr("vg2c.runtime.csv_io.Path", PurePosixPath)
     with pytest.raises(ValueError, match="Windows absolute CSV-list path"):
         _CsvIO(workdir=tmp_path).sql_get_csv_list(name, "lot", "t.lot In")
+
+
+def test_csv_list_reads_native_absolute_path_with_explicit_workdir(tmp_path):
+    source = tmp_path / "lots.csv"
+    source.write_text("lot\nLOT-A\n", encoding="utf-8")
+
+    assert _CsvIO(workdir=tmp_path).sql_get_csv_list(str(source), "lot", "t.lot In") == (
+        "('LOT-A')"
+    )

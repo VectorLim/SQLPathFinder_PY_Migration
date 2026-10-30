@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
-
 from vg2c import translate
 from vg2c.utilities._emit_helpers import parse_table_binding
 from vg2c.utilities.csv_io import CsvIO
 from vg2c.utilities.runtime_adapters import SqliteReader
-
-ROOT = Path(__file__).parents[2]
 
 
 def test_parse_table_binding_preserves_windows_paths() -> None:
@@ -47,9 +42,15 @@ def test_sqlite_reader_preserves_select_columns_when_result_is_empty(tmp_path) -
     assert output.read_text(encoding="utf-8") == "lot_1,operation_1,out_date\n"
 
 
-def test_icmpcs_translation_emits_table_bindings_without_running_artifact(tmp_path) -> None:
-    source = tmp_path / "ICMPCS.txt"
-    shutil.copy(ROOT / "ICMPCS.txt", source)
+def test_translation_emits_table_bindings_without_running_artifact(tmp_path) -> None:
+    source = tmp_path / "table_bindings.txt"
+    source.write_text(
+        "<OPTIONS>\n/ENGINE=SQLite\n/TABLE=data.csv:T0\n/CSV=first.csv\n"
+        "</OPTIONS>\nSELECT * FROM [T0]\n<---- New Query ---->\n"
+        "<OPTIONS>\n/ENGINE=SQLite\n/TABLE=IPM_Data.csv:T0\n/CSV=second.csv\n"
+        "</OPTIONS>\nSELECT * FROM [T0]\n",
+        encoding="utf-8",
+    )
 
     output = translate(source)
     generated = output.read_text(encoding="utf-8")

@@ -29,16 +29,16 @@ class SqliteEngine(EmitterUtility):
     handles = (Kind.SQL_QUERY, Kind.SQLITE_QUERY, Kind.DUCKDB_QUERY)
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         if (
             options.lookup.get("OLEDB", "").upper() == "DUCKDB"
             or options.lookup.get("ENGINE", "").upper() == "DUCKDB"
         ):
-            return Kind.DUCKDB_QUERY, "/OLEDB=DuckDB or /ENGINE=DuckDB"
+            return Kind.DUCKDB_QUERY
         if options.lookup.get("OLEDB", "").upper() == "SQLITE":
-            return Kind.SQLITE_QUERY, "/OLEDB=SQLite"
+            return Kind.SQLITE_QUERY
         if options.lookup.get("ENGINE", "").upper() == "SQLITE":
-            return Kind.SQLITE_QUERY, "/ENGINE=SQLite"
+            return Kind.SQLITE_QUERY
 
         node = options.lookup.get("NODE", "")
         engine = options.lookup.get("ENGINE", "")
@@ -50,10 +50,7 @@ class SqliteEngine(EmitterUtility):
             SqliteEngine._node_matches(node, token)
             for token in ("MARS", "OASYS", "ARIES")
         ):
-            return (
-                Kind.SQL_QUERY,
-                "/NODE indicates Oracle dialect and /ENGINE=VA or /OLEDB=SQLPlus",
-            )
+            return Kind.SQL_QUERY
         return None
 
     @staticmethod

@@ -79,10 +79,10 @@ and executes a generated project from a detached directory without a compiler
 checkout, VG2 source or ScriptHost at runtime:
 
 ```bash
-python -m pip install build wheel setuptools pandas==3.0.3 duckdb==1.5.6
+python -m pip install build wheel setuptools pandas==3.0.3 duckdb==1.5.6 "python-dotenv>=1.2,<2"
 python -m build --wheel --no-isolation --outdir /tmp/vg2c-dist
 python -m venv /tmp/vg2c-wheel-venv
-/tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3 duckdb==1.5.6
+/tmp/vg2c-wheel-venv/bin/python -m pip install pandas==3.0.3 duckdb==1.5.6 "python-dotenv>=1.2,<2"
 /tmp/vg2c-wheel-venv/bin/python -m pip install --no-deps /tmp/vg2c-dist/*.whl
 python tests/deployment/verify_linux_wheel.py \\
     --python /tmp/vg2c-wheel-venv/bin/python \\
@@ -90,7 +90,7 @@ python tests/deployment/verify_linux_wheel.py \\
 ```
 
 The `--no-deps` wheel install is intentional for this **synthetic offline SQLite**
-probe: runtime imports require pandas and DuckDB, while external DataSyncX and production
+probe: runtime imports require pandas, DuckDB and python-dotenv, while external DataSyncX and production
 credentials are absent. For a real deployed job, install all declared project
 requirements from an authorized corporate package source and validate its
 reader/service integration separately. Do not replace the production dependency
@@ -100,7 +100,7 @@ install with this minimal offline test environment.
 
 `vg2c.runtime.aed_api` is the upstream ICMPCS `AEDAPIClient` (imports adapted only),
 `vg2c.runtime.aed_client.AEDClient` wraps it with input validation, URL encoding and
-per-job credentials, and `vg2c.runtime.csr` owns the validated CSR request loader.
+per-job credentials. `vg2c.runtime.job` owns the validated CSR request loader.
 Generated scripts obtain the client with `job.aed(facility)`.
 
 The compiler recognizes CSR submissions from a parsed `RoboCopy.va` destination of

@@ -25,12 +25,12 @@ class MailService(EmitterUtility):
     handles = (Kind.EMAIL,)
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         text = options.lookup.get("UTILITIES", "")
         if not text:
             return None
         if MailService._is_mail_utility(split_utility_command(text)):
-            return Kind.EMAIL, "/UTILITIES command is SQLPathFinder_Email.va"
+            return Kind.EMAIL
         return None
 
     @classmethod

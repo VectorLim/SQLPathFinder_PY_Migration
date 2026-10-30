@@ -177,9 +177,7 @@ secrets.yml
 .secrets
 
 /docs/*
-!/docs/symbol-dependency-resolution.md
 !/docs/docker-lan.md
-!/docs/workflow-responsibilities.md
 
 
 /data

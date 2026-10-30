@@ -33,10 +33,10 @@ class RowsInFile(EmitterUtility):
     _TOKEN_RE = re.compile(r"^\s*\{ROWS-IN-FILE\}", re.IGNORECASE)
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         utilities = options.lookup.get("UTILITIES", "")
         if RowsInFile._TOKEN_RE.match(utilities):
-            return Kind.ROWS_IN_FILE, "/UTILITIES is {ROWS-IN-FILE}"
+            return Kind.ROWS_IN_FILE
         return None
 
     @staticmethod

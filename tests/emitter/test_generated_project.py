@@ -111,13 +111,12 @@ def test_direct_step_ranges(tmp_path):
     source.write_text(SQL)
     result = compile_document(source)
     emitted = result.emitted
-    for step in emitted.steps:
-        assert (
-            emitted.source[
-                step.source_range.start_offset : step.source_range.end_offset
-            ]
-            == step.source
-        )
+    step, = emitted.steps
+    assert step.block_index == 0
+    span = step.source_range
+    assert emitted.source[span.start_offset:span.end_offset] == (
+        "    job.sql('sql/query_000_result.sql', output='result.csv')"
+    )
 
 
 def block(options, body=""):

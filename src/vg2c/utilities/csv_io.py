@@ -17,7 +17,7 @@ from vg2c.utilities._emit_helpers import (
 )
 
 
-class CsvIO(UtilitySpec):
+class CsvIO(RuntimeCsvIO, UtilitySpec):
     utility_name = "csv_io"
     iter = emittable(RuntimeCsvIO.iter)
 
@@ -40,13 +40,13 @@ class SmartAppend(EmitterUtility):
     _COMMAND_NAME = "smartappend.va"
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         argv = split_utility_command(options.lookup.get("UTILITIES", ""))
         if not argv:
             return None
         basename = argv[0].replace("/", "\\").rsplit("\\", 1)[-1].lower()
         if basename == SmartAppend._COMMAND_NAME:
-            return Kind.SMART_APPEND, "/UTILITIES command maps to SmartAppend"
+            return Kind.SMART_APPEND
         return None
 
     @classmethod

@@ -334,7 +334,7 @@ def test_csr_step_has_source_metadata(tmp_path):
     submission = result.resolved.csr_submissions[0]
     step = result.emitted.step_for_block(submission.block_index)
     assert step.functional_kind == "CSR_SUBMISSION"
-    assert step.function_name.endswith("_csr_submission")
+    assert step.block_index == submission.block_index
     generated_step = result.emitted.source[
         step.source_range.start_offset : step.source_range.end_offset
     ]

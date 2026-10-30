@@ -81,7 +81,7 @@ class EmitterUtility(UtilitySpec):
 
     @staticmethod
     @abstractmethod
-    def check(options: BlockOptions) -> tuple[Kind, str] | None:
+    def check(options: BlockOptions) -> Kind | None:
         raise NotImplementedError
 
     @classmethod

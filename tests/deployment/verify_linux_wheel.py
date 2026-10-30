@@ -50,8 +50,11 @@ def run_python(python: Path, args: list[str], cwd: Path, *, success: bool = True
 def main(python: Path, wheel: Path) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
-        retired = {"vg2c/runtime/aed.py", "vg2c/runtime/aed_updater.py"}
-        assert not names.intersection(retired), "Wheel contains retired AED modules"
+        retired = {
+            "vg2c/runtime/aed.py", "vg2c/runtime/aed_updater.py",
+            "vg2c/runtime/csr.py", "vg2c/runtime/append.py",
+        }
+        assert not names.intersection(retired), "Wheel contains retired runtime modules"
         for required in (
             "vg2c/runtime/__init__.py",
             "vg2c/runtime/job.py",
@@ -61,7 +64,6 @@ def main(python: Path, wheel: Path) -> None:
             "vg2c/runtime/macros.py",
             "vg2c/runtime/aed_client.py",
             "vg2c/runtime/aed_api.py",
-            "vg2c/runtime/csr.py",
         ):
             assert required in names, f"Wheel omits {required}"
 
@@ -121,7 +123,6 @@ def main(python: Path, wheel: Path) -> None:
         main_file = project / "main.py"
         assert ast.parse(main_file.read_text(encoding="utf-8"))
         source_assets = sorted(p for p in project.rglob("*") if p.is_file())
-        initial = {p.relative_to(project): p.read_bytes() for p in source_assets}
         assert any(p.suffix == ".sql" for p in source_assets)
         assert any(p.suffix == ".css" for p in source_assets)
         assert len(list((project / "html").glob("*.html"))) == 2
@@ -246,15 +247,17 @@ def main(python: Path, wheel: Path) -> None:
         csr_source = root / "csr.txt"
         csr_source.write_text(
             block("/WRITE-FILE=Y\n/CSV=config.csv", "SIGNAL,DCSR,FAC\n1,Y,A15")
+            + block("/WRITE-FILE=Y\n/CSV=requests.csv", "lot\nL1\nL1")
             + block('/UTILITIES={START-MACRO} "config.csv" "N"')
             + block('/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""')
             + block('/UTILITIES={IF-THEN} "VAR(<<<DCSR>>>)" "EQS" "Y" "" "" "" ""')
             + block(
-                "/ENGINE=SQLite\n/CSV=RESULT_csr.csv\n"
+                "/ENGINE=SQLite\n/CSV=RESULT_csr.csv\n/TABLE=requests.csv:T0\n"
                 "/HEADERS=HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module",
-                "select 'L1' as HOLD_LOT, 'N' as AUTO_CONTAIN, 'L1' as LOT, "
+                "select 'Y' as HOLD_LOT, 'N' as AUTO_CONTAIN, [lot] as LOT, "
                 "'offline@example.test' as EMAIL, '42' as CCB_NUMBER, "
-                "'note & detail' as HOLD_NOTE, 'NCO' as HOLDCATEGORY, 'IAM' as Module",
+                "'note & detail' as HOLD_NOTE, 'NCO' as HOLDCATEGORY, 'IAM' as Module "
+                "from [T0] where 1=1",
             )
             + block('/UTILITIES=RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>"')
             + block("/UTILITIES={END-IF}")

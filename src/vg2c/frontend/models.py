@@ -50,7 +50,7 @@ class ParsedBlock:
 class ClassifiedBlock(ParsedBlock):
     kind: Kind
 
-    def __init__(self, parsed: ParsedBlock, kind: Kind, reason: str) -> None:
+    def __init__(self, parsed: ParsedBlock, kind: Kind) -> None:
         copy_dataclass_fields(parsed, self, ParsedBlock)
         object.__setattr__(self, "kind", kind)
 

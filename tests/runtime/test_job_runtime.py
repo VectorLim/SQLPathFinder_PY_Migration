@@ -114,8 +114,18 @@ def test_emitted_calls_avoid_context_kwargs_and_preserve_step_ranges(tmp_path):
     assert "job.row_count(" in result.source
     assert "workdir=workdir" not in result.source
     assert "values=job_values" not in result.source
-    for step in result.steps:
-        assert result.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
+    assert [step.block_index for step in result.steps] == [0, 1, 3]
+    expected = (
+        "job.sql('sql/query_000_rows.sql', output='rows.csv')",
+        "macros['COUNT'] = str(job.row_count('rows.csv'))",
+        "job.update_file(path='label.txt', asset='files/label.txt')",
+    )
+    previous_end = 0
+    for step, statement in zip(result.steps, expected, strict=True):
+        span = step.source_range
+        assert previous_end <= span.start_offset < span.end_offset
+        assert result.source[span.start_offset:span.end_offset].strip() == statement
+        previous_end = span.end_offset
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
     main = translate(source)
     work = main.parent / "output"

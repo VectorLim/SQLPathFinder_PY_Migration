@@ -33,14 +33,11 @@ class TestCheck:
     def test_waitfile_va_detected(self):
         opts = _opts(FIXTURE_UTILITIES)
         result = WaitFile.check(opts)
-        assert result is not None
-        kind, reason = result
-        assert kind is Kind.WAIT_FILE
-        assert "WaitFile" in reason
+        assert result is Kind.WAIT_FILE
 
     def test_case_insensitive_basename(self):
         opts = _opts(r"@EXEDIR@\WAITFILE.VA \"C:\some\file.csv\" \"60\"")
-        assert WaitFile.check(opts) is not None
+        assert WaitFile.check(opts) is Kind.WAIT_FILE
 
     def test_unknown_utility_returns_none(self):
         opts = _opts(r"@EXEDIR@\RoboCopy.bat \"src\" \"dst\"")

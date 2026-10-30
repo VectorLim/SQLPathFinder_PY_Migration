@@ -41,7 +41,7 @@ def _block(
         raw="",
         span=SourceSpan(file=None, start_line=index + 1, end_line=index + 1),
     )
-    return ClassifiedBlock(parsed=parsed, kind=kind, reason="test")
+    return ClassifiedBlock(parsed=parsed, kind=kind)
 
 
 def _resolve_blocks(blocks: list[ClassifiedBlock]):

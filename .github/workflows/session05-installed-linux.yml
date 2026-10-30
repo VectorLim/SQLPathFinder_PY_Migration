@@ -20,12 +20,12 @@ jobs:
       - name: Build a distributable wheel
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build wheel setuptools "pandas==3.0.3" "duckdb==1.5.6"
+          python -m pip install build wheel setuptools "pandas==3.0.3" "duckdb==1.5.6" "python-dotenv>=1.2,<2"
           python -m build --wheel --no-isolation --outdir "$RUNNER_TEMP/session05-dist"
       - name: Install wheel into clean venv (offline supported runtime path)
         run: |
           python -m venv "$RUNNER_TEMP/session05-venv"
-          "$RUNNER_TEMP/session05-venv/bin/python" -m pip install "pandas==3.0.3" "duckdb==1.5.6"
+          "$RUNNER_TEMP/session05-venv/bin/python" -m pip install "pandas==3.0.3" "duckdb==1.5.6" "python-dotenv>=1.2,<2"
           "$RUNNER_TEMP/session05-venv/bin/python" -m pip install --no-deps "$RUNNER_TEMP"/session05-dist/*.whl
       - name: Execute moved generated projects using installed wheel only
         env:

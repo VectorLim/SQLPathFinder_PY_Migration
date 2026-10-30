@@ -86,11 +86,15 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     assert "with macros.scope(" in code
     assert any(isinstance(node, ast.With) for node in ast.walk(tree))
     assert any(isinstance(node, ast.If) for node in ast.walk(tree))
-    for step in emitted.steps:
-        assert (
-            code[step.source_range.start_offset : step.source_range.end_offset]
-            == step.source
+    assert [step.block_index for step in emitted.steps] == [1, 3, 5]
+    previous_end = 0
+    for step, name in zip(emitted.steps, ("outer", "inner", "restored"), strict=True):
+        span = step.source_range
+        assert previous_end <= span.start_offset < span.end_offset
+        assert code[span.start_offset:span.end_offset].strip() == (
+            f"job.update_file(path='{name}.txt', asset='files/{name}.txt')"
         )
+        previous_end = span.end_offset
 
     main = translate(source)
     for label in ["first", "second"]:

@@ -24,8 +24,7 @@ def _block(utilities: str) -> SimpleNamespace:
 def test_smartappend_classifies_by_case_insensitive_basename() -> None:
     result = SmartAppend.check(_options(r'@EXEDIR@\SMARTAPPEND.VA "dest.csv" "source.csv"'))
 
-    assert result is not None
-    assert result[0] is Kind.SMART_APPEND
+    assert result is Kind.SMART_APPEND
     assert SmartAppend.check(_options(r'@EXEDIR@\OtherAppend.va "dest.csv" "source.csv"')) is None
 
 

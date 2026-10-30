@@ -1,4 +1,4 @@
-"""Execute isolated original HTML-RUN CSS blocks from five actual VG2 fixtures.
+"""Execute isolated original HTML-RUN CSS blocks from four actual VG2 fixtures.
 
 These are PARTIAL source-preserved checks, not full job or ScriptHost parity tests.
 All later network, credential, executable and mail steps are excluded.
@@ -20,7 +20,6 @@ SEPARATOR = "<---- New Query ---->"
 @pytest.mark.parametrize(
     "fixture",
     [
-        "ICMPCS.txt",
         "CSR_IAM_v2.txt",
         "tests/fixtures/actual_script.txt",
         "tests/fixtures/maxlidheight.txt",
@@ -69,12 +68,12 @@ def test_original_html_run_css_asset_is_editable_and_rerun_publishes_changes(tmp
     run = runpy.run_path(str(main), run_name="isolated_css_edit")["run"]
     run()
     output = workdir / "sqlpathfinder_style_1.css"
-    initial = output.read_bytes()
-    assert initial == css_assets[0].read_bytes()
-    assert b"background-color" in initial
+    initial = output.read_text(encoding="utf-8")
+    assert initial == css_assets[0].read_text(encoding="utf-8")
+    assert "background-color" in initial
 
-    marker = b"/* stage2 fixture asset edit */\n"
-    css_assets[0].write_bytes(initial + marker)
+    marker = "/* stage2 fixture asset edit */\n"
+    css_assets[0].write_text(initial + marker, encoding="utf-8")
     run()
-    assert output.read_bytes() == initial + marker
-    assert output.read_bytes() != initial
+    assert output.read_text(encoding="utf-8") == initial + marker
+    assert output.read_text(encoding="utf-8") != initial

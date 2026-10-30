@@ -16,7 +16,7 @@ def test_compile_document_exposes_metadata_without_writing(tmp_path):
     assert result.resolved.blocks
     assert result.resolved.scope_tree.kind == "program"
     assert result.emitted.steps
-    assert all(step.function_name.startswith("step_") for step in result.emitted.steps)
+    assert [step.functional_kind for step in result.emitted.steps] == ["SQLITE_QUERY"]
     resolved_indices = {block.index for block in result.resolved.blocks}
     assert all(step.block_index in resolved_indices for step in result.emitted.steps)
 

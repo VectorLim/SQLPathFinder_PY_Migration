@@ -34,12 +34,12 @@ class FileSystemOps(EmitterUtility):
     handles = (Kind.WRITE_FILE, Kind.FS_COPY, Kind.FS_DELETE)
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         if options.lookup.get("WRITE-FILE", "").upper() == "Y":
             csv_value = options.lookup.get("CSV", "")
             if csv_value.lower().endswith(".py"):
                 return None
-            return Kind.WRITE_FILE, "/WRITE-FILE=Y"
+            return Kind.WRITE_FILE
 
         utilities = options.lookup.get("UTILITIES")
         if not utilities:
@@ -49,9 +49,9 @@ class FileSystemOps(EmitterUtility):
         basename = first_token.split("/")[-1].split("\\")[-1].lower()
 
         if "robocopy" in basename or "spfcopy" in basename or "spfrename" in basename:
-            return Kind.FS_COPY, "/UTILITIES command maps to FS copy"
+            return Kind.FS_COPY
         if "spfdelete" in basename:
-            return Kind.FS_DELETE, "/UTILITIES command maps to FS delete"
+            return Kind.FS_DELETE
         return None
 
     @classmethod
@@ -175,13 +175,13 @@ class PythonEmbed(EmitterUtility):
     handles = (Kind.PYTHON_EMBED,)
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         if options.lookup.get("WRITE-FILE", "").upper() != "Y":
             return None
 
         csv_value = options.lookup.get("CSV", "")
         if csv_value.lower().endswith(".py"):
-            return Kind.PYTHON_EMBED, "/WRITE-FILE=Y targeting .py script"
+            return Kind.PYTHON_EMBED
         return None
 
     @classmethod
@@ -232,7 +232,7 @@ class WaitFile(EmitterUtility):
     _POLL_INTERVAL = 5
 
     @staticmethod
-    def check(options) -> tuple[Kind, str] | None:
+    def check(options) -> Kind | None:
         text = options.lookup.get("UTILITIES", "").strip()
         if not text:
             return None
@@ -241,7 +241,7 @@ class WaitFile(EmitterUtility):
             return None
         basename = argv[0].split("/")[-1].split("\\")[-1].lower()
         if basename in WaitFile._WAITFILE_NAMES:
-            return Kind.WAIT_FILE, "/UTILITIES command maps to WaitFile poll"
+            return Kind.WAIT_FILE
         return None
 
     @staticmethod

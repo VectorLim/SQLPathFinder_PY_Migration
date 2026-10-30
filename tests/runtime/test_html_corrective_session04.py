@@ -139,12 +139,13 @@ def test_html_only_csv_field_dollar_and_unicode_data_are_not_templates(tmp_path)
     (root / "page.html").write_text(
         '<html><head></head><body><table data-report="R"><thead><tr>'
         '<th data-field="A$B">Price $USD &amp; ¥</th></tr></thead>'
-        '<tbody></tbody></table></body></html>')
-    (work / "data.csv").write_text('A$B\n"€ 3.25 & <span> ${NOT_A_SLOT}"\n')
+        '<tbody></tbody></table></body></html>', encoding="utf-8")
+    (work / "data.csv").write_text(
+        'A$B\n"€ 3.25 & <span> ${NOT_A_SLOT}"\n', encoding="utf-8")
     runtime = JobRuntime(root, work)
     runtime.reports["R"] = csv_report("data.csv")
     runtime.html("page.html", output="out.html")
-    result = (work / "out.html").read_text()
+    result = (work / "out.html").read_text(encoding="utf-8")
     assert 'data-field="A$B"' in result
     assert "Price $USD &amp; ¥" in result
     assert "&lt;span&gt;" in result and "€ 3.25" in result
@@ -265,7 +266,7 @@ def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
     (root / "reports").mkdir(parents=True)
     work = tmp_path / "work"
     work.mkdir()
-    (work / "data.csv").write_text('A$B\n"¥ 5 & <other>"\n')
+    (work / "data.csv").write_text('A$B\n"¥ 5 & <other>"\n', encoding="utf-8")
     (root / "reports/r.table.html").write_text(
         '<table data-report="R"><thead><tr>'
         '<th data-field="A$B" data-note="$USD">Price $USD</th>'
@@ -281,7 +282,7 @@ def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
     job.reports["R"] = job.report("reports/r.table.html", input_file="data.csv")
     job.html("page.html", output="out.html", values={"VALUE_1": "ok & <done>"},
              css_file="style.css", embed_css=True)
-    result = (work / "out.html").read_text()
+    result = (work / "out.html").read_text(encoding="utf-8")
     assert "Annual $USD" in result
     assert 'data-field="A$B"' in result and 'data-note="$USD"' in result
     assert "Price $USD" in result
@@ -292,7 +293,7 @@ def test_shared_fragment_dollar_fields_css_and_legacy_bare_slots(tmp_path):
     # the HTML-first fragment intentionally owns columns separately.
     job.reports["R"] = csv_report("data.csv", columns=["A$B"])
     job.html("legacy.html", output="old.html", css_file="style.css", embed_css=True)
-    assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text()
+    assert "¥ 5 &amp; &lt;other&gt;" in (work / "old.html").read_text(encoding="utf-8")
 
 
 def test_csv_data_field_with_dollar_is_not_substituted_by_colliding_value(tmp_path):

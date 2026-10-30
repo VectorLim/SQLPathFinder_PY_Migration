@@ -66,10 +66,8 @@ def finalize_steps(
         search_from = step_end
         finalized.append(
             EmittedStep(
-                function_name=emission.function_name,
                 block_index=emission.block_index,
                 functional_kind=emission.functional_kind,
-                source=emission.source,
                 source_range=SourceRange(step_start, step_end),
                 parameters=emission.parameters,
             )

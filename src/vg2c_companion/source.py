@@ -208,7 +208,7 @@ def _mapping_for_step(result: Any, step: Any, reason: str) -> SourceMapping:
     owned: list[str] = []
     for parameter in step.parameters:
         value = parameter.value
-        if parameter.artifact_role is None or not isinstance(value, str):
+        if not parameter.artifact_role or not isinstance(value, str):
             continue
         value_name = value.replace("\\", "/")
         if value_name in asset_names and value_name not in owned:

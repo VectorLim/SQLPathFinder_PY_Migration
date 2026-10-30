@@ -42,8 +42,13 @@ def test_html_direct_emission_preserves_editable_shell_and_metadata(tmp_path):
     assert "job.html(" in emitted.source
     assert any(p.endswith(".html") and "data-field" in text for p, text in emitted.assets)
     assert not any(p.endswith(".report.json") for p, _ in emitted.assets)
-    assert all(emitted.source[step.source_range.start_offset:step.source_range.end_offset] == step.source
-               for step in emitted.steps)
+    assert [step.block_index for step in emitted.steps] == [0, 1]
+    previous_end = 0
+    for step, statement in zip(emitted.steps, ("job.reports['R']", "job.html("), strict=True):
+        span = step.source_range
+        assert previous_end <= span.start_offset < span.end_offset
+        assert statement in emitted.source[span.start_offset:span.end_offset]
+        previous_end = span.end_offset
 
 
 def test_deferred_report_state_is_isolated_between_translations(tmp_path):

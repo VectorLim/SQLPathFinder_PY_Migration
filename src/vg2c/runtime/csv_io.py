@@ -47,8 +47,8 @@ class _CsvIO:
         """Read a column from a legacy comma, tab, or pipe-delimited file."""
         rows: list[str] = []
         # Original VG2 SQL_Get_CSV_List uses Windows-relative .\\file paths.
-        # Interpret only their path separators; do not map Windows drives/UNC.
-        if "\\" in path:
+        # Normalize foreign separators without remapping Windows drives/UNC.
+        if "\\" in path and not Path(path).is_absolute():
             windows_path = PureWindowsPath(path)
             if windows_path.drive or windows_path.root:
                 raise ValueError(f"Windows absolute CSV-list path is unsupported: {path!r}")

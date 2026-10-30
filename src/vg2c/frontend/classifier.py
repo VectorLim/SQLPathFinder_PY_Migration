@@ -23,7 +23,7 @@ def classify(
         if result is None:
             classified.append(
                 ClassifiedBlock(
-                    parsed=block, kind=Kind.UNKNOWN, reason="no rule matched"
+                    parsed=block, kind=Kind.UNKNOWN
                 )
             )
             loc = f"{block.span.file or '<input>'}:{block.span.start_line}:1"
@@ -33,13 +33,12 @@ def classify(
             )
             continue
 
-        kind, reason = result
-        classified.append(ClassifiedBlock(parsed=block, kind=kind, reason=reason))
+        classified.append(ClassifiedBlock(parsed=block, kind=result))
 
     return classified
 
 
-def _classify_one(options: BlockOptions) -> tuple[Kind, str] | None:
+def _classify_one(options: BlockOptions) -> Kind | None:
     for utility_cls in EmitterUtility.iter_checks():
         outcome = utility_cls.check(options)
         if outcome is not None:
