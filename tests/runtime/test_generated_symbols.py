@@ -56,18 +56,28 @@ def test_sqlite_generated_script_executes_and_writes_exact_rows(tmp_path):
     fixture = Path(__file__).parents[1] / "fixtures/script_short.txt"
     (tmp_path / "ww_yield.csv").write_text("owner\nAda\nBob\nAda\n", encoding="utf-8")
     result = run_generated(tmp_path, fixture.read_text(encoding="utf-8"))
-    with (tmp_path / "workflow" / "output" / "owner.csv").open(newline="", encoding="utf-8") as stream:
+    with (tmp_path / "workflow" / "output" / "owner.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
         assert list(csv.reader(stream)) == [["owner"], ["Ada"], ["Bob"]]
     assert "class SqliteEngine" not in result.emitted.source
     assert "def check(" not in result.emitted.source
 
 
-def test_smart_append_generated_workflow_executes_twice_without_duplicate_header(tmp_path):
+def test_smart_append_generated_workflow_executes_twice_without_duplicate_header(
+    tmp_path,
+):
     (tmp_path / "source.csv").write_text("id,value\n1,first\n", encoding="utf-8")
     block = '<OPTIONS>\n/UTILITIES=SmartAppend.va "dest.csv" "source.csv"\n</OPTIONS>\n'
     result = run_generated(tmp_path, block + "<---- New Query ---->\n" + block)
-    with (tmp_path / "workflow" / "output" / "dest.csv").open(newline="", encoding="utf-8") as stream:
-        assert list(csv.reader(stream)) == [["id", "value"], ["1", "first"], ["1", "first"]]
+    with (tmp_path / "workflow" / "output" / "dest.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        assert list(csv.reader(stream)) == [
+            ["id", "value"],
+            ["1", "first"],
+            ["1", "first"],
+        ]
     assert "class SmartAppend:" not in result.emitted.source
     assert result.emitted.source.count("smart_append(") == 2
 
@@ -86,7 +96,10 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
     assert (tmp_path / "workflow" / "output" / "copied.txt").read_text() == "Hello Bob"
     assert "job_entrypoint" not in result.emitted.source
     assert "def run():" in result.emitted.source
-    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in result.emitted.source
+    assert (
+        "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)"
+        in result.emitted.source
+    )
     assert "job.run_python('python/step_" in result.emitted.source
     assert any(name.startswith("python/") for name, _ in result.emitted.assets)
     assert "ctx" not in result.emitted.source
@@ -94,7 +107,9 @@ copy_file('hello.txt', 'copied.txt', workdir=workdir)
 
 def test_retired_context_in_embedded_python_has_explicit_diagnostic(tmp_path):
     path = tmp_path / "legacy.txt"
-    path.write_text("<OPTIONS>\n/WRITE-FILE=Y\n/CSV=code.py\n</OPTIONS>\nctx.write_file('x', 'y')\n")
+    path.write_text(
+        "<OPTIONS>\n/WRITE-FILE=Y\n/CSV=code.py\n</OPTIONS>\nctx.write_file('x', 'y')\n"
+    )
     with pytest.raises(ValueError, match="retired ctx API"):
         compile_document(path)
 
@@ -104,10 +119,10 @@ def test_repeat_compilation_is_identical_and_step_ranges_match_source():
     first = compile_document(fixture).emitted
     second = compile_document(fixture).emitted
     assert first == second
-    step, = first.steps
+    (step,) = first.steps
     assert step.block_index == 0
     span = step.source_range
-    assert first.source[span.start_offset:span.end_offset] == (
+    assert first.source[span.start_offset : span.end_offset] == (
         "    job.sql('sql/query_000_owner.sql', output='owner.csv', inputs=['ww_yield.csv'])"
     )
 
@@ -121,11 +136,17 @@ def test_generated_html_layout_resolves_nested_callbacks_and_context_helpers(tmp
         f"COLUMN-HEADERS{delimiter}{delimiter}Name{delimiter}Yield\n"
     )
     layout = ":FILE:report.html\n:TITLE:Generated report\nHTM:REPORT1\n"
-    text = ("<OPTIONS>\n/REPORT=HTML-DEFER\n/ID=REPORT1\n</OPTIONS>\n"
-            + report + "<---- New Query ---->\n"
-            + "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n" + layout)
+    text = (
+        "<OPTIONS>\n/REPORT=HTML-DEFER\n/ID=REPORT1\n</OPTIONS>\n"
+        + report
+        + "<---- New Query ---->\n"
+        + "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n"
+        + layout
+    )
     result = run_generated(tmp_path, text)
-    content = (tmp_path / "workflow" / "output" / "report.html").read_text(encoding="utf-8")
+    content = (tmp_path / "workflow" / "output" / "report.html").read_text(
+        encoding="utf-8"
+    )
     assert "Ada" in content and "85.00%" in content
     assert "<title>Generated report</title>" in content
     assert "job.html(" in result.emitted.source
@@ -160,7 +181,7 @@ runpy.run_path(sys.argv[1], run_name='generated_job')['run']()
         "select 42 as VALUE from dual\n"
     )
     run_generated(tmp_path, text, runner=runner)
-    with (tmp_path / "workflow" / "output" / "result.csv").open(newline="", encoding="utf-8") as stream:
+    with (tmp_path / "workflow" / "output" / "result.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
         assert list(csv.reader(stream)) == [["value"], ["42"]]
-
-

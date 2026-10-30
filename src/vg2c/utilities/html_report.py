@@ -3,6 +3,7 @@
 Generated jobs render only through vg2c.runtime.html. This compiler helper does
 not retain the historical stateful HTML preview/rendering engine.
 """
+
 from __future__ import annotations
 
 import logging
@@ -110,7 +111,9 @@ tr th {{ background-color:#f5f5f5; }}
             key = parts[0].upper()
             if key == "SORT":
                 if any(parts[4:]):
-                    raise ValueError("SORT accepts only a field, order and row-span flag")
+                    raise ValueError(
+                        "SORT accepts only a field, order and row-span flag"
+                    )
                 options.setdefault(key, []).append(parts[1:4])
                 continue
             # 2nd column is an optional sub-key. If blank, values start at [2].
@@ -144,12 +147,23 @@ tr th {{ background-color:#f5f5f5; }}
     def _report_options(self, block):
         options = self.parse_options(block.resolved_body)
         allowed = {
-            "TYPE", "INPUT-FILE", "OUTPUT-FILE", "CSS", "COLUMN-DATA",
-            "COLUMN-HEADERS", "COLUMN-ALIGNMENT", "AT-TOP-OF-REPORT", "NOPREPROCESS",
+            "TYPE",
+            "INPUT-FILE",
+            "OUTPUT-FILE",
+            "CSS",
+            "COLUMN-DATA",
+            "COLUMN-HEADERS",
+            "COLUMN-ALIGNMENT",
+            "AT-TOP-OF-REPORT",
+            "NOPREPROCESS",
             "SORT",
         }
         for name, value in options.items():
-            if name not in allowed and value and str(value).upper() not in {"N", "NO", "FALSE"}:
+            if (
+                name not in allowed
+                and value
+                and str(value).upper() not in {"N", "NO", "FALSE"}
+            ):
                 raise ValueError(f"Active report option {name} is unsupported")
         return options
 
@@ -166,24 +180,51 @@ tr th {{ background-color:#f5f5f5; }}
             label = labels[index] if index < len(labels) else field
             align = alignment[index] if index < len(alignment) else "middle-left"
             # Pattern SOURCE label is a column-name matcher, not a display title.
-            pattern = f' data-pattern="{escape(label, quote=True).replace("$", "&#36;")}"' if field.upper() in (
-                "STARTS WITH:", "ENDS WITH:", "CONTAINS:", "STARTS/ENDS WITH (%):"
-            ) else ""
+            pattern = (
+                f' data-pattern="{escape(label, quote=True).replace("$", "&#36;")}"'
+                if field.upper()
+                in ("STARTS WITH:", "ENDS WITH:", "CONTAINS:", "STARTS/ENDS WITH (%):")
+                else ""
+            )
             display = "Matching CSV columns" if pattern else label
-            parts.append(f'<th data-field="{escape(field, quote=True).replace("$", "&#36;")}"{pattern} '
-                         f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$$")}</th>')
+            parts.append(
+                f'<th data-field="{escape(field, quote=True).replace("$", "&#36;")}"{pattern} '
+                f'data-align="{escape(align, quote=True)}">{escape(display).replace("$", "$$")}</th>'
+            )
         top = options.get("AT-TOP-OF-REPORT")
-        heading = '<p class="at-top-of-report">' + escape(" ".join(cls._list(top))).replace("$", "$$") + "</p>\n" if top else ""
+        heading = (
+            '<p class="at-top-of-report">'
+            + escape(" ".join(cls._list(top))).replace("$", "$$")
+            + "</p>\n"
+            if top
+            else ""
+        )
         sorting = []
         for row in options.get("SORT", []):
-            if (len(row) != 3 or not row[0] or row[1].upper() not in {"ASC", "DESC", ""}
-                    or row[2].upper() not in {"Y", "N", ""}):
+            if (
+                len(row) != 3
+                or not row[0]
+                or row[1].upper() not in {"ASC", "DESC", ""}
+                or row[2].upper() not in {"Y", "N", ""}
+            ):
                 raise ValueError(f"Invalid report SORT row: {row!r}")
             sorting.append([row[0], row[1].upper() or "ASC", row[2].upper() == "Y"])
-        sort_attribute = (' data-sort="' + escape(json.dumps(sorting), quote=True).replace("$", "&#36;") + '"') if sorting else ""
-        return (heading + f'<table class="tblin" data-report="{escape(report_id, quote=True)}"{sort_attribute}>'
-                '<thead><tr id="colhdr">' + "".join(parts) +
-                '</tr></thead><tbody></tbody><tfoot></tfoot></table>')
+        sort_attribute = (
+            (
+                ' data-sort="'
+                + escape(json.dumps(sorting), quote=True).replace("$", "&#36;")
+                + '"'
+            )
+            if sorting
+            else ""
+        )
+        return (
+            heading
+            + f'<table class="tblin" data-report="{escape(report_id, quote=True)}"{sort_attribute}>'
+            '<thead><tr id="colhdr">'
+            + "".join(parts)
+            + "</tr></thead><tbody></tbody><tfoot></tfoot></table>"
+        )
 
     @staticmethod
     def _operation_definition(method):
@@ -208,14 +249,20 @@ tr th {{ background-color:#f5f5f5; }}
             definition,
             parameters=tuple(
                 [path]
-                + [item for item in definition.parameters if item.name not in {"ctx", "template"}]
+                + [
+                    item
+                    for item in definition.parameters
+                    if item.name not in {"ctx", "template"}
+                ]
             ),
         )
         return EmittableOperation.render_method_call(
             definition,
             function="job.html",
             args=tuple(native_argument(value, macros) for value in args),
-            kwargs={key: native_argument(value, macros) for key, value in kwargs.items()},
+            kwargs={
+                key: native_argument(value, macros) for key, value in kwargs.items()
+            },
         )
 
     def emit_block(self, block, *, macros="macros") -> BlockEmission:
@@ -239,11 +286,19 @@ tr th {{ background-color:#f5f5f5; }}
         # SPFSQL3.py:20083-20100: CSS and HTML have immediate effects.
         rows = list(self._iter_rows(block.resolved_body))
         # The first TYPE/KEY/COL1... row is the spec header, not the report type.
-        kind = next((parts[1].upper() for parts in rows
-                     if parts[0].upper() == "TYPE" and parts[1].upper() != "KEY"), "")
+        kind = next(
+            (
+                parts[1].upper()
+                for parts in rows
+                if parts[0].upper() == "TYPE" and parts[1].upper() != "KEY"
+            ),
+            "",
+        )
         definition = self._operation_definition(method)
         if kind == "CSS":
-            logical_name = next((parts[1] for parts in rows if parts[0].upper() == "CSS"), "")
+            logical_name = next(
+                (parts[1] for parts in rows if parts[0].upper() == "CSS"), ""
+            )
             if not logical_name:
                 return BlockEmission(
                     (self._tracked(["pass"], definition),),
@@ -252,10 +307,16 @@ tr th {{ background-color:#f5f5f5; }}
                 raise ValueError(
                     "Dynamic HTML-RUN CSS filenames require source-backed runtime generation"
                 )
-            styles = {parts[1]: parts[2:] for parts in rows if parts[0].upper() == "FORMAT"}
+            styles = {
+                parts[1]: parts[2:] for parts in rows if parts[0].upper() == "FORMAT"
+            }
             name = f"styles/report_{block.index:03d}.css"
             return BlockEmission(
-                (self._tracked([f"job.define_css({logical_name!r}, {name!r})"], definition),),
+                (
+                    self._tracked(
+                        [f"job.define_css({logical_name!r}, {name!r})"], definition
+                    ),
+                ),
                 assets=((name, build_css(styles) + "\n"),),
             )
         if kind == "HTML":
@@ -269,11 +330,14 @@ tr th {{ background-color:#f5f5f5; }}
             name = f"html/report_{block.index:03d}.html"
             input_file = options.get("INPUT-FILE", "")
             output = options.get("OUTPUT-FILE") or "SQLPathFinder.htm"
-            call = self._tracked([
-                f"job.html({name!r}, output={native_macro_expression(output, macros)}, "
-                f"reports={{{report_id!r}: "
-                f"csv_report({native_macro_expression(input_file, macros)})}})"
-            ], definition)
+            call = self._tracked(
+                [
+                    f"job.html({name!r}, output={native_macro_expression(output, macros)}, "
+                    f"reports={{{report_id!r}: "
+                    f"csv_report({native_macro_expression(input_file, macros)})}})"
+                ],
+                definition,
+            )
             return BlockEmission(
                 (call,),
                 runtime_exports=("csv_report",),
@@ -284,7 +348,9 @@ tr th {{ background-color:#f5f5f5; }}
             return BlockEmission(
                 (self._tracked(["pass"], definition),),
             )
-        raise ValueError(f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS, HTML or KEY")
+        raise ValueError(
+            f"Unsupported HTML-RUN TYPE {kind!r}; expected CSS, HTML or KEY"
+        )
 
     def _emit_defer(self, block, macros, method):
         options = self._report_options(block)
@@ -295,13 +361,16 @@ tr th {{ background-color:#f5f5f5; }}
         input_file = options.get("INPUT-FILE", "")
         output_file = options.get("OUTPUT-FILE")
         assets = ()
-        if (self.layout_references.get(report_id, 0) > 1
-                or self.report_definitions.get(report_id, 0) > 1):
+        if (
+            self.layout_references.get(report_id, 0) > 1
+            or self.report_definitions.get(report_id, 0) > 1
+        ):
             fragment = f"html/reports/{report_id}_{block.index:03d}.table.html"
             assets = ((fragment, self._table(report_id, options) + "\n"),)
             report_ctor = native_expression(
                 f"job.report({fragment!r}, input_file={input_file!r}, "
-                f"output_file={output_file!r})", macros
+                f"output_file={output_file!r})",
+                macros,
             )
         else:
             report_ctor = native_expression(
@@ -327,17 +396,26 @@ tr th {{ background-color:#f5f5f5; }}
                 directives[key.upper()] = value.strip()
             else:
                 body.append(line)
-        unsupported = [key for key, value in directives.items()
-                       if key not in {"FILE", "TITLE", "CSS", "CSSEMBED"}
-                       and value and value.upper() not in {"N", "NO", "FALSE"}]
-        unsupported += [key for key in ("OUTLOOK", "JSON-ONLY", "CHART-INSTANCE", "APP_SERVER_DEFAULT")
-                        if (value := block.resolved_options.lookup.get(key))
-                        and value.upper() not in {"N", "NO", "FALSE"}]
+        unsupported = [
+            key
+            for key, value in directives.items()
+            if key not in {"FILE", "TITLE", "CSS", "CSSEMBED"}
+            and value
+            and value.upper() not in {"N", "NO", "FALSE"}
+        ]
+        unsupported += [
+            key
+            for key in ("OUTLOOK", "JSON-ONLY", "CHART-INSTANCE", "APP_SERVER_DEFAULT")
+            if (value := block.resolved_options.lookup.get(key))
+            and value.upper() not in {"N", "NO", "FALSE"}
+        ]
         if unsupported:
             # Preserve the original diagnostic category for callers that capture logs.
             logging.getLogger("vg2c.emitter.project").warning(
                 "[local-html-only] %s:%s:1 (block %s): Local HTML output does not implement %s; delivery/browser/security/chart integration is outside this renderer.",
-                block.span.file or "<input>", block.span.start_line, block.index,
+                block.span.file or "<input>",
+                block.span.start_line,
+                block.index,
                 ", ".join(unsupported),
             )
         source = "".join(body).replace("$", "$$")
@@ -345,7 +423,9 @@ tr th {{ background-color:#f5f5f5; }}
             raise ValueError("HTMI/HTMIC interactive layout references are unsupported")
         for candidate in re.finditer(r"(?im)^[ \t]*HTM:[^\r\n]*", source):
             if not _HTM_LAYOUT_LINE.fullmatch(candidate.group(0)):
-                raise ValueError(f"Malformed HTM: report directive {candidate.group(0)!r}")
+                raise ValueError(
+                    f"Malformed HTM: report directive {candidate.group(0)!r}"
+                )
 
         return directives, _HTM_LAYOUT_LINE.sub(self._insert_report, source)
 
@@ -355,8 +435,10 @@ tr th {{ background-color:#f5f5f5; }}
             raise ValueError(f"Unknown deferred report {report_id!r} in HTML-LAYOUT")
         content = (
             ("${" + report_id + "_TABLE}")
-            if (self.layout_references.get(report_id, 0) > 1
-                or self.report_definitions.get(report_id, 0) > 1)
+            if (
+                self.layout_references.get(report_id, 0) > 1
+                or self.report_definitions.get(report_id, 0) > 1
+            )
             else self._table(report_id, self.report_options[report_id])
         )
         return match.group("indent") + content + match.group("suffix")
@@ -365,7 +447,9 @@ tr th {{ background-color:#f5f5f5; }}
         source = body
         if "<html" not in source.lower():
             source = self._HTML_SCAFFOLD.format(
-                title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace("$", "$$"),
+                title=escape(directives.get("TITLE", "SQLPathFinder Report")).replace(
+                    "$", "$$"
+                ),
                 css_decl="${VG2C_CSS}",
                 body=source,
             )
@@ -397,9 +481,7 @@ tr th {{ background-color:#f5f5f5; }}
         if extra_values:
             values = slot_values + [f"{key!r}: {value}" for key, value in extra_values]
             kwargs["values"] = CodeExpr("{" + ", ".join(values) + "}")
-        call = self._render_layout_call(
-            CodeExpr(repr(name)), macros=macros, **kwargs
-        )
+        call = self._render_layout_call(CodeExpr(repr(name)), macros=macros, **kwargs)
         return BlockEmission(
             (call,),
             assets=((name, source),),
@@ -407,15 +489,21 @@ tr th {{ background-color:#f5f5f5; }}
 
     @emittable
     def run(
-        self, instance: str | None = None, prompt_text: str | None = None,
-        app_server_default: str | None = None, template: str | None = None,
+        self,
+        instance: str | None = None,
+        prompt_text: str | None = None,
+        app_server_default: str | None = None,
+        template: str | None = None,
     ) -> None:
         raise NotImplementedError("Compiler metadata only; use JobRuntime.html")
 
     @emittable
     def defer(
-        self, id: str, instance: str | None = None,
-        prompt_text: str | None = None, app_server_default: str | None = None,
+        self,
+        id: str,
+        instance: str | None = None,
+        prompt_text: str | None = None,
+        app_server_default: str | None = None,
         template: str | None = None,
     ) -> None:
         raise NotImplementedError("Compiler metadata only; use JobRuntime.report")
@@ -426,8 +514,12 @@ tr th {{ background-color:#f5f5f5; }}
 
     @emittable
     def layout(
-        self, ctx: Any, template: str, outlook: str | None = None,
-        instance: str | None = None, json_only: str | None = None,
+        self,
+        ctx: Any,
+        template: str,
+        outlook: str | None = None,
+        instance: str | None = None,
+        json_only: str | None = None,
         chart_instance: str | None = None,
         app_server_default: str | None = None,
     ) -> None:

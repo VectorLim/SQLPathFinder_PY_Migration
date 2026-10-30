@@ -91,7 +91,7 @@ def test_scopes_and_independent_runs_and_empty_csv(tmp_path):
     for step, name in zip(emitted.steps, ("outer", "inner", "restored"), strict=True):
         span = step.source_range
         assert previous_end <= span.start_offset < span.end_offset
-        assert code[span.start_offset:span.end_offset].strip() == (
+        assert code[span.start_offset : span.end_offset].strip() == (
             f"job.update_file(path='{name}.txt', asset='files/{name}.txt')"
         )
         previous_end = span.end_offset
