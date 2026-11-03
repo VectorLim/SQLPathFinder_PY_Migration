@@ -87,7 +87,9 @@ def test_project_includes_ca_certificate_beside_entrypoint(tmp_path):
     main = translate(source)
     certificate = main.with_name("IntelSHA256RootCA-Base64.crt")
     bundled = files("vg2c.runtime").joinpath(certificate.name)
-    assert certificate.read_text(encoding="ascii") == bundled.read_text(encoding="ascii")
+    assert certificate.read_text(encoding="ascii") == bundled.read_text(
+        encoding="ascii"
+    )
     ssl.create_default_context(cafile=str(certificate))
 
 

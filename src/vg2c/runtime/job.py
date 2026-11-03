@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import Callable, Mapping
-from functools import wraps
+from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
-from typing import Concatenate, ParamSpec, TypeVar, cast
 
 from vg2c.runtime.file_store import input_path
 from vg2c.runtime.aed_client import AEDClient, identifier
@@ -27,10 +25,6 @@ from vg2c.runtime.macros import MacroStore
 from vg2c.runtime.mail import send_mail
 from vg2c.runtime.query import execute_sql
 from vg2c.runtime.values import job_path, read_macro_row, snapshot_values, substitute
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
 
 def csr_lots(path, column, *, workdir, files=None):
     """Return the distinct lot IDs of one CSV column (header matched case-insensitively)."""
@@ -56,31 +50,6 @@ def csr_comment(note, ccb):
     if not str(ccb).strip():
         raise ValueError("CSR requests require a CCB number")
     return f"{note}\nCCB: {ccb}"
-
-
-def operation(
-    name: str,
-    skipped: Callable[[], object] | None = None,
-) -> Callable[
-    [Callable[Concatenate["JobRuntime", P], R]],
-    Callable[Concatenate["JobRuntime", P], R],
-]:
-    """Tag a JobRuntime method; skip it when `name` is excluded in test mode."""
-
-    def decorate(
-        method: Callable[Concatenate["JobRuntime", P], R],
-    ) -> Callable[Concatenate["JobRuntime", P], R]:
-
-        @wraps(method)
-        def run(self: "JobRuntime", *args: P.args, **kwargs: P.kwargs) -> R:
-            if not self.enabled(name):
-                return cast(R, skipped() if skipped else None)
-            return method(self, *args, **kwargs)
-
-        setattr(run, "operation", name)
-        return run
-
-    return decorate
 
 
 class JobRuntime:
@@ -140,9 +109,10 @@ class JobRuntime:
             raise ValueError("Asset path must remain inside the generated project")
         return resolved
 
-    @operation("run_python")
     def run_python(self, path, **names):
         """Run an embedded-Python asset in a namespace shared across all such assets."""
+        if not self.enabled("run_python"):
+            return
         asset = self.asset_path(path)
         if self._python_globals is None:
             self._python_globals = {
@@ -205,7 +175,6 @@ class JobRuntime:
             table_template=self.asset_path(template),
         )
 
-    @operation("sql")
     def sql(
         self,
         path,
@@ -226,6 +195,8 @@ class JobRuntime:
         pivot_header_ref=None,
         pivot_legacy_headers=False,
     ):
+        if not self.enabled("sql"):
+            return
         return execute_sql(
             self.asset_path(path),
             reader=reader,
@@ -249,12 +220,13 @@ class JobRuntime:
             pivot_legacy_headers=pivot_legacy_headers,
         )
 
-    @operation("define_css")
     def define_css(self, output, asset):
         """Publish an editable stylesheet when HTML-RUN CSS executes.
 
         SPFSQL3.py:20095-20098 and SPFUtilities/utils.py:9028-9047.
         """
+        if not self.enabled("define_css"):
+            return
         source = self.asset_path(asset)
         target = job_path(
             substitute(str(output), values=self.values, macros=self.macros),
@@ -267,14 +239,14 @@ class JobRuntime:
         self.css_file = str(target)
         return target
 
-    @operation("delete_html")
     def delete_html(self):
         """Remove only used deferred reports (SPFSQL3.py:20244-20250)."""
+        if not self.enabled("delete_html"):
+            return
         for report_id in self._used_html_reports:
             self.reports.pop(report_id, None)
         self._used_html_reports.clear()
 
-    @operation("html")
     def html(
         self,
         path,
@@ -286,6 +258,8 @@ class JobRuntime:
         embed_css=False,
         reports=None,
     ):
+        if not self.enabled("html"):
+            return
         slots = self.values if values is None else {**self.values, **values}
         selected = self.css_file if css_file is None else css_file
         if css_file is not None and not Path(str(css_file)).is_absolute():
@@ -314,8 +288,9 @@ class JobRuntime:
             files=self.files,
         )
 
-    @operation("write_file")
     def write_file(self, path, template, *, vars=None):
+        if not self.enabled("write_file"):
+            return
         return write_file(
             path,
             template,
@@ -326,17 +301,19 @@ class JobRuntime:
             files=self.files,
         )
 
-    @operation("load_file")
     def load_file(self, path, asset):
         """Activate an editable WRITE-FILE asset without changing it."""
+        if not self.enabled("load_file"):
+            return
         source = self.asset_path(asset)
         if not source.is_file():
             raise FileNotFoundError(str(source))
         self.files[job_path(path, self.workdir).resolve()] = source
 
-    @operation("update_file")
     def update_file(self, path, asset):
         """Expand the original template afresh at its source execution point."""
+        if not self.enabled("update_file"):
+            return
         content = self.asset_path(asset).read_text(encoding="utf-8")
         content = substitute(content, values=self.values, macros=self.macros)
         self.files[job_path(path, self.workdir).resolve()] = content.encode("utf-8")
@@ -362,30 +339,35 @@ class JobRuntime:
             files=self.files,
         )
 
-    @operation("copy_file")
     def copy_file(self, src, dst, *, recurse=False):
+        if not self.enabled("copy_file"):
+            return
         return copy_file(
             src, dst, workdir=self.workdir, recurse=recurse, files=self.files
         )
 
-    @operation("rename_file")
     def rename_file(self, src, dst):
+        if not self.enabled("rename_file"):
+            return
         return rename_file(src, dst, workdir=self.workdir, files=self.files)
 
-    @operation("delete_files")
     def delete_files(self, paths, *, recurse=False):
+        if not self.enabled("delete_files"):
+            return
         return delete_files(
             paths, workdir=self.workdir, recurse=recurse, files=self.files
         )
 
-    @operation("wait_file")
     def wait_file(self, path, timeout=30, *, interval=5):
+        if not self.enabled("wait_file"):
+            return
         return wait_file(
             path, timeout, workdir=self.workdir, interval=interval, files=self.files
         )
 
-    @operation("run_program")
     def run_program(self, argv, *, cwd=None, env=None, check=False, exedir=None):
+        if not self.enabled("run_program"):
+            return
         return run_program(
             argv,
             workdir=self.workdir,
@@ -396,14 +378,16 @@ class JobRuntime:
             files=self.files,
         )
 
-    @operation("smart_append")
     def smart_append(self, destination, source):
+        if not self.enabled("smart_append"):
+            return
         return smart_append(destination, source, workdir=self.workdir, files=self.files)
 
-    @operation("email")
     def send_mail(
         self, to, subject, body, attachments=None, from_addr=None, enabled=True
     ):
+        if not self.enabled("email"):
+            return
         return send_mail(
             to,
             subject,
@@ -421,15 +405,17 @@ class JobRuntime:
         """False when `name` is in TEST_MODE_EXCLUDED and ENV_MODE is test."""
         return self.env_mode == "prod" or name not in self.test_mode_excluded
 
-    @operation("mms")
     def submit_mms(self, src, dst, *, recurse=False):
+        if not self.enabled("mms"):
+            return
         return copy_file(
             src, dst, workdir=self.workdir, recurse=recurse, files=self.files
         )
 
-    @operation("csr", skipped=list)
     def csr_lots(self, path, column):
         """Distinct lot IDs of `column` in this run's `path` CSV."""
+        if not self.enabled("csr"):
+            return []
         return csr_lots(
             self.macros.substitute(str(path)),
             column,
@@ -440,8 +426,9 @@ class JobRuntime:
     def csr_comment(self, note, ccb):
         return csr_comment(note, ccb)
 
-    @operation("csr")
-    def aed(self, facility) -> AEDClient:
+    def aed(self, facility) -> AEDClient | None:
+        if not self.enabled("csr"):
+            return
         self._aed = AEDClient(facility, environ=self.environ)
         return self._aed
 

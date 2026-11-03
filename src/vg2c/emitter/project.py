@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import csv
+import re
 from collections import Counter
 from importlib.resources import files
+from itertools import groupby
 
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import BlockEmission, EmittedScope, EmittedScript, SourceRange
@@ -51,9 +54,10 @@ def emit_project(dispatched):
     )
     certificate = "IntelSHA256RootCA-Base64.crt"
     assets = {
-        certificate: files("vg2c.runtime").joinpath(certificate).read_text(encoding="ascii")
+        certificate: files("vg2c.runtime")
+        .joinpath(certificate)
+        .read_text(encoding="ascii")
     }
-    steps = []
     scope_lines = []
     imports = {"from pathlib import Path"}
     has_state = any(
@@ -63,7 +67,12 @@ def emit_project(dispatched):
         for block in blocks.values()
     )
     runtime_imports = {"JobRuntime"}
-    writer = IndentWriter()
+    main_writer = IndentWriter()
+    helper_writer = IndentWriter()
+    main_steps = []
+    helper_steps = []
+    writer = main_writer
+    steps = main_steps
     writer.write("def run():")
     writer.push_indent()
     writer.write(
@@ -73,7 +82,14 @@ def emit_project(dispatched):
     if has_state:
         writer.write("macros = job.macros")
 
-    def walk(node, macros="macros"):
+    def walk(node, macros="macros", *, grouped=True):
+        if grouped:
+            if id(node) in grouped_siblings:
+                return
+            if id(node) in prepost_groups:
+                root, members = prepost_groups[id(node)]
+                emit_prepost(root, members, macros)
+                return
         if node.kind == "leaf":
             block = blocks[node.block_index]
             if block.index in csr_workflow.producers:
@@ -157,8 +173,128 @@ def emit_project(dispatched):
             )
         if node.control_payload is not None and len(writer.lines) > start_line:
             scope_lines.append(
-                (node.start_index, node.end_index, start_line, len(writer.lines))
+                (
+                    node.start_index,
+                    node.end_index,
+                    start_line,
+                    len(writer.lines),
+                    writer is helper_writer,
+                )
             )
+
+    prepost_pattern = re.compile(r"^Step\s+([0-9]+)-[0-9]+(?:[.-][0-9A-Za-z]+)*\.(?:\s|$)")
+
+    def prepost_root(node):
+        first = blocks[node.start_index].resolved_options.lookup.get("PROMPT-TEXT", "")
+        match = prepost_pattern.match(first)
+        if match is None:
+            return None
+        root = match.group(1)
+        for index in range(node.start_index, node.end_index + 1):
+            prompt = blocks[index].resolved_options.lookup.get("PROMPT-TEXT", "")
+            if prompt:
+                member = prepost_pattern.match(prompt)
+                if member is None or member.group(1) != root:
+                    return None
+        return root
+
+    prepost_groups = {}
+    grouped_siblings = set()
+
+    def find_groups(node):
+        children = node.children
+        roots = [prepost_root(child) for child in children]
+        for position, child in enumerate(children):
+            if position == 0 or roots[position] is not None or child.kind != "leaf":
+                continue
+            options = blocks[child.block_index].resolved_options.lookup
+            if options.get("PROMPT-TEXT") or options.get("DELETE", "").casefold() != "*instance*":
+                continue
+            previous = children[position - 1]
+            prompt = blocks[previous.start_index].resolved_options.lookup.get("PROMPT-TEXT", "")
+            root = roots[position - 1]
+            if root is None or not re.search(r"-a[0-9]+\.(?:\s|$)", prompt):
+                continue
+            tables = {
+                name.strip().casefold()
+                for name in next(csv.reader([options.get("TABLE", "")]))
+                if name.strip()
+            }
+            produced = set()
+            group_start = position - 1
+            while group_start > 0 and roots[group_start - 1] == root:
+                group_start -= 1
+            for member in children[group_start:position]:
+                for index in range(member.start_index, member.end_index + 1):
+                    source_options = blocks[index].resolved_options.lookup
+                    if source_options.get("INSTANCE") == options.get("INSTANCE"):
+                        produced.add(source_options.get("CSV", "").strip().casefold())
+            if tables and tables <= produced:
+                roots[position] = root
+        position = 0
+        while position < len(children):
+            if roots[position] is not None:
+                position += 1
+                continue
+            gap_start = position
+            while position < len(children) and roots[position] is None and not any(
+                blocks[index].resolved_options.lookup.get("PROMPT-TEXT")
+                for index in range(children[position].start_index, children[position].end_index + 1)
+            ):
+                position += 1
+            if (
+                gap_start > 0
+                and position < len(children)
+                and roots[gap_start - 1] is not None
+                and roots[gap_start - 1] == roots[position]
+            ):
+                roots[gap_start:position] = [roots[position]] * (position - gap_start)
+            if position == gap_start:
+                position += 1
+        for root, entries in groupby(zip(roots, children, strict=True), key=lambda entry: entry[0]):
+            members = tuple(child for _, child in entries)
+            if root is None:
+                for member in members:
+                    find_groups(member)
+            else:
+                prepost_groups[id(members[0])] = (root, members)
+                grouped_siblings.update(id(member) for member in members[1:])
+
+    find_groups(scope_tree)
+    function_names = set()
+
+    def emit_prepost(root, members, macros):
+        nonlocal writer, steps
+        caller_writer, caller_steps = writer, steps
+        prompt = blocks[members[0].start_index].resolved_options.lookup["PROMPT-TEXT"]
+        description = prompt[prepost_pattern.match(prompt).end() :]
+        slug = re.sub(r"[^a-z0-9]+", "_", description.lower()).strip("_")
+        base = f"prepost_{root}" + (f"_{slug}" if slug else "")
+        name = base
+        suffix = 2
+        while name in function_names:
+            name = f"{base}_{suffix}"
+            suffix += 1
+        function_names.add(name)
+        arguments = "job, macros" if has_state else "job"
+        call_arguments = f"job, {macros}" if has_state else "job"
+        caller_writer.write(f"{name}({call_arguments})")
+        writer = helper_writer
+        steps = helper_steps
+        writer.write(f"def {name}({arguments}):")
+        writer.push_indent()
+        function_start = len(writer.lines)
+        for member in members:
+            walk(member, grouped=False)
+        if not any(
+            line.strip() and not line.lstrip().startswith("#")
+            for line in writer.lines[function_start:]
+        ):
+            writer.write("pass")
+        writer.pop_indent()
+        writer.write("")
+        writer.write("")
+        writer, steps = caller_writer, caller_steps
 
     walk(scope_tree)
     if not any(
@@ -167,6 +303,10 @@ def emit_project(dispatched):
     ):
         writer.write("pass")
     writer.pop_indent()
+    helper_line_count = len(helper_writer.lines)
+    writer = IndentWriter()
+    writer.lines.extend(helper_writer.lines)
+    writer.lines.extend(main_writer.lines)
     if runtime_imports:
         imports.add("from vg2c.runtime import " + ", ".join(sorted(runtime_imports)))
     reader_imports = sorted(
@@ -183,13 +323,22 @@ def emit_project(dispatched):
     )
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
-    finalized = finalize_steps(source, steps)
+    finalized = sorted(
+        finalize_steps(source, helper_steps + main_steps), key=lambda step: step.block_index
+    )
     offsets = [len(header)]
     for line in writer.lines:
         offsets.append(offsets[-1] + len(line) + 1)
     scopes = tuple(
-        EmittedScope(start, end, SourceRange(offsets[first], offsets[last] - 1))
-        for start, end, first, last in scope_lines
+        EmittedScope(
+            start,
+            end,
+            SourceRange(
+                offsets[first + (0 if helper else helper_line_count)],
+                offsets[last + (0 if helper else helper_line_count)] - 1,
+            ),
+        )
+        for start, end, first, last, helper in scope_lines
     )
     return EmittedScript(
         source=source,

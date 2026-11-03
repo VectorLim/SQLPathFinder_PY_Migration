@@ -39,28 +39,62 @@ def test_one_policy_controls_operations_and_delivery(
     ]
 
 
-def test_every_action_method_is_tagged_and_any_tag_can_be_excluded(
-    tmp_path, monkeypatch
-):
-    tags = {
-        name: getattr(member, "operation", None)
-        for name, member in vars(JobRuntime).items()
-    }
-    assert tags["send_mail"] == "email" and tags["submit_mms"] == "mms"
-    assert tags["aed"] == tags["csr_lots"] == "csr"
-    assert tags["sql"] == "sql" and tags["copy_file"] == "copy_file"
-    assert tags["row_count"] is None and tags["read_macro_row"] is None
-    monkeypatch.setattr(
-        "vg2c.runtime.job.write_file", lambda *a, **kw: pytest.fail("excluded")
-    )
+@pytest.mark.parametrize(
+    "method, operation, args, kwargs",
+    [
+        ("run_python", "run_python", ("missing.py",), {}),
+        ("sql", "sql", ("missing.sql",), {"output": "out.csv"}),
+        ("define_css", "define_css", ("out.css", "missing.css"), {}),
+        ("delete_html", "delete_html", (), {}),
+        ("html", "html", ("missing.htm",), {"output": "out.htm"}),
+        ("write_file", "write_file", ("out.txt", "content"), {}),
+        ("load_file", "load_file", ("out.txt", "missing.txt"), {}),
+        ("update_file", "update_file", ("out.txt", "missing.txt"), {}),
+        ("copy_file", "copy_file", ("missing.csv", "out.csv"), {}),
+        ("rename_file", "rename_file", ("missing.csv", "out.csv"), {}),
+        ("delete_files", "delete_files", (["keep.txt"],), {}),
+        ("wait_file", "wait_file", ("missing.csv",), {"timeout": 0}),
+        ("run_program", "run_program", (["missing-program"],), {}),
+        ("smart_append", "smart_append", ("out.csv", "missing.csv"), {}),
+        ("send_mail", "email", ("owner@test", "subject", "missing.htm"), {}),
+        ("submit_mms", "mms", ("missing.csv", "out.csv"), {}),
+        ("csr_lots", "csr", ("missing.csv", "lot"), {}),
+        ("aed", "csr", ("A15",), {}),
+    ],
+)
+def test_excluded_operation_has_no_side_effects(tmp_path, method, operation, args, kwargs):
     job = JobRuntime(
         tmp_path,
         tmp_path / "out",
         environ={"ENV_MODE": "test"},
-        test_mode_excluded={"write_file"},
+        test_mode_excluded={operation},
     )
-    assert job.write_file("a.txt", "x") is None
+    job.workdir.mkdir()
+    kept = job.workdir / "keep.txt"
+    kept.write_text("keep")
+    job.reports["keep"] = "report"
+    job._used_html_reports.add("keep")
+
+    result = getattr(job, method)(*args, **kwargs)
+
+    if method == "csr_lots":
+        assert result == []
+    else:
+        assert result is None
+    assert kept.read_text() == "keep"
+    assert list(job.workdir.iterdir()) == [kept]
+    assert job.files == {}
+    assert job.reports == {"keep": "report"}
+    assert job._used_html_reports == {"keep"}
+    assert job.css_file is None
+    assert job._python_globals is None
+    assert job._aed is None
+
+
+def test_skipped_csr_lots_returns_a_fresh_list(tmp_path):
     job = JobRuntime(tmp_path, tmp_path / "out", environ={"ENV_MODE": "test"})
+    first = job.csr_lots("missing.csv", "lot")
+    first.append("changed")
     assert job.csr_lots("missing.csv", "lot") == []
 
 

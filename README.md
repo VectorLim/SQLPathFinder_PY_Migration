@@ -58,6 +58,18 @@ Literal values belong to their individual calls rather than shared
 generated globals. Embedded Python must use explicit runtime functions and
 `workdir`; the retired `ctx` API and top-level return/yield have diagnostics.
 
+TXT prompt IDs such as `Step 6-1.` and `Step 6-2.` identify contiguous pre/post
+members. These emit module-level functions named from the first member's prompt,
+such as `prepost_6_fetch_data(job, macros)`, called at the original point in `run()`.
+Names are sanitized Python identifiers with suffixes for duplicates; prompts
+without a description fall back to `prepost_6`. Job and macro state are passed
+explicitly, with the macro argument omitted when unused. Ordinary query
+IDs such as `Step 7.0.` stay inline. Missing or conflicting IDs are not guessed;
+mixed control scopes stay intact, with identified child groups called inside their
+original gates. Unmarked blocks bounded by matching group IDs remain in that group.
+Unmarked instance-consolidation SQL also belongs to the preceding fetch group when
+its table inputs match that group's outputs and instance. Query order is unchanged.
+
 The generated project has been checked in a clean Linux virtual environment using
 a built and installed `vg2c` wheel. The offline probe covers a moved generated project,
 changed working directory, parameterless `run()`, SQLite, crosstab/CTARRAY,
@@ -151,8 +163,8 @@ TEST_MODE_EXCLUDED = {"csr", "email", "mms"}
 ```
 
 The setting is passed once to `JobRuntime.from_script`. Every `JobRuntime` action
-method carries an `.operation` tag and returns without running when that tag is
-excluded in test mode: `send_mail` is `email`, `submit_mms` is `mms`,
+method checks `enabled()` before doing work and returns when its operation name
+is excluded in test mode: `send_mail` is `email`, `submit_mms` is `mms`,
 `csr_lots` / `aed` are `csr`, and the rest use their own name (`sql`,
 `copy_file`, `write_file`, ...), so any of them can be listed. Readers such as
 `row_count` and `read_macro_row` are never skipped. The generated CSR and MMS

@@ -47,9 +47,6 @@ def run():
         ],
     )
 
-    aed_client = AEDClient("A15", environ=job.environ)
-    aed_client.lot_status("7641G630")
-
 
 if __name__ == "__main__":
     run()
