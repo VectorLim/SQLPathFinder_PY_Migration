@@ -31,26 +31,42 @@ def run_job(main):
     return namespace["_job"]
 
 
-def test_prepost_functions_leave_intervening_normal_queries_inline(tmp_path, monkeypatch):
+def test_prepost_functions_leave_intervening_normal_queries_inline(
+    tmp_path, monkeypatch
+):
     source = tmp_path / "prepost.txt"
     source.write_text(
-        block("/ENGINE=SQLite\n/CSV=first.csv\n/PROMPT-TEXT=Step 1-1. Fetch first / data", "SELECT 1")
+        block(
+            "/ENGINE=SQLite\n/CSV=first.csv\n/PROMPT-TEXT=Step 1-1. Fetch first / data",
+            "SELECT 1",
+        )
         + block("/ENGINE=SQLite\n/CSV=second.csv\n/PROMPT-TEXT=Step 1-2.", "SELECT 2")
         + block("/ENGINE=SQLite\n/CSV=normal.csv\n/PROMPT-TEXT=Step 2.0.", "SELECT 3")
-        + block("/ENGINE=SQLite\n/CSV=last.csv\n/PROMPT-TEXT=Step 3-1. Finish!", "SELECT 4")
+        + block(
+            "/ENGINE=SQLite\n/CSV=last.csv\n/PROMPT-TEXT=Step 3-1. Finish!", "SELECT 4"
+        )
         + block("/ENGINE=SQLite\n/CSV=unmarked.csv", "SELECT 5")
     )
     main = translate(source)
     tree = ast.parse(main.read_text())
     run = next(
-        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run"
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run"
     )
     helpers = [
-        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name != "run"
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name != "run"
     ]
-    assert [node.name for node in helpers] == ["prepost_1_fetch_first_data", "prepost_3_finish"]
+    assert [node.name for node in helpers] == [
+        "prepost_1_fetch_first_data",
+        "prepost_3_finish",
+    ]
     assert not any(isinstance(node, ast.FunctionDef) for node in run.body)
-    assert all([argument.arg for argument in node.args.args] == ["job"] for node in helpers)
+    assert all(
+        [argument.arg for argument in node.args.args] == ["job"] for node in helpers
+    )
     inline_sql = [
         node.value.keywords[0].value.value
         for node in run.body
@@ -61,19 +77,33 @@ def test_prepost_functions_leave_intervening_normal_queries_inline(tmp_path, mon
     ]
     assert inline_sql == ["normal.csv", "unmarked.csv"]
     calls = []
-    monkeypatch.setattr(JobRuntime, "sql", lambda self, path, *, output: calls.append(output))
+    monkeypatch.setattr(
+        JobRuntime, "sql", lambda self, path, *, output: calls.append(output)
+    )
     run_job(main)
-    assert calls == ["first.csv", "second.csv", "normal.csv", "last.csv", "unmarked.csv"]
+    assert calls == [
+        "first.csv",
+        "second.csv",
+        "normal.csv",
+        "last.csv",
+        "unmarked.csv",
+    ]
 
 
 def test_prepost_prompt_names_are_unique_and_deterministic(tmp_path):
     source = tmp_path / "prepost_names.txt"
     source.write_text(
-        block("/WRITE-FILE=Y\n/CSV=first.txt\n/PROMPT-TEXT=Step 1-1. Load-data", "first")
+        block(
+            "/WRITE-FILE=Y\n/CSV=first.txt\n/PROMPT-TEXT=Step 1-1. Load-data", "first"
+        )
         + block("/WRITE-FILE=Y\n/CSV=normal.txt\n/PROMPT-TEXT=Step 2.", "normal")
-        + block("/WRITE-FILE=Y\n/CSV=second.txt\n/PROMPT-TEXT=Step 1-2. Load data", "second")
+        + block(
+            "/WRITE-FILE=Y\n/CSV=second.txt\n/PROMPT-TEXT=Step 1-2. Load data", "second"
+        )
         + block("/WRITE-FILE=Y\n/CSV=normal.txt\n/PROMPT-TEXT=Step 2.", "normal")
-        + block("/WRITE-FILE=Y\n/CSV=third.txt\n/PROMPT-TEXT=Step 1-3. Load data 2", "third")
+        + block(
+            "/WRITE-FILE=Y\n/CSV=third.txt\n/PROMPT-TEXT=Step 1-3. Load data 2", "third"
+        )
     )
     emitted = compile_document(source).emitted
     names = [
@@ -81,13 +111,17 @@ def test_prepost_prompt_names_are_unique_and_deterministic(tmp_path):
         for node in ast.parse(emitted.source).body
         if isinstance(node, ast.FunctionDef) and node.name != "run"
     ]
-    assert names == ["prepost_1_load_data", "prepost_1_load_data_2", "prepost_1_load_data_2_2"]
+    assert names == [
+        "prepost_1_load_data",
+        "prepost_1_load_data_2",
+        "prepost_1_load_data_2_2",
+    ]
     assert compile_document(source).emitted.source == emitted.source
     main = translate(source)
     job = run_job(main)
-    assert [job.read_file(name).strip() for name in ("first.txt", "second.txt", "third.txt")] == [
-        "first", "second", "third"
-    ]
+    assert [
+        job.read_file(name).strip() for name in ("first.txt", "second.txt", "third.txt")
+    ] == ["first", "second", "third"]
 
 
 def test_prepost_functions_share_job_and_preserve_macro_scopes(tmp_path):
@@ -97,8 +131,12 @@ def test_prepost_functions_share_job_and_preserve_macro_scopes(tmp_path):
         + block('/UTILITIES={START-MACRO} "seed.csv" "N"\n/PROMPT-TEXT=Step 1-2.')
         + block("/WRITE-FILE=Y\n/CSV=inside.txt\n/PROMPT-TEXT=Step 1-3.", "<<<VALUE>>>")
         + block("/UTILITIES={END-MACRO}")
-        + block("/WRITE-FILE=Y\n/CSV=normal.txt\n/PROMPT-TEXT=Step 2.", "<<<ENV_MODE>>>")
-        + block("/WRITE-FILE=Y\n/CSV=last.txt\n/PROMPT-TEXT=Step 3-1.", "<<<ENV_MODE>>>")
+        + block(
+            "/WRITE-FILE=Y\n/CSV=normal.txt\n/PROMPT-TEXT=Step 2.", "<<<ENV_MODE>>>"
+        )
+        + block(
+            "/WRITE-FILE=Y\n/CSV=last.txt\n/PROMPT-TEXT=Step 3-1.", "<<<ENV_MODE>>>"
+        )
     )
     main = translate(source)
     job = run_job(main)
@@ -113,9 +151,15 @@ def test_prepost_groups_inside_normal_macro_scopes(tmp_path):
     source.write_text(
         block("/WRITE-FILE=Y\n/CSV=seed.csv", "VALUE\ninside")
         + block('/UTILITIES={START-MACRO} "seed.csv" "N"\n/PROMPT-TEXT=Step 2.')
-        + block("/WRITE-FILE=Y\n/CSV=first.txt\n/PROMPT-TEXT=Step 3-1. First group", "<<<VALUE>>>")
+        + block(
+            "/WRITE-FILE=Y\n/CSV=first.txt\n/PROMPT-TEXT=Step 3-1. First group",
+            "<<<VALUE>>>",
+        )
         + block("/WRITE-FILE=Y\n/CSV=normal.txt\n/PROMPT-TEXT=Step 4.", "<<<VALUE>>>")
-        + block("/WRITE-FILE=Y\n/CSV=last.txt\n/PROMPT-TEXT=Step 5-1. Last group", "<<<VALUE>>>")
+        + block(
+            "/WRITE-FILE=Y\n/CSV=last.txt\n/PROMPT-TEXT=Step 5-1. Last group",
+            "<<<VALUE>>>",
+        )
         + block("/UTILITIES={END-MACRO}")
     )
     main = translate(source)
@@ -125,7 +169,10 @@ def test_prepost_groups_inside_normal_macro_scopes(tmp_path):
     assert "            prepost_3_first_group(job, macros)" in code
     assert "            prepost_5_last_group(job, macros)" in code
     job = run_job(main)
-    assert all(job.read_file(name).strip() == "inside" for name in ("first.txt", "normal.txt", "last.txt"))
+    assert all(
+        job.read_file(name).strip() == "inside"
+        for name in ("first.txt", "normal.txt", "last.txt")
+    )
 
 
 def test_unmarked_blocks_between_same_group_prompts_stay_in_group(tmp_path):
@@ -136,9 +183,16 @@ def test_unmarked_blocks_between_same_group_prompts_stay_in_group(tmp_path):
         + block("/WRITE-FILE=Y\n/CSV=last.txt\n/PROMPT-TEXT=Step 1-2. Finish", "last")
     )
     emitted = compile_document(source).emitted
-    functions = [node for node in ast.parse(emitted.source).body if isinstance(node, ast.FunctionDef)]
+    functions = [
+        node
+        for node in ast.parse(emitted.source).body
+        if isinstance(node, ast.FunctionDef)
+    ]
     assert [node.name for node in functions] == ["prepost_1_setup", "run"]
-    assert all(step.source_range.start_offset < emitted.source.index("def run():") for step in emitted.steps)
+    assert all(
+        step.source_range.start_offset < emitted.source.index("def run():")
+        for step in emitted.steps
+    )
 
 
 def test_prepost_group_includes_unmarked_instance_consolidation(tmp_path):
@@ -156,7 +210,9 @@ def test_prepost_group_includes_unmarked_instance_consolidation(tmp_path):
     )
     emitted = compile_document(source).emitted
     run_offset = emitted.source.index("def run():")
-    assert all(step.source_range.start_offset < run_offset for step in emitted.steps[:2])
+    assert all(
+        step.source_range.start_offset < run_offset for step in emitted.steps[:2]
+    )
     assert emitted.steps[2].source_range.start_offset > run_offset
 
 
@@ -164,12 +220,24 @@ def test_csr_iam_prepost_layout():
     source = Path(__file__).resolve().parents[2] / "CSR_IAM_v2.txt"
     emitted = compile_document(source).emitted
     functions = [
-        node for node in ast.parse(emitted.source).body if isinstance(node, ast.FunctionDef)
+        node
+        for node in ast.parse(emitted.source).body
+        if isinstance(node, ast.FunctionDef)
     ]
     helpers = [node for node in functions if node.name.startswith("prepost_")]
-    assert [node.name.split("_")[1] for node in helpers] == ["1", "3", "6", "7", "8", "9", "10"]
+    assert [node.name.split("_")[1] for node in helpers] == [
+        "1",
+        "3",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+    ]
     run = next(node for node in functions if node.name == "run")
-    assert not any(isinstance(node, ast.FunctionDef) for node in ast.walk(run) if node is not run)
+    assert not any(
+        isinstance(node, ast.FunctionDef) for node in ast.walk(run) if node is not run
+    )
     assert not any(
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -177,12 +245,18 @@ def test_csr_iam_prepost_layout():
         for node in ast.walk(run)
     )
     query = next(node for node in helpers if node.name.startswith("prepost_3_"))
-    assert len([
-        node for node in ast.walk(query)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "sql"
-    ]) == 3
+    assert (
+        len(
+            [
+                node
+                for node in ast.walk(query)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "sql"
+            ]
+        )
+        == 3
+    )
 
 
 def test_prepost_inference_does_not_split_mixed_control_scopes(tmp_path):

@@ -62,7 +62,9 @@ def test_one_policy_controls_operations_and_delivery(
         ("aed", "csr", ("A15",), {}),
     ],
 )
-def test_excluded_operation_has_no_side_effects(tmp_path, method, operation, args, kwargs):
+def test_excluded_operation_has_no_side_effects(
+    tmp_path, method, operation, args, kwargs
+):
     job = JobRuntime(
         tmp_path,
         tmp_path / "out",

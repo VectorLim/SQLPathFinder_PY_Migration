@@ -26,6 +26,7 @@ from vg2c.runtime.mail import send_mail
 from vg2c.runtime.query import execute_sql
 from vg2c.runtime.values import job_path, read_macro_row, snapshot_values, substitute
 
+
 def csr_lots(path, column, *, workdir, files=None):
     """Return the distinct lot IDs of one CSV column (header matched case-insensitively)."""
     with input_path(path, workdir, files).open(

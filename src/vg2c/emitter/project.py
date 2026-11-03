@@ -182,7 +182,9 @@ def emit_project(dispatched):
                 )
             )
 
-    prepost_pattern = re.compile(r"^Step\s+([0-9]+)-[0-9]+(?:[.-][0-9A-Za-z]+)*\.(?:\s|$)")
+    prepost_pattern = re.compile(
+        r"^Step\s+([0-9]+)-[0-9]+(?:[.-][0-9A-Za-z]+)*\.(?:\s|$)"
+    )
 
     def prepost_root(node):
         first = blocks[node.start_index].resolved_options.lookup.get("PROMPT-TEXT", "")
@@ -208,10 +210,15 @@ def emit_project(dispatched):
             if position == 0 or roots[position] is not None or child.kind != "leaf":
                 continue
             options = blocks[child.block_index].resolved_options.lookup
-            if options.get("PROMPT-TEXT") or options.get("DELETE", "").casefold() != "*instance*":
+            if (
+                options.get("PROMPT-TEXT")
+                or options.get("DELETE", "").casefold() != "*instance*"
+            ):
                 continue
             previous = children[position - 1]
-            prompt = blocks[previous.start_index].resolved_options.lookup.get("PROMPT-TEXT", "")
+            prompt = blocks[previous.start_index].resolved_options.lookup.get(
+                "PROMPT-TEXT", ""
+            )
             root = roots[position - 1]
             if root is None or not re.search(r"-a[0-9]+\.(?:\s|$)", prompt):
                 continue
@@ -237,9 +244,15 @@ def emit_project(dispatched):
                 position += 1
                 continue
             gap_start = position
-            while position < len(children) and roots[position] is None and not any(
-                blocks[index].resolved_options.lookup.get("PROMPT-TEXT")
-                for index in range(children[position].start_index, children[position].end_index + 1)
+            while (
+                position < len(children)
+                and roots[position] is None
+                and not any(
+                    blocks[index].resolved_options.lookup.get("PROMPT-TEXT")
+                    for index in range(
+                        children[position].start_index, children[position].end_index + 1
+                    )
+                )
             ):
                 position += 1
             if (
@@ -251,7 +264,9 @@ def emit_project(dispatched):
                 roots[gap_start:position] = [roots[position]] * (position - gap_start)
             if position == gap_start:
                 position += 1
-        for root, entries in groupby(zip(roots, children, strict=True), key=lambda entry: entry[0]):
+        for root, entries in groupby(
+            zip(roots, children, strict=True), key=lambda entry: entry[0]
+        ):
             members = tuple(child for _, child in entries)
             if root is None:
                 for member in members:
@@ -324,7 +339,8 @@ def emit_project(dispatched):
     source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = sorted(
-        finalize_steps(source, helper_steps + main_steps), key=lambda step: step.block_index
+        finalize_steps(source, helper_steps + main_steps),
+        key=lambda step: step.block_index,
     )
     offsets = [len(header)]
     for line in writer.lines:
