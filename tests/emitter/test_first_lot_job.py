@@ -27,6 +27,7 @@ HISTORY_COLUMNS = [
     "first_lot_timestamp",
     "lot_timestamp_key",
 ]
+OUTPUT_COLUMNS = INTERVENTION_COLUMNS[:-1] + HISTORY_COLUMNS[2:-1]
 
 
 def intervention(statehist_id, end, facility="KM", entity="JDC1"):
@@ -118,7 +119,6 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
 
 
 def test_matching_preserves_ties_precision_and_facility(tmp_path):
-    namespace = runpy.run_path(str(PROJECT / "main.py"))
     interventions = pd.DataFrame(
         [
             intervention(1, "20261103100000500000000"),
@@ -161,7 +161,7 @@ def test_matching_preserves_ties_precision_and_facility(tmp_path):
         ("10", "TIE_B"),
         ("4", "OTHER"),
     ]
-    assert result.columns.tolist() == namespace["OUTPUT_COLUMNS"]
+    assert result.columns.tolist() == OUTPUT_COLUMNS
 
 
 def test_dedup_groups_non_dgx_and_preserves_dgx_states_and_lot_occurrences(tmp_path):
@@ -244,8 +244,27 @@ def test_first_lot_job_empty_results(monkeypatch, tmp_path, empty_interventions)
         "vg2c.runtime.query.resolve_reader",
         lambda node: Reader() if node else resolve_reader(),
     )
-    namespace = runpy.run_path(str(PROJECT / "main.py"), run_name="__main__")
-    assert len(calls) == (1 if empty_interventions else 2)
-    output = pd.read_csv(tmp_path / "first_lot_after_ept_lots.csv")
-    assert output.empty
-    assert output.columns.tolist() == namespace["OUTPUT_COLUMNS"]
+    for filename in (
+        "ept_interventions.csv",
+        "lot_history.csv",
+        "first_lot_after_ept_lots.csv",
+    ):
+        (tmp_path / filename).write_text("stale,data\n1,2\n", encoding="utf-8")
+
+    runpy.run_path(str(PROJECT / "main.py"), run_name="__main__")
+    assert len(calls) == 2
+    assert "<<<" not in calls[1]
+    if empty_interventions:
+        normalized = " ".join(calls[1].split())
+        assert "history.facility IN ('__NO_VALUES__')" in normalized
+        assert "history.entity IN ('__NO_VALUES__')" in normalized
+        assert "TO_DATE('', 'YYYYMMDDHH24MISS')" in normalized
+    for filename, columns in (
+        ("ept_interventions.csv", INTERVENTION_COLUMNS),
+        ("lot_history.csv", HISTORY_COLUMNS),
+        ("first_lot_after_ept_lots.csv", OUTPUT_COLUMNS),
+    ):
+        output = pd.read_csv(tmp_path / filename)
+        assert output.columns.tolist() == columns
+        if filename != "ept_interventions.csv" or empty_interventions:
+            assert output.empty

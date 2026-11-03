@@ -78,6 +78,36 @@ def test_generated_run_creates_fresh_state_each_time(tmp_path, monkeypatch):
     assert jobs[0].reports is not jobs[1].reports
 
 
+@pytest.mark.parametrize("engine", ["SQLite", "DuckDB"])
+@pytest.mark.parametrize("headers,expected", [
+    (None, "code,label\n"),
+    ("LABEL,CODE,MISSING", "LABEL,CODE,MISSING\n"),
+])
+def test_generated_empty_query_still_writes_headers(tmp_path, engine, headers, expected):
+    source = _source(tmp_path, headers=headers)
+    engine_options = engine
+    if engine == "DuckDB":
+        engine_options += "\n/NODE=DUCKDB:input.csv:data"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace("SQLite", engine_options)
+        + "WHERE 1 = 0\n",
+        encoding="utf-8",
+    )
+    main = translate(source)
+    run = runpy.run_path(str(main), run_name="generated")["run"]
+    output = main.parent / "output" / "result.csv"
+    if engine == "DuckDB":
+        output.parent.mkdir(parents=True, exist_ok=True)
+        (output.parent / "input.csv").write_text("id\n1\n", encoding="utf-8")
+
+    run()
+    assert output.read_text(encoding="utf-8") == expected
+
+    output.write_text("stale,data\n1,2\n", encoding="utf-8")
+    run()
+    assert output.read_text(encoding="utf-8") == expected
+
+
 def test_explicit_legacy_header_is_stored_in_sql_not_generated_main(tmp_path):
     source = _source(tmp_path, headers="CODE,LABEL")
     emitted = compile_document(source).emitted

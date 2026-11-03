@@ -181,10 +181,13 @@ class _CsvIO:
         """Write *content* to a CSV file.
 
         *content* can be:
+        - a DataFrame      -> written with result columns or explicit *header*
         - a list of dicts  -> written via DictWriter (keys as header)
         - a list of lists  -> written via writer (optional *header* for first row)
         - a string         -> written as raw text (no CSV encoding)
         - a Path           -> copied verbatim
+
+        Empty content still creates the file and writes any available header.
         """
         path = resolve_path(name, for_write=True, workdir=self.workdir)
         if self.files is not None:
@@ -209,7 +212,10 @@ class _CsvIO:
                     ]
                 )
                 content.columns = header
-            content.to_csv(path, index=False, encoding="utf-8", sep=delimiter)
+            content.to_csv(
+                path, index=False, encoding="utf-8", sep=delimiter,
+                header=len(content.columns) > 0,
+            )
             return
 
         if isinstance(content, str):
@@ -223,17 +229,8 @@ class _CsvIO:
             return
 
         rows = list(content) if content is not None else []
-        if not rows:
-            if header is not None:
-                with path.open("w", newline="", encoding="utf-8") as fh:
-                    writer = csv.writer(fh, delimiter=delimiter)
-                    writer.writerow(header)
-            else:
-                path.write_text("", encoding="utf-8")
-            return
-
         with path.open("w", newline="", encoding="utf-8") as fh:
-            if isinstance(rows[0], dict):
+            if rows and isinstance(rows[0], dict):
                 fieldnames = header if header is not None else list(rows[0].keys())
                 writer = csv.DictWriter(
                     fh, fieldnames=fieldnames, extrasaction="ignore", delimiter=delimiter
@@ -244,6 +241,6 @@ class _CsvIO:
                 writer_plain = csv.writer(fh, delimiter=delimiter)
                 if header:
                     writer_plain.writerow(header)
-                    if rows[0] == header:
+                    if rows and rows[0] == header:
                         rows = rows[1:]
                 writer_plain.writerows(rows)

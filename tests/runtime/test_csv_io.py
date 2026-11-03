@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas
 import pytest
 
 from vg2c.utilities.csv_io import CsvIO
@@ -64,6 +65,21 @@ def test_write_empty_list(tmp_path):
     out = str(tmp_path / "empty.csv")
     csv_io.write(out, [])
     assert Path(out).read_text() == ""
+
+
+@pytest.mark.parametrize("content", [None, [], pandas.DataFrame()])
+@pytest.mark.parametrize("header", [None, [], ["code", "label"]])
+def test_write_empty_content_creates_file_with_expected_header(tmp_path, content, header):
+    output = tmp_path / "nested" / "result.csv"
+    csv_io = CsvIO()
+
+    csv_io.write(str(output), content, header=header)
+    expected = "code,label\n" if header else ""
+    assert output.read_text(encoding="utf-8") == expected
+
+    output.write_text("stale,data\n1,2\n", encoding="utf-8")
+    csv_io.write(str(output), content, header=header)
+    assert output.read_text(encoding="utf-8") == expected
 
 
 def test_write_raw_string(tmp_path):
