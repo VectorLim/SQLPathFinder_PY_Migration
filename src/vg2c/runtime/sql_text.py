@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from vg2c.runtime.values import strip_quotes
 
+
 @dataclass(frozen=True, slots=True)
 class SqlGetCsvListCall:
     """A well-formed SQL_Get_CSV_List call found in compiler input."""
@@ -119,5 +120,3 @@ def _split_args(args_text: str) -> list[str]:
 def _parse_column_ref(raw: str) -> int | str:
     value = strip_quotes(raw)
     return int(value) if value.isdigit() else value
-
-

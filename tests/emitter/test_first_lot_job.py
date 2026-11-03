@@ -10,18 +10,36 @@ from vg2c.runtime.query import resolve_reader
 
 PROJECT = Path(__file__).resolve().parents[2] / "first_lot_after_ept_lots"
 INTERVENTION_COLUMNS = [
-    "facility", "parent_entity", "ept_entity", "statehist_id", "ept_state",
-    "event_start", "event_end", "event_end_key",
+    "facility",
+    "parent_entity",
+    "ept_entity",
+    "statehist_id",
+    "ept_state",
+    "event_start",
+    "event_end",
+    "event_end_key",
 ]
 HISTORY_COLUMNS = [
-    "facility", "parent_entity", "lot", "operation", "first_lot_timestamp",
+    "facility",
+    "parent_entity",
+    "lot",
+    "operation",
+    "first_lot_timestamp",
     "lot_timestamp_key",
 ]
 
 
 def intervention(statehist_id, end, facility="KM", entity="JDC1"):
-    return [facility, entity, "DGX1", statehist_id, "PM",
-            "2026-11-03 09:00:00", "2026-11-03 10:00:00", end]
+    return [
+        facility,
+        entity,
+        "DGX1",
+        statehist_id,
+        "PM",
+        "2026-11-03 09:00:00",
+        "2026-11-03 10:00:00",
+        end,
+    ]
 
 
 def history_row(lot, timestamp, facility="KM", entity="JDC1"):
@@ -34,8 +52,10 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
         columns=INTERVENTION_COLUMNS,
     )
     history = pd.DataFrame(
-        [history_row("EARLY", "20261103100000000000000"),
-         history_row("FIRST", "20261103100001000000000")],
+        [
+            history_row("EARLY", "20261103100000000000000"),
+            history_row("FIRST", "20261103100001000000000"),
+        ],
         columns=HISTORY_COLUMNS,
     )
     calls = []
@@ -67,7 +87,9 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
     assert "SQL_Get_CSV_List" not in calls[1][1]
     assert "<<<" not in calls[1][1]
     with sqlite3.connect(":memory:") as connection:
-        connection.create_function("NVL", 2, lambda value, default: default if value is None else value)
+        connection.create_function(
+            "NVL", 2, lambda value, default: default if value is None else value
+        )
         connection.create_function("TO_DATE", 2, lambda value, date_format: value)
         connection.execute(
             "CREATE TABLE F_ENTITYLOTHIST "
@@ -75,12 +97,14 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
         )
         connection.executemany(
             "INSERT INTO F_ENTITYLOTHIST VALUES (?, ?, ?, ?, ?)",
-            [("KM", "JDC1", "Y", None, "20261103100001"),
-             ("OTHER", "JDC1", "Y", None, "20261103100001"),
-             ("KM", "JDC2", "Y", None, "20261103100001"),
-             ("KM", "JDC1", "N", None, "20261103100001"),
-             ("KM", "JDC1", "Y", "Y", "20261103100001"),
-             ("KM", "JDC1", "Y", None, "20261103095959")],
+            [
+                ("KM", "JDC1", "Y", None, "20261103100001"),
+                ("OTHER", "JDC1", "Y", None, "20261103100001"),
+                ("KM", "JDC2", "Y", None, "20261103100001"),
+                ("KM", "JDC1", "N", None, "20261103100001"),
+                ("KM", "JDC1", "Y", "Y", "20261103100001"),
+                ("KM", "JDC1", "Y", None, "20261103095959"),
+            ],
         )
         predicate = calls[1][1].partition("WHERE")[2]
         rows = connection.execute(
@@ -96,25 +120,29 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
 def test_matching_preserves_ties_precision_and_facility(tmp_path):
     namespace = runpy.run_path(str(PROJECT / "main.py"))
     interventions = pd.DataFrame(
-        [intervention(1, "20261103100000500000000"),
-         intervention(2, "20261103100001000000000"),
-         intervention(3, "20261103110000000000000"),
-         intervention(4, "20261103100000500000000", facility="OTHER"),
-         intervention(5, "20261103100000500000000", entity="JDC2"),
-         intervention(6, "20261103100000500000000", facility=None),
-         intervention(7, None),
-         intervention(10, "20261103100001000000000"),
-         intervention(20, "20261103100000999999999")],
+        [
+            intervention(1, "20261103100000500000000"),
+            intervention(2, "20261103100001000000000"),
+            intervention(3, "20261103110000000000000"),
+            intervention(4, "20261103100000500000000", facility="OTHER"),
+            intervention(5, "20261103100000500000000", entity="JDC2"),
+            intervention(6, "20261103100000500000000", facility=None),
+            intervention(7, None),
+            intervention(10, "20261103100001000000000"),
+            intervention(20, "20261103100000999999999"),
+        ],
         columns=INTERVENTION_COLUMNS,
     )
     history = pd.DataFrame(
-        [history_row("EARLY", "20261103100000499999999"),
-         history_row("TIE_A", "20261103100001000000000"),
-         history_row("TIE_B", "20261103100001000000000"),
-         history_row("TIE_A", "20261103100001000000000"),
-         history_row("LATER", "20261103100002000000000"),
-         history_row("OTHER", "20261103100000500000000", facility="OTHER"),
-         history_row("NULL", "20261103100000500000000", facility=None)],
+        [
+            history_row("EARLY", "20261103100000499999999"),
+            history_row("TIE_A", "20261103100001000000000"),
+            history_row("TIE_B", "20261103100001000000000"),
+            history_row("TIE_A", "20261103100001000000000"),
+            history_row("LATER", "20261103100002000000000"),
+            history_row("OTHER", "20261103100000500000000", facility="OTHER"),
+            history_row("NULL", "20261103100000500000000", facility=None),
+        ],
         columns=HISTORY_COLUMNS,
     )
     interventions.to_csv(tmp_path / "ept_interventions.csv", index=False)
@@ -129,33 +157,41 @@ def test_matching_preserves_ties_precision_and_facility(tmp_path):
         ],
     )
     assert list(zip(result["statehist_id"], result["lot"], strict=True)) == [
-        ("10", "TIE_A"), ("10", "TIE_B"), ("4", "OTHER"),
+        ("10", "TIE_A"),
+        ("10", "TIE_B"),
+        ("4", "OTHER"),
     ]
     assert result.columns.tolist() == namespace["OUTPUT_COLUMNS"]
 
 
 def test_dedup_groups_non_dgx_and_preserves_dgx_states_and_lot_occurrences(tmp_path):
     interventions = pd.DataFrame(
-        [intervention(1, "20261103100000000000000"),
-         intervention(2, "20261103100002000000000"),
-         intervention(3, "20261103100000000000000"),
+        [
+            intervention(1, "20261103100000000000000"),
+            intervention(2, "20261103100002000000000"),
+            intervention(3, "20261103100000000000000"),
             intervention(4, "20261103100000000000000"),
             intervention(5, "20261103100000250000000"),
             intervention(6, "20261103100000500000000"),
-            intervention(7, "20261103100000500000000")],
+            intervention(7, "20261103100000500000000"),
+        ],
         columns=INTERVENTION_COLUMNS,
     )
     interventions.loc[2, "ept_entity"] = "DGX2"
     interventions.loc[3, "ept_state"] = "SETUP SDT"
     interventions.loc[4:, "ept_entity"] = ["ASF1", "JDC1", "JLP1"]
     history = pd.DataFrame(
-        [history_row("LOT", "20261103100001000000000"),
-         history_row("LOT", "20261103100003000000000"),
-         history_row("LOT", "20261103100003000000000")],
+        [
+            history_row("LOT", "20261103100001000000000"),
+            history_row("LOT", "20261103100003000000000"),
+            history_row("LOT", "20261103100003000000000"),
+        ],
         columns=HISTORY_COLUMNS,
     )
     history["first_lot_timestamp"] = [
-        "2026-11-03 10:00:01", "2026-11-03 10:00:03", "2026-11-03 10:00:03",
+        "2026-11-03 10:00:01",
+        "2026-11-03 10:00:03",
+        "2026-11-03 10:00:03",
     ]
     history.loc[2, "operation"] = "2000"
     interventions.to_csv(tmp_path / "ept_interventions.csv", index=False)
@@ -172,10 +208,19 @@ def test_dedup_groups_non_dgx_and_preserves_dgx_states_and_lot_occurrences(tmp_p
     assert sorted(result["statehist_id"].tolist()) == ["1", "2", "2", "3", "4", "7"]
     assert result.loc[result["statehist_id"] == "7", "ept_entity"].tolist() == ["JLP1"]
     grouped = result.assign(
-        entity_group=result["ept_entity"].where(result["ept_entity"].str.startswith("DGX"))
+        entity_group=result["ept_entity"].where(
+            result["ept_entity"].str.startswith("DGX")
+        )
     )
-    keys = ["facility", "parent_entity", "entity_group", "ept_state", "lot",
-            "operation", "first_lot_timestamp"]
+    keys = [
+        "facility",
+        "parent_entity",
+        "entity_group",
+        "ept_state",
+        "lot",
+        "operation",
+        "first_lot_timestamp",
+    ]
     assert not grouped.duplicated(keys).any()
 
 

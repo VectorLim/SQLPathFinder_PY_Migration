@@ -33,17 +33,22 @@ class TreeMixin:
                 visit(iid)
 
         visit("")
-        width = max(widths, default=font.measure("Generated preview") + self._tree_indent)
+        width = max(
+            widths, default=font.measure("Generated preview") + self._tree_indent
+        )
         self.tree.column("#0", width=max(220, width + self._tree_indent), stretch=False)
 
     def _populate_generated_tree(self) -> None:
         entries = (
-            ("generated", "Generated preview", ("main.py", *sorted(self.current_assets))),
+            (
+                "generated",
+                "Generated preview",
+                ("main.py", *sorted(self.current_assets)),
+            ),
             ("runtime", "Runtime library (installed)", tuple(self.runtime_files)),
         )
-        if (
-            entries == getattr(self, "_populated_tree_entries", None)
-            and all(self.tree.exists(root) for root, _label, _names in entries)
+        if entries == getattr(self, "_populated_tree_entries", None) and all(
+            self.tree.exists(root) for root, _label, _names in entries
         ):
             return
         for iid in tuple(self._tree_assets):
@@ -94,8 +99,11 @@ class TreeMixin:
         if tree is None:
             return
         iid = next(
-            (candidate for candidate, asset_name in self._tree_assets.items()
-             if asset_name == name and candidate in self._tree_asset_files),
+            (
+                candidate
+                for candidate, asset_name in self._tree_assets.items()
+                if asset_name == name and candidate in self._tree_asset_files
+            ),
             None,
         )
         if iid is None or not tree.exists(iid):

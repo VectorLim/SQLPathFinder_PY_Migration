@@ -26,9 +26,7 @@ def test_lead_in_with_commas_preserved() -> None:
 
 
 def test_two_calls_captured_with_source_order_spans() -> None:
-    body = (
-        'A SQL_Get_CSV_List(".\\a.csv", "1", "x In") OR SQL_Get_CSV_List(".\\b.csv", col, "y In")'
-    )
+    body = 'A SQL_Get_CSV_List(".\\a.csv", "1", "x In") OR SQL_Get_CSV_List(".\\b.csv", col, "y In")'
     calls = scan_sql_get_csv_list_calls(body)
     assert len(calls) == 2
     assert calls[0].csv_path == ".\\a.csv"
@@ -54,14 +52,19 @@ def test_explicitly_closed_call_site_needs_no_extra_paren() -> None:
         "\n) AND active = 1",
         ") AND (entity IN SQL_Get_CSV_List('f.csv', 'entity', 'entity IN'))",
     ):
-        body = "WHERE (facility IN SQL_Get_CSV_List('f.csv', 'facility', 'facility IN')" + ending
+        body = (
+            "WHERE (facility IN SQL_Get_CSV_List('f.csv', 'facility', 'facility IN')"
+            + ending
+        )
         calls = scan_sql_get_csv_list_calls(body)
         assert calls
         assert all(not call.needs_closing_paren for call in calls)
 
 
 def test_unwrapped_call_site_has_no_flag() -> None:
-    body = 'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    body = (
+        'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
+    )
     calls = scan_sql_get_csv_list_calls(body)
     assert len(calls) == 1
     assert calls[0].needs_closing_paren is False

@@ -11,7 +11,14 @@ from pathlib import Path
 
 from ..models import ObserverSnapshot
 from .build import _hidden_flags, build_helper
-from .protocol import _MAX_OUTPUT, NativeTarget, RefreshResult, parse_refresh, parse_snapshot, parse_targets
+from .protocol import (
+    _MAX_OUTPUT,
+    NativeTarget,
+    RefreshResult,
+    parse_refresh,
+    parse_snapshot,
+    parse_targets,
+)
 
 _POLL_TIMEOUT = 5
 
@@ -23,7 +30,10 @@ def foreground_pid() -> int | None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.GetForegroundWindow.restype = ctypes.c_void_p
-        user32.GetWindowThreadProcessId.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong))
+        user32.GetWindowThreadProcessId.argtypes = (
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_ulong),
+        )
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return None
@@ -46,7 +56,9 @@ class _ServeSession:
             creationflags=_hidden_flags(),
         )
         self.lines: queue.SimpleQueue[bytes | None] = queue.SimpleQueue()
-        threading.Thread(target=self._read, name="vg2c-observer-serve", daemon=True).start()
+        threading.Thread(
+            target=self._read, name="vg2c-observer-serve", daemon=True
+        ).start()
 
     def _read(self) -> None:
         stdout = self.process.stdout
@@ -68,7 +80,9 @@ class _ServeSession:
 
 class ObserverClient:
     def __init__(self, cache_dir: Path | None = None) -> None:
-        local_app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+        local_app_data = Path(
+            os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")
+        )
         self.cache_dir = Path(cache_dir or local_app_data / "vg2c-companion")
         self.helper_path = self.cache_dir / "sqlpathfinder-observer.exe"
         self._helper_lock = threading.Lock()
@@ -140,19 +154,28 @@ class ObserverClient:
                     line = self._serve.request(pid, hwnd)
                 except queue.Empty:
                     self._stop_serve_locked()
-                    return ObserverSnapshot(status="error", error="Observer helper timed out.")
+                    return ObserverSnapshot(
+                        status="error", error="Observer helper timed out."
+                    )
                 except OSError:
                     line = None
                 if line is None:
                     self._stop_serve_locked()
-                    return ObserverSnapshot(status="error", error="Observer helper exited unexpectedly.")
+                    return ObserverSnapshot(
+                        status="error", error="Observer helper exited unexpectedly."
+                    )
             output = line.decode("utf-8", errors="replace")
             if len(output) > _MAX_OUTPUT:
-                return ObserverSnapshot(status="error", error="Observer frame exceeds the maximum supported size.")
+                return ObserverSnapshot(
+                    status="error",
+                    error="Observer frame exceeds the maximum supported size.",
+                )
             try:
                 return parse_snapshot(output)
             except ValueError:
-                return ObserverSnapshot(status="error", error="Observer frame failed validation.")
+                return ObserverSnapshot(
+                    status="error", error="Observer frame failed validation."
+                )
         except Exception as exc:
             return ObserverSnapshot(status="error", error=str(exc))
 
@@ -172,12 +195,16 @@ class ObserverClient:
             )
             if completed.stdout.strip():
                 return parse_targets(completed.stdout)
-            raise RuntimeError((completed.stderr or "Target helper returned no result.").strip())
+            raise RuntimeError(
+                (completed.stderr or "Target helper returned no result.").strip()
+            )
         except Exception as exc:
             self.last_target_error = str(exc)
             return ()
 
-    def refresh(self, target_pid: int, designer_hwnd: int, document_name: str) -> RefreshResult:
+    def refresh(
+        self, target_pid: int, designer_hwnd: int, document_name: str
+    ) -> RefreshResult:
         """Request a fresh Show Query source without running on the Tk thread."""
         with self._active_lock:
             self._refreshing += 1
@@ -187,12 +214,20 @@ class ObserverClient:
             with self._active_lock:
                 self._refreshing -= 1
 
-    def _refresh(self, target_pid: int, designer_hwnd: int, document_name: str) -> RefreshResult:
+    def _refresh(
+        self, target_pid: int, designer_hwnd: int, document_name: str
+    ) -> RefreshResult:
         try:
             helper = self.ensure_helper()
             command = [
-                str(helper), "--refresh", "--pid", str(target_pid),
-                "--hwnd", str(designer_hwnd), "--document", Path(document_name).name,
+                str(helper),
+                "--refresh",
+                "--pid",
+                str(target_pid),
+                "--hwnd",
+                str(designer_hwnd),
+                "--document",
+                Path(document_name).name,
             ]
             process = subprocess.Popen(
                 command,
@@ -206,12 +241,17 @@ class ObserverClient:
             except subprocess.TimeoutExpired:
                 process.kill()
                 stdout, stderr = process.communicate()
-                return RefreshResult(status="timeout", error="Show Query refresh timed out.")
+                return RefreshResult(
+                    status="timeout", error="Show Query refresh timed out."
+                )
             finally:
                 self._untrack_process(process)
             output = stdout.decode("utf-8", errors="replace")
             if len(output) > _MAX_OUTPUT:
-                return RefreshResult(status="error", error="Refresh frame exceeds the maximum supported size.")
+                return RefreshResult(
+                    status="error",
+                    error="Refresh frame exceeds the maximum supported size.",
+                )
             if output.strip():
                 try:
                     return parse_refresh(output)
@@ -219,7 +259,10 @@ class ObserverClient:
                     return RefreshResult(status="error", error=str(exc))
             return RefreshResult(
                 status="error",
-                error=(stderr.decode("utf-8", errors="replace") or "Refresh helper returned no result.").strip(),
+                error=(
+                    stderr.decode("utf-8", errors="replace")
+                    or "Refresh helper returned no result."
+                ).strip(),
             )
         except Exception as exc:
             return RefreshResult(status="error", error=str(exc))

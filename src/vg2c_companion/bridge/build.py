@@ -29,7 +29,10 @@ def _find_compiler(windows_root: Path) -> Path | None:
 
 def _reference_paths(compiler: Path) -> tuple[Path, ...]:
     root = Path(compiler).parent
-    return tuple(root / name for name in ("Accessibility.dll", "System.Runtime.Serialization.dll"))
+    return tuple(
+        root / name
+        for name in ("Accessibility.dll", "System.Runtime.Serialization.dll")
+    )
 
 
 def _helper_build_command(
@@ -59,7 +62,9 @@ def build_helper(cache_dir: Path, helper_path: Path) -> Path:
         ),
         key=lambda source: source.name,
     )
-    source_texts = [(source.name, source.read_text(encoding="utf-8")) for source in sources]
+    source_texts = [
+        (source.name, source.read_text(encoding="utf-8")) for source in sources
+    ]
     digest_builder = hashlib.sha256()
     for name, text in source_texts:
         digest_builder.update(name.encode("utf-8") + b"\0")
@@ -80,7 +85,9 @@ def build_helper(cache_dir: Path, helper_path: Path) -> Path:
     references = _reference_paths(compiler)
     missing = [str(path) for path in references if not path.is_file()]
     if missing:
-        raise FileNotFoundError("Missing .NET Accessibility assemblies: " + ", ".join(missing))
+        raise FileNotFoundError(
+            "Missing .NET Accessibility assemblies: " + ", ".join(missing)
+        )
     cache_dir.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex
     temporary_sources = cache_dir / f".observer-{token}"

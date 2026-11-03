@@ -17,7 +17,9 @@ _HEARTBEAT_SECONDS = 10.0
 class ObserverWorker:
     """Poll the native helper away from Tk and retain only the newest frame."""
 
-    def __init__(self, client: ObserverClient, pid: int | None = None, hwnd: int | None = None) -> None:
+    def __init__(
+        self, client: ObserverClient, pid: int | None = None, hwnd: int | None = None
+    ) -> None:
         self._client = client
         self._pid = pid
         self._hwnd = hwnd
@@ -25,7 +27,9 @@ class ObserverWorker:
         self._target_epoch = 0
         self._frames: queue.Queue[tuple[int, ObserverSnapshot]] = queue.Queue(maxsize=1)
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="vg2c-observer", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="vg2c-observer", daemon=True
+        )
         self._thread.start()
 
     def drain(self) -> ObserverSnapshot | None:
@@ -72,7 +76,10 @@ class ObserverWorker:
             with self._target_lock:
                 pid, hwnd = self._pid, self._hwnd
                 epoch = self._target_epoch
-            first = epoch != polled_epoch or time.monotonic() - last_poll >= _HEARTBEAT_SECONDS
+            first = (
+                epoch != polled_epoch
+                or time.monotonic() - last_poll >= _HEARTBEAT_SECONDS
+            )
             if hwnd is None or not should_poll(pid, first=first):
                 self._stop.wait(_IDLE_WAIT_SECONDS)
                 continue

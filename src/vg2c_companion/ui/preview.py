@@ -37,7 +37,9 @@ class PreviewMixin:
                 )
                 self._select_tab(getattr(self, "source_tab", None))
                 if self._selected_target is not None:
-                    self.status.configure(text="VG2 selected; press Update Python to refresh from SQLPathFinder.")
+                    self.status.configure(
+                        text="VG2 selected; press Update Python to refresh from SQLPathFinder."
+                    )
             except OSError as exc:
                 self.status.configure(text=f"Native snapshot unavailable: {exc}")
             return
@@ -74,13 +76,16 @@ class PreviewMixin:
             self._set_source(self.compiled_source_text)
         header = getattr(self, "generated_header", None)
         if header is not None:
-            label = "Runtime library" if name in self.runtime_files else "Generated preview"
+            label = (
+                "Runtime library" if name in self.runtime_files else "Generated preview"
+            )
             header.configure(text=f"{label}: {name}")
         origin = getattr(self, "generated_origin", None)
         if origin is not None:
             source = (
                 "installed vg2c/runtime (read-only)"
-                if name in self.runtime_files else self.compiled_origin or "retained preview"
+                if name in self.runtime_files
+                else self.compiled_origin or "retained preview"
             )
             origin.configure(text=f"Origin: {source}")
         if select_tab:
@@ -109,7 +114,10 @@ class PreviewMixin:
             if hasattr(getattr(self, "_observer_worker", None), "invalidate_frames"):
                 self._observer_worker.invalidate_frames()
         if outcome.error or outcome.result is None:
-            self._set_diagnostics("Compiler error\n\n" + (outcome.error or "No compiler details were returned."))
+            self._set_diagnostics(
+                "Compiler error\n\n"
+                + (outcome.error or "No compiler details were returned.")
+            )
             self._select_tab(getattr(self, "diagnostics_tab", None))
             self._last_compile_status = "Compiler error; last good preview retained"
             self.status.configure(text=self._last_compile_status)
@@ -123,7 +131,8 @@ class PreviewMixin:
         if outcome.source_path.name.lower() == "sqlpathfinder-preview.txt":
             self.compiled_origin = (
                 "Live Show Query: " + self.compiled_designer_title
-                if self.compiled_designer_title else "Live Show Query"
+                if self.compiled_designer_title
+                else "Live Show Query"
             )
         else:
             self.compiled_origin = "Source: " + str(outcome.source_path)
@@ -142,9 +151,13 @@ class PreviewMixin:
         for item in outcome.result.diagnostics:
             location = f" ({item.location})" if item.location else ""
             diagnostics.append(f"{item.level}: [{item.code}] {item.message}{location}")
-        self._set_diagnostics("\n\n".join(diagnostics) if diagnostics else "No diagnostics.")
+        self._set_diagnostics(
+            "\n\n".join(diagnostics) if diagnostics else "No diagnostics."
+        )
         if diagnostics:
-            self._last_compile_status = f"Compiled with diagnostics: {len(diagnostics)} item(s)"
+            self._last_compile_status = (
+                f"Compiled with diagnostics: {len(diagnostics)} item(s)"
+            )
         else:
             self._last_compile_status = "Preview ready"
         if any(copy.pending_identity is not None for copy in self.edit_copies):
@@ -155,7 +168,8 @@ class PreviewMixin:
     def _set_generated(self, text: str, mode: str) -> None:
         links = (
             self._asset_links()
-            if self.selected_generated_name == "main.py" and self.current_result is not None
+            if self.selected_generated_name == "main.py"
+            and self.current_result is not None
             else None
         )
         render_key = (text, mode, id(links) if links else None)

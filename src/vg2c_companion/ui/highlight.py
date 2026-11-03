@@ -17,7 +17,13 @@ TAG_COLOURS = (
 
 def mode_for_name(name: str) -> str:
     suffix = Path(name).suffix.lower()
-    return {".py": "python", ".sql": "sql", ".html": "html", ".htm": "html", ".css": "css"}.get(suffix, "text")
+    return {
+        ".py": "python",
+        ".sql": "sql",
+        ".html": "html",
+        ".htm": "html",
+        ".css": "css",
+    }.get(suffix, "text")
 
 
 def highlight_ranges(text: str, mode: str = "python") -> list[tuple[str, int, int]]:
@@ -33,8 +39,14 @@ def highlight_ranges(text: str, mode: str = "python") -> list[tuple[str, int, in
                 line_starts.append(index + 1)
         try:
             for token in tokenize.generate_tokens(StringIO(text).readline):
-                start = line_starts[min(token.start[0] - 1, len(line_starts) - 1)] + token.start[1]
-                end = line_starts[min(token.end[0] - 1, len(line_starts) - 1)] + token.end[1]
+                start = (
+                    line_starts[min(token.start[0] - 1, len(line_starts) - 1)]
+                    + token.start[1]
+                )
+                end = (
+                    line_starts[min(token.end[0] - 1, len(line_starts) - 1)]
+                    + token.end[1]
+                )
                 if token.type == tokenize.NAME and keyword.iskeyword(token.string):
                     tags.append(("keyword", start, end))
                 elif token.type == tokenize.STRING:
@@ -54,13 +66,25 @@ def highlight_ranges(text: str, mode: str = "python") -> list[tuple[str, int, in
             tag = "comment" if value.startswith(("--", "/*", "<!--")) else "string"
             tags.append((tag, match.start(), match.end()))
         if mode == "sql":
-            for match in re.finditer(r"\b(?:SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|ORDER|BY|AS|INSERT|UPDATE|DELETE|CREATE|DROP|AND|OR|NOT|NULL)\b", text, re.IGNORECASE):
+            for match in re.finditer(
+                r"\b(?:SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|ORDER|BY|AS|INSERT|UPDATE|DELETE|CREATE|DROP|AND|OR|NOT|NULL)\b",
+                text,
+                re.IGNORECASE,
+            ):
                 tags.append(("keyword", match.start(), match.end()))
         elif mode == "html":
             for match in re.finditer(r"<!--[\s\S]*?-->|</?[A-Za-z][^>]*>", text):
                 if not match.group(0).startswith("<!--"):
                     tags.append(("markup", match.start(), match.end()))
         elif mode == "css":
-            for match in re.finditer(r"#[0-9A-Fa-f]{3,8}\b|[-A-Za-z_][\w-]*(?=\s*:)", text):
-                tags.append(("number" if match.group(0).startswith("#") else "keyword", match.start(), match.end()))
+            for match in re.finditer(
+                r"#[0-9A-Fa-f]{3,8}\b|[-A-Za-z_][\w-]*(?=\s*:)", text
+            ):
+                tags.append(
+                    (
+                        "number" if match.group(0).startswith("#") else "keyword",
+                        match.start(),
+                        match.end(),
+                    )
+                )
     return tags

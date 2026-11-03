@@ -77,7 +77,11 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
         raise ValueError("Observer fingerprints must be strings.")
     if not isinstance(status, str) or status not in _WINDOWS_STATUS:
         raise ValueError("Observer status is invalid.")
-    if not isinstance(active_control, str) or active_control not in {"editor", "designer", "unknown"}:
+    if not isinstance(active_control, str) or active_control not in {
+        "editor",
+        "designer",
+        "unknown",
+    }:
         raise ValueError("Observer activeControl is invalid.")
     if error is not None and not isinstance(error, str):
         raise ValueError("Observer error must be a string or null.")
@@ -92,7 +96,9 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
     if len(selection_text) > _MAX_OUTPUT:
         raise ValueError("Observer selection exceeds the maximum supported size.")
     raw_values = data.get("designerValues", [])
-    if not isinstance(raw_values, list) or not all(isinstance(item, str) for item in raw_values):
+    if not isinstance(raw_values, list) or not all(
+        isinstance(item, str) for item in raw_values
+    ):
         raise ValueError("Observer designerValues must be a string list.")
     if len(raw_values) > 100:
         raise ValueError("Observer designerValues exceeds the bounded item count.")
@@ -105,7 +111,9 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
     elif (
         isinstance(raw_bounds, list)
         and len(raw_bounds) == 4
-        and all(isinstance(item, int) and not isinstance(item, bool) for item in raw_bounds)
+        and all(
+            isinstance(item, int) and not isinstance(item, bool) for item in raw_bounds
+        )
     ):
         bounds = tuple(raw_bounds)  # type: ignore[assignment]
     else:
@@ -115,7 +123,10 @@ def parse_snapshot(payload: str) -> ObserverSnapshot:
     elif (
         isinstance(designer_bounds_value, list)
         and len(designer_bounds_value) == 4
-        and all(isinstance(item, int) and not isinstance(item, bool) for item in designer_bounds_value)
+        and all(
+            isinstance(item, int) and not isinstance(item, bool)
+            for item in designer_bounds_value
+        )
     ):
         designer_bounds = tuple(designer_bounds_value)  # type: ignore[assignment]
     else:
@@ -161,7 +172,11 @@ def parse_refresh(payload: str) -> RefreshResult:
     source = data.get("sourceText", "")
     status = data.get("status", "error")
     error = data.get("error")
-    if not isinstance(title, str) or not isinstance(designer_fingerprint, str) or not isinstance(source, str):
+    if (
+        not isinstance(title, str)
+        or not isinstance(designer_fingerprint, str)
+        or not isinstance(source, str)
+    ):
         raise ValueError("Refresh title and sourceText must be strings.")
     if len(source) > 200_000:
         raise ValueError("Refresh sourceText exceeds the helper bound.")
@@ -169,8 +184,12 @@ def parse_refresh(payload: str) -> RefreshResult:
         raise ValueError("Refresh status is invalid.")
     if error is not None and not isinstance(error, str):
         raise ValueError("Refresh error must be a string or null.")
-    if status == "ok" and (target_pid is None or target_pid <= 0 or not title or not source):
-        raise ValueError("Successful refresh must include a target PID, designer title, and source text.")
+    if status == "ok" and (
+        target_pid is None or target_pid <= 0 or not title or not source
+    ):
+        raise ValueError(
+            "Successful refresh must include a target PID, designer title, and source text."
+        )
     return RefreshResult(target_pid, title, designer_fingerprint, source, status, error)
 
 
@@ -182,7 +201,11 @@ def parse_targets(payload: str) -> tuple[NativeTarget, ...]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Target frame is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict) or data.get("status") != "ok":
-        raise ValueError(str(data.get("error", "Target discovery failed.")) if isinstance(data, dict) else "Target frame must be an object.")
+        raise ValueError(
+            str(data.get("error", "Target discovery failed."))
+            if isinstance(data, dict)
+            else "Target frame must be an object."
+        )
     raw_targets = data.get("targets", [])
     if not isinstance(raw_targets, list) or len(raw_targets) > 100:
         raise ValueError("Target list is invalid or oversized.")
@@ -195,10 +218,16 @@ def parse_targets(payload: str) -> tuple[NativeTarget, ...]:
         title = raw.get("designerWindowTitle", "")
         document = raw.get("documentName", "")
         if (
-            isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0
-            or isinstance(hwnd, bool) or not isinstance(hwnd, int) or hwnd <= 0
-            or not isinstance(title, str) or not isinstance(document, str)
-            or not title or not document
+            isinstance(pid, bool)
+            or not isinstance(pid, int)
+            or pid <= 0
+            or isinstance(hwnd, bool)
+            or not isinstance(hwnd, int)
+            or hwnd <= 0
+            or not isinstance(title, str)
+            or not isinstance(document, str)
+            or not title
+            or not document
         ):
             raise ValueError("Target entry has invalid identity fields.")
         targets.append(NativeTarget(pid, hwnd, title, document))
