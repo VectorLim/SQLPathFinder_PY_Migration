@@ -1,7 +1,9 @@
 """Generated jobs run offline from editable assets and an explicit work root."""
 
 import ast
+from importlib.resources import files
 import shutil
+import ssl
 import sys
 from types import SimpleNamespace
 
@@ -77,6 +79,16 @@ def test_project_assets_move_and_reread(tmp_path, monkeypatch):
     with pytest.raises(TypeError):
         run(workdir=other)
     assert not (other / "result.csv").exists()
+
+
+def test_project_includes_ca_certificate_beside_entrypoint(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text(SQL)
+    main = translate(source)
+    certificate = main.with_name("IntelSHA256RootCA-Base64.crt")
+    bundled = files("vg2c.runtime").joinpath(certificate.name)
+    assert certificate.read_text(encoding="ascii") == bundled.read_text(encoding="ascii")
+    ssl.create_default_context(cafile=str(certificate))
 
 
 def test_project_refuses_nonempty_without_writes(tmp_path):

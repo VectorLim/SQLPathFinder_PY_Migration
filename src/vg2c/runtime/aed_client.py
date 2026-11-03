@@ -18,8 +18,7 @@ from vg2c.runtime.environment import AED_ENVIRONMENT_LOCK
 @contextlib.contextmanager
 def _aed_environment(environ):
     if environ is None:
-        yield
-        return
+        environ = dict(os.environ)
     keys = (
         "X_API_KEY",
         "API_KEY",
@@ -34,6 +33,8 @@ def _aed_environment(environ):
     try:
         for key in keys:
             value = environ.get(key)
+            if key == "REQUESTS_CA_BUNDLE" and not value:
+                value = str(Path(__file__).with_name("IntelSHA256RootCA-Base64.crt"))
             if key == "NO_PROXY" and value is None:
                 value = environ.get("no_proxy")
             if value is None:
@@ -169,8 +170,8 @@ class AEDClient:
                 result = getattr(self._client(), method)(*arguments)
         except (ValueError, RuntimeError):
             raise
-        except Exception:
-            raise RuntimeError(f"AED {method} request failed") from None
+        except Exception as err:
+            raise RuntimeError(f"AED {method} request failed: {err}") from None
         if not isinstance(result, dict) or result.get("Success") is not True:
             raise RuntimeError(
                 f"AED {method} returned an unsuccessful or malformed response"

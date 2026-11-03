@@ -1,11 +1,22 @@
-import pandas as pd
+from pathlib import Path
 
-from vg2c.runtime import JobRuntime
+import pandas as pd
+from dotenv import load_dotenv
+
+from vg2c.runtime import AEDClient, JobRuntime
 
 TEST_MODE_EXCLUDED = {"csr", "email", "mms"}
 OUTPUT_COLUMNS = [
-    "facility", "parent_entity", "ept_entity", "statehist_id", "ept_state",
-    "event_start", "event_end", "lot", "operation", "first_lot_timestamp",
+    "facility",
+    "parent_entity",
+    "ept_entity",
+    "statehist_id",
+    "ept_state",
+    "event_start",
+    "event_end",
+    "lot",
+    "operation",
+    "first_lot_timestamp",
 ]
 
 
@@ -35,6 +46,9 @@ def run():
             ("lot_history.csv", "lot_history"),
         ],
     )
+
+    aed_client = AEDClient("A15", environ=job.environ)
+    aed_client.lot_status("7641G630")
 
 
 if __name__ == "__main__":

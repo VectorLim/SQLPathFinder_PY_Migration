@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
+from importlib.resources import files
 
 from vg2c.emitter.indent_writer import IndentWriter
 from vg2c.emitter.models import BlockEmission, EmittedScope, EmittedScript, SourceRange
@@ -48,7 +49,10 @@ def emit_project(dispatched):
     scope_tree, inlined_counts = inline_row_count_conditions(
         dispatched.resolved.scope_tree, blocks
     )
-    assets = {}
+    certificate = "IntelSHA256RootCA-Base64.crt"
+    assets = {
+        certificate: files("vg2c.runtime").joinpath(certificate).read_text(encoding="ascii")
+    }
     steps = []
     scope_lines = []
     imports = {"from pathlib import Path"}

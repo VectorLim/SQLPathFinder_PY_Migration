@@ -2,6 +2,8 @@
 
 import json
 import os
+from pathlib import Path
+import ssl
 from types import SimpleNamespace
 from urllib.parse import unquote
 
@@ -167,10 +169,32 @@ def test_upstream_reloads_facility_context_and_host_arguments_restored(
     assert sys.argv is arguments
 
 
-def test_missing_ca_and_unavailable_sdk_fail_without_requests(tmp_path, monkeypatch):
-    from vg2c.runtime import aed_client
+@pytest.mark.parametrize("environ", [None, {}, {"REQUESTS_CA_BUNDLE": ""}])
+def test_bundled_ca_is_used_and_environment_restored(monkeypatch, environ):
+    from vg2c.runtime.aed_client import _aed_environment
 
     monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+    with _aed_environment(environ):
+        ca = Path(os.environ["REQUESTS_CA_BUNDLE"])
+        assert ca.is_absolute() and ca.is_file()
+        ssl.create_default_context(cafile=str(ca))
+    assert "REQUESTS_CA_BUNDLE" not in os.environ
+
+
+def test_explicit_ca_overrides_bundle_and_is_restored(tmp_path, monkeypatch):
+    from vg2c.runtime.aed_client import _aed_environment
+
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "original-ca")
+    configured = str(tmp_path / "configured-ca.crt")
+    with _aed_environment({"REQUESTS_CA_BUNDLE": configured}):
+        assert os.environ["REQUESTS_CA_BUNDLE"] == configured
+    assert os.environ["REQUESTS_CA_BUNDLE"] == "original-ca"
+
+
+def test_invalid_ca_and_unavailable_sdk_fail_without_requests(tmp_path, monkeypatch):
+    from vg2c.runtime import aed_client
+
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(tmp_path / "missing.crt"))
     with pytest.raises(ValueError, match="CA bundle"):
         AEDClient("A15").lot_status("L1")
 
