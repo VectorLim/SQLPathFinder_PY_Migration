@@ -41,8 +41,9 @@ def for_values(start, end, step, suffix, reverse=None, version=None):
         count += 1
     counter = float(first)
     for _ in range(count):
-        if ((not backwards and counter + increment > last and first != 0)
-                or (backwards and counter + increment < last and last != 0)):
+        if (not backwards and counter + increment > last and first != 0) or (
+            backwards and counter + increment < last and last != 0
+        ):
             increment = last - counter
         yield row(first, last, -increment, counter)
         counter += increment
@@ -54,9 +55,12 @@ def site_values(nodes):
     if not nodes:
         raise ValueError("Missing Site Argument")
     for node in nodes.split(","):
-        yield {"SPF-SITE": node,
-               "SPF-SITE-FOR-FILE-NAME": "".join("_" if char in '?/|<>"*{};[].\\/' else char
-                                                for char in node)}
+        yield {
+            "SPF-SITE": node,
+            "SPF-SITE-FOR-FILE-NAME": "".join(
+                "_" if char in '?/|<>"*{};[].\\/' else char for char in node
+            ),
+        }
 
 
 def read_csv(input_file, chunk_file=None, chunk_size=None, *, workdir, files=None):
@@ -81,6 +85,8 @@ def _csv_chunks(input_file, chunk_file, chunk_size, *, workdir, files=None):
     if output.resolve() == job_path(input_file, workdir).resolve():
         raise ValueError("RUN chunk output cannot overwrite its input")
     try:
-        yield from _CsvIO(workdir=workdir, files=files).iter_chunks(str(source), str(output), chunk_size)
+        yield from _CsvIO(workdir=workdir, files=files).iter_chunks(
+            str(source), str(output), chunk_size
+        )
     finally:
         output.unlink(missing_ok=True)

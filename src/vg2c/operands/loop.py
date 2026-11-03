@@ -131,7 +131,9 @@ class ForLoop:
     def from_block(cls, block):
         args = tuple(_quoted_args(block.options.lookup.get("UTILITIES", "")))
         if len(args) < 4 or len(args) > 6:
-            raise ValueError(f"{block.span.file}:{block.span.start_line}: FOR requires 4-6 arguments")
+            raise ValueError(
+                f"{block.span.file}:{block.span.start_line}: FOR requires 4-6 arguments"
+            )
         return cls(args)
 
     def render_header(self, scope_id: int, *, macros: str = "macros") -> str:
@@ -169,7 +171,9 @@ class SiteLoop:
     def from_block(cls, block):
         args = _quoted_args(block.options.lookup.get("UTILITIES", ""))
         if len(args) != 1 or not args[0]:
-            raise ValueError(f"{block.span.file}:{block.span.start_line}: SITE requires a node list")
+            raise ValueError(
+                f"{block.span.file}:{block.span.start_line}: SITE requires a node list"
+            )
         return cls(args[0])
 
     def render_header(self, scope_id: int, *, macros: str = "macros") -> str:

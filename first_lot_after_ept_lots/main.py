@@ -27,8 +27,7 @@ def run():
         ],
     )
 
-    for i in job.read_csv("first_lot_after_ept_lots.csv"):
-        print(i)
+    print(job.read_csv("first_lot_after_ept_lots.csv"))
 
 
 if __name__ == "__main__":

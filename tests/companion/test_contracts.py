@@ -861,7 +861,9 @@ def test_observer_source_compiles_with_real_framework_csc(tmp_path: Path):
         pytest.skip(".NET Framework csc.exe is unavailable.")
     output = tmp_path / "observer.exe"
     sources = sorted(
-        (Path(__file__).parents[2] / "src" / "vg2c_companion" / "observer_helper").glob("*.cs"),
+        (Path(__file__).parents[2] / "src" / "vg2c_companion" / "observer_helper").glob(
+            "*.cs"
+        ),
         key=lambda source: source.name,
     )
     completed = subprocess.run(
@@ -1248,7 +1250,9 @@ def test_target_switch_discards_observation_already_in_flight():
             release.wait(2)
         return ObserverSnapshot(target_pid=pid, source_text=str(hwnd))
 
-    client = SimpleNamespace(poll=poll, close=release.set, should_poll=lambda *_args, **_kwargs: True)
+    client = SimpleNamespace(
+        poll=poll, close=release.set, should_poll=lambda *_args, **_kwargs: True
+    )
     worker = ObserverWorker(client, 7, 100)
     try:
         assert started.wait(2)
