@@ -9,7 +9,7 @@ from pathlib import Path, PureWindowsPath
 from vg2c.runtime.file_store import input_path
 from vg2c.runtime.aed_client import AEDClient, identifier
 from vg2c.runtime.environment import DEFAULT_TEST_MODE_EXCLUDED, read_environment
-from vg2c.runtime.controls import csv_chunks
+from vg2c.runtime.controls import read_csv
 from vg2c.runtime.files import (
     copy_file,
     delete_files,
@@ -331,10 +331,10 @@ class JobRuntime:
             self.macros.substitute(str(path)), workdir=self.workdir, files=self.files
         )
 
-    def csv_chunks(self, input_file, chunk_file, chunk_size):
-        return csv_chunks(
+    def read_csv(self, input_file, chunk_file=None, chunk_size=None):
+        return read_csv(
             self.macros.substitute(str(input_file)),
-            self.macros.substitute(str(chunk_file)),
+            None if chunk_file is None else self.macros.substitute(str(chunk_file)),
             chunk_size,
             workdir=self.workdir,
             files=self.files,

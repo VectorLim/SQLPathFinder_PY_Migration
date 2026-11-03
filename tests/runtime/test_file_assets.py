@@ -116,7 +116,8 @@ def test_disk_operations_replace_aliases_and_wait_sees_external_files(tmp_path):
     job.write_file("<<<DEST>>>", "VALUE\nnew\n", vars={"DEST": "out.csv"})
     assert job.read_file("out.csv") == "VALUE\nnew\n"
     job.load_file("chunk.csv", "template.csv")
-    for _ in job.csv_chunks("out.csv", "chunk.csv", 1):
+    assert job.read_csv("out.csv").to_dict("records") == [{"VALUE": "new"}]
+    for _ in job.read_csv("out.csv", "chunk.csv", 1):
         assert job.read_file("chunk.csv") == "VALUE\nnew\n"
     assert not job.wait_file("chunk.csv", timeout=0)
     job.delete_files(["out.csv"])

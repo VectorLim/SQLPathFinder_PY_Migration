@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pandas
+
 from vg2c.runtime.file_store import input_path
 from vg2c.runtime.csv_io import _CsvIO
 from vg2c.runtime.values import job_path
@@ -57,7 +59,18 @@ def site_values(nodes):
                                                 for char in node)}
 
 
-def csv_chunks(input_file, chunk_file, chunk_size, *, workdir, files=None):
+def read_csv(input_file, chunk_file=None, chunk_size=None, *, workdir, files=None):
+    """Return the whole CSV as a DataFrame, or chunk-file paths when both chunk args are given."""
+    if (chunk_file is None) != (chunk_size is None):
+        raise ValueError("chunk_file and chunk_size must be provided together")
+    if chunk_file is None:
+        source = input_path(input_file, workdir, files)
+        with source.open(newline="", encoding="utf-8", errors="replace") as fh:
+            return pandas.read_csv(fh, sep=_CsvIO._delimiter_for(str(source)))
+    return _csv_chunks(input_file, chunk_file, chunk_size, workdir=workdir, files=files)
+
+
+def _csv_chunks(input_file, chunk_file, chunk_size, *, workdir, files=None):
     # Adapted from SPFLib/SPFSQL3.py:RunLoopTask (12608-12669); missing input skips.
     source = input_path(input_file, workdir, files)
     if not source.exists():

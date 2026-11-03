@@ -549,7 +549,7 @@ def test_prepost_group_and_run_loop_map_complete_control_scope():
     loop_code = result.emitted.source[slice(*loop.generated_range)]
     assert "job.delete_files" in group_code
     assert (
-        "with closing(job.csv_chunks('cam_lot_list.csv', 'temp_cam_lot_list.csv', 10))"
+        "with closing(job.read_csv('cam_lot_list.csv', 'temp_cam_lot_list.csv', 10))"
         in loop_code
     )
     assert "job.smart_append" in loop_code
@@ -577,7 +577,7 @@ def test_prepost_group_and_run_loop_map_complete_control_scope():
     assert child_group.generated_range is not None
     child_code = child.emitted.source[slice(*child_group.generated_range)]
     assert (
-        "job.delete_files" in child_code and "with closing(job.csv_chunks" in child_code
+        "job.delete_files" in child_code and "with closing(job.read_csv" in child_code
     )
     assert "job.smart_append" in child_code and "sibling.csv" not in child_code
     assert (

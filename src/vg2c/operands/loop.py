@@ -79,7 +79,7 @@ class RunLoop:
         input_path = native_macro_expression(self.input_csv_path, macros)
         chunk_path = native_macro_expression(self.chunk_csv_path, macros)
         return (
-            f"with closing(job.csv_chunks({input_path}, {chunk_path}, "
+            f"with closing(job.read_csv({input_path}, {chunk_path}, "
             f"{self.chunk_size})) as chunks_{scope_id}:"
         )
 

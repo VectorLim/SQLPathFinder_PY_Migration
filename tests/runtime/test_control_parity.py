@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from vg2c.runtime.controls import csv_chunks, for_values
+from vg2c.runtime.controls import for_values, read_csv
 from vg2c.runtime.values import read_macro_row, snapshot_values, substitute
 
 
@@ -70,19 +70,32 @@ def test_for_values_match_original(args):
 
 def test_chunk_remainder_cleanup_missing_and_header_only(tmp_path):
     (tmp_path / "data.csv").write_text("ID\n1\n2\n3\n")
-    chunks = [path.read_text() for path in csv_chunks("data.csv", "chunk.csv", 2, workdir=tmp_path)]
+    chunks = [path.read_text() for path in read_csv("data.csv", "chunk.csv", 2, workdir=tmp_path)]
     assert chunks == ["ID\n1\n2\n", "ID\n3\n"]
     assert not (tmp_path / "chunk.csv").exists()
     (tmp_path / "data.csv").write_text("ID\n")
-    assert list(csv_chunks("data.csv", "chunk.csv", 2, workdir=tmp_path)) == []
-    assert list(csv_chunks("missing.csv", "chunk.csv", 2, workdir=tmp_path)) == []
+    assert list(read_csv("data.csv", "chunk.csv", 2, workdir=tmp_path)) == []
+    assert list(read_csv("missing.csv", "chunk.csv", 2, workdir=tmp_path)) == []
+
+
+def test_read_csv_whole_file_and_paired_chunk_args(tmp_path):
+    (tmp_path / "data.csv").write_text("ID,NAME\n1,a\n2,\n")
+    frame = read_csv("data.csv", workdir=tmp_path)
+    assert frame["ID"].tolist() == [1, 2]
+    assert frame["NAME"].isna().tolist() == [False, True]
+    with pytest.raises(ValueError, match="provided together"):
+        read_csv("data.csv", "chunk.csv", workdir=tmp_path)
+    with pytest.raises(ValueError, match="provided together"):
+        read_csv("data.csv", chunk_size=1, workdir=tmp_path)
+    with pytest.raises(FileNotFoundError):
+        read_csv("missing.csv", workdir=tmp_path)
 
 
 def test_chunk_output_cannot_delete_input(tmp_path):
     path = tmp_path / "data.csv"
     path.write_text("ID\n1\n")
     with pytest.raises(ValueError, match="overwrite its input"):
-        list(csv_chunks("data.csv", "data.csv", 1, workdir=tmp_path))
+        list(read_csv("data.csv", "data.csv", 1, workdir=tmp_path))
     assert path.read_text() == "ID\n1\n"
 
 

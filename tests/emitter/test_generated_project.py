@@ -273,7 +273,7 @@ def test_generated_run_loop_closes_chunks_and_continues_on_prompt_off(tmp_path):
     tree = ast.parse(generated)
 
     assert "from contextlib import closing" in generated
-    assert "with closing(job.csv_chunks('input.csv', 'chunk.csv', 2))" in generated
+    assert "with closing(job.read_csv('input.csv', 'chunk.csv', 2))" in generated
     assert "with macros.scope():" in generated
     assert any(
         isinstance(child, ast.Continue)
