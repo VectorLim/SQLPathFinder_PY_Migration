@@ -54,7 +54,10 @@ def scan_sql_get_csv_list_calls(body: str) -> list[SqlGetCsvListCall]:
                     csv_path=strip_quotes(args[0]),
                     column_ref=_parse_column_ref(args[1]),
                     lead_in=strip_quotes(args[2]),
-                    needs_closing_paren=bool(_CALL_SITE_WRAP_RE.search(body[: match.start()])),
+                    needs_closing_paren=(
+                        bool(_CALL_SITE_WRAP_RE.search(body[: match.start()]))
+                        and not body[next_cursor:].lstrip().startswith(")")
+                    ),
                 )
             )
         cursor = next_cursor

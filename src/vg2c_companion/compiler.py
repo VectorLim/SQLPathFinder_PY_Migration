@@ -6,6 +6,7 @@ import queue
 import tempfile
 import threading
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Callable
@@ -25,12 +26,17 @@ class CompilationOutcome:
 
 def runtime_sources() -> dict[str, str]:
     """Read the installed runtime source without importing its execution modules."""
+    return dict(_runtime_source_items())
+
+
+@lru_cache(maxsize=1)
+def _runtime_source_items() -> tuple[tuple[str, str], ...]:
     root = files("vg2c").joinpath("runtime")
-    return {
-        f"vg2c/runtime/{source.name}": source.read_text(encoding="utf-8")
+    return tuple(
+        (f"vg2c/runtime/{source.name}", source.read_text(encoding="utf-8"))
         for source in sorted(root.iterdir(), key=lambda item: item.name)
         if source.is_file() and source.name.endswith(".py")
-    }
+    )
 
 
 def compile_source(

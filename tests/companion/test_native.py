@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from vg2c_companion.observer import ObserverClient, _find_compiler, _hidden_flags
+from vg2c_companion.bridge.build import _find_compiler, _hidden_flags
+from vg2c_companion.bridge.client import ObserverClient
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows native UI integration")
 SOURCE = "<OPTIONS>\r\n/OLEDB=SQLite\r\n/CSV=out.csv\r\n</OPTIONS>\r\nSELECT 1\r\n"

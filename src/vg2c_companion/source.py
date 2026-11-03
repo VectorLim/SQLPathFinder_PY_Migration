@@ -57,7 +57,9 @@ def _prompt_step_id(block: Any) -> str | None:
 def generated_asset_links(result: Any) -> tuple[GeneratedAssetLink, ...]:
     """Return generated string literals that name an emitted asset exactly."""
     source = result.emitted.source
-    asset_names = {name for name, _content in result.emitted.assets if isinstance(name, str)}
+    asset_names = {
+        name for name, _content in result.emitted.assets if isinstance(name, str)
+    }
     line_starts = [0]
     for index, character in enumerate(source):
         if character == "\n":
@@ -85,7 +87,8 @@ def generated_asset_links(result: Any) -> tuple[GeneratedAssetLink, ...]:
 def map_generated_offset_to_asset(result: Any, offset: int) -> str | None:
     """Return one emitted asset for a clicked generated-source offset, if unambiguous."""
     matches = tuple(
-        link.name for link in generated_asset_links(result)
+        link.name
+        for link in generated_asset_links(result)
         if link.source_range[0] <= offset < link.source_range[1]
     )
     return matches[0] if len(matches) == 1 else None
@@ -101,93 +104,170 @@ def map_designer_label(
     compiled_title: str,
 ) -> SourceMapping:
     """Map a designer's own qualified step ID through compiler prompt metadata."""
-    if not observed_pid or observed_pid != compiled_pid or designer_document(observed_title) != designer_document(compiled_title):
-        return SourceMapping(None, None, None, reason="Designer/process context does not match the preview.")
+    if (
+        not observed_pid
+        or observed_pid != compiled_pid
+        or designer_document(observed_title) != designer_document(compiled_title)
+    ):
+        return SourceMapping(
+            None,
+            None,
+            None,
+            reason="Designer/process context does not match the preview.",
+        )
     match = re.match(r"^(" + _STEP_ID + r")\.\s+", label)
     blocks = tuple(getattr(result.dispatched.resolved, "blocks", ()))
-    is_main_query = bool(match and label[match.end():].strip().lower() == "main query")
+    is_main_query = bool(match and label[match.end() :].strip().lower() == "main query")
     is_prepost_query = bool(
-        match and re.match(r"pre/post\s+query(?:\s|$)", label[match.end():].strip(), re.IGNORECASE)
+        match
+        and re.match(
+            r"pre/post\s+query(?:\s|$)", label[match.end() :].strip(), re.IGNORECASE
+        )
     )
     if is_prepost_query:
         root_id = match.group(1)
-        query_name = re.search(r"\{([^{}]+)\}", label[match.end():])
-        opened_query = bool(query_name and re.search(
-            r"\(Pre/Post Query - .* - " + re.escape(query_name.group(1)) + r" - [0-9]+\) - \[",
-            observed_title, re.IGNORECASE,
-        ))
+        query_name = re.search(r"\{([^{}]+)\}", label[match.end() :])
+        opened_query = bool(
+            query_name
+            and re.search(
+                r"\(Pre/Post Query - .* - "
+                + re.escape(query_name.group(1))
+                + r" - [0-9]+\) - \[",
+                observed_title,
+                re.IGNORECASE,
+            )
+        )
         # A separately captured child has local step numbers, while its tree retains the parent's ID.
-        members = blocks if opened_query else tuple(
-            block for block in blocks
-            if (prompt_id := _prompt_step_id(block))
-            and (prompt_id == root_id or prompt_id.startswith(root_id + "-"))
+        members = (
+            blocks
+            if opened_query
+            else tuple(
+                block
+                for block in blocks
+                if (prompt_id := _prompt_step_id(block))
+                and (prompt_id == root_id or prompt_id.startswith(root_id + "-"))
+            )
         )
         if not members:
-            return SourceMapping(None, None, None, reason=f"Pre/Post Query {root_id} has no emitted prompt-mapped steps.")
-        return _mapping_for_blocks(result, members, f"Mapped Pre/Post Query {root_id} and its nested steps.")
+            return SourceMapping(
+                None,
+                None,
+                None,
+                reason=f"Pre/Post Query {root_id} has no emitted prompt-mapped steps.",
+            )
+        return _mapping_for_blocks(
+            result, members, f"Mapped Pre/Post Query {root_id} and its nested steps."
+        )
     if is_main_query:
         root_id = match.group(1)
         query_blocks = tuple(
-            block for block in blocks
+            block
+            for block in blocks
             if (prompt_id := _prompt_step_id(block))
             and (prompt_id == root_id or prompt_id.startswith(root_id + "."))
             and (step := result.emitted.step_for_block(block.index)) is not None
-            and str(getattr(step, "functional_kind", "")).lower() in {
-                "sql_query", "sql-query", "sqlite_query", "sqlite-query", "duckdb_query", "duckdb-query",
+            and str(getattr(step, "functional_kind", "")).lower()
+            in {
+                "sql_query",
+                "sql-query",
+                "sqlite_query",
+                "sqlite-query",
+                "duckdb_query",
+                "duckdb-query",
             }
         )
         if len(query_blocks) == 1:
-            return _mapping_for_block(result, query_blocks[0], f"Mapped main query {root_id}.")
+            return _mapping_for_block(
+                result, query_blocks[0], f"Mapped main query {root_id}."
+            )
         if query_blocks:
-            return SourceMapping(None, None, None, reason="Main-query prompt mapping is ambiguous.")
+            return SourceMapping(
+                None, None, None, reason="Main-query prompt mapping is ambiguous."
+            )
         if any(block.resolved_options.lookup.get("PROMPT-TEXT") for block in blocks):
-            return SourceMapping(None, None, None, reason="Main query has no emitted prompt-mapped query step.")
+            return SourceMapping(
+                None,
+                None,
+                None,
+                reason="Main query has no emitted prompt-mapped query step.",
+            )
     if match:
         step_id = match.group(1)
-        matches = tuple(
-            block for block in blocks
-            if _prompt_step_id(block) == step_id
-        )
+        matches = tuple(block for block in blocks if _prompt_step_id(block) == step_id)
         if len(matches) == 1:
-            return _mapping_for_block(result, matches[0], f"Mapped designer step {step_id}.")
+            return _mapping_for_block(
+                result, matches[0], f"Mapped designer step {step_id}."
+            )
         if matches:
-            return SourceMapping(None, None, None, reason="Designer step prompt mapping is ambiguous.")
+            return SourceMapping(
+                None, None, None, reason="Designer step prompt mapping is ambiguous."
+            )
         if label != "1. Main Query":
-            return SourceMapping(None, None, None, reason=f"No compiler prompt matches designer step {step_id}.")
+            return SourceMapping(
+                None,
+                None,
+                None,
+                reason=f"No compiler prompt matches designer step {step_id}.",
+            )
     if label != "1. Main Query":
-        return SourceMapping(None, None, None, reason="Designer label has no qualified step ID.")
+        return SourceMapping(
+            None, None, None, reason="Designer label has no qualified step ID."
+        )
     steps = tuple(getattr(result.emitted, "steps", ()))
     query_steps = tuple(
-        step for step in steps
-        if str(getattr(step, "functional_kind", "")).lower() in {
-            "sql_query", "sql-query", "sqlite_query", "sqlite-query",
-            "duckdb_query", "duckdb-query",
+        step
+        for step in steps
+        if str(getattr(step, "functional_kind", "")).lower()
+        in {
+            "sql_query",
+            "sql-query",
+            "sqlite_query",
+            "sqlite-query",
+            "duckdb_query",
+            "duckdb-query",
         }
     )
     if len(query_steps) != 1:
-        return SourceMapping(None, None, None, reason="Main-query mapping is ambiguous.")
+        return SourceMapping(
+            None, None, None, reason="Main-query mapping is ambiguous."
+        )
     step = query_steps[0]
-    return _mapping_for_step(result, step, "Mapped the exact SQLPathFinder main-query label.")
+    return _mapping_for_step(
+        result, step, "Mapped the exact SQLPathFinder main-query label."
+    )
 
 
 def _mapping_for_block(result: Any, block: Any, reason: str) -> SourceMapping:
     step = result.emitted.step_for_block(block.index)
     if step is None:
-        scope = next((
-            scope for scope in getattr(result.emitted, "scopes", ())
-            if block.index in (scope.start_index, scope.end_index)
-        ), None)
+        scope = next(
+            (
+                scope
+                for scope in getattr(result.emitted, "scopes", ())
+                if block.index in (scope.start_index, scope.end_index)
+            ),
+            None,
+        )
         if scope is not None:
             start, end = scope.source_range.start_offset, scope.source_range.end_offset
             return SourceMapping(block.index, start, (start, end), reason=reason)
-        return SourceMapping(block.index, None, None, reason="Compiler emitted no step for this block.")
+        return SourceMapping(
+            block.index, None, None, reason="Compiler emitted no step for this block."
+        )
     return _mapping_for_step(result, step, reason)
 
 
-def _mapping_for_blocks(result: Any, blocks: tuple[Any, ...], reason: str) -> SourceMapping:
+def _mapping_for_blocks(
+    result: Any, blocks: tuple[Any, ...], reason: str
+) -> SourceMapping:
     mappings = tuple(_mapping_for_block(result, block, reason) for block in blocks)
     if any(mapping.generated_range is None for mapping in mappings):
-        return SourceMapping(None, None, None, reason="Compiler emitted no step for part of this Pre/Post Query.")
+        return SourceMapping(
+            None,
+            None,
+            None,
+            reason="Compiler emitted no step for part of this Pre/Post Query.",
+        )
     ranges = tuple(mapping.generated_range for mapping in mappings)
     owned: list[str] = []
     for mapping in mappings:
@@ -197,7 +277,10 @@ def _mapping_for_blocks(result: Any, blocks: tuple[Any, ...], reason: str) -> So
     return SourceMapping(
         block_index=None,
         generated_offset=min(start for start, _end in ranges),
-        generated_range=(min(start for start, _end in ranges), max(end for _start, end in ranges)),
+        generated_range=(
+            min(start for start, _end in ranges),
+            max(end for _start, end in ranges),
+        ),
         asset_names=tuple(owned),
         reason=reason,
     )
@@ -258,7 +341,9 @@ def _is_separator_line(text: str, line: int) -> bool:
     )
 
 
-def map_source_offset(result: Any, source_text: str, source_offset: int) -> SourceMapping:
+def map_source_offset(
+    result: Any, source_text: str, source_offset: int
+) -> SourceMapping:
     """Map a source caret to the emitted step range owned by its block.
 
     The compiler intentionally exposes block line spans and emitted step ranges;
@@ -267,18 +352,25 @@ def map_source_offset(result: Any, source_text: str, source_offset: int) -> Sour
     source_offset = max(0, min(source_offset, len(source_text)))
     line = _line_at(source_text, source_offset)
     if _is_separator_line(source_text, line):
-        return SourceMapping(None, None, None, reason="Query separator has no source block mapping.")
+        return SourceMapping(
+            None, None, None, reason="Query separator has no source block mapping."
+        )
     # shortcut: compiler blocks expose line spans only; upgrade when character spans are public.
     blocks = tuple(getattr(result.dispatched.resolved, "blocks", ()))
     block = next(
         (
             item
             for item in blocks
-            if item.span.start_line <= line <= max(item.span.end_line, item.span.start_line)
+            if item.span.start_line
+            <= line
+            <= max(item.span.end_line, item.span.start_line)
         ),
         None,
     )
     if block is None:
-        return SourceMapping(None, None, None, reason="No compiler block covers this source line.")
-    return _mapping_for_block(result, block, f"Mapped source line {line} to block {block.index}.")
-
+        return SourceMapping(
+            None, None, None, reason="No compiler block covers this source line."
+        )
+    return _mapping_for_block(
+        result, block, f"Mapped source line {line} to block {block.index}."
+    )

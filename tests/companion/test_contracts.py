@@ -17,7 +17,15 @@ from vg2c_companion.compiler import CompilationWorker, compile_source, runtime_s
 from vg2c_companion.export import export_preview, save_copy
 from vg2c_companion.models import EditCopy, ObserverSnapshot, Selection
 from vg2c_companion.native import inspect_native
-from vg2c_companion.observer import NativeTarget, _find_compiler, _helper_build_command, parse_refresh, parse_snapshot, parse_targets
+from vg2c_companion.bridge.build import _find_compiler, _helper_build_command
+from vg2c_companion.bridge.protocol import (
+    NativeTarget,
+    RefreshResult,
+    parse_refresh,
+    parse_snapshot,
+    parse_targets,
+)
+from vg2c_companion.bridge.worker import ObserverWorker
 from vg2c_companion.source import (
     SourceMapping,
     generated_asset_links,
@@ -40,16 +48,23 @@ def _fake_result():
             source_range=SourceRange(10, 20),
             parameters=(SimpleNamespace(artifact_role=True, value="sql/query.sql"),),
         ),
-        1: SimpleNamespace(block_index=1, source_range=SourceRange(30, 40), parameters=()),
+        1: SimpleNamespace(
+            block_index=1, source_range=SourceRange(30, 40), parameters=()
+        ),
     }
     emitted = SimpleNamespace(
         assets=(("sql/query.sql", "SELECT 1\n"),),
         step_for_block=lambda index: steps.get(index),
     )
-    return SimpleNamespace(dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)), emitted=emitted)
+    return SimpleNamespace(
+        dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)),
+        emitted=emitted,
+    )
 
 
-def _generated_link_result(parameters, assets, source="run('sql/query.sql', 'pages/report.html')\n"):
+def _generated_link_result(
+    parameters, assets, source="run('sql/query.sql', 'pages/report.html')\n"
+):
     emitted = SimpleNamespace(
         source=source,
         assets=assets,
@@ -81,7 +96,9 @@ def test_runtime_library_sources_are_browsable_without_generated_asset_copies():
     sources = runtime_sources()
     assert "vg2c/runtime/__init__.py" in sources
     assert "class JobRuntime:" in sources["vg2c/runtime/job.py"]
-    assert all(name.startswith("vg2c/runtime/") and name.endswith(".py") for name in sources)
+    assert all(
+        name.startswith("vg2c/runtime/") and name.endswith(".py") for name in sources
+    )
 
 
 def test_generated_asset_navigation_uses_only_exact_emitted_string_literals():
@@ -92,7 +109,10 @@ def test_generated_asset_navigation_uses_only_exact_emitted_string_literals():
         source,
     )
 
-    assert [link.name for link in generated_asset_links(result)] == ["sql/query.sql", "pages/report.html"]
+    assert [link.name for link in generated_asset_links(result)] == [
+        "sql/query.sql",
+        "pages/report.html",
+    ]
     assert map_generated_offset_to_asset(result, 8) == "sql/query.sql"
     assert map_generated_offset_to_asset(result, 30) == "pages/report.html"
     assert map_generated_offset_to_asset(result, source.index("missing.sql")) is None
@@ -111,7 +131,12 @@ def test_utf16_offsets_and_duplicate_source_lines_map_to_distinct_steps():
     assert utf16_to_python_offset("abc\n", 0) == 0
     assert utf16_to_python_offset("abc\n", 4) == 4
     separator = "first\n<---- New Query ---->\nsecond\n"
-    assert map_source_offset(_fake_result(), separator, separator.index("New Query")).block_index is None
+    assert (
+        map_source_offset(
+            _fake_result(), separator, separator.index("New Query")
+        ).block_index
+        is None
+    )
     assert python_to_utf16_offset("😀x", 1) == 2
     assert utf16_to_python_offset("😀x", 2) == 1
 
@@ -135,9 +160,13 @@ def test_dirty_edit_copy_marks_new_source_revision_without_overwrite():
     assert copy.pending_identity == 2
 
 
-def test_export_accepts_empty_directory_and_rejects_nonempty_or_traversal(tmp_path: Path):
+def test_export_accepts_empty_directory_and_rejects_nonempty_or_traversal(
+    tmp_path: Path,
+):
     result = SimpleNamespace(
-        emitted=SimpleNamespace(source="print('preview')\n", assets=(("sql/query.sql", "SELECT 1\n"),))
+        emitted=SimpleNamespace(
+            source="print('preview')\n", assets=(("sql/query.sql", "SELECT 1\n"),)
+        )
     )
     destination = tmp_path / "export"
     destination.mkdir()
@@ -145,10 +174,14 @@ def test_export_accepts_empty_directory_and_rejects_nonempty_or_traversal(tmp_pa
     assert (destination / "main.py").read_text() == "print('preview')\n"
     with pytest.raises(FileExistsError):
         export_preview(result, destination)
-    unsafe = SimpleNamespace(emitted=SimpleNamespace(source="", assets=(("../escape.sql", "x"),)))
+    unsafe = SimpleNamespace(
+        emitted=SimpleNamespace(source="", assets=(("../escape.sql", "x"),))
+    )
     with pytest.raises(ValueError):
         export_preview(unsafe, tmp_path / "unsafe")
-    aliases = SimpleNamespace(emitted=SimpleNamespace(source="", assets=(("A.sql", "x"), ("a.SQL", "y"))))
+    aliases = SimpleNamespace(
+        emitted=SimpleNamespace(source="", assets=(("A.sql", "x"), ("a.SQL", "y")))
+    )
     with pytest.raises(ValueError):
         export_preview(aliases, tmp_path / "aliases")
     original = tmp_path / "original.txt"
@@ -170,8 +203,10 @@ def test_observer_build_command_uses_framework_root_and_msaa_refs(tmp_path: Path
         (compiler.parent / name).write_text("")
     found = _find_compiler(windows)
     assert found == compiler
-    command = _helper_build_command(compiler, tmp_path / "observer.exe", tmp_path / "observer.cs")
+    sources = [tmp_path / "Contracts.cs", tmp_path / "Program.cs"]
+    command = _helper_build_command(compiler, tmp_path / "observer.exe", sources)
     assert str(compiler) == command[0]
+    assert command[-2:] == [str(source) for source in sources]
     assert any(item.endswith("Accessibility.dll") for item in command)
     assert not any("UIAutomation" in item or "WindowsBase" in item for item in command)
     assert not any(item.endswith("csc.exe\\csc.exe") for item in command)
@@ -179,7 +214,10 @@ def test_observer_build_command_uses_framework_root_and_msaa_refs(tmp_path: Path
 
 def test_native_snapshot_reads_bom_and_quoted_csv(tmp_path: Path):
     native = tmp_path / "sample.VG2"
-    native.write_text('\ufeffVERSION:,"7.1"\nTABLEGRID,"1. Main Query","a,b"\nQUERYGRID,"x,y"\n', encoding="utf-8")
+    native.write_text(
+        '\ufeffVERSION:,"7.1"\nTABLEGRID,"1. Main Query","a,b"\nQUERYGRID,"x,y"\n',
+        encoding="utf-8",
+    )
     snapshot = inspect_native(native)
     assert snapshot.version == "7.1"
     assert snapshot.sections == ("TABLEGRID", "QUERYGRID")
@@ -189,10 +227,10 @@ def test_main_query_mapping_requires_exact_context_and_unique_query_step():
     source = "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1\n"
     result = compile_source(source, "main-query.txt")
     query_steps = tuple(
-        step for step in result.emitted.steps
-        if str(getattr(step, "functional_kind", "")).lower() in {
-            "sql_query", "sql-query", "sqlite_query", "sqlite-query"
-        }
+        step
+        for step in result.emitted.steps
+        if str(getattr(step, "functional_kind", "")).lower()
+        in {"sql_query", "sql-query", "sqlite_query", "sqlite-query"}
     )
     assert len(query_steps) == 1
     mapped = map_designer_label(
@@ -204,78 +242,171 @@ def test_main_query_mapping_requires_exact_context_and_unique_query_step():
         compiled_title="Cayman",
     )
     assert mapped.block_index == query_steps[0].block_index
-    assert map_designer_label(
-        result,
-        "Other",
-        observed_pid=42,
-        compiled_pid=42,
-        observed_title="Cayman",
-        compiled_title="Cayman",
-    ).block_index is None
+    assert (
+        map_designer_label(
+            result,
+            "Other",
+            observed_pid=42,
+            compiled_pid=42,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        ).block_index
+        is None
+    )
 
 
 def test_designer_step_mapping_uses_exact_prompt_ids_and_rejects_duplicates():
     def result(prompts):
-        blocks = tuple(SimpleNamespace(
-            index=index,
-            resolved_options=SimpleNamespace(lookup={"PROMPT-TEXT": prompt}),
-        ) for index, prompt in enumerate(prompts))
-        steps = {block.index: SimpleNamespace(
-            block_index=block.index, source_range=SourceRange(10 + block.index, 20 + block.index), parameters=(),
-        ) for block in blocks}
-        emitted = SimpleNamespace(assets=(), steps=tuple(steps.values()), step_for_block=steps.get)
-        return SimpleNamespace(dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)), emitted=emitted)
-
-    mapped = map_designer_label(result(("Step 1-14.1. Nested step",)), "1-14.1. Nested step", observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman")
-    assert mapped.block_index == 0
-    assert map_designer_label(result(("Step 1. First", "Step 1. Duplicate")), "1. First", observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman").generated_offset is None
-    assert map_designer_label(result(("Step 12. Other",)), "1. First", observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman").generated_offset is None
-
-
-@pytest.mark.parametrize("compiled_title,observed_title", [
-    ("Cayman", "Cayman"),
-    ("SQLPathFinder 3 (Main - 31154) - [sample.vg2 (L0)]",
-     "SQLPathFinder 3 (Pre/Post Query - sample.vg2 (L0) - unit_level_data - - 31154) - [sample.vg2 (L0)]"),
-])
-def test_prepost_query_mapping_groups_only_hyphen_descendants_and_requires_all_ranges(compiled_title, observed_title):
-    def result(prompts, missing=()):
-        blocks = tuple(SimpleNamespace(
-            index=index,
-            resolved_options=SimpleNamespace(lookup={"PROMPT-TEXT": prompt}),
-        ) for index, prompt in enumerate(prompts))
+        blocks = tuple(
+            SimpleNamespace(
+                index=index,
+                resolved_options=SimpleNamespace(lookup={"PROMPT-TEXT": prompt}),
+            )
+            for index, prompt in enumerate(prompts)
+        )
         steps = {
             block.index: SimpleNamespace(
                 block_index=block.index,
-                source_range=SourceRange(10 + (block.index * 10), 18 + (block.index * 10)),
+                source_range=SourceRange(10 + block.index, 20 + block.index),
                 parameters=(),
             )
-            for block in blocks if block.index not in missing
+            for block in blocks
         }
-        emitted = SimpleNamespace(assets=(), steps=tuple(steps.values()), step_for_block=steps.get)
-        return SimpleNamespace(dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)), emitted=emitted)
+        emitted = SimpleNamespace(
+            assets=(), steps=tuple(steps.values()), step_for_block=steps.get
+        )
+        return SimpleNamespace(
+            dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)),
+            emitted=emitted,
+        )
+
+    mapped = map_designer_label(
+        result(("Step 1-14.1. Nested step",)),
+        "1-14.1. Nested step",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
+    )
+    assert mapped.block_index == 0
+    assert (
+        map_designer_label(
+            result(("Step 1. First", "Step 1. Duplicate")),
+            "1. First",
+            observed_pid=7,
+            compiled_pid=7,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        ).generated_offset
+        is None
+    )
+    assert (
+        map_designer_label(
+            result(("Step 12. Other",)),
+            "1. First",
+            observed_pid=7,
+            compiled_pid=7,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        ).generated_offset
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "compiled_title,observed_title",
+    [
+        ("Cayman", "Cayman"),
+        (
+            "SQLPathFinder 3 (Main - 31154) - [sample.vg2 (L0)]",
+            "SQLPathFinder 3 (Pre/Post Query - sample.vg2 (L0) - unit_level_data - - 31154) - [sample.vg2 (L0)]",
+        ),
+    ],
+)
+def test_prepost_query_mapping_groups_only_hyphen_descendants_and_requires_all_ranges(
+    compiled_title, observed_title
+):
+    def result(prompts, missing=()):
+        blocks = tuple(
+            SimpleNamespace(
+                index=index,
+                resolved_options=SimpleNamespace(lookup={"PROMPT-TEXT": prompt}),
+            )
+            for index, prompt in enumerate(prompts)
+        )
+        steps = {
+            block.index: SimpleNamespace(
+                block_index=block.index,
+                source_range=SourceRange(
+                    10 + (block.index * 10), 18 + (block.index * 10)
+                ),
+                parameters=(),
+            )
+            for block in blocks
+            if block.index not in missing
+        }
+        emitted = SimpleNamespace(
+            assets=(), steps=tuple(steps.values()), step_for_block=steps.get
+        )
+        return SimpleNamespace(
+            dispatched=SimpleNamespace(resolved=SimpleNamespace(blocks=blocks)),
+            emitted=emitted,
+        )
 
     grouped = map_designer_label(
-        result(("Step 6-1. First", "Step 6-3.1-a0. Nested", "Step 60-1. Other", "Step 7-1. Other")),
+        result(
+            (
+                "Step 6-1. First",
+                "Step 6-3.1-a0. Nested",
+                "Step 60-1. Other",
+                "Step 7-1. Other",
+            )
+        ),
         "6. Pre/Post Query {unit_level_data}=5",
-        observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
     )
     assert grouped.generated_range == (10, 28)
     assert grouped.block_index is None
     assert map_designer_label(
-        result(("Step 6. Root",)), "6. Pre/Post Query", observed_pid=7, compiled_pid=7,
-        observed_title="Cayman", compiled_title="Cayman",
+        result(("Step 6. Root",)),
+        "6. Pre/Post Query",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
     ).generated_range == (10, 18)
-    assert map_designer_label(
-        result(("Step 6-1. First",), missing=(0,)), "6. Pre/Post Query", observed_pid=7, compiled_pid=7,
-        observed_title="Cayman", compiled_title="Cayman",
-    ).generated_range is None
-    assert map_designer_label(
-        result(("Step 7-1. Other",)), "6. Pre/Post Query", observed_pid=7, compiled_pid=7,
-        observed_title="Cayman", compiled_title="Cayman",
-    ).generated_range is None
+    assert (
+        map_designer_label(
+            result(("Step 6-1. First",), missing=(0,)),
+            "6. Pre/Post Query",
+            observed_pid=7,
+            compiled_pid=7,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        ).generated_range
+        is None
+    )
+    assert (
+        map_designer_label(
+            result(("Step 7-1. Other",)),
+            "6. Pre/Post Query",
+            observed_pid=7,
+            compiled_pid=7,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        ).generated_range
+        is None
+    )
     ordinary = map_designer_label(
-        result(("Step 6. Root", "Step 6-1. Nested")), "6. Root", observed_pid=7, compiled_pid=7,
-        observed_title="Cayman", compiled_title="Cayman",
+        result(("Step 6. Root", "Step 6-1. Nested")),
+        "6. Root",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
     )
     assert ordinary.generated_range == (10, 18)
 
@@ -297,7 +428,9 @@ def test_prepost_query_mapping_groups_only_hyphen_descendants_and_requires_all_r
     app._last_mapping_key = None
     app._active_mapping = None
     app.selected_generated_name = "sql/query.sql"
-    app.status = SimpleNamespace(configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready")
+    app.status = SimpleNamespace(
+        configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready"
+    )
     app.selection_status = SimpleNamespace(configure=lambda **_kwargs: None)
     app._position_beside = lambda _bounds: None
     app._clear_selection = lambda: None
@@ -305,14 +438,18 @@ def test_prepost_query_mapping_groups_only_hyphen_descendants_and_requires_all_r
     mappings = []
     app._show_mapping = mappings.append
 
-    app._apply_snapshot(ObserverSnapshot(
-        target_pid=7,
-        window_title=observed_title,
-        designer_window_title=observed_title,
-        designer_fingerprint="root",
-        designer_values=("6. Pre/Post Query {unit_level_data}=5 focused <TreeItem>",),
-        active_control="designer",
-    ))
+    app._apply_snapshot(
+        ObserverSnapshot(
+            target_pid=7,
+            window_title=observed_title,
+            designer_window_title=observed_title,
+            designer_fingerprint="root",
+            designer_values=(
+                "6. Pre/Post Query {unit_level_data}=5 focused <TreeItem>",
+            ),
+            active_control="designer",
+        )
+    )
 
     assert app.shown_generated == "main.py"
     assert mappings[0].generated_range == (10, 28)
@@ -321,8 +458,13 @@ def test_prepost_query_mapping_groups_only_hyphen_descendants_and_requires_all_r
 def test_prepost_query_mapping_uses_compiler_step_ranges():
     def block(prompt, csv, sql):
         return (
-            "<OPTIONS>\n/OLEDB=SQLite\n/CSV=" + csv + "\n/PROMPT-TEXT=" + prompt
-            + "\n</OPTIONS>\n" + sql + "\n<---- New Query ---->\n"
+            "<OPTIONS>\n/OLEDB=SQLite\n/CSV="
+            + csv
+            + "\n/PROMPT-TEXT="
+            + prompt
+            + "\n</OPTIONS>\n"
+            + sql
+            + "\n<---- New Query ---->\n"
         )
 
     result = compile_source(
@@ -332,13 +474,19 @@ def test_prepost_query_mapping_uses_compiler_step_ranges():
         "prepost.txt",
     )
     mapping = map_designer_label(
-        result, "6. Pre/Post Query", observed_pid=7, compiled_pid=7,
-        observed_title="Cayman", compiled_title="Cayman",
+        result,
+        "6. Pre/Post Query",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
     )
     members = tuple(
         result.emitted.step_for_block(block.index)
         for block in result.dispatched.resolved.blocks
-        if block.resolved_options.lookup.get("PROMPT-TEXT", "").startswith(("Step 6-1.", "Step 6-2."))
+        if block.resolved_options.lookup.get("PROMPT-TEXT", "").startswith(
+            ("Step 6-1.", "Step 6-2.")
+        )
     )
     sibling = next(
         result.emitted.step_for_block(block.index)
@@ -356,7 +504,10 @@ def test_prepost_query_mapping_uses_compiler_step_ranges():
     assert mapped_source.index(first_call) < mapped_source.index(second_call)
     for step, statement in zip(members, (first_call, second_call), strict=True):
         span = step.source_range
-        assert result.emitted.source[span.start_offset:span.end_offset].strip() == statement
+        assert (
+            result.emitted.source[span.start_offset : span.end_offset].strip()
+            == statement
+        )
     assert members[0].source_range.end_offset <= members[1].source_range.start_offset
     assert sibling.source_range.start_offset >= mapping.generated_range[1]
 
@@ -366,16 +517,30 @@ def test_prepost_group_and_run_loop_map_complete_control_scope():
         return f"<OPTIONS>\n{options}\n</OPTIONS>\n{body}\n<---- New Query ---->\n"
 
     source = (
-        block('/UTILITIES=@EXEDIR@\\SPFDelete.bat "data.csv" "N"\n/PROMPT-TEXT=Step 6-1. Delete Files')
-        + block('/UTILITIES={RUN-LOOP} "cam_lot_list.csv" "temp_cam_lot_list.csv" "10" "N" "0"\n/PROMPT-TEXT=Step 6-2. Loop through a File')
-        + block('/ENGINE=SQLite\n/CSV=xdata.csv\n/PROMPT-TEXT=Step 6-3.1-a0. Fetching Data', "SELECT 1 AS lot")
-        + block('/ENGINE=SQLite\n/CSV=merged.csv', "SELECT 2 AS lot")
-        + block('/UTILITIES=@EXEDIR@\\SmartAppend.va "data.csv" "xdata.csv"\n/PROMPT-TEXT=Step 6-4. Smart-Append Data')
-        + block('/UTILITIES={END-LOOP}')
-        + block('/ENGINE=SQLite\n/CSV=sibling.csv\n/PROMPT-TEXT=Step 7-1. Sibling', "SELECT 7 AS lot")
+        block(
+            '/UTILITIES=@EXEDIR@\\SPFDelete.bat "data.csv" "N"\n/PROMPT-TEXT=Step 6-1. Delete Files'
+        )
+        + block(
+            '/UTILITIES={RUN-LOOP} "cam_lot_list.csv" "temp_cam_lot_list.csv" "10" "N" "0"\n/PROMPT-TEXT=Step 6-2. Loop through a File'
+        )
+        + block(
+            "/ENGINE=SQLite\n/CSV=xdata.csv\n/PROMPT-TEXT=Step 6-3.1-a0. Fetching Data",
+            "SELECT 1 AS lot",
+        )
+        + block("/ENGINE=SQLite\n/CSV=merged.csv", "SELECT 2 AS lot")
+        + block(
+            '/UTILITIES=@EXEDIR@\\SmartAppend.va "data.csv" "xdata.csv"\n/PROMPT-TEXT=Step 6-4. Smart-Append Data'
+        )
+        + block("/UTILITIES={END-LOOP}")
+        + block(
+            "/ENGINE=SQLite\n/CSV=sibling.csv\n/PROMPT-TEXT=Step 7-1. Sibling",
+            "SELECT 7 AS lot",
+        )
     )
     result = compile_source(source, "prepost-loop.txt")
-    context = dict(observed_pid=7, compiled_pid=7, observed_title="parent", compiled_title="parent")
+    context = dict(
+        observed_pid=7, compiled_pid=7, observed_title="parent", compiled_title="parent"
+    )
     group = map_designer_label(result, "6. Pre/Post Query {unit_level_data}", **context)
     loop = map_designer_label(result, "6-2. Loop through a File", **context)
     assert group.generated_range is not None
@@ -383,28 +548,44 @@ def test_prepost_group_and_run_loop_map_complete_control_scope():
     group_code = result.emitted.source[slice(*group.generated_range)]
     loop_code = result.emitted.source[slice(*loop.generated_range)]
     assert "job.delete_files" in group_code
-    assert "with closing(job.csv_chunks('cam_lot_list.csv', 'temp_cam_lot_list.csv', 10))" in loop_code
+    assert (
+        "with closing(job.csv_chunks('cam_lot_list.csv', 'temp_cam_lot_list.csv', 10))"
+        in loop_code
+    )
     assert "job.smart_append" in loop_code
     assert "output='merged.csv'" in loop_code
     assert "job.delete_files" not in loop_code
     assert "sibling.csv" not in group_code
     assert group.generated_range[1] == loop.generated_range[1]
     end_loop = result.dispatched.resolved.blocks[5]
-    end_mapping = map_source_offset(result, source, source.index('/UTILITIES={END-LOOP}'))
+    end_mapping = map_source_offset(
+        result, source, source.index("/UTILITIES={END-LOOP}")
+    )
     assert end_mapping.block_index == end_loop.index
     assert end_mapping.generated_range == loop.generated_range
 
-    child_source = source.rsplit('<---- New Query ---->', 2)[0] + '\n<---- New Query ---->\n'
-    child_source = child_source.replace('Step 6-', 'Step ')
-    child = compile_source(child_source, 'unit_level_data.txt')
+    child_source = (
+        source.rsplit("<---- New Query ---->", 2)[0] + "\n<---- New Query ---->\n"
+    )
+    child_source = child_source.replace("Step 6-", "Step ")
+    child = compile_source(child_source, "unit_level_data.txt")
     title = "SQLPathFinder 3 (Pre/Post Query - parent.vg2 (L0) - unit_level_data - 31154) - [31154.vg2 (L1)]"
     context.update(observed_title=title, compiled_title=title)
-    child_group = map_designer_label(child, "6. Pre/Post Query {unit_level_data}", **context)
+    child_group = map_designer_label(
+        child, "6. Pre/Post Query {unit_level_data}", **context
+    )
     assert child_group.generated_range is not None
     child_code = child.emitted.source[slice(*child_group.generated_range)]
-    assert "job.delete_files" in child_code and "with closing(job.csv_chunks" in child_code
+    assert (
+        "job.delete_files" in child_code and "with closing(job.csv_chunks" in child_code
+    )
     assert "job.smart_append" in child_code and "sibling.csv" not in child_code
-    assert map_designer_label(child, "6. Pre/Post Query {different_query}", **context).generated_range is None
+    assert (
+        map_designer_label(
+            child, "6. Pre/Post Query {different_query}", **context
+        ).generated_range
+        is None
+    )
 
 
 def test_prepost_snapshot_retains_parent_preview_until_explicit_refresh():
@@ -424,22 +605,34 @@ def test_prepost_snapshot_retains_parent_preview_until_explicit_refresh():
     app._pending_designer_fingerprint = "parent"
     app.current_identity = 12
     app.last_live_source = source
-    app.selection_status = SimpleNamespace(configure=lambda **kwargs: setattr(app, "selection_text", kwargs["text"]))
-    app.status = SimpleNamespace(configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready")
+    app.selection_status = SimpleNamespace(
+        configure=lambda **kwargs: setattr(app, "selection_text", kwargs["text"])
+    )
+    app.status = SimpleNamespace(
+        configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready"
+    )
     app._position_beside = lambda _bounds: None
-    app._submit_compile = lambda *_args: (_ for _ in ()).throw(AssertionError("nested Pre/Post source compiled"))
-    app._set_source = lambda *_args: (_ for _ in ()).throw(AssertionError("nested Pre/Post source replaced"))
-    app._clear_selection = lambda: (_ for _ in ()).throw(AssertionError("parent highlight cleared"))
+    app._submit_compile = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("nested Pre/Post source compiled")
+    )
+    app._set_source = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("nested Pre/Post source replaced")
+    )
+    app._clear_selection = lambda: (_ for _ in ()).throw(
+        AssertionError("parent highlight cleared")
+    )
 
-    app._apply_snapshot(ObserverSnapshot(
-        target_pid=7,
-        window_title="SQLPathFinder 3 (Pre/Post Query - sample.VG2 (L0)) - [sample.vg2 (L1)]",
-        source_text="child source",
-        designer_fingerprint="child",
-        designer_window_title="SQLPathFinder 3 (Pre/Post Query - sample.VG2 (L0)) - [child.vg2 (L1)]",
-        designer_values=("6. Pre/Post Query focused <TreeItem>",),
-        active_control="designer",
-    ))
+    app._apply_snapshot(
+        ObserverSnapshot(
+            target_pid=7,
+            window_title="SQLPathFinder 3 (Pre/Post Query - sample.VG2 (L0)) - [sample.vg2 (L1)]",
+            source_text="child source",
+            designer_fingerprint="child",
+            designer_window_title="SQLPathFinder 3 (Pre/Post Query - sample.VG2 (L0)) - [child.vg2 (L1)]",
+            designer_values=("6. Pre/Post Query focused <TreeItem>",),
+            active_control="designer",
+        )
+    )
 
     assert app.compiled_source_text == source
     assert app.last_live_source == source
@@ -448,21 +641,38 @@ def test_prepost_snapshot_retains_parent_preview_until_explicit_refresh():
 
 
 def test_compiled_prompt_steps_and_html_assets_produce_navigable_ranges():
-    query_source = (
-        "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n/PROMPT-TEXT=Step 15.0.\n</OPTIONS>\nSELECT 1\n"
-    )
+    query_source = "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n/PROMPT-TEXT=Step 15.0.\n</OPTIONS>\nSELECT 1\n"
     query = compile_source(query_source, "prompt-step.txt")
-    main = map_designer_label(query, "15. Main Query", observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman")
-    child = map_designer_label(query, "15.0. Text (SQLite)", observed_pid=7, compiled_pid=7, observed_title="Cayman", compiled_title="Cayman")
+    main = map_designer_label(
+        query,
+        "15. Main Query",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
+    )
+    child = map_designer_label(
+        query,
+        "15.0. Text (SQLite)",
+        observed_pid=7,
+        compiled_pid=7,
+        observed_title="Cayman",
+        compiled_title="Cayman",
+    )
     assert main.generated_range is not None
     assert main.generated_range == child.generated_range
     step = query.emitted.step_for_block(main.block_index)
     assert step is not None
-    assert main.generated_range == (step.source_range.start_offset, step.source_range.end_offset)
+    assert main.generated_range == (
+        step.source_range.start_offset,
+        step.source_range.end_offset,
+    )
     assert query.emitted.source[slice(*main.generated_range)].strip() == (
         "job.sql('sql/query_000_out.sql', output='out.csv')"
     )
-    assert "sql/query_000_out.sql" in {link.name for link in generated_asset_links(query)}
+    assert "sql/query_000_out.sql" in {
+        link.name for link in generated_asset_links(query)
+    }
 
     html = compile_source(
         "<OPTIONS>\n/REPORT=HTML-LAYOUT\n</OPTIONS>\n:FILE:report.html\n:CSS:report.css\n:CSSEMBED:N\n<h1>Report</h1>\n",
@@ -498,15 +708,24 @@ def test_pending_live_source_withholds_designer_mapping_until_recompiled():
     app._set_source = lambda _text: None
     app._submit_compile = lambda *_args: submitted.append(_args) or 2
     app._clear_selection = lambda: None
-    app._show_generated = lambda *_args: (_ for _ in ()).throw(AssertionError("stale preview navigated"))
-    app.status = SimpleNamespace(configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready")
+    app._show_generated = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("stale preview navigated")
+    )
+    app.status = SimpleNamespace(
+        configure=lambda **_kwargs: None, cget=lambda _name: "Preview ready"
+    )
     app.selection_status = SimpleNamespace(configure=lambda **_kwargs: None)
 
-    app._apply_snapshot(ObserverSnapshot(
-        target_pid=7, source_text=source.replace("SELECT 1", "SELECT 2"),
-        designer_values=("15. Main Query focused",), active_control="designer",
-        designer_fingerprint="fp", designer_window_title="Cayman",
-    ))
+    app._apply_snapshot(
+        ObserverSnapshot(
+            target_pid=7,
+            source_text=source.replace("SELECT 1", "SELECT 2"),
+            designer_values=("15. Main Query focused",),
+            active_control="designer",
+            designer_fingerprint="fp",
+            designer_window_title="Cayman",
+        )
+    )
     assert submitted
 
 
@@ -556,8 +775,22 @@ def test_refresh_frame_accepts_identical_regenerated_source_and_validates_status
     assert result.target_pid == 42
     assert result.designer_fingerprint == "designer-state"
     assert result.source_text == "<OPTIONS>\nSELECT 1\n"
-    assert parse_refresh(json.dumps({"status": "editor-open", "error": "close it"})).status == "editor-open"
-    assert parse_refresh(json.dumps({"status": "ambiguous", "designerFingerprint": None, "error": "choose one"})).designer_fingerprint == ""
+    assert (
+        parse_refresh(json.dumps({"status": "editor-open", "error": "close it"})).status
+        == "editor-open"
+    )
+    assert (
+        parse_refresh(
+            json.dumps(
+                {
+                    "status": "ambiguous",
+                    "designerFingerprint": None,
+                    "error": "choose one",
+                }
+            )
+        ).designer_fingerprint
+        == ""
+    )
     with pytest.raises(ValueError):
         parse_refresh(json.dumps({"status": "ok", "sourceText": 7}))
     with pytest.raises(ValueError):
@@ -565,31 +798,58 @@ def test_refresh_frame_accepts_identical_regenerated_source_and_validates_status
 
 
 def test_target_frame_preserves_exact_pid_hwnd_and_document_identity():
-    targets = parse_targets(json.dumps({
-        "status": "ok",
-        "targets": [{
-            "targetPid": 23048,
-            "designerHwnd": 1181596,
-            "designerWindowTitle": "SQLPathFinder 3 - [2763.vg2 (L1)]",
-            "documentName": "2763.vg2",
-        }],
-    }))
+    targets = parse_targets(
+        json.dumps(
+            {
+                "status": "ok",
+                "targets": [
+                    {
+                        "targetPid": 23048,
+                        "designerHwnd": 1181596,
+                        "designerWindowTitle": "SQLPathFinder 3 - [2763.vg2 (L1)]",
+                        "documentName": "2763.vg2",
+                    }
+                ],
+            }
+        )
+    )
     assert targets[0].target_pid == 23048
     assert targets[0].designer_hwnd == 1181596
     assert targets[0].document_name == "2763.vg2"
     with pytest.raises(ValueError):
-        parse_targets(json.dumps({"status": "ok", "targets": [{"targetPid": 1, "designerHwnd": 2}]}))
+        parse_targets(
+            json.dumps(
+                {"status": "ok", "targets": [{"targetPid": 1, "designerHwnd": 2}]}
+            )
+        )
 
 
 def test_target_frame_keeps_duplicate_documents_selectable_by_pid_and_hwnd():
-    targets = parse_targets(json.dumps({
-        "status": "ok",
-        "targets": [
-            {"targetPid": 10, "designerHwnd": 100, "designerWindowTitle": "SQLPathFinder - [same.vg2]", "documentName": "same.vg2"},
-            {"targetPid": 11, "designerHwnd": 200, "designerWindowTitle": "SQLPathFinder - [same.vg2]", "documentName": "same.vg2"},
-        ],
-    }))
-    assert [(target.target_pid, target.designer_hwnd) for target in targets] == [(10, 100), (11, 200)]
+    targets = parse_targets(
+        json.dumps(
+            {
+                "status": "ok",
+                "targets": [
+                    {
+                        "targetPid": 10,
+                        "designerHwnd": 100,
+                        "designerWindowTitle": "SQLPathFinder - [same.vg2]",
+                        "documentName": "same.vg2",
+                    },
+                    {
+                        "targetPid": 11,
+                        "designerHwnd": 200,
+                        "designerWindowTitle": "SQLPathFinder - [same.vg2]",
+                        "documentName": "same.vg2",
+                    },
+                ],
+            }
+        )
+    )
+    assert [(target.target_pid, target.designer_hwnd) for target in targets] == [
+        (10, 100),
+        (11, 200),
+    ]
 
 
 def test_observer_source_compiles_with_real_framework_csc(tmp_path: Path):
@@ -600,9 +860,12 @@ def test_observer_source_compiles_with_real_framework_csc(tmp_path: Path):
     if compiler is None:
         pytest.skip(".NET Framework csc.exe is unavailable.")
     output = tmp_path / "observer.exe"
-    source = Path(__file__).parents[2] / "src" / "vg2c_companion" / "observer.cs"
+    sources = sorted(
+        (Path(__file__).parents[2] / "src" / "vg2c_companion" / "observer_helper").glob("*.cs"),
+        key=lambda source: source.name,
+    )
     completed = subprocess.run(
-        _helper_build_command(compiler, output, source),
+        _helper_build_command(compiler, output, sources),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -615,10 +878,11 @@ def test_observer_source_compiles_with_real_framework_csc(tmp_path: Path):
 
 def test_refresh_completion_is_correlated_and_compiles_fresh_source_once():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import RefreshResult
 
     submitted = []
-    status = SimpleNamespace(configure=lambda **kwargs: setattr(status, "text", kwargs["text"]))
+    status = SimpleNamespace(
+        configure=lambda **kwargs: setattr(status, "text", kwargs["text"])
+    )
     app = _bare_app(CompanionApp)
     app._closed = False
     app._refresh_request = 7
@@ -629,7 +893,9 @@ def test_refresh_completion_is_correlated_and_compiles_fresh_source_once():
     app.status = status
     app.diagnostics_tab = None
     app.source_tab = None
-    app.worker = SimpleNamespace(submit=lambda path, text: submitted.append((path.name, text)) or 12)
+    app.worker = SimpleNamespace(
+        submit=lambda path, text: submitted.append((path.name, text)) or 12
+    )
     app._set_source = lambda text: setattr(app, "shown_source", text)
     app._select_tab = lambda _tab: None
     app._set_diagnostics = lambda _text: None
@@ -657,7 +923,6 @@ def test_refresh_completion_is_correlated_and_compiles_fresh_source_once():
 
 def test_refresh_completion_is_ignored_after_document_selection_changes():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import RefreshResult
 
     app = _bare_app(CompanionApp)
     app._refresh_request = 3
@@ -676,9 +941,10 @@ def test_refresh_completion_is_ignored_after_document_selection_changes():
 
 def test_refresh_failure_retains_last_preview_and_releases_passive_polling():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import RefreshResult
 
-    status = SimpleNamespace(configure=lambda **kwargs: setattr(status, "text", kwargs["text"]))
+    status = SimpleNamespace(
+        configure=lambda **kwargs: setattr(status, "text", kwargs["text"])
+    )
     app = _bare_app(CompanionApp)
     app._closed = False
     app._refresh_request = 4
@@ -692,7 +958,9 @@ def test_refresh_failure_retains_last_preview_and_releases_passive_polling():
     app.status = status
     app.current_result = object()
 
-    app._finish_refresh(4, RefreshResult(status="editor-open", error="Close the existing editor."))
+    app._finish_refresh(
+        4, RefreshResult(status="editor-open", error="Close the existing editor.")
+    )
 
     assert app.current_result is not None
     assert not app._poll_suspended
@@ -706,7 +974,9 @@ def test_passive_snapshot_is_discarded_while_refresh_compile_is_pending():
     app = _bare_app(CompanionApp)
     app._poll_suspended = True
     app._position_beside = lambda _bounds: None
-    app._submit_compile = lambda *_args: (_ for _ in ()).throw(AssertionError("stale frame compiled"))
+    app._submit_compile = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("stale frame compiled")
+    )
     frame = ObserverSnapshot(target_pid=42, source_text="old source")
 
     app._apply_snapshot(frame)
@@ -719,13 +989,16 @@ def test_passive_snapshot_is_ignored_without_an_exact_selected_target():
     app = _bare_app(CompanionApp)
     app._poll_suspended = False
     app._selected_target = None
-    app._position_beside = lambda _bounds: (_ for _ in ()).throw(AssertionError("unselected frame positioned"))
+    app._position_beside = lambda _bounds: (_ for _ in ()).throw(
+        AssertionError("unselected frame positioned")
+    )
 
-    app._apply_snapshot(ObserverSnapshot(target_pid=7, bounds=(1, 2, 3, 4), source_text="old"))
+    app._apply_snapshot(
+        ObserverSnapshot(target_pid=7, bounds=(1, 2, 3, 4), source_text="old")
+    )
 
 
 def test_worker_target_epoch_discards_same_pid_frames_from_previous_window():
-    from vg2c_companion.observer import ObserverWorker
 
     worker = object.__new__(ObserverWorker)
     worker._target_lock = threading.Lock()
@@ -744,10 +1017,11 @@ def test_worker_target_epoch_discards_same_pid_frames_from_previous_window():
 
 def test_open_vg2_mismatch_clears_previous_native_target():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import NativeTarget
 
     selected = []
-    status = SimpleNamespace(configure=lambda **kwargs: setattr(status, "text", kwargs["text"]))
+    status = SimpleNamespace(
+        configure=lambda **kwargs: setattr(status, "text", kwargs["text"])
+    )
     app = _bare_app(CompanionApp)
     app._targets = (NativeTarget(7, 100, "SQLPathFinder - [a.vg2]", "a.vg2"),)
     app._selected_target = app._targets[0]
@@ -757,7 +1031,9 @@ def test_open_vg2_mismatch_clears_previous_native_target():
     app._poll_suspended = False
     app._refresh_compile_identity = None
     app._refresh_button = None
-    app._observer_worker = SimpleNamespace(select_target=lambda pid, hwnd: selected.append((pid, hwnd)))
+    app._observer_worker = SimpleNamespace(
+        select_target=lambda pid, hwnd: selected.append((pid, hwnd))
+    )
     app.status = status
 
     app._match_native_target(Path("b.vg2"))
@@ -769,7 +1045,6 @@ def test_open_vg2_mismatch_clears_previous_native_target():
 
 def test_discovery_result_is_applied_by_tk_poll_queue():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import NativeTarget
 
     target = NativeTarget(7, 100, "SQLPathFinder - [a.vg2]", "a.vg2")
     applied = []
@@ -783,7 +1058,7 @@ def test_discovery_result_is_applied_by_tk_poll_queue():
     app._set_targets = lambda targets, error=None: applied.append((targets, error))
     app.root = SimpleNamespace(after=lambda *args: scheduled.append(args))
     app._poll_after = None
-    app._target_results.put(( (target,), None ))
+    app._target_results.put(((target,), None))
 
     app._discover_targets = lambda: None
     app._poll()
@@ -816,7 +1091,9 @@ def test_rediscovery_updates_descriptor_and_invalidates_only_changed_document(re
     app.pid = None
     app.target_combo = combo
     app.status = SimpleNamespace(configure=lambda **_kwargs: None)
-    app._observer_worker = SimpleNamespace(select_target=lambda *args: selected.append(args))
+    app._observer_worker = SimpleNamespace(
+        select_target=lambda *args: selected.append(args)
+    )
     app._invalidate_requests = lambda: invalidated.append(True)
     app._start_update = lambda: None
 
@@ -831,9 +1108,21 @@ def test_rediscovery_retains_parent_target_for_same_window_prepost_query():
     from vg2c_companion.app import CompanionApp
 
     root = NativeTarget(7, 100, "SQLPathFinder 3 - [a.vg2 (L0)]", "a.vg2")
-    child = NativeTarget(7, 100, "SQLPathFinder 3 (Pre/Post Query - a.vg2 (L0)) - [child.vg2 (L1)]", "child.vg2")
-    returned_root = NativeTarget(7, 100, "SQLPathFinder 3 (Pre/Post Query - a.vg2 (L0) - child - - 31154) - [a.vg2 (L0)]", "a.vg2")
-    other = NativeTarget(7, 100, "SQLPathFinder 3 (Pre/Post Query - stale) - [b.vg2 (L0)]", "b.vg2")
+    child = NativeTarget(
+        7,
+        100,
+        "SQLPathFinder 3 (Pre/Post Query - a.vg2 (L0)) - [child.vg2 (L1)]",
+        "child.vg2",
+    )
+    returned_root = NativeTarget(
+        7,
+        100,
+        "SQLPathFinder 3 (Pre/Post Query - a.vg2 (L0) - child - - 31154) - [a.vg2 (L0)]",
+        "a.vg2",
+    )
+    other = NativeTarget(
+        7, 100, "SQLPathFinder 3 (Pre/Post Query - stale) - [b.vg2 (L0)]", "b.vg2"
+    )
     invalidated = []
     started = []
 
@@ -862,7 +1151,9 @@ def test_rediscovery_retains_parent_target_for_same_window_prepost_query():
     app.current_source = None
     app.pid = None
     app.target_combo = Combo()
-    app.status = SimpleNamespace(configure=lambda **kwargs: setattr(app, "status_text", kwargs["text"]))
+    app.status = SimpleNamespace(
+        configure=lambda **kwargs: setattr(app, "status_text", kwargs["text"])
+    )
     app._observer_worker = SimpleNamespace(select_target=lambda *_args: None)
     app._invalidate_requests = lambda: invalidated.append(True)
     app._start_update = lambda: started.append(app._selected_target)
@@ -919,10 +1210,14 @@ def test_discovery_does_not_attach_or_display_native_target_over_offline_preview
 
 def test_refresh_worker_completion_is_queued_until_tk_poll():
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import NativeTarget, RefreshResult
 
     target = NativeTarget(7, 100, "SQLPathFinder - [a.vg2]", "a.vg2")
-    result = RefreshResult(target_pid=7, designer_window_title=target.designer_window_title, source_text="SELECT 1", status="ok")
+    result = RefreshResult(
+        target_pid=7,
+        designer_window_title=target.designer_window_title,
+        source_text="SELECT 1",
+        status="ok",
+    )
     applied = []
     app = _bare_app(CompanionApp)
     app.observer = SimpleNamespace(refresh=lambda *_args: result)
@@ -943,7 +1238,6 @@ def test_refresh_worker_completion_is_queued_until_tk_poll():
 
 
 def test_target_switch_discards_observation_already_in_flight():
-    from vg2c_companion.observer import ObserverWorker
 
     started = threading.Event()
     release = threading.Event()
@@ -954,7 +1248,7 @@ def test_target_switch_discards_observation_already_in_flight():
             release.wait(2)
         return ObserverSnapshot(target_pid=pid, source_text=str(hwnd))
 
-    client = SimpleNamespace(poll=poll, close=release.set)
+    client = SimpleNamespace(poll=poll, close=release.set, should_poll=lambda *_args, **_kwargs: True)
     worker = ObserverWorker(client, 7, 100)
     try:
         assert started.wait(2)
@@ -978,7 +1272,6 @@ def test_tk_update_pipeline_and_rediscovery_use_current_document(monkeypatch):
     except tk.TclError:
         pytest.skip("Tk display is unavailable")
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import RefreshResult
 
     root.withdraw()
     source = "<OPTIONS>\n/OLEDB=SQLite\n/CSV=out.csv\n</OPTIONS>\nSELECT 1\n"
@@ -989,14 +1282,21 @@ def test_tk_update_pipeline_and_rediscovery_use_current_document(monkeypatch):
 
     def refresh(pid, hwnd, name):
         calls.append((pid, hwnd, name))
-        return RefreshResult(pid, observer.targets[0].designer_window_title, "fp", observer.source, "ok")
+        return RefreshResult(
+            pid, observer.targets[0].designer_window_title, "fp", observer.source, "ok"
+        )
 
     observer.refresh = refresh
     monkeypatch.setattr("vg2c_companion.app.ObserverClient", lambda: observer)
-    monkeypatch.setattr("vg2c_companion.app.ObserverWorker", lambda *_args: SimpleNamespace(
-        drain=lambda: None, close=lambda: None, select_target=lambda *_args: None,
-        invalidate_frames=lambda: None,
-    ))
+    monkeypatch.setattr(
+        "vg2c_companion.app.ObserverWorker",
+        lambda *_args: SimpleNamespace(
+            drain=lambda: None,
+            close=lambda: None,
+            select_target=lambda *_args: None,
+            invalidate_frames=lambda: None,
+        ),
+    )
     app = CompanionApp(root)
 
     def wait_until(condition):
@@ -1019,7 +1319,10 @@ def test_tk_update_pipeline_and_rediscovery_use_current_document(monkeypatch):
         app.notebook.select(app.source_tab)
         observer.source = source.replace("SELECT 1", "SELECT 2")
         app.update_python()
-        wait_until(lambda: app.compiled_source_text == observer.source and not app._refresh_busy)
+        wait_until(
+            lambda: app.compiled_source_text == observer.source
+            and not app._refresh_busy
+        )
         assert app.notebook.select() == str(app.generated_tab)
         assert app.edit_copies[0].text == "keep my edits"
         assert app.selected_generated_name == "main.py"
@@ -1047,7 +1350,6 @@ def test_update_button_coalesces_clicks_while_native_capture_is_running(monkeypa
     except tk.TclError:
         pytest.skip("Tk display is unavailable")
     from vg2c_companion.app import CompanionApp
-    from vg2c_companion.observer import RefreshResult
 
     root.withdraw()
     target = NativeTarget(7, 100, "SQLPathFinder - [a.vg2]", "a.vg2")
@@ -1060,15 +1362,27 @@ def test_update_button_coalesces_clicks_while_native_capture_is_running(monkeypa
         number = captures[-1]
         if number == 1:
             assert release.wait(5)
-        return RefreshResult(7, target.designer_window_title, "fp", source.format(number), "ok")
+        return RefreshResult(
+            7, target.designer_window_title, "fp", source.format(number), "ok"
+        )
 
-    monkeypatch.setattr("vg2c_companion.app.ObserverClient", lambda: SimpleNamespace(
-        list_targets=lambda: (target,), last_target_error=None, refresh=refresh,
-    ))
-    monkeypatch.setattr("vg2c_companion.app.ObserverWorker", lambda *_args: SimpleNamespace(
-        drain=lambda: None, close=lambda: None, select_target=lambda *_args: None,
-        invalidate_frames=lambda: None,
-    ))
+    monkeypatch.setattr(
+        "vg2c_companion.app.ObserverClient",
+        lambda: SimpleNamespace(
+            list_targets=lambda: (target,),
+            last_target_error=None,
+            refresh=refresh,
+        ),
+    )
+    monkeypatch.setattr(
+        "vg2c_companion.app.ObserverWorker",
+        lambda *_args: SimpleNamespace(
+            drain=lambda: None,
+            close=lambda: None,
+            select_target=lambda *_args: None,
+            invalidate_frames=lambda: None,
+        ),
+    )
     app = CompanionApp(root)
 
     def wait_until(condition):
@@ -1090,7 +1404,10 @@ def test_update_button_coalesces_clicks_while_native_capture_is_running(monkeypa
         assert app._refresh_again
         assert not app._refresh_button.instate(["disabled"])
         release.set()
-        wait_until(lambda: app.compiled_source_text == source.format(2) and not app._refresh_busy)
+        wait_until(
+            lambda: app.compiled_source_text == source.format(2)
+            and not app._refresh_busy
+        )
         assert captures == [1, 2]
     finally:
         release.set()
@@ -1139,7 +1456,12 @@ def test_observer_frames_are_typed_and_preserve_process_boundaries(status: str):
                 "windowTitle": "SQLPathFinder",
                 "sourceText": "<OPTIONS>\n</OPTIONS>",
                 "sourceTruncated": True,
-                "selection": {"text": "SELECT", "start": 2, "end": 8, "truncated": False},
+                "selection": {
+                    "text": "SELECT",
+                    "start": 2,
+                    "end": 8,
+                    "truncated": False,
+                },
                 "designerValues": ["TABLEGRID"],
                 "fingerprint": "abc",
                 "status": status,
@@ -1166,7 +1488,9 @@ def test_worker_drops_out_of_order_snapshot(monkeypatch, tmp_path: Path):
         if source_text == "first":
             first_started.set()
             release_first.wait(2)
-        return SimpleNamespace(emitted=SimpleNamespace(source=source_text), diagnostics=())
+        return SimpleNamespace(
+            emitted=SimpleNamespace(source=source_text), diagnostics=()
+        )
 
     monkeypatch.setattr(compiler, "compile_source", fake_compile)
     worker = CompilationWorker(delivered.append)
@@ -1229,7 +1553,11 @@ def test_tk_main_query_mapping_persists_and_respects_native_selection():
         app._poll_suspended = False
         app._selected_target = NativeTarget(42, 100, "Cayman", "sample.vg2")
         app._positioned = True
-        app.worker = type("Worker", (), {"submit": lambda self, path, text: calls.append((path, text)) or 2})()
+        app.worker = type(
+            "Worker",
+            (),
+            {"submit": lambda self, path, text: calls.append((path, text)) or 2},
+        )()
         calls = []
         app.source = tk.Text(root, state="disabled")
         app.notebook = ttk.Notebook(root)
@@ -1267,10 +1595,18 @@ def test_tk_main_query_mapping_persists_and_respects_native_selection():
         app._apply_snapshot(observe(frame["designer_values"]))
         first = app.generated.tag_ranges("selection")
         assert first
-        expected = map_designer_label(result, "15.0. Text (SQLite)", observed_pid=42, compiled_pid=42, observed_title="Cayman", compiled_title="Cayman")
+        expected = map_designer_label(
+            result,
+            "15.0. Text (SQLite)",
+            observed_pid=42,
+            compiled_pid=42,
+            observed_title="Cayman",
+            compiled_title="Cayman",
+        )
         assert expected.generated_range is not None
         assert tuple(len(app.generated.get("1.0", index)) for index in first) == (
-            expected.generated_range[0], expected.generated_range[1],
+            expected.generated_range[0],
+            expected.generated_range[1],
         )
         app._apply_snapshot(observe(frame["designer_values"]))
         assert app.generated.tag_ranges("selection") == first
@@ -1290,8 +1626,12 @@ def test_tk_main_query_mapping_persists_and_respects_native_selection():
         app._pending_pid = 42
         app._pending_designer_title = "Cayman"
         app._pending_designer_fingerprint = "fp"
-        app._apply_snapshot(observe(frame["designer_values"], "next", "<OPTIONS>\nSELECT 1\n"))
-        app._apply_snapshot(observe(frame["designer_values"], "next", "<OPTIONS>\nSELECT 1\n"))
+        app._apply_snapshot(
+            observe(frame["designer_values"], "next", "<OPTIONS>\nSELECT 1\n")
+        )
+        app._apply_snapshot(
+            observe(frame["designer_values"], "next", "<OPTIONS>\nSELECT 1\n")
+        )
         assert len(calls) == 1
         assert app._pending_designer_fingerprint == "next"
         app.notebook.select(app.source_tab)
@@ -1350,14 +1690,23 @@ def test_tk_unmapped_source_caret_clears_and_next_mapping_restores_highlight():
             )
 
         app._apply_snapshot(observe(1))
-        assert tuple(map(str, app.generated.tag_ranges("selection"))) == ("1.10", "1.20")
+        assert tuple(map(str, app.generated.tag_ranges("selection"))) == (
+            "1.10",
+            "1.20",
+        )
 
         app._apply_snapshot(observe(source.index("New Query")))
         assert not app.generated.tag_ranges("selection")
-        assert "Query separator has no source block mapping." in app.selection_status.cget("text")
+        assert (
+            "Query separator has no source block mapping."
+            in app.selection_status.cget("text")
+        )
 
         app._apply_snapshot(observe(1))
-        assert tuple(map(str, app.generated.tag_ranges("selection"))) == ("1.10", "1.20")
+        assert tuple(map(str, app.generated.tag_ranges("selection"))) == (
+            "1.10",
+            "1.20",
+        )
     finally:
         root.destroy()
 
@@ -1381,9 +1730,13 @@ def test_tk_companion_initial_layout_and_user_sash_resize(monkeypatch):
             pass
 
     monkeypatch.setattr("vg2c_companion.app.ObserverWorker", IdleObserver)
-    monkeypatch.setattr("vg2c_companion.app.ObserverClient", lambda: SimpleNamespace(
-        list_targets=lambda: (), last_target_error=None,
-    ))
+    monkeypatch.setattr(
+        "vg2c_companion.app.ObserverClient",
+        lambda: SimpleNamespace(
+            list_targets=lambda: (),
+            last_target_error=None,
+        ),
+    )
     from vg2c_companion.app import CompanionApp
 
     try:
@@ -1402,7 +1755,11 @@ def test_tk_companion_initial_layout_and_user_sash_resize(monkeypatch):
         assert 200 <= app.tree.winfo_width() <= 260
         assert app.generated.winfo_width() > app.tree.winfo_width()
 
-        panes = next(child for child in root.winfo_children() if isinstance(child, ttk.Panedwindow))
+        panes = next(
+            child
+            for child in root.winfo_children()
+            if isinstance(child, ttk.Panedwindow)
+        )
         panes.sashpos(0, 320)
         root.update_idletasks()
         root.geometry("1100x700")
@@ -1430,9 +1787,13 @@ def test_tk_programmatic_tree_selection_does_not_steal_notebook_tab(monkeypatch)
             pass
 
     monkeypatch.setattr("vg2c_companion.app.ObserverWorker", IdleObserver)
-    monkeypatch.setattr("vg2c_companion.app.ObserverClient", lambda: SimpleNamespace(
-        list_targets=lambda: (), last_target_error=None,
-    ))
+    monkeypatch.setattr(
+        "vg2c_companion.app.ObserverClient",
+        lambda: SimpleNamespace(
+            list_targets=lambda: (),
+            last_target_error=None,
+        ),
+    )
     from vg2c_companion.app import CompanionApp
 
     try:
@@ -1468,7 +1829,9 @@ def test_tk_programmatic_tree_selection_does_not_steal_notebook_tab(monkeypatch)
         app.close()
 
 
-@pytest.mark.parametrize("source", ("# 😀\nrun('sql/query.sql')\n", "run('😀', 'sql/query.sql')\n"))
+@pytest.mark.parametrize(
+    "source", ("# 😀\nrun('sql/query.sql')\n", "run('😀', 'sql/query.sql')\n")
+)
 def test_tk_generated_asset_link_focuses_the_companion_tree_file(source):
     tk = pytest.importorskip("tkinter")
     try:
@@ -1492,7 +1855,9 @@ def test_tk_generated_asset_link_focuses_the_companion_tree_file(source):
         app._tree_assets = {"asset:sql/query.sql": "sql/query.sql"}
         app._tree_asset_files = {"asset:sql/query.sql"}
         app._last_tree_selection = ()
-        app.current_result = _generated_link_result((), (("sql/query.sql", "SELECT 1\n"),), source)
+        app.current_result = _generated_link_result(
+            (), (("sql/query.sql", "SELECT 1\n"),), source
+        )
         app.current_assets = {"sql/query.sql": "SELECT 1\n"}
         app.selected_generated_name = "main.py"
         app.compiled_source_text = ""
@@ -1503,7 +1868,10 @@ def test_tk_generated_asset_link_focuses_the_companion_tree_file(source):
         root.update_idletasks()
         bbox = app.generated.bbox(f"1.0+{source.index('query.sql')}c")
         assert bbox is not None
-        assert app.generated.get(*app.generated.tag_ranges("asset_link")) == "'sql/query.sql'"
+        assert (
+            app.generated.get(*app.generated.tag_ranges("asset_link"))
+            == "'sql/query.sql'"
+        )
 
         x, y = bbox[0] + 2, bbox[1] + 2
         app.generated.event_generate("<Motion>", x=x, y=y)
@@ -1538,7 +1906,10 @@ def test_tk_source_mapping_replaces_previous_highlight():
         app._active_mapping = None
         app._show_mapping(SourceMapping(0, 2, (2, 8)))
         app._show_mapping(SourceMapping(1, 20, (20, 28)))
-        assert tuple(map(str, app.generated.tag_ranges("selection"))) == ("1.20", "1.28")
+        assert tuple(map(str, app.generated.tag_ranges("selection"))) == (
+            "1.20",
+            "1.28",
+        )
         assert app._active_mapping == SourceMapping(1, 20, (20, 28))
     finally:
         root.destroy()
@@ -1642,7 +2013,9 @@ def test_generated_tree_preserves_nested_asset_paths_and_refreshes_without_orpha
             self.nodes[iid] = {"parent": parent, **kwargs}
 
         def get_children(self, parent):
-            return tuple(iid for iid, data in self.nodes.items() if data.get("parent") == parent)
+            return tuple(
+                iid for iid, data in self.nodes.items() if data.get("parent") == parent
+            )
 
         def item(self, iid, option):
             return self.nodes[iid][option]
@@ -1652,9 +2025,13 @@ def test_generated_tree_preserves_nested_asset_paths_and_refreshes_without_orpha
 
         def delete(self, iid):
             descendants = [
-                child for child, data in self.nodes.items()
+                child
+                for child, data in self.nodes.items()
                 if child == iid
-                or (isinstance(data.get("parent"), str) and data["parent"].startswith(iid + "/"))
+                or (
+                    isinstance(data.get("parent"), str)
+                    and data["parent"].startswith(iid + "/")
+                )
             ]
             for child in descendants:
                 self.nodes.pop(child, None)
@@ -1679,7 +2056,10 @@ def test_generated_tree_preserves_nested_asset_paths_and_refreshes_without_orpha
 
     app._populate_generated_tree()
     assert app.tree.nodes["asset:sql/query/main.sql"]["parent"] == "asset:sql/query"
-    assert app.tree.nodes["asset:sql/query/parts/where.sql"]["parent"] == "asset:sql/query/parts"
+    assert (
+        app.tree.nodes["asset:sql/query/parts/where.sql"]["parent"]
+        == "asset:sql/query/parts"
+    )
     assert "asset:html/report" in app.tree.nodes
     assert "asset:styles/report.css" in app._tree_asset_files
     assert app.tree.nodes["asset:vg2c/runtime"]["parent"] == "asset:vg2c"
@@ -1784,4 +2164,3 @@ def test_generated_tree_sync_is_stable_and_generated_asset_restores_source():
     seen_count = len(app.tree.seen)
     app._sync_generated_selection("sql/query.sql")
     assert len(app.tree.seen) == seen_count
-

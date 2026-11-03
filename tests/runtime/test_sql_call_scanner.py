@@ -48,6 +48,18 @@ def test_wrapped_call_site_flags_closing_paren() -> None:
     assert calls[0].needs_closing_paren is True
 
 
+def test_explicitly_closed_call_site_needs_no_extra_paren() -> None:
+    for ending in (
+        ")",
+        "\n) AND active = 1",
+        ") AND (entity IN SQL_Get_CSV_List('f.csv', 'entity', 'entity IN'))",
+    ):
+        body = "WHERE (facility IN SQL_Get_CSV_List('f.csv', 'facility', 'facility IN')" + ending
+        calls = scan_sql_get_csv_list_calls(body)
+        assert calls
+        assert all(not call.needs_closing_paren for call in calls)
+
+
 def test_unwrapped_call_site_has_no_flag() -> None:
     body = 'WHERE p.prodgroup3 In \nSQL_Get_CSV_List(".\\f.csv", "2", "p.prodgroup3 In")'
     calls = scan_sql_get_csv_list_calls(body)
