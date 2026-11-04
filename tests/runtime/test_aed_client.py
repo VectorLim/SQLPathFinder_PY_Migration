@@ -4,36 +4,65 @@ import json
 import os
 from pathlib import Path
 import ssl
+import sys
 from types import SimpleNamespace
-from urllib.parse import unquote
 
 import pytest
 
-from vg2c.runtime.aed_client import AEDClient, _read_api_key
+from vg2c.runtime import aed_client
+from vg2c.runtime.aed_client import AEDClient, _call_environment, _scoped_environ
 
 
 class Service:
-    def __init__(self, result=None):
+    def __init__(self):
         self.calls = []
-        self.value = None
-        self.result = result
 
     def call(self, method, *args):
         self.calls.append((method, *args))
-        if method == "lot_set_attr":
-            self.value = unquote(args[2])
-        payload = self.result or {
-            "Success": True,
-            "Result": {"Attributes": [{"ID": "1064", "Value": self.value}]},
-        }
-        return payload
+        return {"Success": True}
 
     def __getattr__(self, method):
         return lambda *args: self.call(method, *args)
 
 
 def client(service):
-    return AEDClient("A15", client_factory=lambda facility: service)
+    aed = AEDClient("A15")
+    aed._client_factory = lambda facility: service
+    return aed
+
+
+def test_connection_is_read_only():
+    service = Service()
+    aed = client(service)
+    aed.lot_status("L1")
+    assert aed.test_connection("L1") is True
+    assert service.calls == [("lot_status", "L1"), ("lot_status", "L1")]
+    assert not hasattr(aed, "accepted")
+
+
+@pytest.mark.parametrize("payload", [{"Success": False}, [], {"Result": {}}])
+def test_connection_rejects_unsuccessful_or_malformed_response(payload):
+    service = Service()
+    service.call = lambda *args: payload
+    aed = client(service)
+    with pytest.raises(RuntimeError, match="unsuccessful or malformed"):
+        aed.test_connection("L1")
+
+
+def test_connection_rejects_invalid_lot_and_sanitizes_request_errors():
+    service = Service()
+    aed = client(service)
+    with pytest.raises(ValueError):
+        aed.test_connection("bad/lot")
+    assert service.calls == []
+
+    def failure(*args):
+        raise OSError("do-not-log-response-or-key")
+
+    service.call = failure
+    with pytest.raises(RuntimeError, match="request failed") as error:
+        aed.test_connection("L1")
+    assert "do-not-log" not in str(error.value)
 
 
 def test_ordinary_calls_preserve_order_arguments_and_encode_comments():
@@ -53,13 +82,14 @@ def test_ordinary_calls_preserve_order_arguments_and_encode_comments():
 
 @pytest.mark.parametrize("value", [None, "", ".", "..", "bad/lot", "bad\nlot"])
 def test_invalid_lots_fail_before_service(value):
-    aed = AEDClient("A15", client_factory=lambda facility: pytest.fail("invalid input"))
+    aed = AEDClient("A15")
+    aed._client_factory = lambda facility: pytest.fail("invalid input")
     with pytest.raises(ValueError):
         aed.lot_status(value)
 
 
 def test_missing_hold_parameters_fail_even_in_test_mode():
-    with pytest.raises(ValueError, match="hold operation"):
+    with pytest.raises(ValueError, match="lot_hold argument"):
         AEDClient("A15").lot_hold("L1", None, None, "note")
 
 
@@ -83,98 +113,111 @@ def test_http_errors_are_sanitized():
     assert "do-not-log" not in str(error.value)
 
 
-def test_update_reuses_updater_overwrite_and_already_correct():
-    service = Service()
-    service.value = "existing-value"
-    aed = client(service)
-    assert aed.update_lot_attributes("L1", ("1064",), "Y") == "N"
-    assert [call[0] for call in service.calls] == ["lot_status"]
-    assert aed.update_lot_attributes("L1", ("1064",), "Y", overwrite=True) == "Y"
-    assert service.calls[-1] == ("lot_set_attr", "L1", "1064", "Y")
-    service.calls.clear()
-    assert aed.update_lot_attributes("L1", ("1064",), "Y", overwrite=True) == "Y"
-    assert [call[0] for call in service.calls] == ["lot_status"]
-
-
-@pytest.mark.parametrize(
-    "result,write",
-    [(None, False), ({"Attributes": []}, True), ({"Attributes": None}, True)],
-)
-def test_missing_lot_differs_from_existing_lot_without_attributes(result, write):
-    service = Service({"Success": True, "Result": result})
-    client(service).update_lot_attributes("L1", ("1064",), "Y", overwrite=True)
-    assert any(call[0] == "lot_set_attr" for call in service.calls) is write
-
-
-def test_credentials_use_existing_key_and_reject_partial_pair(monkeypatch):
-    monkeypatch.setenv("X_API_KEY", "synthetic-test-only")
-    monkeypatch.setenv("API_KEY", "invalid")
-    monkeypatch.delenv("API_CONFIG", raising=False)
-    _read_api_key()
-    monkeypatch.delenv("X_API_KEY")
-    with pytest.raises(ValueError, match="both contain"):
-        _read_api_key()
-
-
-def test_upstream_reloads_facility_context_and_host_arguments_restored(
-    tmp_path, monkeypatch
-):
-    import sys
-    from vg2c.runtime import aed_client
-
+@pytest.fixture
+def upstream(tmp_path, monkeypatch):
+    """Real aed_api over a fake SDK module; records contexts, requests and keys."""
     pytest.importorskip("cryptography.fernet")
     ca = tmp_path / "ca.crt"
     ca.write_text("synthetic-ca")
-    monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(ca))
-    monkeypatch.setenv("X_API_KEY", "synthetic-key")
-    contexts, requests = [], []
+    record = SimpleNamespace(ca=str(ca), argv=[], contexts=[], requests=[], keys=[])
     response = SimpleNamespace(
         raise_for_status=lambda: None, json=lambda: {"Success": True}
     )
-    service = SimpleNamespace(
-        lot_status=lambda *args: requests.append(args) or response
-    )
-    sdk = SimpleNamespace(
-        aed_client=SimpleNamespace(
-            load_context=lambda value: contexts.append(json.loads(value))
-        ),
-        ManufacturingService=lambda: service,
-    )
-    monkeypatch.setitem(sys.modules, "aed_client", sdk)
-    monkeypatch.delitem(sys.modules, "vg2c.runtime.aed_api", raising=False)
-    arguments = ["pytest", "--unknown-sdk-argument"]
-    monkeypatch.setattr(sys, "argv", arguments)
+
+    def lot_status(*args):
+        record.requests.append(args)
+        record.keys.append(os.environ.get("X_API_KEY"))
+        return response
+
+    class SDK:
+        ManufacturingService = staticmethod(
+            lambda: SimpleNamespace(lot_status=lot_status)
+        )
+
+        @property
+        def aed_client(self):
+            record.argv.append(list(sys.argv))
+            return SimpleNamespace(
+                load_context=lambda value: record.contexts.append(json.loads(value))
+            )
 
     def version(name):
         if name == "aed-client-winauth":
             raise aed_client.metadata.PackageNotFoundError(name)
         return "6.2.0"
 
-    def load(name):
-        assert sys.argv == ["pytest"]
-        return sdk
-
+    monkeypatch.setitem(sys.modules, "aed_client", SDK())
+    monkeypatch.delitem(sys.modules, "vg2c.runtime.aed_api", raising=False)
     monkeypatch.setattr(aed_client.metadata, "version", version)
-    monkeypatch.setattr(aed_client.importlib, "import_module", load)
-    first, second = AEDClient("A15"), AEDClient("A12")
+    monkeypatch.delenv("X_API_KEY", raising=False)
+    return record
+
+
+def test_api_key_session_has_no_integrated_auth(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["pytest"])
+    authentication = pytest.importorskip("aed_client.sessions.apikey.Authentication")
+    monkeypatch.setenv("X_API_KEY", "synthetic-key")
+    session = authentication.Authentication().create_session("application/json", None)
+    assert session.headers["X-API-Key"] == "synthetic-key"
+    assert session.auth is None
+    assert session.verify
+
+
+def test_connection_uses_encrypted_key_without_sso_or_network(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["pytest"])
+    pytest.importorskip("aed_client.sessions.apikey.Authentication")
+    fernet = pytest.importorskip("cryptography.fernet")
+    import requests
+
+    key = fernet.Fernet.generate_key()
+    token = fernet.Fernet(key).encrypt(b"synthetic-encrypted-key")
+    observed = []
+
+    def send(session, request, **kwargs):
+        assert request.method == "GET"
+        assert request.headers["X-API-Key"] == "synthetic-encrypted-key"
+        assert session.auth is None
+        assert Path(kwargs["verify"]).is_file()
+        assert not kwargs.get("proxies")
+        observed.append(request.path_url)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b'{"Success": true}'
+        return response
+
+    monkeypatch.setattr(requests.Session, "send", send)
+    aed = AEDClient(
+        "A15", environ={"API_KEY": key.decode(), "API_CONFIG": token.decode()}
+    )
+    assert aed.test_connection("L1") is True
+    assert observed == ["/api/latest/manufacturing/lots/L1"]
+
+
+def test_upstream_reloads_facility_context_and_host_arguments_restored(
+    upstream, monkeypatch
+):
+    arguments = ["pytest", "--unknown-sdk-argument"]
+    monkeypatch.setattr(sys, "argv", arguments)
+    environ = {"X_API_KEY": "synthetic-key", "REQUESTS_CA_BUNDLE": upstream.ca}
+    first = AEDClient("A15", environ=environ)
+    second = AEDClient("A12", environ=environ)
     first.lot_status("L1")
     second.lot_status("L2")
     first.lot_status("L3")
-    assert [context["properties"][1]["value"] for context in contexts] == [
+    assert [c["properties"][1]["value"] for c in upstream.contexts] == [
         "A15",
         "A12",
         "A15",
     ]
-    assert requests == [("L1",), ("L2",), ("L3",)]
+    assert upstream.requests == [("L1",), ("L2",), ("L3",)]
+    assert upstream.argv == [["pytest"]]
     assert sys.argv is arguments
 
 
-@pytest.mark.parametrize("environ", [None, {}, {"REQUESTS_CA_BUNDLE": ""}])
+@pytest.mark.parametrize("environ", [{}, {"REQUESTS_CA_BUNDLE": ""}])
 def test_bundled_ca_is_used_and_environment_restored(monkeypatch, environ):
-    from vg2c.runtime.aed_client import _aed_environment
-
     monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
-    with _aed_environment(environ):
+    with _scoped_environ(_call_environment(environ)):
         ca = Path(os.environ["REQUESTS_CA_BUNDLE"])
         assert ca.is_absolute() and ca.is_file()
         ssl.create_default_context(cafile=str(ca))
@@ -182,18 +225,14 @@ def test_bundled_ca_is_used_and_environment_restored(monkeypatch, environ):
 
 
 def test_explicit_ca_overrides_bundle_and_is_restored(tmp_path, monkeypatch):
-    from vg2c.runtime.aed_client import _aed_environment
-
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", "original-ca")
     configured = str(tmp_path / "configured-ca.crt")
-    with _aed_environment({"REQUESTS_CA_BUNDLE": configured}):
+    with _scoped_environ(_call_environment({"REQUESTS_CA_BUNDLE": configured})):
         assert os.environ["REQUESTS_CA_BUNDLE"] == configured
     assert os.environ["REQUESTS_CA_BUNDLE"] == "original-ca"
 
 
 def test_invalid_ca_and_unavailable_sdk_fail_without_requests(tmp_path, monkeypatch):
-    from vg2c.runtime import aed_client
-
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(tmp_path / "missing.crt"))
     with pytest.raises(ValueError, match="CA bundle"):
         AEDClient("A15").lot_status("L1")
@@ -201,31 +240,46 @@ def test_invalid_ca_and_unavailable_sdk_fail_without_requests(tmp_path, monkeypa
     def missing(name):
         raise aed_client.metadata.PackageNotFoundError(name)
 
+    ca = tmp_path / "ca.crt"
+    ca.write_text("synthetic-ca")
     monkeypatch.setattr(aed_client.metadata, "version", missing)
     with pytest.raises(RuntimeError, match="approved.*wheel"):
-        aed_client._load_sdk()
+        AEDClient("A15", environ={"REQUESTS_CA_BUNDLE": str(ca)}).lot_status("L1")
 
 
 def test_encrypted_environment_and_external_files_use_synthetic_credentials(
-    tmp_path, monkeypatch
+    upstream, tmp_path
 ):
-    Fernet = pytest.importorskip("cryptography.fernet").Fernet
+    from cryptography.fernet import Fernet
+
     key = Fernet.generate_key()
     encrypted = Fernet(key).encrypt(b"synthetic-test-key")
-    monkeypatch.delenv("X_API_KEY", raising=False)
-    monkeypatch.setenv("API_KEY", key.decode())
-    monkeypatch.setenv("API_CONFIG", encrypted.decode())
-    _read_api_key()
-    assert os.environ["X_API_KEY"] == "synthetic-test-key"
+    pair = {"API_KEY": key.decode(), "API_CONFIG": encrypted.decode()}
+    AEDClient("A15", environ={**pair, "REQUESTS_CA_BUNDLE": upstream.ca}).lot_status(
+        "L1"
+    )
 
-    monkeypatch.delenv("X_API_KEY")
-    monkeypatch.delenv("API_KEY")
-    monkeypatch.delenv("API_CONFIG")
     (tmp_path / "key.key").write_bytes(key)
     (tmp_path / "config_new.json").write_bytes(encrypted)
-    monkeypatch.setenv("AED_SECRETS_DIR", str(tmp_path))
-    _read_api_key()
-    assert os.environ["X_API_KEY"] == "synthetic-test-key"
+    files = {"AED_SECRETS_DIR": str(tmp_path), "REQUESTS_CA_BUNDLE": upstream.ca}
+    AEDClient("A15", environ=files).lot_status("L2")
+    assert upstream.keys == ["synthetic-test-key", "synthetic-test-key"]
+    assert "X_API_KEY" not in os.environ
+
+
+@pytest.mark.parametrize(
+    "credentials,message",
+    [
+        ({}, "Supply X_API_KEY"),
+        ({"API_KEY": "partial"}, "both contain"),
+        ({"AED_SECRETS_DIR": "relative"}, "absolute"),
+    ],
+)
+def test_missing_or_partial_credentials_fail(upstream, credentials, message):
+    aed = AEDClient("A15", environ={**credentials, "REQUESTS_CA_BUNDLE": upstream.ca})
+    with pytest.raises(ValueError, match=message):
+        aed.lot_status("L1")
+    assert upstream.requests == []
 
 
 @pytest.mark.parametrize("fail", [False, True])
@@ -252,8 +306,8 @@ def test_per_job_credentials_and_proxy_are_restored_after_call(
             "X_API_KEY": "synthetic-job",
             proxy_name: "job-host",
         },
-        client_factory=lambda facility: ScopedService(),
     )
+    aed._client_factory = lambda facility: ScopedService()
     if fail:
         with pytest.raises(RuntimeError, match="request failed"):
             aed.lot_hold("L1", "2303", "NCO", "note")

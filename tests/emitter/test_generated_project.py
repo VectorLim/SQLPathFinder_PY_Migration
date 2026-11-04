@@ -56,7 +56,7 @@ def test_project_assets_move_and_reread(tmp_path, monkeypatch):
     generated = main.read_text()
     tree = ast.parse(generated)
     assert [node.name for node in tree.body if isinstance(node, ast.FunctionDef)] == [
-        "run"
+        "run", "handle"
     ]
     assert "ctx" not in generated
     assert "GetQuery" not in generated
@@ -166,7 +166,6 @@ def test_retired_aed_directive_is_skipped_as_unsupported(tmp_path):
     source.write_text(block('/UTILITIES={AED} "candidates.csv"'))
     result = compile_document(source)
     assert any(item.code == "skipped-block" for item in result.diagnostics)
-    assert "csr_submission" not in result.emitted.source
     assert translate(source).is_file()
 
 

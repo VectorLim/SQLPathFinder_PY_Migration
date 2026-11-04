@@ -16,7 +16,7 @@ class MacroStore(Mapping[str, Any]):
     values expand as `values.substitute` would: reserved SPF tokens can remain
     literal, and CL_/SPF-JOB-/SPF-DEFAULT-/%...% use the values snapshot.
     Text substitution still raises ValueError for missing ordinary names.
-    Assignment writes only into the active frame. Never share an instance
+    Assignment converts None to "" and writes only into the active frame. Never share an instance
     between independent jobs.
     """
 
@@ -54,7 +54,7 @@ class MacroStore(Mapping[str, Any]):
         return substitute(f"<<<{key}>>>", values=self._values, macros=self._snapshot())
 
     def __setitem__(self, name: str, value: Any) -> None:
-        self._frames[-1][str(name).upper()] = value
+        self._frames[-1][str(name).upper()] = "" if value is None else value
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._snapshot())

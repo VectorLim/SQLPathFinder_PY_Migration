@@ -14,10 +14,10 @@ from vg2c.emitter.models import BlockEmission, EmittedScope, EmittedScript, Sour
 from vg2c.emitter.source_map import finalize_steps, record_inline_step
 from vg2c.kind import Kind
 from vg2c.logger import Logger
+from vg2c.project_bundle import HOST_HANDLER, RUNTIME_BOOTSTRAP
 from vg2c.runtime.environment import DEFAULT_TEST_MODE_EXCLUDED
 from vg2c.utilities import ensure_utility_checks_loaded
 from vg2c.utilities._base import UtilitySpec
-from vg2c.utilities.csr import CsrWorkflow
 from vg2c.utilities.fs_ops import FileSystemOps
 from vg2c.utilities.html_report import HtmlReport
 from vg2c.utilities.rows_in_file import inline_row_count_conditions
@@ -30,7 +30,6 @@ def emit_project(dispatched):
     blocks = {block.index: block for block in dispatched.resolved.blocks}
     blocks.update({block.index: block for block in dispatched.dispatched})
     html_report = HtmlReport(blocks.values())
-    csr_workflow = CsrWorkflow(dispatched.resolved.csr_submissions, html_report)
     handlers = {
         kind: handler.emit_block for kind, handler in UtilitySpec._emit_handlers.items()
     }
@@ -92,16 +91,12 @@ def emit_project(dispatched):
                 return
         if node.kind == "leaf":
             block = blocks[node.block_index]
-            if block.index in csr_workflow.producers:
-                return  # The CSR submission reads the producer's input directly.
             writer.write(f"# Source block {block.index}, line {block.span.start_line}")
             if block.index in inlined_counts:
                 return  # The next IF header calls job.row_count directly.
             try:
                 reason = None
-                if csr_workflow.handles_block(block):
-                    emission = csr_workflow.emit_block(block, macros=macros)
-                elif block.kind is Kind.UNKNOWN:
+                if block.kind is Kind.UNKNOWN:
                     reason = (
                         "JMP/JSL blocks are outside the supported core"
                         if block.resolved_options.lookup.get("JSL", "").upper() == "Y"
@@ -137,15 +132,7 @@ def emit_project(dispatched):
                         writer,
                         block,
                         emission.lines,
-                        functional_kind=(
-                            "UNSUPPORTED"
-                            if skipped
-                            else (
-                                "CSR_SUBMISSION"
-                                if block.index in csr_workflow.submissions
-                                else None
-                            )
-                        ),
+                        functional_kind="UNSUPPORTED" if skipped else None,
                     )
                 )
             except (ValueError, SyntaxError) as exc:
@@ -156,21 +143,13 @@ def emit_project(dispatched):
             return
 
         start_line = len(writer.lines)
-        if not csr_workflow.emit_scope(
+        node.emit(
             writer,
             walk,
-            node,
             macros=macros,
             imports=imports,
             runtime_imports=runtime_imports,
-        ):
-            node.emit(
-                writer,
-                walk,
-                macros=macros,
-                imports=imports,
-                runtime_imports=runtime_imports,
-            )
+        )
         if node.control_payload is not None and len(writer.lines) > start_line:
             scope_lines.append(
                 (
@@ -327,16 +306,17 @@ def emit_project(dispatched):
     reader_imports = sorted(
         item for item in imports if item.startswith("from datasyncx ")
     )
-    ordinary_imports = sorted(imports - set(reader_imports))
+    ordinary_imports = sorted(imports - set(reader_imports) - {"from pathlib import Path"})
     setup = "\nOracleClient.configure()\n" if reader_imports else ""
     exclusions = ", ".join(repr(name) for name in sorted(DEFAULT_TEST_MODE_EXCLUDED))
     header = (
-        "\n".join(ordinary_imports)
+        RUNTIME_BOOTSTRAP
+        + "\n".join(ordinary_imports)
         + setup
         + "\n".join(reader_imports)
         + f"\n\nTEST_MODE_EXCLUDED = {{{exclusions}}}\n\n"
     )
-    source = header + writer.source() + '\n\nif __name__ == "__main__":\n    run()\n'
+    source = header + writer.source() + HOST_HANDLER + '\n\nif __name__ == "__main__":\n    run()\n'
     ast.parse(source)
     finalized = sorted(
         finalize_steps(source, helper_steps + main_steps),

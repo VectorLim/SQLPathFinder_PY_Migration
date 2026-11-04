@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from threading import Lock
 
-DEFAULT_TEST_MODE_EXCLUDED = frozenset({"csr", "email", "mms"})
+DEFAULT_TEST_MODE_EXCLUDED = frozenset({"aed", "email", "mms"})
 
 # The AED SDK context and request credentials are process-global.
 AED_ENVIRONMENT_LOCK = Lock()

@@ -108,6 +108,16 @@ class FileSystemOps(EmitterUtility):
     def _emit_copy_block(cls, block, macros: str) -> BlockEmission:
         argv = cls._utility_argv(block)
         basename = argv[0].split("/")[-1].split("\\")[-1].lower() if argv else ""
+        if any("<<<CSRPATH>>>" in arg.upper() for arg in argv[1:]):
+            if "robocopy" not in basename or len(argv) < 4:
+                raise ValueError(
+                    "Only RoboCopy <files> <source> <<<CSRPATH>>> submissions are supported"
+                )
+            return BlockEmission(
+                (
+                    'job.aed.test_connection("LOT_TO_TEST")',
+                )
+            )
         if "robocopy" in basename:
             stmt = cls._emit_robocopy(argv)
         elif "spfcopy" in basename:

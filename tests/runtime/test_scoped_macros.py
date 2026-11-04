@@ -35,6 +35,24 @@ def test_named_lookup_write_missing_and_values_namespace():
     assert macros.get("missing", "fallback") == "fallback"
 
 
+@pytest.mark.parametrize("value, expected", [(None, ""), ("", ""), (0, 0), (False, False)])
+def test_assignment_normalizes_none_and_preserves_other_values(value, expected):
+    macros = MacroStore(initial={"VALUE": "base"})
+    with macros.scope():
+        macros["value"] = value
+        stored = dict(macros.items())["VALUE"]
+        assert stored == expected
+        assert type(stored) is type(expected)
+        if value is None:
+            assert macros["VALUE"] == ""
+            assert macros.substitute("before<<<VALUE>>>after") == "beforeafter"
+    assert macros["VALUE"] == "base"
+    macros["new_key"] = None
+    assert dict(macros.items())["NEW_KEY"] == ""
+    assert macros["NEW_KEY"] == ""
+    assert macros["MISSING"] is None
+
+
 def test_nested_scope_shadow_mutation_exception_and_newlines():
     macros = MacroStore(initial={"LABEL": "base"})
     with macros.scope({"label": "outer", "NONE": None}):

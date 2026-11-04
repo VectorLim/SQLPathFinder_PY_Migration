@@ -1,7 +1,8 @@
 from pathlib import Path
-import tempfile
 
 from importlib import import_module
+
+from vg2c.project_bundle import init_project, write_project
 
 _EXPORT_MODULES = {
     "CompilationDiagnostic": "compilation",
@@ -41,6 +42,7 @@ __all__ = [
     "dispatch",
     "emit",
     "resolve",
+    "init_project",
     "translate",
 ]
 
@@ -66,15 +68,4 @@ def translate(input_path: Path, out_dir: Path | None = None) -> Path:
     errors = [item for item in result.diagnostics if item.level == "error"]
     if errors:
         raise ValueError("\n".join(f"{item.location}: {item.message}" for item in errors))
-    root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".vg2c-", dir=root) as temporary:
-        project = Path(temporary) / dest.name
-        project.mkdir()
-        for name, content in (("main.py", result.emitted.source), *result.emitted.assets):
-            path = project / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8", newline="")
-        if dest.exists():
-            dest.rmdir()
-        project.rename(dest)
-    return dest / "main.py"
+    return write_project(dest, result.emitted.source, result.emitted.assets)

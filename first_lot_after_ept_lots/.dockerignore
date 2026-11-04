@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+secret
+secrets
+**/key.key
+**/config_new.json
+output
+build
+dist

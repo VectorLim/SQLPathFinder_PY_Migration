@@ -6,6 +6,7 @@ directory) and lets the user choose which ones to translate to Python.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import re
 import subprocess
@@ -189,6 +190,7 @@ _HELP = """\
 vg2c — interactive batch translator
 
 Usage:
+    vg2c init [directory]          create a self-contained Linux job project
   vg2c [input_dir] [output_dir]   translate .txt files
   vg2c --build                    compile vg2c into a standalone .exe
   vg2c --help                     show this message
@@ -224,6 +226,20 @@ def main() -> None:
 
     if len(sys.argv) > 1 and sys.argv[1] == "--build":
         cmd_build()
+        sys.exit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        from vg2c import init_project
+
+        parser = argparse.ArgumentParser(prog="vg2c init")
+        parser.add_argument("directory", nargs="?", default=".")
+        args = parser.parse_args(sys.argv[2:])
+        try:
+            project = init_project(args.directory)
+        except (ValueError, OSError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Created {project.parent}")
         sys.exit(0)
 
     Logger.basicConfig(level=Logger.INFO)

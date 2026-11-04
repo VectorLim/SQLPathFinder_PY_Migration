@@ -3,7 +3,6 @@ from __future__ import annotations
 from vg2c.frontend.models import ClassifiedBlock
 from vg2c.resolver.models import ResolvedProgram
 from vg2c.resolver.scope_builder import build_scope_tree, resolve_macros
-from vg2c.resolver.csr import identify_csr
 
 
 def resolve(
@@ -15,7 +14,6 @@ def resolve(
     return ResolvedProgram(
         blocks=tuple(resolved_blocks),
         scope_tree=scope_tree,
-        csr_submissions=identify_csr(resolved_blocks, scope_tree),
     )
 
 

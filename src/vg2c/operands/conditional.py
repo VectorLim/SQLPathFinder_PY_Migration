@@ -207,7 +207,15 @@ class IfThen:
         """Render the direct Python condition used by the native emitter."""
         from vg2c.utilities._emit_helpers import native_expression
 
-        return "if " + native_expression(self._build_condition_expr(), macros) + ":"
+        condition = native_expression(self._build_condition_expr(), macros)
+        if (
+            self.lhs.upper() == "VAR(<<<DMWF>>>)"
+            and self.op == "EQS"
+            and self.rhs.upper() == "Y"
+            and self.conj is None
+        ):
+            condition = "job.enabled('mms') and " + condition
+        return "if " + condition + ":"
 
     def emit_scope(
         self,
@@ -218,7 +226,6 @@ class IfThen:
         macros: str,
         imports: set[str],
         runtime_imports: set[str],
-        header_override: str | None = None,
     ) -> None:
         """Emit an if/else block from this IfThen payload."""
         if_branch: ScopeNode | None = None
@@ -229,9 +236,7 @@ class IfThen:
             elif child.kind == "else-branch":
                 else_branch = child
 
-        writer.write(
-            header_override or self.render_header(node.scope_id, macros=macros)
-        )
+        writer.write(self.render_header(node.scope_id, macros=macros))
         writer.push_indent()
         emit_children(
             writer,

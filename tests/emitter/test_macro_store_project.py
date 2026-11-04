@@ -216,47 +216,58 @@ def test_prepost_group_includes_unmarked_instance_consolidation(tmp_path):
     assert emitted.steps[2].source_range.start_offset > run_offset
 
 
-def test_csr_iam_prepost_layout():
-    source = Path(__file__).resolve().parents[2] / "CSR_IAM_v2.txt"
-    emitted = compile_document(source).emitted
-    functions = [
-        node
-        for node in ast.parse(emitted.source).body
-        if isinstance(node, ast.FunctionDef)
-    ]
-    helpers = [node for node in functions if node.name.startswith("prepost_")]
-    assert [node.name.split("_")[1] for node in helpers] == [
-        "1",
-        "3",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-    ]
-    run = next(node for node in functions if node.name == "run")
-    assert not any(
-        isinstance(node, ast.FunctionDef) for node in ast.walk(run) if node is not run
-    )
-    assert not any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "sql"
-        for node in ast.walk(run)
-    )
-    query = next(node for node in helpers if node.name.startswith("prepost_3_"))
-    assert (
-        len(
-            [
-                node
-                for node in ast.walk(query)
-                if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "sql"
-            ]
+def test_legacy_csr_submission_becomes_aed_connection_check(tmp_path, monkeypatch):
+    source = tmp_path / "csr.txt"
+    source.write_text(
+        block("/WRITE-FILE=Y\n/CSV=data.csv", "lot\n0012A\n7645D737")
+        + block(
+            "/ENGINE=SQLite\n/CSV=RESULT_u_X.csv\n/TABLE=data.csv:T0\n"
+            "/HEADERS=HOLD_LOT,LOT",
+            "SELECT DISTINCT 'Y' AS [HOLD_LOT], [lot] AS [LOT] FROM [T0] WHERE 1=1",
         )
-        == 3
+        + block(
+            '/UTILITIES=@EXEDIR@\\RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>" '
+            '"5" "30" "N" "/MOV" "N"'
+        )
+        + block("/WRITE-FILE=Y\n/CSV=after.txt", "after")
     )
+    main = translate(source)
+    code = main.read_text()
+    assert 'job.aed.test_connection("LOT_TO_TEST")' in code
+    assert "if job.aed is not None:" not in code
+    assert "aed = job.aed" not in code
+    assert "csv.DictReader" not in code
+    calls = []
+
+    class FakeAED:
+        def __init__(self, facility, environ=None):
+            calls.append(("facility", facility))
+
+        def test_connection(self, lot):
+            calls.append(("lot", lot))
+            return True
+
+    monkeypatch.setattr("vg2c.runtime.job.AEDClient", FakeAED)
+    monkeypatch.setenv("SITE", "KM")
+    monkeypatch.setenv("ENV_MODE", "prod")
+    job = run_job(main)
+    assert calls == [("facility", "A15"), ("lot", "LOT_TO_TEST")]
+    assert job.read_file("after.txt").strip() == "after"
+
+    calls.clear()
+    monkeypatch.setenv("ENV_MODE", "test")
+    with pytest.raises(AttributeError, match="test_connection"):
+        run_job(main)
+    assert calls == []
+
+
+def test_unrecognized_csr_submission_is_rejected(tmp_path):
+    source = tmp_path / "csr_copy.txt"
+    source.write_text(
+        block('/UTILITIES=@EXEDIR@\\SPFCopy.bat "RESULT.csv" "<<<CSRPATH>>>" "N"')
+    )
+    with pytest.raises(ValueError, match="Only RoboCopy"):
+        compile_document(source)
 
 
 def test_prepost_inference_does_not_split_mixed_control_scopes(tmp_path):

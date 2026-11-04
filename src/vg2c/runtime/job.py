@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
 from vg2c.runtime.file_store import input_path
-from vg2c.runtime.aed_client import AEDClient, identifier
+from vg2c.runtime.aed_client import AEDClient
 from vg2c.runtime.environment import DEFAULT_TEST_MODE_EXCLUDED, read_environment
 from vg2c.runtime.controls import read_csv
 from vg2c.runtime.files import (
@@ -23,34 +22,9 @@ from vg2c.runtime.files import (
 from vg2c.runtime.html import _write_atomic, csv_report, render_html
 from vg2c.runtime.macros import MacroStore
 from vg2c.runtime.mail import send_mail
+from vg2c.runtime.nodes import normalize_site, site_facility, site_node
 from vg2c.runtime.query import execute_sql
 from vg2c.runtime.values import job_path, read_macro_row, snapshot_values, substitute
-
-
-def csr_lots(path, column, *, workdir, files=None):
-    """Return the distinct lot IDs of one CSV column (header matched case-insensitively)."""
-    with input_path(path, workdir, files).open(
-        encoding="utf-8-sig", newline=""
-    ) as stream:
-        reader = csv.DictReader(stream, strict=True)
-        names = {name.strip().casefold(): name for name in reader.fieldnames or []}
-        key = names.get(column.casefold())
-        if key is None:
-            raise ValueError(f"CSR input {path} has no {column!r} column")
-        lots = []
-        for row in reader:
-            lot = (row.get(key) or "").strip()
-            if None in row or not lot:
-                raise ValueError(f"CSR input {path} has a row without a lot")
-            lots.append(identifier(lot, "CSR lot"))
-    return list(dict.fromkeys(lots))
-
-
-def csr_comment(note, ccb):
-    """Build the legacy CSR hold comment; a CCB number is mandatory."""
-    if not str(ccb).strip():
-        raise ValueError("CSR requests require a CCB number")
-    return f"{note}\nCCB: {ccb}"
 
 
 class JobRuntime:
@@ -65,12 +39,15 @@ class JobRuntime:
         environ: Mapping | None = None,
         initial_macros: Mapping | None = None,
         test_mode_excluded=DEFAULT_TEST_MODE_EXCLUDED,
+        site: str | None = None,
     ):
         self.assets_root = Path(assets_root).resolve()
         self.workdir = Path(workdir).resolve()
         self.environ = (
             read_environment(self.assets_root) if environ is None else dict(environ)
         )
+        site = site or self.environ.get("SITE", "").strip() or None
+        self.site = None if site is None else normalize_site(site)
         self.env_mode = self.environ.get("ENV_MODE", "test").strip().lower()
         if self.env_mode not in {"test", "prod"}:
             raise ValueError("ENV_MODE must be test or prod")
@@ -88,14 +65,40 @@ class JobRuntime:
         self._python_globals = None
 
     @classmethod
-    def from_script(cls, script_file, *, test_mode_excluded=DEFAULT_TEST_MODE_EXCLUDED):
-        """Create one fresh run bound to the generated project's own roots."""
+    def from_script(
+        cls,
+        script_file,
+        *,
+        site: str | None = None,
+        test_mode_excluded=DEFAULT_TEST_MODE_EXCLUDED,
+    ):
+        """Create one fresh run bound to the generated project's own roots.
+
+        ``site`` sets the default site for ``sql(..., database=...)`` calls;
+        when omitted, the ``SITE`` environment variable (or project ``.env``) is used.
+        """
         project_dir = Path(script_file).resolve().parent
         return cls(
             assets_root=project_dir,
             workdir=project_dir / "output",
             test_mode_excluded=test_mode_excluded,
+            site=site,
         )
+
+    def _resolve_node(self, node, database, site):
+        if database is None:
+            if site is not None:
+                raise ValueError("site= requires database=")
+            return node
+        if node is not None:
+            raise ValueError("Pass either node= or database=, not both")
+        site = site or self.site
+        if site is None:
+            raise ValueError(
+                f"No site for database {database!r}: pass site= or set a default "
+                "via JobRuntime.from_script(..., site=...)"
+            )
+        return site_node(database, site)
 
     def asset_path(self, path) -> Path:
         path = Path(path)
@@ -186,6 +189,8 @@ class JobRuntime:
         header=None,
         crosstab=None,
         node=None,
+        database=None,
+        site=None,
         params=None,
         pivot_columns=None,
         pivot_values=None,
@@ -196,6 +201,12 @@ class JobRuntime:
         pivot_header_ref=None,
         pivot_legacy_headers=False,
     ):
+        """Run one SQL asset.
+
+        Route with ``database="MARS"|"ARIES"|"OASYS"`` (optionally ``site=`` to
+        override the job default), a raw ``node=`` string, or neither for local SQLite.
+        """
+        node = self._resolve_node(node, database, site)
         if not self.enabled("sql"):
             return
         return execute_sql(
@@ -413,33 +424,19 @@ class JobRuntime:
             src, dst, workdir=self.workdir, recurse=recurse, files=self.files
         )
 
-    def csr_lots(self, path, column):
-        """Distinct lot IDs of `column` in this run's `path` CSV."""
-        if not self.enabled("csr"):
-            return []
-        return csr_lots(
-            self.macros.substitute(str(path)),
-            column,
-            workdir=self.workdir,
-            files=self.files,
-        )
-
-    def csr_comment(self, note, ccb):
-        return csr_comment(note, ccb)
-
-    def aed(self, facility) -> AEDClient | None:
-        if not self.enabled("csr"):
+    @property
+    def aed(self) -> AEDClient | None:
+        if not self.enabled("aed"):
             return
+        if self._aed:
+            return self._aed
+        facility = self.macros["FACILITY"] or (
+            site_facility(self.site) if self.site else None
+        )
+        if not facility:
+            raise ValueError(
+                "No AED facility: set the FACILITY macro or a default site "
+                "(from_script(..., site=...) or SITE env var)"
+            )
         self._aed = AEDClient(facility, environ=self.environ)
         return self._aed
-
-    @property
-    def csr_status(self):
-        """Outcome of the latest `aed()` client; a failed call stops the run first."""
-        accepted = getattr(self._aed, "accepted", 0)
-        if not accepted:
-            return "No CSR AED action was executed"
-        return (
-            f"AED accepted {accepted} request(s); "
-            "resulting state has not been read back"
-        )

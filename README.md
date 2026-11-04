@@ -108,49 +108,23 @@ requirements from an authorized corporate package source and validate its
 reader/service integration separately. Do not replace the production dependency
 install with this minimal offline test environment.
 
-## AED and legacy CSR submissions
+## AED API clients
 
 `vg2c.runtime.aed_api` is the upstream ICMPCS `AEDAPIClient` (imports adapted only),
 `vg2c.runtime.aed_client.AEDClient` wraps it with input validation, URL encoding and
-per-job credentials. `vg2c.runtime.job` owns the validated CSR request loader.
-Generated scripts obtain the client with `job.aed(facility)`.
+per-job credentials. Jobs obtain the client through the `job.aed` property.
+Set a default site with `JobRuntime.from_script(..., site="KM")` or `SITE`, or
+set the `FACILITY` macro explicitly.
 
-The compiler recognizes CSR submissions from a parsed `RoboCopy.va` destination of
-`<<<CSRPATH>>>`, exactly one preceding SQL CSV producer with common `EMAIL` and
-`CCB_NUMBER` fields plus a CSR request field such as `LOT`, `HOLD_LOT`, or
-`AUTO_CONTAIN`, and enclosing `SIGNAL > 0` / `DCSR = Y` conditions. It replaces that
-submission with an explicit AED call (default: `lot_hold`). Original SQL filters,
-query periods, macro scopes, and the independent MMS submission are preserved.
-Ambiguous or unsupported CSR submissions fail with source locations. Multiple
-CSR submissions in one signal branch are currently unsupported.
-Recognized submissions appear as **CSR → AED** operations with their source location,
-generated Python range and request CSV input. The source
-`DCSR` gate remains in effect; no additional AED enable flag is required.
+A legacy CSR submission (`RoboCopy.va <files> <source> <<<CSRPATH>>> ...`) compiles
+to a read-only placeholder: `job.aed.test_connection("LOT_TO_TEST")` runs once,
+without an exclusion guard. Replace `LOT_TO_TEST` with a known lot and enable AED
+before running this step; an excluded AED client is `None`. The producer SQL, reports,
+email and history steps around it are emitted unchanged. Replace the placeholder
+with the job's real hold/contain logic; no CSR field is mapped to AED arguments.
+Other `<<<CSRPATH>>>` file operations fail at compile time with a source location.
 
-Every CSR input must have nonempty `EMAIL` and `CCB_NUMBER` columns. Headers are
-case-insensitive; duplicate or blank headers and malformed rows are rejected.
-`AUTO_CONTAIN` accepts `Y` or `N` and defaults to `N`.
-`HOLD_LOT` accepts `Y` or `N`; blank means no hold. For older exports it can
-instead contain the actual lot ID. If both `HOLD_LOT` and `LOT`
-contain lot IDs, they must match. When `HOLD_LOT` is absent, it defaults to `N`
-for containment rows and `Y` otherwise. A requested hold or containment requires
-an explicit input lot. Holds also accept a legacy lot ID in `HOLD_LOT`, while
-containment always requires a nonempty `LOT` column. The runtime does not discover
-containment targets from `MODULE`, `ENTITY_ID`, or `DEFECT_MODE`.
-
-The row flags determine the requested actions: rows are normalized so `HOLD_LOT`
-and `AUTO_CONTAIN` are `Y` or `N`. `N` / `N` rows are dropped and never sent to
-the API. If a hold row has `FUTURE_OPERATION` or `PHQ`, both are required and the
-operation must be four ASCII digits; the generated code does not use them unless
-you pass them to a call. `HOLD_NOTE` defaults to empty, and `COMMENT` is formed
-from the note plus `CCB: <CCB_NUMBER>`. Other input columns remain available in
-`row`. `EMAIL` and `CCB_NUMBER` are required payload fields, but the runtime does
-not assume that CCB is an AED reference number or that PHQ is a hold code.
-
-CSR facility is passed directly from the active `FAC` macro populated by the
-source's pre/post query. AED calls live in the generated `main.py`;
-there is no generated AED configuration template or separate `AED_FACILITY` /
-`AED_MODE` override. The optional shared `.env` beside `main.py` supplies
+The optional shared `.env` beside `main.py` supplies
 `ENV_MODE=test|prod` and authentication/network values. It is loaded once at job
 startup, with process environment taking precedence, including blanks.
 `ENV_MODE` defaults to `test`; other values are rejected. The normalized value is
@@ -159,49 +133,37 @@ available as `macros['ENV_MODE']`.
 Every generated `main.py` has one editable setting near the top:
 
 ```python
-TEST_MODE_EXCLUDED = {"csr", "email", "mms"}
+TEST_MODE_EXCLUDED = {"aed", "email", "mms"}
 ```
 
 The setting is passed once to `JobRuntime.from_script`. Every `JobRuntime` action
 method checks `enabled()` before doing work and returns when its operation name
 is excluded in test mode: `send_mail` is `email`, `submit_mms` is `mms`,
-`csr_lots` / `aed` are `csr`, and the rest use their own name (`sql`,
+the `aed` property is `aed`, and the rest use their own name (`sql`,
 `copy_file`, `write_file`, ...), so any of them can be listed. Readers such as
-`row_count` and `read_macro_row` are never skipped. The generated CSR and MMS
-blocks read `if job.enabled('csr') and macros['DCSR'] == 'Y':`, so in test mode
-their complete subqueries, including input preparation, are skipped.
-Production runs allow all operations, subject to the source's existing
-`DCSR` and `DMWF` gates. Removing an operation from the set permits it in test
+`row_count` and `read_macro_row` are never skipped. Generated MMS scopes retain
+their `DMWF` condition and `job.enabled('mms')` gate.
+Production runs allow all operations. Removing an operation from the set permits it in test
 mode too, including real AED writes, email, or MMS delivery. AED still uses the
-production service context, so only remove `csr` when that is intended.
-
-The legacy CSR request query (`SELECT DISTINCT ... FROM [T0] WHERE 1=1` feeding
-`RoboCopy ... <<<CSRPATH>>>`) is not emitted. The translator reads its lot column,
-hold/contain flags, `HOLD_NOTE` and `CCB_NUMBER` at compile time and fails on any
-other query shape. The generated code calls AED directly for each distinct lot of
-the query's input file:
+production service context, so only remove `aed` when that is intended.
+When excluded, `job.aed` returns `None` without loading the SDK or credentials.
+Guard the complete operation, including any dependent history updates:
 
 ```python
-aed = job.aed(macros['FAC'])
-comment = job.csr_comment(macros['DHNOTE'], ccb=macros['DCCB'])
-for lot in job.csr_lots('final_data.csv', 'lot'):
-    # Legacy CSR fields: EMAIL=<<<dEmail>>>, FUTURE_OPERATION=<<<dHoldOperation>>>, PHQ=<<<dPHQ>>>
-    aed.lot_hold(lotid=lot, operation=macros['dHoldOperation'],
-                 holdcode='<approved-hold-code>', comment=comment)
+aed = job.aed
+if aed is not None:
+    result = aed.lot_hold(
+        lotid=lot,
+        operation=operation,
+        holdcode=holdcode,
+        comment=comment,
+    )
 ```
 
-Edit the loop in place: delete the hold or contain call that does not apply, or
-filter lots with an `if`. `csr_lots` rejects a missing column, empty or invalid
-lot IDs; `csr_comment` rejects a blank CCB number; `AEDClient` rejects blank or
-invalid operation, hold code and control characters. Any AED failure stops the
-run, so later steps (report email, history) do not run. History steps are gated
-by `job.enabled('csr')`, so test mode never records lots as handled.
-`job.csr_status` reports how many requests the latest `job.aed(...)` client had
-accepted.
-
-The default calls leave operation, hold code and reference number blank because
-legacy CSR columns do not establish their AED equivalents; the legacy values are
-listed in the comment above the call.
+Jobs supply confirmed lot IDs, operation and hold codes, comments, and reference
+numbers. CSV validation, deduplication, CCB requirements, and reporting belong to
+the job's business logic. `AEDClient` validates identifiers and returns each
+successful response; unsuccessful or malformed responses raise an exception.
 
 The write methods and their arguments match `aed_client.ManufacturingService`
 6.2.0 one-to-one:
@@ -214,36 +176,34 @@ The write methods and their arguments match `aed_client.ManufacturingService`
 | `lot_contain` | `lotid, operation, reference_number` |
 | `lot_uncontain` | `lotid, operation, reference_number, comment` |
 
-For example, replace the hold with an attribute write:
-`aed.lot_set_attr(lotid=row['LOT'], attributeid='<approved-attribute-id>',
+For an attribute write, use:
+`aed.lot_set_attr(lotid=lot, attributeid='<approved-attribute-id>',
 attributevalue='Y')`. `AEDClient` URL-encodes every value, because the SDK
-formats them into the request URL unencoded. Containment requires an explicit row
-`LOT`; equipment fields do not discover target lots. Regenerate older projects to
-obtain this call form.
-
-The complete CSV is parsed and validated before any call. Calls run sequentially;
-if a later call fails, earlier writes may already have completed. The workflow
-stops, history is not appended, and CSR owners receive a failure email when email
-is enabled. A successfully completed nonempty batch permits the history append.
-Batch acceptance is not readback confirmation of manufacturing state. There is no
-dry-run simulation, write callback, or generated `AED_results.csv` audit file.
-Failure email uses the CSR `EMAIL` values; the HTML notification retains its own
-recipient.
+formats them into the request URL unencoded. Calls run sequentially; if a later
+call fails, earlier writes may already have completed. There is no batch rollback,
+automatic failure email, history tracking, or dry-run simulation. Use explicit
+status or attribute reads when post-write verification is required.
 
 For a generated job in a Linux image, `docker run --env-file aed.env` supplies the
 shared mode and credential values. Normal production runs use `ENV_MODE=prod`
 plus the credentials and CA bundle described below. Windows batch/executable
 steps still need Linux replacements before the whole job can run there. With the
-default exclusions, test-mode AED calls return without loading the SDK or
-credentials, including explicit status and attribute reads.
+default exclusions, `job.aed` returns `None`, including for status and attribute
+reads. Existing generated projects must be migrated to the direct AED API and
+the `aed` exclusion name; old CSR helpers are not retained.
 
-`1064="Y"` is the SOIMS CSR_IAM upgrade's business choice, not a translator
-default. The updater preserves its first-attribute and overwrite behavior. The old
-`{AED} candidates.csv` pipeline, config bootstrap, hardcoded site/business defaults,
-and entrypoint decorator are retired. Such directives now produce an
-unsupported-utility error; replace them with explicit client calls. Attribute update
-results follow the reference updater's acknowledgement behavior; use an explicit
-status or attribute read if your business logic requires post-write verification.
+To explicitly check connectivity before manufacturing operations, read a known
+accessible lot through the same client:
+
+```python
+aed = job.aed
+if aed is not None:
+    aed.test_connection("7645D737")
+```
+
+This check is read-only and is never automatic.
+It verifies authentication and lot read access, not permission to hold, release,
+or change attributes.
 
 Install the approved API-key wheel together with the optional extra:
 
@@ -252,7 +212,9 @@ python -m pip install "<approved-wheel-directory>/aed_client_apikey-6.2.0-py3-no
 ```
 
 Use an isolated environment without `aed-client-winauth`, since both distributions
-own the `aed_client` import. Credentials supplied in `.env` or the process
+own the `aed_client` import. Windows and Linux use the same API-key authentication;
+no logged-in Windows identity or SSPI dependency is required.
+Credentials supplied in `.env` or the process
 environment are loaded only for an actual request, using nonempty `X_API_KEY`, then
 the encrypted `API_KEY`/`API_CONFIG` pair, then `key.key` and `config_new.json`
 under an explicitly supplied absolute `AED_SECRETS_DIR`. Keep secret files outside
@@ -271,6 +233,68 @@ automatic containment or CCB-system association; those actions require separate
 business logic. Test hold/release/attribute writes using `service_factory` fakes only.
 A live status read additionally requires an authorized test facility/lot and approved
 credentials; offline tests do not establish live API access.
+
+### Portable Linux Projects
+
+Create a new empty project:
+
+```powershell
+vg2c init my-job
+```
+
+Run `vg2c init` without a path to initialize the current empty directory. Existing
+nonempty directories are never overwritten. The Python API is
+`vg2c.init_project(path)`. CLI/API translations and companion exports include
+the same packaging automatically; no separate initialization step is needed.
+
+Each project contains:
+
+```text
+main.py
+Dockerfile
+.dockerignore
+README.md
+sql/                         # Translated assets, when present
+html/                        # Translated assets, when present
+dependencies/
+    requirements.txt
+    aed_client_apikey-6.2.0-py3-none-any.whl
+    vg2c/
+        __init__.py
+        runtime/             # Runtime source and Intel CA, without compiler
+```
+
+All packaging resources originate from `vg2c/project_template` inside the
+installed VG2C distribution. The runtime snapshot is copied from that same
+distribution. Generated projects do not reference this checkout or require
+VG2C to be installed on the build or execution machine.
+
+```powershell
+Set-Location my-job
+docker build -t my-job:local .
+docker run --rm --network none --entrypoint python my-job:local -c "import main; assert callable(main.handle)"
+```
+
+The Dockerfile uses `amr-registry.caas.intel.com/soia/icmpcs-soims:base`; override
+`SOIMS_BASE_IMAGE` at build time for another approved compatible image. That
+base provides the imserverless host, DataSyncX/Oracle system libraries and trust.
+Python requirements are installed during the build; uncached builds require
+registry and package-index access. This is not an offline wheelhouse for every
+third-party dependency. No Windows virtual environment or SSPI dependency is copied.
+
+The platform loads `main.handle(job_id, context, header, body)`, matching SOIMS.
+The shared base already supplies `/etc/icmpcs/conf/func.json` for `main.py`, so
+projects do not duplicate that config or add a separate entrypoint wrapper.
+The handler invokes `run()` and propagates failures. Mount persistent
+writable storage at `/app/output`; inject database and AED credentials through
+runtime Secrets, not image layers. Keep `ENV_MODE=test` until production is approved.
+The generated README includes a read-only AED connection-test command.
+
+For encrypted AED credentials, remove stale `X_API_KEY` settings: a direct key
+takes precedence over `API_KEY`/`API_CONFIG` or `AED_SECRETS_DIR`. Existing SOIMS
+encrypted credentials succeeded with API-key-only auth and TLS verification;
+Windows SSO is not required. Docker build and hosted Linux execution still
+require separate verification.
 ## Architecture Overview
 
 ```mermaid
@@ -291,7 +315,7 @@ graph TD
 
 `CompilationResult` and the compiler-stage objects are the authoritative chain. The emitter records per-step source ranges and asset-producing parameters while it generates Python; the companion uses them to map source blocks to generated code and assets.
 
-Native scope payloads own their generated headers and bodies for macro, conditional, and loop scopes; the project emitter walks the resolved scope tree and assembles imports, assets, and source maps. HTML report emission belongs to a per-translation `HtmlReport`, while CSR submission and history policy belongs to a per-translation `CsrWorkflow`. Generated jobs call the installed `vg2c.runtime` APIs, which own file, SQL, email, and control behavior at execution time.
+Native scope payloads own their generated headers and bodies for macro, conditional, and loop scopes; the project emitter walks the resolved scope tree and assembles imports, assets, and source maps. HTML report emission belongs to a per-translation `HtmlReport`. Generated jobs call the installed `vg2c.runtime` APIs, which own file, SQL, email, and control behavior at execution time.
 
 ## Requirements
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-import shutil
-import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from vg2c.project_bundle import write_project
 
 
 def _safe_relative_name(name: str) -> PurePosixPath:
@@ -19,7 +19,7 @@ def _safe_relative_name(name: str) -> PurePosixPath:
 
 
 def export_preview(result: Any, destination: Path) -> Path:
-    """Write main.py and compiler-owned assets into a new or empty directory."""
+    """Write a portable project into a new or empty directory."""
     destination = Path(destination).expanduser().resolve()
     parent = destination.parent
     if not parent.is_dir():
@@ -39,18 +39,11 @@ def export_preview(result: Any, destination: Path) -> Path:
         seen.add(key)
         files.append((relative, content))
 
-    stage = Path(tempfile.mkdtemp(prefix=".vg2c-companion-", dir=parent))
-    try:
-        for relative, content in files:
-            target = stage.joinpath(*relative.parts)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8", newline="")
-        if destination.exists():
-            destination.rmdir()
-        os.replace(stage, destination)
-    except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
-        raise
+    write_project(
+        destination,
+        result.emitted.source,
+        [(relative.as_posix(), content) for relative, content in files[1:]],
+    )
     return destination
 
 

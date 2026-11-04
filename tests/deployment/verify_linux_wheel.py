@@ -54,10 +54,17 @@ def main(python: Path, wheel: Path) -> None:
             "vg2c/runtime/aed.py",
             "vg2c/runtime/aed_updater.py",
             "vg2c/runtime/csr.py",
+            "vg2c/resolver/csr.py",
+            "vg2c/utilities/csr.py",
             "vg2c/runtime/append.py",
         }
         assert not names.intersection(retired), "Wheel contains retired runtime modules"
         for required in (
+            "vg2c/project_bundle.py",
+            "vg2c/project_template/Dockerfile",
+            "vg2c/project_template/.dockerignore",
+            "vg2c/project_template/dependencies/requirements.txt",
+            "vg2c/project_template/dependencies/aed_client_apikey-6.2.0-py3-none-any.whl",
             "vg2c/runtime/__init__.py",
             "vg2c/runtime/job.py",
             "vg2c/runtime/html.py",
@@ -129,6 +136,12 @@ def main(python: Path, wheel: Path) -> None:
         assert any(p.suffix == ".css" for p in source_assets)
         assert len(list((project / "html").glob("*.html"))) == 2
         assert not list(project.rglob("*.report.json"))
+        assert (project / "Dockerfile").is_file()
+        assert not (project / "entrypoint.py").exists()
+        assert not (project / "func.json").exists()
+        assert "def handle(" in main_file.read_text(encoding="utf-8")
+        assert (project / "dependencies/vg2c/runtime/job.py").is_file()
+        assert not (project / "dependencies/vg2c/compilation.py").exists()
 
         unrelated = root / "unrelated-cwd"
         unrelated.mkdir()
@@ -244,74 +257,6 @@ def main(python: Path, wheel: Path) -> None:
         assert actual[0] == ["owner"], actual
         assert sorted(actual[1:]) == [["ALICE"], ["BOB"], ["雪"]], actual
         print("STAGE2_REAL_FIXTURE_INSTALLED_WHEEL_PASS: script_short.txt")
-
-        # Exercise emitted CSR calls with the installed runtime, never a live SDK.
-        csr_source = root / "csr.txt"
-        csr_source.write_text(
-            block("/WRITE-FILE=Y\n/CSV=config.csv", "SIGNAL,DCSR,FAC\n1,Y,A15")
-            + block("/WRITE-FILE=Y\n/CSV=requests.csv", "lot\nL1\nL1")
-            + block('/UTILITIES={START-MACRO} "config.csv" "N"')
-            + block('/UTILITIES={IF-THEN} "SIGNAL" "GT" "0" "" "" "" ""')
-            + block('/UTILITIES={IF-THEN} "VAR(<<<DCSR>>>)" "EQS" "Y" "" "" "" ""')
-            + block(
-                "/ENGINE=SQLite\n/CSV=RESULT_csr.csv\n/TABLE=requests.csv:T0\n"
-                "/HEADERS=HOLD_LOT,AUTO_CONTAIN,LOT,EMAIL,CCB_NUMBER,HOLD_NOTE,HOLDCATEGORY,Module",
-                "select 'Y' as HOLD_LOT, 'N' as AUTO_CONTAIN, [lot] as LOT, "
-                "'offline@example.test' as EMAIL, '42' as CCB_NUMBER, "
-                "'note & detail' as HOLD_NOTE, 'NCO' as HOLDCATEGORY, 'IAM' as Module "
-                "from [T0] where 1=1",
-            )
-            + block('/UTILITIES=RoboCopy.va "RESULT_*.csv" "." "<<<CSRPATH>>>"')
-            + block("/UTILITIES={END-IF}")
-            + block(
-                "/REPORT=HTML-LAYOUT",
-                ":FILE:EMAIL:offline@example.test\n"
-                ":TITLE:CSR result\n<p>Lot on hold due to NCO.</p>",
-            )
-            + block("/UTILITIES={END-IF}")
-            + block("/UTILITIES={END-MACRO}"),
-            encoding="utf-8",
-        )
-        csr_main = translate(csr_source)
-        csr_main.write_text(
-            csr_main.read_text(encoding="utf-8")
-            .replace("operation=''", "operation='2303'")
-            .replace("holdcode=''", "holdcode='NCO'"),
-            encoding="utf-8",
-        )
-        csr_project = root / "relocated CSR project"
-        shutil.move(str(csr_main.parent), csr_project)
-        csr_source.unlink()
-        csr_check = """
-import os, runpy, sys
-from types import SimpleNamespace
-import vg2c.runtime.job as runtime_job
-from vg2c.runtime import AEDClient
-from pathlib import Path
-calls, emails = [], []
-class Upstream:
-    def lot_hold(self, *args):
-        calls.append(args)
-        return {"Success": True}
-runtime_job.send_mail = lambda *args, **kwargs: emails.append((args, kwargs))
-run = runpy.run_path(sys.argv[1], run_name="installed_csr")["run"]
-os.environ["ENV_MODE"] = "prod"
-runtime_job.AEDClient = lambda facility, **kwargs: AEDClient(
-    facility, **kwargs, client_factory=lambda f: Upstream())
-run()
-assert calls == [("L1", "2303", "NCO", "note%20%26%20detail%0ACCB%3A%2042")], calls
-assert len(emails) == 1, emails
-output = Path(sys.argv[1]).parent / "output"
-assert not (output / "AED_results.csv").exists()
-assert all(name not in sys.modules for name in (
-    "aed_client", "vg2c.frontend", "vg2c.resolver", "vg2c.emitter", "vg2c_ui"))
-print("AED_INSTALLED_WHEEL_PASS: relocated CSR; explicit arguments; mocked hold; "
-      "notification; no SDK/compiler imports")
-"""
-        result = run_python(
-            python, ["-c", csr_check, str(csr_project / "main.py")], unrelated
-        )
-        print(result.stdout.strip())
 
         print(
             "SESSION05_INSTALLED_LINUX_PASS: wheel-only imports; moved project; "

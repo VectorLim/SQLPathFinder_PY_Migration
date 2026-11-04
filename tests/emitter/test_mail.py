@@ -38,5 +38,5 @@ def test_generated_email_uses_job_workdir(monkeypatch, tmp_path):
     assert calls == [
         (("user@intel.com", "Report", "body.htm", ["report.csv"], None, True),
          {"files": {}, "workdir": workdir, "env_mode": "prod",
-          "test_mode_excluded": frozenset({"csr", "email", "mms"})})
+          "test_mode_excluded": frozenset({"aed", "email", "mms"})})
     ]
