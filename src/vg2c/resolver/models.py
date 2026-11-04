@@ -47,4 +47,3 @@ class ResolvedBlock(ClassifiedBlock):
 class ResolvedProgram:
     blocks: tuple[ResolvedBlock, ...]
     scope_tree: ScopeNode
-

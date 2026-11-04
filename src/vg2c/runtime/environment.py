@@ -16,5 +16,7 @@ def read_environment(project_dir):
 
     with AED_ENVIRONMENT_LOCK:
         environ = dict(os.environ)
-    values = dotenv_values(Path(project_dir) / ".env", encoding="utf-8-sig", interpolate=False)
+    values = dotenv_values(
+        Path(project_dir) / ".env", encoding="utf-8-sig", interpolate=False
+    )
     return {**{name: value or "" for name, value in values.items()}, **environ}

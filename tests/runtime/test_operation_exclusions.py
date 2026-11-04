@@ -105,9 +105,7 @@ def test_environment_is_loaded_into_macros_once_per_run(tmp_path, monkeypatch):
     assert JobRuntime.from_script(tmp_path / "main.py").macros["ENV_MODE"] == "test"
 
 
-def test_test_mode_does_not_import_mail_adapter_or_create_output(
-    tmp_path, monkeypatch
-):
+def test_test_mode_does_not_import_mail_adapter_or_create_output(tmp_path, monkeypatch):
     from vg2c.runtime.mail import send_mail
 
     monkeypatch.setenv("ENV_MODE", "test")
@@ -129,8 +127,7 @@ def test_removing_aed_exclusion_allows_aed_in_test_mode(tmp_path):
     )
     assert isinstance(job.aed, AEDClient)
     assert (
-        JobRuntime(tmp_path, tmp_path / "out", environ={"ENV_MODE": "test"}).aed
-        is None
+        JobRuntime(tmp_path, tmp_path / "out", environ={"ENV_MODE": "test"}).aed is None
     )
 
 

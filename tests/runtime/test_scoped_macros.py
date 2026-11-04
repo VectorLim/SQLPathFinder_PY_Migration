@@ -35,7 +35,9 @@ def test_named_lookup_write_missing_and_values_namespace():
     assert macros.get("missing", "fallback") == "fallback"
 
 
-@pytest.mark.parametrize("value, expected", [(None, ""), ("", ""), (0, 0), (False, False)])
+@pytest.mark.parametrize(
+    "value, expected", [(None, ""), ("", ""), (0, 0), (False, False)]
+)
 def test_assignment_normalizes_none_and_preserves_other_values(value, expected):
     macros = MacroStore(initial={"VALUE": "base"})
     with macros.scope():

@@ -113,11 +113,7 @@ class FileSystemOps(EmitterUtility):
                 raise ValueError(
                     "Only RoboCopy <files> <source> <<<CSRPATH>>> submissions are supported"
                 )
-            return BlockEmission(
-                (
-                    'job.aed.test_connection("LOT_TO_TEST")',
-                )
-            )
+            return BlockEmission(('job.aed.test_connection("LOT_TO_TEST")',))
         if "robocopy" in basename:
             stmt = cls._emit_robocopy(argv)
         elif "spfcopy" in basename:
