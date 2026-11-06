@@ -125,7 +125,9 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
             "CREATE TABLE F_LOTHIST "
             "(facility, lot, operation, prevout_date, product, history_deleted_flag)"
         )
-        connection.execute("INSERT INTO F_LOTHIST VALUES ('KM', 'L1', '1000', 'previous', 'P1', NULL)")
+        connection.execute(
+            "INSERT INTO F_LOTHIST VALUES ('KM', 'L1', '1000', 'previous', 'P1', NULL)"
+        )
         connection.execute(
             "CREATE TABLE F_PRODUCT (facility, product, latest_version, prodgroup3)"
         )
@@ -148,17 +150,25 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
         ).fetchall()
         assert rows == [("KM", "JDC1")]
         connection.execute("UPDATE F_PRODUCT SET prodgroup3 = 'OTHER'")
-        assert connection.execute(
-            "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
-        ).fetchall() == []
+        assert (
+            connection.execute(
+                "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE "
+                + predicate
+            ).fetchall()
+            == []
+        )
         connection.execute("UPDATE F_PRODUCT SET prodgroup3 = ' sql '")
         assert connection.execute(
             "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
         ).fetchall() == [("KM", "JDC1")]
         connection.execute("UPDATE F_PRODUCT SET latest_version = 'N'")
-        assert connection.execute(
-            "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
-        ).fetchall() == []
+        assert (
+            connection.execute(
+                "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE "
+                + predicate
+            ).fetchall()
+            == []
+        )
     assert (tmp_path / "ept_interventions.csv").is_file()
     assert (tmp_path / "lot_history.csv").is_file()
     output = pd.read_csv(tmp_path / "first_lot_after_ept_lots.csv")
@@ -169,7 +179,9 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
 def test_product_config_uses_job_site_and_normalizes_codes(tmp_path, site):
     namespace = runpy.run_path(str(PROJECT / "main.py"))
     job = JobRuntime(
-        PROJECT, tmp_path / "output", site=site,
+        PROJECT,
+        tmp_path / "output",
+        site=site,
         environ={"PRODUCT_CONFIG_ROOT": str(tmp_path / "config")},
     )
     config = tmp_path / "config" / job.site / "prod.txt"
@@ -180,9 +192,13 @@ def test_product_config_uses_job_site_and_normalizes_codes(tmp_path, site):
 
 
 @pytest.mark.parametrize("contents", [None, "\n \n"])
-def test_product_config_missing_or_empty_stops_before_queries(tmp_path, monkeypatch, contents):
+def test_product_config_missing_or_empty_stops_before_queries(
+    tmp_path, monkeypatch, contents
+):
     job = JobRuntime(
-        PROJECT, tmp_path / "output", site="KM",
+        PROJECT,
+        tmp_path / "output",
+        site="KM",
         environ={"PRODUCT_CONFIG_ROOT": str(tmp_path)},
     )
     if contents is not None:
