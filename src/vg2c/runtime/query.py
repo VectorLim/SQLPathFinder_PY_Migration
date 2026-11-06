@@ -114,7 +114,8 @@ def resolve_reader(node=None, *, environ=None):
     credentials = _reader_credentials(reader_class, environ)
     if matches:
         missing = [
-            p for p in _required_params(reader_class.__init__)
+            p
+            for p in _required_params(reader_class.__init__)
             if p not in reader_kwargs and p not in credentials
         ]
         missing += [
@@ -330,7 +331,8 @@ def run_query(
         try:
             with (
                 _reader_environment(reader, environ)
-                if inferred_reader else nullcontext()
+                if inferred_reader
+                else nullcontext()
             ):
                 result = reader.read(
                     site=node_site(substitute(node, values=values, macros=macros)),

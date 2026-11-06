@@ -308,7 +308,9 @@ def emit_project(dispatched):
     reader_imports = sorted(
         item for item in imports if item.startswith("from datasyncx ")
     )
-    ordinary_imports = sorted(imports - set(reader_imports) - {"from pathlib import Path"})
+    ordinary_imports = sorted(
+        imports - set(reader_imports) - {"from pathlib import Path"}
+    )
     setup = "\nOracleClient.configure()\n" if reader_imports else ""
     exclusions = ", ".join(repr(name) for name in sorted(DEFAULT_TEST_MODE_EXCLUDED))
     header = (
@@ -318,7 +320,12 @@ def emit_project(dispatched):
         + "\n".join(reader_imports)
         + f"\n\nTEST_MODE_EXCLUDED = {{{exclusions}}}\n\n"
     )
-    source = header + writer.source() + HOST_HANDLER + '\n\nif __name__ == "__main__":\n    run()\n'
+    source = (
+        header
+        + writer.source()
+        + HOST_HANDLER
+        + '\n\nif __name__ == "__main__":\n    run()\n'
+    )
     ast.parse(source)
     finalized = sorted(
         finalize_steps(source, helper_steps + main_steps),

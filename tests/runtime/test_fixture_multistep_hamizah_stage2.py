@@ -16,7 +16,6 @@ import pytest
 from tests.fixtures.generated_job import sql_keyword_names
 from vg2c import translate
 
-
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "hamizah.txt"
 SEPARATOR = "<---- New Query ---->"
 
@@ -46,33 +45,46 @@ def _read(path, delimiter):
 
 
 def _seed(workdir):
-    _write_tab(workdir / "yeuchuan_a0_5547.tab", [
-        ["test_lot", "from_to", "tcb_lot"],
-        ["TEST-1", "F", "TCB-1"],
-        ["TEST-2", "F", "TCB-2"],
-    ])
-    _write_tab(workdir / "yeuchuan_a1_5547.tab", [
-        ["lot_1", "entity", "prodgroup3"],
-        ["TCB-1", "ENTITY-A", "GROUP-A"],
-        ["OTHER", "ENTITY-X", "GROUP-X"],
-    ])
+    _write_tab(
+        workdir / "yeuchuan_a0_5547.tab",
+        [
+            ["test_lot", "from_to", "tcb_lot"],
+            ["TEST-1", "F", "TCB-1"],
+            ["TEST-2", "F", "TCB-2"],
+        ],
+    )
+    _write_tab(
+        workdir / "yeuchuan_a1_5547.tab",
+        [
+            ["lot_1", "entity", "prodgroup3"],
+            ["TCB-1", "ENTITY-A", "GROUP-A"],
+            ["OTHER", "ENTITY-X", "GROUP-X"],
+        ],
+    )
 
 
 def _run(main):
     runpy.run_path(str(main), run_name="isolated_hamizah_fixture")["run"]()
 
 
-def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(tmp_path):
+def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(
+    tmp_path,
+):
     main = _project(tmp_path)
     user_code = main.read_text(encoding="utf-8")
     assert "job_entrypoint" not in user_code
     assert "def run():" in user_code
-    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in user_code
+    assert (
+        "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)"
+        in user_code
+    )
     assert "header" not in sql_keyword_names(user_code)
     assets = list((main.parent / "sql").glob("*.sql"))
     assert len(assets) == 2
-    assert all(asset.read_text(encoding="utf-8").startswith("-- vg2c-output-headers: ")
-               for asset in assets)
+    assert all(
+        asset.read_text(encoding="utf-8").startswith("-- vg2c-output-headers: ")
+        for asset in assets
+    )
     workdir = main.parent / "output"
     workdir.mkdir()
     _seed(workdir)
@@ -113,7 +125,8 @@ def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
     sql_assets = sorted((main.parent / "sql").glob("*.sql"))
     assert len(sql_assets) == 2
     downstream = [
-        asset for asset in sql_assets
+        asset
+        for asset in sql_assets
         if "[input] a0" in asset.read_text(encoding="utf-8")
     ]
     assert len(downstream) == 1
@@ -132,7 +145,9 @@ def test_consecutive_original_hamizah_sql_asset_edit_changes_rerun(tmp_path):
     ]
 
 
-def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(tmp_path, monkeypatch):
+def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(
+    tmp_path, monkeypatch
+):
     """Preserve all four VG2 bodies; only the external MARS results are simulated.
 
     A fake reader validates local cross-block SQL_Get_CSV_List expansion, not
@@ -159,17 +174,21 @@ def test_original_first_four_hamizah_blocks_run_with_mocked_mars_reader(tmp_path
         def read(self, *, site, query):
             calls.append((site, query))
             if len(calls) == 1:
-                return pd.DataFrame({
-                    "test_lot": ["TEST-1", "TEST-2"],
-                    "from_to": ["F", "F"],
-                    "tcb_lot": ["TCB-1", "TCB-2"],
-                })
+                return pd.DataFrame(
+                    {
+                        "test_lot": ["TEST-1", "TEST-2"],
+                        "from_to": ["F", "F"],
+                        "tcb_lot": ["TCB-1", "TCB-2"],
+                    }
+                )
             if len(calls) == 2:
-                return pd.DataFrame({
-                    "lot_1": ["TCB-1", "OTHER"],
-                    "entity": ["ENTITY-A", "ENTITY-X"],
-                    "prodgroup3": ["GROUP-A", "GROUP-X"],
-                })
+                return pd.DataFrame(
+                    {
+                        "lot_1": ["TCB-1", "OTHER"],
+                        "entity": ["ENTITY-A", "ENTITY-X"],
+                        "prodgroup3": ["GROUP-A", "GROUP-X"],
+                    }
+                )
             raise AssertionError("Unexpected external reader invocation")
 
     fake_datasyncx = types.ModuleType("datasyncx")

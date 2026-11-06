@@ -43,29 +43,48 @@ def test_query_output_renamed_case_can_be_read_downstream(tmp_path):
     data.write_text('id,label\n001,"a,b"\n002,x\n')
     initial = tmp_path / "initial.sql"
     initial.write_text("SELECT id AS code, label FROM T0")
-    execute_sql(initial, reader=SqliteReader(), inputs=[("source.csv", "T0")],
-                output="renamed.csv", header=["CODE", "LABEL"], workdir=tmp_path)
+    execute_sql(
+        initial,
+        reader=SqliteReader(),
+        inputs=[("source.csv", "T0")],
+        output="renamed.csv",
+        header=["CODE", "LABEL"],
+        workdir=tmp_path,
+    )
     assert (tmp_path / "renamed.csv").read_text() == 'CODE,LABEL\n001,"a,b"\n002,x\n'
     downstream = tmp_path / "downstream.sql"
     downstream.write_text("SELECT CODE, LABEL FROM renamed WHERE CODE = :id")
-    execute_sql(downstream, reader=SqliteReader(), inputs=["renamed.csv"],
-                output="final.csv", workdir=tmp_path, params={"id": "001"})
+    execute_sql(
+        downstream,
+        reader=SqliteReader(),
+        inputs=["renamed.csv"],
+        output="final.csv",
+        workdir=tmp_path,
+        params={"id": "001"},
+    )
     assert (tmp_path / "final.csv").read_text() == 'CODE,LABEL\n001,"a,b"\n'
 
 
 def test_legacy_unmatched_header_remains_blank_by_name(tmp_path):
-    CsvIO().write(str(tmp_path / "out.csv"), pd.DataFrame({"a": ["one"]}),
-                  header=["a", "unmatched"])
+    CsvIO().write(
+        str(tmp_path / "out.csv"),
+        pd.DataFrame({"a": ["one"]}),
+        header=["a", "unmatched"],
+    )
     assert (tmp_path / "out.csv").read_text() == "a,unmatched\none,\n"
 
 
 def test_crosstab_first_duplicate_and_string_identifier():
-    rows = pd.DataFrame({
-        "Lot": ["001", "001", "002"], "Metric": ["A", "A", "B"],
-        "Value": ["first", "second", "third"],
-    })
-    result = CrosstabUtility().apply(rows, row_keys=["lot"], header_key="metric",
-                                    value_key="value")
+    rows = pd.DataFrame(
+        {
+            "Lot": ["001", "001", "002"],
+            "Metric": ["A", "A", "B"],
+            "Value": ["first", "second", "third"],
+        }
+    )
+    result = CrosstabUtility().apply(
+        rows, row_keys=["lot"], header_key="metric", value_key="value"
+    )
     assert result["LOT"].tolist() == ["001", "002"]
     assert result.loc[0, "A"] == "first"
     assert result.loc[1, "B"] == "third"
@@ -74,8 +93,9 @@ def test_crosstab_first_duplicate_and_string_identifier():
 def test_crosstab_diagnoses_ambiguous_schema():
     source = pd.DataFrame({"ID": ["1"], "id": ["2"], "metric": ["A"], "value": ["3"]})
     with pytest.raises(ValueError, match="Ambiguous"):
-        CrosstabUtility().apply(source, row_keys=["id"], header_key="metric",
-                                value_key="value")
+        CrosstabUtility().apply(
+            source, row_keys=["id"], header_key="metric", value_key="value"
+        )
 
 
 def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
@@ -85,14 +105,20 @@ def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
     opts = "/CTROW=classification_only\n/CTHEADER=metric\n/CTVALUE=value"
     query = "SELECT " + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names))
     query += ", 'A' AS metric, 'first' AS value, 'second' AS alternate"
-    source.write_text("<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n" + opts
-                      + "\n</OPTIONS>\n" + query + "\n")
+    source.write_text(
+        "<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n"
+        + opts
+        + "\n</OPTIONS>\n"
+        + query
+        + "\n"
+    )
     compiled = compile_document(source)
     assert "pivot_columns='metric'" in compiled.emitted.source
     assert "pivot_values='value'" in compiled.emitted.source
     assert "crosstab=job.table_spec(" not in compiled.emitted.source
-    assert not any(name.endswith(".crosstab.json")
-                   for name, _ in compiled.emitted.assets)
+    assert not any(
+        name.endswith(".crosstab.json") for name, _ in compiled.emitted.assets
+    )
     main = translate(source)
     namespace = {"__file__": str(main), "__name__": "translated_job"}
     exec(compile(main.read_text(), str(main), "exec"), namespace)
@@ -115,22 +141,32 @@ def test_large_table_options_are_runtime_inferred_and_editable(tmp_path):
 def test_large_explicit_header_spec_remains_by_name(tmp_path):
     names = [f"c{i}" for i in range(8)]
     source = tmp_path / "headers.txt"
-    source.write_text("<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n/HEADERS="
-                      + ",".join(names) + "\n</OPTIONS>\nSELECT "
-                      + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names)))
+    source.write_text(
+        "<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n/HEADERS="
+        + ",".join(names)
+        + "\n</OPTIONS>\nSELECT "
+        + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names))
+    )
     generated = compile_document(source).emitted
     assert "header" not in sql_keyword_names(generated.source)
-    path, text = next((name, value) for name, value in generated.assets if name.endswith(".sql"))
+    path, text = next(
+        (name, value) for name, value in generated.assets if name.endswith(".sql")
+    )
     assert path.startswith("sql/")
-    assert json.loads(text.split("\n", 1)[0].removeprefix("-- vg2c-output-headers: ")) == names
+    assert (
+        json.loads(text.split("\n", 1)[0].removeprefix("-- vg2c-output-headers: "))
+        == names
+    )
     assert not any(name.endswith(".header.json") for name, _ in generated.assets)
 
 
 def test_multi_alias_join_and_dynamic_sql_projection(tmp_path):
     (tmp_path / "left.csv").write_text("lot,code\n001,ABC\n002,DEF\n")
     (tmp_path / "right.csv").write_text("lot,quantity\n001,5\n")
-    sql = ("SELECT a.lot, CrossTab->[[a,ignored;:Y]], b.quantity "
-           "FROM [T0] a LEFT JOIN [T1] b ON a.lot = b.lot")
+    sql = (
+        "SELECT a.lot, CrossTab->[[a,ignored;:Y]], b.quantity "
+        "FROM [T0] a LEFT JOIN [T1] b ON a.lot = b.lot"
+    )
     frame = SqliteReader().execute(
         sql, [("left.csv", "T0"), ("right.csv", "T1")], workdir=tmp_path
     )
@@ -141,8 +177,9 @@ def test_multi_alias_join_and_dynamic_sql_projection(tmp_path):
 
 def test_empty_crosstab_keeps_ordered_row_schema():
     frame = pd.DataFrame(columns=["ID", "Category", "Measure"])
-    result = CrosstabUtility().apply(frame, row_keys=["ID"],
-                                    header_key="Category", value_key="Measure")
+    result = CrosstabUtility().apply(
+        frame, row_keys=["ID"], header_key="Category", value_key="Measure"
+    )
     assert result.columns.tolist() == ["ID"]
     assert result.empty
 
@@ -150,10 +187,11 @@ def test_empty_crosstab_keeps_ordered_row_schema():
 def test_query_sql_get_csv_list_quotes_and_deduplicates(tmp_path):
     (tmp_path / "items.csv").write_text("lot\n001\nO'Neil\n001\n")
     sql = tmp_path / "query.sql"
-    sql.write_text("SELECT '001' AS lot WHERE '001' IN "
-                   "SQL_Get_CSV_List('items.csv', 1, 'lot IN')")
-    execute_sql(sql, reader=SqliteReader(), output="matched.csv",
-                workdir=tmp_path)
+    sql.write_text(
+        "SELECT '001' AS lot WHERE '001' IN "
+        "SQL_Get_CSV_List('items.csv', 1, 'lot IN')"
+    )
+    execute_sql(sql, reader=SqliteReader(), output="matched.csv", workdir=tmp_path)
     assert (tmp_path / "matched.csv").read_text() == "lot\n001\n"
 
 

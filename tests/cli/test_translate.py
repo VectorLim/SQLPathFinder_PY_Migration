@@ -50,18 +50,28 @@ def test_project_bundles_runtime_and_linux_packaging(tmp_path, operation):
     assert (project / ".gitignore").is_file()
     assert not (project / "func.json").exists()
     assert not (project / "entrypoint.py").exists()
-    assert "def handle(job_id=None, context=None, header=None, body=None):" in main.read_text()
+    assert (
+        "def handle(job_id=None, context=None, header=None, body=None):"
+        in main.read_text()
+    )
     assert (project / "dependencies" / "requirements.txt").is_file()
-    assert (project / "dependencies" / "aed_client_apikey-6.2.0-py3-none-any.whl").is_file()
+    assert (
+        project / "dependencies" / "aed_client_apikey-6.2.0-py3-none-any.whl"
+    ).is_file()
     assert (project / "dependencies" / "vg2c" / "runtime" / "aed_client.py").is_file()
     assert not (project / "dependencies" / "vg2c" / "compilation.py").exists()
     process = subprocess.run(
-        [sys.executable, "-I", "-c", (
-            f"import runpy; namespace = runpy.run_path({str(main)!r}, run_name='import_only'); "
-            "assert callable(namespace['handle']); "
-            "import vg2c.runtime; "
-            f"assert str(vg2c.runtime.__file__).startswith({str(project)!r})"
-        )],
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                f"import runpy; namespace = runpy.run_path({str(main)!r}, run_name='import_only'); "
+                "assert callable(namespace['handle']); "
+                "import vg2c.runtime; "
+                f"assert str(vg2c.runtime.__file__).startswith({str(project)!r})"
+            ),
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -148,21 +158,34 @@ def test_generated_release_attaches_shared_credentials_without_inline_values(tmp
     image = target.repository + "@sha256:" + "a" * 64
     deployment = {
         "metadata": {"name": target.deployment_name("1.0"), "resourceVersion": "1"},
-        "spec": {"template": {"spec": {"containers": [{
-            "image": image,
-            "env": [
-                *[{"name": key, "value": value} for key, value in target.environment.items()],
-                {"name": "PW", "value": "stale-inline-value"},
-                {"name": "API_KEY", "value": "stale-inline-value"},
-            ],
-        }]}}},
+        "spec": {
+            "template": {
+                "spec": {
+                    "containers": [
+                        {
+                            "image": image,
+                            "env": [
+                                *[
+                                    {"name": key, "value": value}
+                                    for key, value in target.environment.items()
+                                ],
+                                {"name": "PW", "value": "stale-inline-value"},
+                                {"name": "API_KEY", "value": "stale-inline-value"},
+                            ],
+                        }
+                    ]
+                }
+            }
+        },
     }
     configure(cluster, deployment, image, target)
     arguments = cluster.call.call_args.args
     patch = json.loads(arguments[arguments.index("--patch") + 1])
     environment = next(item["value"] for item in patch if item["path"].endswith("/env"))
     assert {entry["name"] for entry in environment} == {"ENV_MODE", "SITE"}
-    env_from = next(item["value"] for item in patch if item["path"].endswith("/envFrom"))
+    env_from = next(
+        item["value"] for item in patch if item["path"].endswith("/envFrom")
+    )
     assert env_from == [
         {"secretRef": {"name": name, "optional": False}} for name in target.env_secrets
     ]
@@ -186,7 +209,9 @@ def test_initialized_and_translated_handlers_preserve_soims_contract(tmp_path):
         calls = []
         namespace["run"] = lambda: calls.append("run")
         assert namespace["handle"]("job", "context", "header", "body") == (
-            True, "Function executed successfully", "Function executed successfully"
+            True,
+            "Function executed successfully",
+            "Function executed successfully",
         )
         assert calls == ["run"]
 

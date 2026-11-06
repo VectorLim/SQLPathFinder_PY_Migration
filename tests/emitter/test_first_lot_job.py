@@ -50,7 +50,10 @@ def history_row(lot, timestamp, facility="KM", entity="JDC1"):
 
 def _offline_job(monkeypatch, tmp_path, reader):
     job = JobRuntime(
-        PROJECT, tmp_path, site="KM", environ={},
+        PROJECT,
+        tmp_path,
+        site="KM",
+        environ={},
         test_mode_excluded={"email", "mms"},
     )
     aed = Mock()

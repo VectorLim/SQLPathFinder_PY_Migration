@@ -18,12 +18,16 @@ def _source(tmp_path, *, headers=None):
     if headers is not None:
         options += "/HEADERS=" + headers + "\n"
     source = tmp_path / "sample.txt"
-    source.write_text(options + "</OPTIONS>\n"
-                      + "SELECT '001' AS code, 'Example' AS label\n", encoding="utf-8")
+    source.write_text(
+        options + "</OPTIONS>\n" + "SELECT '001' AS code, 'Example' AS label\n",
+        encoding="utf-8",
+    )
     return source
 
 
-def test_generated_run_is_parameterless_and_uses_relocated_project_output(tmp_path, monkeypatch):
+def test_generated_run_is_parameterless_and_uses_relocated_project_output(
+    tmp_path, monkeypatch
+):
     source = _source(tmp_path)
     main = translate(source)
     text = main.read_text(encoding="utf-8")
@@ -31,7 +35,10 @@ def test_generated_run_is_parameterless_and_uses_relocated_project_output(tmp_pa
     assert "def run():" in text
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
-    assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in text
+    assert (
+        "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)"
+        in text
+    )
     assert '# job.environ["NAME"] = ""' in text
     assert '# job.environ["PW"] = ""' in text
     assert "MarsReader" not in text
@@ -84,11 +91,16 @@ def test_generated_run_creates_fresh_state_each_time(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("engine", ["SQLite", "DuckDB"])
-@pytest.mark.parametrize("headers,expected", [
-    (None, "code,label\n"),
-    ("LABEL,CODE,MISSING", "LABEL,CODE,MISSING\n"),
-])
-def test_generated_empty_query_still_writes_headers(tmp_path, engine, headers, expected):
+@pytest.mark.parametrize(
+    "headers,expected",
+    [
+        (None, "code,label\n"),
+        ("LABEL,CODE,MISSING", "LABEL,CODE,MISSING\n"),
+    ],
+)
+def test_generated_empty_query_still_writes_headers(
+    tmp_path, engine, headers, expected
+):
     source = _source(tmp_path, headers=headers)
     engine_options = engine
     if engine == "DuckDB":
@@ -140,11 +152,14 @@ def test_explicit_legacy_header_is_stored_in_sql_not_generated_main(tmp_path):
     assert (workdir / "result.csv").read_text() == "identifier,label\n001,Example\n"
 
 
-@pytest.mark.parametrize("bad", [
-    "-- vg2c-output-headers: {}\nSELECT 1 AS code",
-    "-- vg2c-output-headers: [1]\nSELECT 1 AS code",
-    "-- vg2c-output-headers: broken\nSELECT 1 AS code",
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "-- vg2c-output-headers: {}\nSELECT 1 AS code",
+        "-- vg2c-output-headers: [1]\nSELECT 1 AS code",
+        "-- vg2c-output-headers: broken\nSELECT 1 AS code",
+    ],
+)
 def test_bad_sql_header_directive_fails_visibly(tmp_path, bad):
     asset = tmp_path / "custom.sql"
     asset.write_text(bad, encoding="utf-8")

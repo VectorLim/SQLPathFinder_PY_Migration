@@ -111,14 +111,17 @@ def test_from_script_binds_project_and_output_with_fresh_state(tmp_path):
     assert "LABEL" not in dict(second.macros.items())
 
 
-@pytest.mark.parametrize("platform,previous,failure", [
-    ("linux", None, False),
-    ("linux", None, True),
-    ("linux", "previous-password", False),
-    ("linux", "previous-password", True),
-    ("win32", "previous-password", False),
-    ("win32", None, True),
-])
+@pytest.mark.parametrize(
+    "platform,previous,failure",
+    [
+        ("linux", None, False),
+        ("linux", None, True),
+        ("linux", "previous-password", False),
+        ("linux", "previous-password", True),
+        ("win32", "previous-password", False),
+        ("win32", None, True),
+    ],
+)
 def test_sql_uses_job_credentials_and_preserves_environment(
     tmp_path, monkeypatch, platform, previous, failure
 ):
@@ -157,7 +160,9 @@ def test_sql_uses_job_credentials_and_preserves_environment(
     assert os.environ.get("OFFLINE_USER") == previous
 
 
-def test_partial_credentials_fail_only_for_automatic_authenticated_readers(tmp_path, monkeypatch):
+def test_partial_credentials_fail_only_for_automatic_authenticated_readers(
+    tmp_path, monkeypatch
+):
     class Mars:
         def __init__(self, *, username=None, password=None):
             raise AssertionError("Incomplete credentials reached reader")
@@ -167,7 +172,9 @@ def test_partial_credentials_fail_only_for_automatic_authenticated_readers(tmp_p
 
     monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=Mars))
     (tmp_path / "q.sql").write_text("select 1 as ID")
-    job = JobRuntime(tmp_path, tmp_path / "output", site="KM", environ={"NAME": "offline_user"})
+    job = JobRuntime(
+        tmp_path, tmp_path / "output", site="KM", environ={"NAME": "offline_user"}
+    )
     with pytest.raises(ValueError, match="Set both NAME and PW"):
         job.sql("q.sql", database="MARS", output="result.csv")
     job.sql("q.sql", output="local.csv")
