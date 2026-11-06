@@ -1,4 +1,7 @@
 .git
+.github
+automation
+release.yaml
 .venv
 **/__pycache__
 **/*.pyc

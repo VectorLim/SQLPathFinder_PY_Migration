@@ -63,6 +63,11 @@ def main(python: Path, wheel: Path) -> None:
             "vg2c/project_bundle.py",
             "vg2c/project_template/Dockerfile",
             "vg2c/project_template/.dockerignore",
+            "vg2c/project_template/.gitignore",
+            "vg2c/project_template/.github/workflows/release.yml",
+            "vg2c/project_template/release.yaml",
+            "vg2c/project_template/automation/__main__.py",
+            "vg2c/project_template/automation/cluster.py",
             "vg2c/project_template/dependencies/requirements.txt",
             "vg2c/project_template/dependencies/aed_client_apikey-6.2.0-py3-none-any.whl",
             "vg2c/runtime/__init__.py",
@@ -137,6 +142,9 @@ def main(python: Path, wheel: Path) -> None:
         assert len(list((project / "html").glob("*.html"))) == 2
         assert not list(project.rglob("*.report.json"))
         assert (project / "Dockerfile").is_file()
+        assert (project / "release.yaml").is_file()
+        assert (project / ".github/workflows/release.yml").is_file()
+        assert (project / "automation/__main__.py").is_file()
         assert not (project / "entrypoint.py").exists()
         assert not (project / "func.json").exists()
         assert "def handle(" in main_file.read_text(encoding="utf-8")

@@ -7,6 +7,7 @@ import json
 import pandas as pd
 import pytest
 
+from tests.fixtures.generated_job import sql_keyword_names
 from vg2c import compile_document, translate
 from vg2c.runtime import SqliteReader, execute_sql
 from vg2c.runtime.csv_io import _CsvIO as CsvIO
@@ -118,7 +119,7 @@ def test_large_explicit_header_spec_remains_by_name(tmp_path):
                       + ",".join(names) + "\n</OPTIONS>\nSELECT "
                       + ", ".join(f"'{i}' AS {name}" for i, name in enumerate(names)))
     generated = compile_document(source).emitted
-    assert "header=" not in generated.source
+    assert "header" not in sql_keyword_names(generated.source)
     path, text = next((name, value) for name, value in generated.assets if name.endswith(".sql"))
     assert path.startswith("sql/")
     assert json.loads(text.split("\n", 1)[0].removeprefix("-- vg2c-output-headers: ")) == names

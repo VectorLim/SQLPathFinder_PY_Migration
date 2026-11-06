@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 ARG SOIMS_BASE_IMAGE=amr-registry.caas.intel.com/soia/icmpcs-soims:base
 FROM ${SOIMS_BASE_IMAGE}
 USER root
@@ -11,5 +10,7 @@ ENV FUNCCONF=/etc/icmpcs/conf
 ENV ENVFUNCAPPLOC=/app
 COPY . /app
 RUN python -m pip install -r dependencies/requirements.txt \
+    && printf 'LOG_LEVEL=INFO\n' > /app/.env \
+    && chmod -R a+rX /app \
     && mkdir -p /app/output \
     && chmod 1777 /app/output

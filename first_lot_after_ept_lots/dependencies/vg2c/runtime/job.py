@@ -212,6 +212,7 @@ class JobRuntime:
         return execute_sql(
             self.asset_path(path),
             reader=reader,
+            environ=self.environ,
             output=output,
             workdir=self.workdir,
             values=self.values,
@@ -440,4 +441,3 @@ class JobRuntime:
             )
         self._aed = AEDClient(facility, environ=self.environ)
         return self._aed
-

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.generated_job import sql_keyword_names
 from vg2c import translate
 
 
@@ -67,7 +68,7 @@ def test_consecutive_original_hamizah_sqlite_steps_produce_downstream_relation(t
     assert "job_entrypoint" not in user_code
     assert "def run():" in user_code
     assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in user_code
-    assert "header=" not in user_code
+    assert "header" not in sql_keyword_names(user_code)
     assets = list((main.parent / "sql").glob("*.sql"))
     assert len(assets) == 2
     assert all(asset.read_text(encoding="utf-8").startswith("-- vg2c-output-headers: ")

@@ -2,7 +2,11 @@
 
 import ast
 from concurrent.futures import ThreadPoolExecutor
+import os
+import sys
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from tests.fixtures.generated_job import capture_jobs
@@ -105,6 +109,72 @@ def test_from_script_binds_project_and_output_with_fresh_state(tmp_path):
     assert first is not second
     first.macros["LABEL"] = "local"
     assert "LABEL" not in dict(second.macros.items())
+
+
+@pytest.mark.parametrize("platform,previous,failure", [
+    ("linux", None, False),
+    ("linux", None, True),
+    ("linux", "previous-password", False),
+    ("linux", "previous-password", True),
+    ("win32", "previous-password", False),
+    ("win32", None, True),
+])
+def test_sql_uses_job_credentials_and_preserves_environment(
+    tmp_path, monkeypatch, platform, previous, failure
+):
+    calls = []
+
+    class Mars:
+        def __init__(self, *, username, password):
+            self.username, self.password = username, password
+
+        def read(self, *, site, query):
+            calls.append(
+                (self.username, self.password, site, os.environ.get("OFFLINE_USER"))
+            )
+            if failure:
+                raise RuntimeError("service failed")
+            return pd.DataFrame({"ID": [1]})
+
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=Mars))
+    monkeypatch.setattr(sys, "platform", platform)
+    if previous is None:
+        monkeypatch.delenv("OFFLINE_USER", raising=False)
+    else:
+        monkeypatch.setenv("OFFLINE_USER", previous)
+    (tmp_path / "q.sql").write_text("select 1 as ID")
+    job = JobRuntime(tmp_path, tmp_path / "output", site="KM", environ={})
+    job.environ["NAME"] = "GAR\\offline_user"
+    job.environ["PW"] = "offline-password"
+    if failure:
+        with pytest.raises(RuntimeError, match="service failed"):
+            job.sql("q.sql", database="MARS", output="result.csv")
+    else:
+        job.sql("q.sql", database="MARS", output="result.csv")
+        assert (job.workdir / "result.csv").read_text() == "id\n1\n"
+    expected_alias = "offline-password" if platform == "linux" else previous
+    assert calls == [("GAR\\offline_user", "offline-password", "KM", expected_alias)]
+    assert os.environ.get("OFFLINE_USER") == previous
+
+
+def test_partial_credentials_fail_only_for_automatic_authenticated_readers(tmp_path, monkeypatch):
+    class Mars:
+        def __init__(self, *, username=None, password=None):
+            raise AssertionError("Incomplete credentials reached reader")
+
+        def read(self, *, site, query):
+            return pd.DataFrame({"ID": [2]})
+
+    monkeypatch.setitem(sys.modules, "datasyncx", SimpleNamespace(MarsReader=Mars))
+    (tmp_path / "q.sql").write_text("select 1 as ID")
+    job = JobRuntime(tmp_path, tmp_path / "output", site="KM", environ={"NAME": "offline_user"})
+    with pytest.raises(ValueError, match="Set both NAME and PW"):
+        job.sql("q.sql", database="MARS", output="result.csv")
+    job.sql("q.sql", output="local.csv")
+    assert (job.workdir / "local.csv").read_text() == "ID\n1\n"
+    explicit = object.__new__(Mars)
+    job.sql("q.sql", database="MARS", reader=explicit, output="explicit.csv")
+    assert (job.workdir / "explicit.csv").read_text() == "id\n2\n"
 
 
 def test_emitted_calls_avoid_context_kwargs_and_preserve_step_ranges(tmp_path):

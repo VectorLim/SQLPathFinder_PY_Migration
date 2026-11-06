@@ -1,5 +1,41 @@
 # Portable VG2C Job
 
+## Standalone GitHub Deployment
+
+This folder now includes `release.yaml`, `automation/`, `.gitignore`, and
+`.github/workflows/release.yml`. Make this folder the Git repository root;
+GitHub ignores workflows nested beneath a job subfolder. Push committed source
+on `main`, or select **Actions > Build, push and deploy VG2C job > Run workflow**.
+Manual deployment defaults on; uncheck deployment for image-only publication.
+The translating machine and compiler installation are not required.
+
+The included workflow pulls the SOIMS base, installs dependencies, validates
+non-root startup, publishes to Harbor, and deploys an immutable digest to
+IMServerless/Rancher. It checks and attaches the shared `workflow-testing-database`
+(`NAME`, `PW`), `aed-api-key` (`API_KEY`, `API_CONFIG`), and `itcaas-regcred`
+Secrets in `icmpcs-soims`. No user-specific credential entry is required.
+Credential values stay in Kubernetes, not in this folder or image.
+
+The standalone target is recorded in `release.yaml` and remains stable after
+copying or renaming the folder. It is separate from the previously published
+private SOIMS first-lot app below. `main` deploys the base target; `master`
+deploys a separate `-master` target. Other branches must be added to the config
+with unique suffixes before they release.
+
+The destination repository must be allowed to use the shared Linux
+`soims-release` runner. Platform maintainers provide protected Rancher access,
+context, owner and domain through the `soims-test` GitHub environment or the
+runner defaults (`RUNNER_KUBECONFIG`, `RUNNER_RANCHER_CONTEXT`,
+`RUNNER_IMSERVERLESS_OWNER`, `RUNNER_IMSERVERLESS_DOMAIN`). An authorized shared
+runner is still necessary; source files cannot grant deployment permissions.
+The workflow reuses these settings automatically, not per-user setup.
+
+The standalone default does not create a schedule or persistent output mount.
+Add these through the platform when required. Existing test-mode exclusions
+are unchanged; this job keeps read-only AED enabled and email/MMS disabled.
+
+## Local Build and Runtime
+
 This folder is independent of the translating machine and the installed VG2C
 compiler. `dependencies/vg2c/runtime` contains the runtime snapshot,
 `dependencies` contains the approved AED wheel and dependency requirements,
@@ -46,3 +82,34 @@ docker run --rm --entrypoint python \
 Use a known authorized lot for your facility. This verifies read access, not
 permission to change manufacturing state. Secret files, `.env` files, local
 virtual environments and outputs are excluded from the Docker context.
+
+The image creates a read-only `/app/.env` containing only `LOG_LEVEL=INFO`.
+DataSyncX hardcodes this Linux path and otherwise tries to create it as a
+non-root worker. Database credentials come from runtime `NAME` and `PW`; the
+JobRuntime backend passes them explicitly to its inferred MARS reader. Never put their values in
+Dockerfile `ENV`, build arguments, the AppSpec, or source.
+On Linux, JobRuntime temporarily exposes `PW` under the uppercase account-name
+environment key required by DataSyncX's Kerberos lookup, restoring its prior value
+after each read, including failures. It uses `MarsReader`, preserving the original
+runtime authentication path; no credentials are written to `.env`.
+The commented `job.environ["NAME"]` and `job.environ["PW"]` lines in `main.py`
+allow local overrides when runtime environment injection is unavailable.
+Keep filled-in overrides local; never commit real credentials.
+
+The previously published deployment lives in the private SOIMS repository on branch
+`first-lot-after-ept-lots`. Update the job folder on that branch and push to
+build, validate, publish to Harbor, and deploy a new immutable image digest.
+The dedicated app is `icmpcs-soims/first-lot-after-ept-lots`, displayed as
+"SOIA Workflow Testing". Runtime database and AED credentials come from
+Kubernetes Secrets. Its IMServerless time-based trigger uses 30-minute intervals
+and the latest app version. The release image stores output under the KM share's
+`first_lot_after_ept_lots` subdirectory. Changes here must be copied to the
+release branch before they are deployed.
+
+For routine GitHub releases, users need no local Docker or registry/Rancher setup.
+The workflow handles approved base-image pull, Linux build, dependency install,
+image checks, Harbor push, runtime Secret injection, and rollout verification.
+Manual releases on the job branch deploy by default; deployment can be unchecked
+for image-only publication. Both paths use committed source.
+Runner capacity, corporate connectivity, and authorized Secrets are provisioned
+once by platform maintainers and reused automatically, not configured by each user.

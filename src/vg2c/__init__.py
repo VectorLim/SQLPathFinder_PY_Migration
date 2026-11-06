@@ -50,6 +50,8 @@ __all__ = [
 def translate(input_path: Path, out_dir: Path | None = None) -> Path:
     """Write an editable project and return <root>/<source-name>/main.py.
 
+    Includes the runtime, Dockerfile, release.yaml, helpers and GitHub workflow.
+
     Args:
         input_path: Path to the source .txt file.
         out_dir: Project root, defaulting to the source's parent directory.

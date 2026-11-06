@@ -15,6 +15,8 @@ def run():
     job = JobRuntime.from_script(
         __file__, site="KM", test_mode_excluded=TEST_MODE_EXCLUDED
     )
+    # job.environ["NAME"] = ""
+    # job.environ["PW"] = ""
     interventions = job.sql(
         "sql/query_001_first_lot_after_ept_lots.sql",
         output="ept_interventions.csv",

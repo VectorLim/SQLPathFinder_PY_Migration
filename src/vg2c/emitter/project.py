@@ -77,6 +77,8 @@ def emit_project(dispatched):
     writer.write(
         "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)"
     )
+    writer.write('# job.environ["NAME"] = ""')
+    writer.write('# job.environ["PW"] = ""')
     body_start = len(writer.lines)
     if has_state:
         writer.write("macros = job.macros")

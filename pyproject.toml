@@ -13,6 +13,7 @@ dependencies = [
     "duckdb==1.5.6",
     "pandas==3.0.3",
     "python-dotenv>=1.2,<2",
+    "PyYAML==6.0.3",
     "uv",
 ]
 
@@ -29,6 +30,7 @@ ui = [
 dev = [
     "pytest>=8.4,<10",
     "ruff>=0.12,<1",
+    "types-PyYAML>=6,<7",
 ]
 
 [project.scripts]
@@ -51,7 +53,14 @@ package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.package-data]
-vg2c = ["project_template/*", "project_template/.dockerignore", "project_template/dependencies/*"]
+vg2c = [
+    "project_template/*",
+    "project_template/.dockerignore",
+    "project_template/.gitignore",
+    "project_template/dependencies/*",
+    "project_template/automation/*.py",
+    "project_template/.github/workflows/*.yml",
+]
 "vg2c.runtime" = ["*.crt"]
 vg2c_companion = ["observer_helper/*.cs"]
 
@@ -71,4 +80,4 @@ extend-exclude = ["tests/fixtures"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyrefly]
-search-path = ["src"]
+search-path = ["src", "."]

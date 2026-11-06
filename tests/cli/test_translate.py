@@ -8,16 +8,46 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
-def test_init_project_bundles_runtime_and_linux_packaging(tmp_path):
-    from vg2c.project_bundle import init_project
+@pytest.mark.parametrize("operation", ["init", "translate"])
+def test_project_bundles_runtime_and_linux_packaging(tmp_path, operation):
+    from vg2c import init_project, translate
 
-    main = init_project(tmp_path / "portable")
+    if operation == "init":
+        main = init_project(tmp_path / "portable")
+    else:
+        source = tmp_path / "portable.txt"
+        source.write_text(
+            "<OPTIONS>\n/ENGINE=SQLite\n/CSV=result.csv\n</OPTIONS>\nselect 1 as ID;\n"
+        )
+        main = translate(source)
     project = main.parent
     assert (project / "Dockerfile").is_file()
+    dockerfile = (project / "Dockerfile").read_text()
+    assert "# syntax=" not in dockerfile
+    assert "LOG_LEVEL=INFO" in dockerfile
+    assert "chmod -R a+rX /app" in dockerfile
+    release = yaml.safe_load((project / "release.yaml").read_text())
+    assert release["funcname"] == "vg2c-portable"
+    assert release["namespace"] == "icmpcs-soims"
+    assert release["secrets"]["env"] == {
+        "workflow-testing-database": ["NAME", "PW"],
+        "aed-api-key": ["API_KEY", "API_CONFIG"],
+    }
+    for name in ("__init__", "__main__", "target", "cluster", "gateway", "release"):
+        assert (project / "automation" / f"{name}.py").is_file()
+    workflow = yaml.safe_load((project / ".github/workflows/release.yml").read_text())
+    events = workflow.get("on", workflow.get(True))
+    assert events["workflow_dispatch"]["inputs"]["deploy"]["default"] is True
+    assert events["push"]["branches"] == ["**"]
+    assert workflow["jobs"]["release"]["env"]["RELEASE_CONFIG"] == "release.yaml"
+    assert (project / ".gitignore").is_file()
     assert not (project / "func.json").exists()
     assert not (project / "entrypoint.py").exists()
     assert "def handle(job_id=None, context=None, header=None, body=None):" in main.read_text()
@@ -56,7 +86,15 @@ def test_translated_project_executes_after_move_without_compiler(tmp_path):
         f"import runpy; runpy.run_path({str(moved / 'main.py')!r}, run_name='__main__'); "
         "import vg2c.runtime,sys; "
         f"assert str(vg2c.runtime.__file__).startswith({str(moved / 'dependencies')!r}); "
-        "assert 'vg2c.compilation' not in sys.modules"
+        "assert 'vg2c.compilation' not in sys.modules; "
+        f"sys.path.insert(0, {str(moved)!r}); "
+        "from automation.target import Target, app_spec; "
+        "target = Target(branch='main'); "
+        "assert target.namespace == 'icmpcs-soims'; "
+        "assert target.env_secrets == {'workflow-testing-database': ['NAME','PW'], 'aed-api-key': ['API_KEY','API_CONFIG']}; "
+        "assert app_spec(target, target.repository + '@sha256:' + 'a'*64, '', '1.0', False)['action'] == 'create'; "
+        "sys.argv = ['automation', 'plan', '--branch', 'main']; "
+        "runpy.run_module('automation', run_name='__main__')"
     )
     process = subprocess.run(
         [sys.executable, "-I", "-c", code],
@@ -65,7 +103,73 @@ def test_translated_project_executes_after_move_without_compiler(tmp_path):
         text=True,
     )
     assert process.returncode == 0, process.stderr
+    assert "RELEASE=true" in process.stdout
     assert (moved / "output/result.csv").read_text() == "ID\n1\n"
+
+
+@pytest.mark.parametrize("name", ["same job", "A" * 80, "\u751f\u6210\u5c08\u6848"])
+def test_generated_release_names_are_valid_and_stable(tmp_path, name):
+    from vg2c.project_bundle import init_project
+    from vg2c.project_template.automation.target import Target, release_branches
+
+    main = init_project(tmp_path / name)
+    config = main.parent / "release.yaml"
+    target = Target(config, "main")
+    other_branch = Target(config, "master")
+    assert target.function.startswith("vg2c-")
+    assert len(other_branch.deployment_name("1.999")) <= 63
+    assert target.function != other_branch.function
+    assert release_branches(config) == {"main": "", "master": "-master"}
+    copied = tmp_path / "copied"
+    shutil.copytree(main.parent, copied)
+    assert Target(copied / "release.yaml", "main").function == target.function
+
+
+def test_generated_release_attaches_shared_credentials_without_inline_values(tmp_path):
+    import base64
+    import json
+    from unittest.mock import Mock
+
+    from vg2c.project_bundle import init_project
+    from vg2c.project_template.automation.cluster import configure, preflight
+    from vg2c.project_template.automation.target import Target
+
+    main = init_project(tmp_path / "shared-job")
+    target = Target(main.parent / "release.yaml", "main")
+    cluster = Mock()
+    encoded = base64.b64encode(b"offline-value").decode()
+    cluster.get.return_value = {
+        "data": {key: encoded for keys in target.secrets.values() for key in keys}
+    }
+    preflight(cluster, target)
+    assert {call.args for call in cluster.get.call_args_list} == {
+        ("secret", name) for name in target.secrets
+    }
+    image = target.repository + "@sha256:" + "a" * 64
+    deployment = {
+        "metadata": {"name": target.deployment_name("1.0"), "resourceVersion": "1"},
+        "spec": {"template": {"spec": {"containers": [{
+            "image": image,
+            "env": [
+                *[{"name": key, "value": value} for key, value in target.environment.items()],
+                {"name": "PW", "value": "stale-inline-value"},
+                {"name": "API_KEY", "value": "stale-inline-value"},
+            ],
+        }]}}},
+    }
+    configure(cluster, deployment, image, target)
+    arguments = cluster.call.call_args.args
+    patch = json.loads(arguments[arguments.index("--patch") + 1])
+    environment = next(item["value"] for item in patch if item["path"].endswith("/env"))
+    assert {entry["name"] for entry in environment} == {"ENV_MODE", "SITE"}
+    env_from = next(item["value"] for item in patch if item["path"].endswith("/envFrom"))
+    assert env_from == [
+        {"secretRef": {"name": name, "optional": False}} for name in target.env_secrets
+    ]
+    assert "stale-inline-value" not in json.dumps(patch)
+    cluster.get.return_value = {"data": {}}
+    with pytest.raises(ValueError, match="Required nonempty keys"):
+        preflight(cluster, target)
 
 
 def test_initialized_and_translated_handlers_preserve_soims_contract(tmp_path):

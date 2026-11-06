@@ -1,6 +1,7 @@
 import runpy
 import sqlite3
 from pathlib import Path
+from unittest.mock import Mock
 
 import pandas as pd
 import pytest
@@ -47,6 +48,21 @@ def history_row(lot, timestamp, facility="KM", entity="JDC1"):
     return [facility, entity, lot, "1000", "2026-11-03 10:00:00", timestamp]
 
 
+def _offline_job(monkeypatch, tmp_path, reader):
+    job = JobRuntime(
+        PROJECT, tmp_path, site="KM", environ={},
+        test_mode_excluded={"email", "mms"},
+    )
+    aed = Mock()
+    monkeypatch.setattr("vg2c.runtime.job.AEDClient", lambda *args, **kwargs: aed)
+    monkeypatch.setattr(JobRuntime, "from_script", lambda *args, **kwargs: job)
+    monkeypatch.setattr(
+        "vg2c.runtime.query.resolve_reader",
+        lambda node, **kwargs: reader if node else resolve_reader(),
+    )
+    return aed
+
+
 def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
     interventions = pd.DataFrame(
         [intervention(1, "20261103100000500000000")],
@@ -66,16 +82,12 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
             calls.append((site, query))
             return (interventions if len(calls) == 1 else history).copy()
 
-    job = JobRuntime(PROJECT, tmp_path, environ={})
-    monkeypatch.setattr(JobRuntime, "from_script", lambda *args, **kwargs: job)
-    monkeypatch.setattr(
-        "vg2c.runtime.query.resolve_reader",
-        lambda node: Reader() if node else resolve_reader(),
-    )
+    aed = _offline_job(monkeypatch, tmp_path, Reader())
     monkeypatch.chdir(tmp_path)
     runpy.run_path(str(PROJECT / "main.py"), run_name="__main__")
 
     assert len(calls) == 2
+    aed.lot_status.assert_called_once_with("FIRST")
     assert [site for site, query in calls] == ["KM", "KM"]
     assert "F_ENTITYLOTHIST" not in calls[0][1]
     assert "event_end >= event_start" in calls[0][1]
@@ -238,12 +250,7 @@ def test_first_lot_job_empty_results(monkeypatch, tmp_path, empty_interventions)
             calls.append(query)
             return (interventions if len(calls) == 1 else history).copy()
 
-    job = JobRuntime(PROJECT, tmp_path, environ={})
-    monkeypatch.setattr(JobRuntime, "from_script", lambda *args, **kwargs: job)
-    monkeypatch.setattr(
-        "vg2c.runtime.query.resolve_reader",
-        lambda node: Reader() if node else resolve_reader(),
-    )
+    aed = _offline_job(monkeypatch, tmp_path, Reader())
     for filename in (
         "ept_interventions.csv",
         "lot_history.csv",
@@ -253,6 +260,7 @@ def test_first_lot_job_empty_results(monkeypatch, tmp_path, empty_interventions)
 
     runpy.run_path(str(PROJECT / "main.py"), run_name="__main__")
     assert len(calls) == 2
+    aed.lot_status.assert_not_called()
     assert "<<<" not in calls[1]
     if empty_interventions:
         normalized = " ".join(calls[1].split())

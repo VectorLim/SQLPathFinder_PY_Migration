@@ -1,8 +1,12 @@
 """Write portable job projects from installed VG2C package resources."""
 
+import hashlib
 from importlib.resources import files
 from pathlib import Path
+import re
 import tempfile
+
+import yaml
 
 RUNTIME_BOOTSTRAP = (
     "from pathlib import Path\n"
@@ -33,6 +37,22 @@ def _copy_resources(source, destination):
             target.write_bytes(resource.read_bytes())
 
 
+def _configure_release(project):
+    original = project.name.casefold()
+    slug = re.sub(r"[^a-z0-9-]+", "-", original).strip("-")
+    if not slug or slug != original or len(slug) > 32:
+        digest = hashlib.sha256(project.name.encode("utf-8")).hexdigest()[:8]
+        slug = f"{(slug or 'job')[:23].rstrip('-')}-{digest}"
+    name = "vg2c-" + slug
+    path = project / "release.yaml"
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["project"]["name"] = project.name
+    config["funcname"] = name
+    config["dnshostname"] = f"{name}.s33prod.mfg.intel.com"
+    config["containers"][0]["image"] = f"amr-registry.caas.intel.com/soia/{name}:pending"
+    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+
 def write_project(destination, source, assets=()):
     """Stage a complete project before publishing; refuse nonempty destinations."""
     destination = Path(destination).resolve()
@@ -55,6 +75,7 @@ def write_project(destination, source, assets=()):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8", newline="")
         _copy_resources(files("vg2c").joinpath("project_template"), project)
+        _configure_release(project)
         runtime_package = project / "dependencies" / "vg2c"
         runtime_package.mkdir(parents=True, exist_ok=True)
         (runtime_package / "__init__.py").write_text("", encoding="ascii")
@@ -70,7 +91,7 @@ def write_project(destination, source, assets=()):
 
 
 def init_project(destination):
-    """Create an empty job with the same Linux packaging as a translation."""
+    """Create an empty job with runtime, Linux image and GitHub release kit."""
     source = (
         RUNTIME_BOOTSTRAP
         + "from vg2c.runtime import JobRuntime\n\n"
@@ -79,6 +100,8 @@ def init_project(destination):
         + "    job = JobRuntime.from_script(\n"
         + "        __file__, test_mode_excluded=TEST_MODE_EXCLUDED\n"
         + "    )\n"
+        + '    # job.environ["NAME"] = ""\n'
+        + '    # job.environ["PW"] = ""\n'
         + "    return job\n"
         + HOST_HANDLER
         + '\n\nif __name__ == "__main__":\n'

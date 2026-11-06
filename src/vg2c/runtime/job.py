@@ -212,6 +212,7 @@ class JobRuntime:
         return execute_sql(
             self.asset_path(path),
             reader=reader,
+            environ=self.environ,
             output=output,
             workdir=self.workdir,
             values=self.values,

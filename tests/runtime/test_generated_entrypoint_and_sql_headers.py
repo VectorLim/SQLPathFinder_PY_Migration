@@ -8,6 +8,7 @@ import shutil
 
 import pytest
 
+from tests.fixtures.generated_job import sql_keyword_names
 from vg2c import compile_document, translate
 from vg2c.runtime import JobRuntime, SqliteReader, execute_sql
 
@@ -31,11 +32,15 @@ def test_generated_run_is_parameterless_and_uses_relocated_project_output(tmp_pa
     assert "job.sql(" in text
     assert "workdir = Path(workdir).resolve()" not in text
     assert "job = JobRuntime.from_script(__file__, test_mode_excluded=TEST_MODE_EXCLUDED)" in text
+    assert '# job.environ["NAME"] = ""' in text
+    assert '# job.environ["PW"] = ""' in text
+    assert "MarsReader" not in text
+    assert "os.environ" not in text
     assert "project_dir =" not in text
     assert "workdir =" not in text
     assert "BASE_DIR =" not in text
     assert "WORK_DIR =" not in text
-    assert "header=" not in text
+    assert "header" not in sql_keyword_names(text)
     assert "inputs=[]" not in text  # Empty TABLE configuration is the runtime default.
 
     moved = tmp_path / "relocated"
@@ -111,7 +116,7 @@ def test_generated_empty_query_still_writes_headers(tmp_path, engine, headers, e
 def test_explicit_legacy_header_is_stored_in_sql_not_generated_main(tmp_path):
     source = _source(tmp_path, headers="CODE,LABEL")
     emitted = compile_document(source).emitted
-    assert "header=" not in emitted.source
+    assert "header" not in sql_keyword_names(emitted.source)
     assert "job.table_spec(" not in emitted.source
     assert "job.sql(" in emitted.source
     path, sql = next((p, text) for p, text in emitted.assets if p.endswith(".sql"))

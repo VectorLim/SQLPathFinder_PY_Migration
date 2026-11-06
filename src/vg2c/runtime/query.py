@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
 import inspect
 import json
+import os
 import re
+import sys
 
 from vg2c.runtime.csv_io import _CsvIO as CsvIO
 from vg2c.runtime.crosstab import _CrosstabUtility as CrosstabUtility
 from vg2c.runtime.duckdb_reader import _DuckDbReader as DuckDbReader
+from vg2c.runtime.environment import DATABASE_ENVIRONMENT_LOCK
 from vg2c.runtime.sqlite_reader import _SqliteReader as SqliteReader
 from vg2c.runtime.sql_text import scan_sql_get_csv_list_calls
 from vg2c.runtime.values import job_path, substitute
@@ -32,7 +36,44 @@ def _required_params(function) -> list[str]:
     ]
 
 
-def resolve_reader(node=None):
+def _reader_credentials(reader_class, environ):
+    parameters = inspect.signature(reader_class.__init__).parameters
+    if not {"username", "password"}.issubset(parameters):
+        return {}
+    environ = os.environ if environ is None else environ
+    username, password = environ.get("NAME"), environ.get("PW")
+    if not username and not password:
+        return {}
+    if (
+        not isinstance(username, str)
+        or not username.strip()
+        or not isinstance(password, str)
+        or not password
+    ):
+        raise ValueError("Set both NAME and PW through job.environ or runtime Secrets")
+    return {"username": username, "password": password}
+
+
+@contextmanager
+def _reader_environment(reader, environ):
+    credentials = _reader_credentials(type(reader), environ)
+    if not credentials or not sys.platform.startswith("linux"):
+        yield
+        return
+    key = credentials["username"].rsplit("\\", 1)[-1].upper()
+    with DATABASE_ENVIRONMENT_LOCK:
+        previous = os.environ.get(key)
+        os.environ[key] = credentials["password"]
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+
+
+def resolve_reader(node=None, *, environ=None):
     """No node -> local SQLite; else the datasyncx reader whose name appears in the node."""
     if not node:
         return SqliteReader()
@@ -61,27 +102,29 @@ def resolve_reader(node=None):
                 f"Cannot infer reader from node {node!r}: no datasyncx reader name "
                 "in node and it is not a SITE.DATABASE Oracle node"
             )
-        return datasyncx.OracleReader(node=node.strip())
+        reader_class = datasyncx.OracleReader
+        reader_kwargs = {"node": node.strip()}
+    else:
+        name = matches[0]
+        reader_class = getattr(datasyncx, name)
+        parameters = inspect.signature(reader_class.__init__).parameters
+        node_kwarg = next((key for key in ("node", "nodes") if key in parameters), None)
+        reader_kwargs = {node_kwarg: node} if node_kwarg else {}
 
-    name = matches[0]
-    reader_class = getattr(datasyncx, name)
-    node_kwarg = next(
-        (
-            key
-            for key in ("node", "nodes")
-            if key in inspect.signature(reader_class.__init__).parameters
-        ),
-        None,
-    )
-    missing = [p for p in _required_params(reader_class.__init__) if p != node_kwarg]
-    missing += [
-        p for p in _required_params(reader_class.read) if p not in {"site", "query"}
-    ]
-    if missing:
-        raise ValueError(
-            f"{name} for node {node!r} needs {missing}; pass reader= explicitly"
-        )
-    return reader_class(**{node_kwarg: node} if node_kwarg else {})
+    credentials = _reader_credentials(reader_class, environ)
+    if matches:
+        missing = [
+            p for p in _required_params(reader_class.__init__)
+            if p not in reader_kwargs and p not in credentials
+        ]
+        missing += [
+            p for p in _required_params(reader_class.read) if p not in {"site", "query"}
+        ]
+        if missing:
+            raise ValueError(
+                f"{name} for node {node!r} needs {missing}; pass reader= explicitly"
+            )
+    return reader_class(**reader_kwargs, **credentials)
 
 
 _OUTPUT_HEADERS = "-- vg2c-output-headers: "
@@ -118,6 +161,7 @@ def execute_sql(
     output,
     workdir,
     reader=None,
+    environ=None,
     values=None,
     macros=None,
     inputs=None,
@@ -144,6 +188,7 @@ def execute_sql(
         return run_query(
             sql,
             reader=reader,
+            environ=environ,
             output=output,
             workdir=workdir,
             values=values,
@@ -173,6 +218,7 @@ def run_query(
     output,
     workdir,
     reader=None,
+    environ=None,
     values=None,
     macros=None,
     inputs=None,
@@ -233,9 +279,11 @@ def run_query(
         or not all(isinstance(item, str) for item in header)
     ):
         raise ValueError("SQL header must be a list of strings")
-    if reader is None:
+    inferred_reader = reader is None
+    if inferred_reader:
         reader = resolve_reader(
-            substitute(node, values=values, macros=macros) if node else None
+            substitute(node, values=values, macros=macros) if node else None,
+            environ=environ,
         )
     sql = substitute(sql, values=values, macros=macros)
     sql = CrosstabUtility.substitute_header_lists(sql, workdir, files=files)
@@ -280,11 +328,15 @@ def run_query(
         if not node:
             raise ValueError("An external reader requires an explicit node/site")
         try:
-            result = reader.read(
-                site=node_site(substitute(node, values=values, macros=macros)),
-                query=sql,
-                **kwargs,
-            )
+            with (
+                _reader_environment(reader, environ)
+                if inferred_reader else nullcontext()
+            ):
+                result = reader.read(
+                    site=node_site(substitute(node, values=values, macros=macros)),
+                    query=sql,
+                    **kwargs,
+                )
         finally:
             if type(reader).__module__.startswith("datasyncx"):
                 from vg2c.runtime.oracle_client import _OracleClient as OracleClient
