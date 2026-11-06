@@ -59,6 +59,15 @@ def _offline_job(monkeypatch, tmp_path, reader):
     aed = Mock()
     monkeypatch.setattr("vg2c.runtime.job.AEDClient", lambda *args, **kwargs: aed)
     monkeypatch.setattr(JobRuntime, "from_script", lambda *args, **kwargs: job)
+    original_read_text = Path.read_text
+
+    def read_text(path, *args, **kwargs):
+        if path.name == "prod.txt":
+            assert str(path.parent).endswith("KM")
+            return "SQH\nSQL\n"
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
     monkeypatch.setattr(
         "vg2c.runtime.query.resolve_reader",
         lambda node, **kwargs: reader if node else resolve_reader(),
@@ -109,10 +118,21 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
         connection.create_function("TO_DATE", 2, lambda value, date_format: value)
         connection.execute(
             "CREATE TABLE F_ENTITYLOTHIST "
-            "(facility, entity, unique_flag, history_deleted_flag, txn_date)"
+            "(facility, entity, unique_flag, history_deleted_flag, txn_date, "
+            "lot DEFAULT 'L1', operation DEFAULT '1000', prevout_date DEFAULT 'previous')"
         )
+        connection.execute(
+            "CREATE TABLE F_LOTHIST "
+            "(facility, lot, operation, prevout_date, product, history_deleted_flag)"
+        )
+        connection.execute("INSERT INTO F_LOTHIST VALUES ('KM', 'L1', '1000', 'previous', 'P1', NULL)")
+        connection.execute(
+            "CREATE TABLE F_PRODUCT (facility, product, latest_version, prodgroup3)"
+        )
+        connection.execute("INSERT INTO F_PRODUCT VALUES ('KM', 'P1', 'Y', 'SQH')")
         connection.executemany(
-            "INSERT INTO F_ENTITYLOTHIST VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO F_ENTITYLOTHIST "
+            "(facility, entity, unique_flag, history_deleted_flag, txn_date) VALUES (?, ?, ?, ?, ?)",
             [
                 ("KM", "JDC1", "Y", None, "20261103100001"),
                 ("OTHER", "JDC1", "Y", None, "20261103100001"),
@@ -122,15 +142,66 @@ def test_first_lot_job_two_bounded_calls(monkeypatch, tmp_path):
                 ("KM", "JDC1", "Y", None, "20261103095959"),
             ],
         )
-        predicate = calls[1][1].partition("WHERE")[2]
+        predicate = calls[1][1].partition("WHERE")[2].replace("@[]@.", "")
         rows = connection.execute(
             "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
         ).fetchall()
         assert rows == [("KM", "JDC1")]
+        connection.execute("UPDATE F_PRODUCT SET prodgroup3 = 'OTHER'")
+        assert connection.execute(
+            "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
+        ).fetchall() == []
+        connection.execute("UPDATE F_PRODUCT SET prodgroup3 = ' sql '")
+        assert connection.execute(
+            "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
+        ).fetchall() == [("KM", "JDC1")]
+        connection.execute("UPDATE F_PRODUCT SET latest_version = 'N'")
+        assert connection.execute(
+            "SELECT facility, entity FROM F_ENTITYLOTHIST history WHERE " + predicate
+        ).fetchall() == []
     assert (tmp_path / "ept_interventions.csv").is_file()
     assert (tmp_path / "lot_history.csv").is_file()
     output = pd.read_csv(tmp_path / "first_lot_after_ept_lots.csv")
     assert output["lot"].tolist() == ["FIRST"]
+
+
+@pytest.mark.parametrize("site", ["km", "vn"])
+def test_product_config_uses_job_site_and_normalizes_codes(tmp_path, site):
+    namespace = runpy.run_path(str(PROJECT / "main.py"))
+    job = JobRuntime(
+        PROJECT, tmp_path / "output", site=site,
+        environ={"PRODUCT_CONFIG_ROOT": str(tmp_path / "config")},
+    )
+    config = tmp_path / "config" / job.site / "prod.txt"
+    config.parent.mkdir(parents=True)
+    config.write_text("\ufeff sqh \n\nsql\nSQH\n", encoding="utf-8")
+    namespace["load_target_products"](job)
+    assert job.read_csv("target_products.csv")["prodgroup3"].tolist() == ["SQH", "SQL"]
+
+
+@pytest.mark.parametrize("contents", [None, "\n \n"])
+def test_product_config_missing_or_empty_stops_before_queries(tmp_path, monkeypatch, contents):
+    job = JobRuntime(
+        PROJECT, tmp_path / "output", site="KM",
+        environ={"PRODUCT_CONFIG_ROOT": str(tmp_path)},
+    )
+    if contents is not None:
+        config = tmp_path / job.site / "prod.txt"
+        config.parent.mkdir()
+        config.write_text(contents, encoding="utf-8")
+    monkeypatch.setattr(JobRuntime, "from_script", lambda *args, **kwargs: job)
+    monkeypatch.setattr(job, "sql", Mock())
+    with pytest.raises(FileNotFoundError if contents is None else ValueError):
+        runpy.run_path(str(PROJECT / "main.py"), run_name="__main__")
+    job.sql.assert_not_called()
+    assert job._aed is None
+
+
+def test_product_config_requires_site(tmp_path):
+    namespace = runpy.run_path(str(PROJECT / "main.py"))
+    job = JobRuntime(PROJECT, tmp_path, environ={})
+    with pytest.raises(ValueError, match="site is required"):
+        namespace["load_target_products"](job)
 
 
 def test_matching_preserves_ties_precision_and_facility(tmp_path):

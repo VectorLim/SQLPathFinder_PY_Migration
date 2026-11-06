@@ -1,5 +1,35 @@
 # Portable VG2C Job
 
+## Target Products
+
+`JobRuntime.from_script(..., site="KM")` exposes the normalized site as
+`job.site`. The job rereads the following allowlist before each run:
+
+```text
+\\AZatshfs.intel.com\AZatanalysis$\MAOATM\Config\VF_POR_Cfg\ICM_PCS\NGICMPCS_JDSC_BAR_SKIP\<SITE>\prod.txt
+```
+
+Use one MARS `F_Product.prodgroup3` code per line. Initial KM contents:
+
+```text
+SQH
+SQL
+```
+
+`SQH` targets Square Hill; `SQL` targets Square Hill Large. Blank lines are
+ignored and codes are matched case-insensitively. Missing, unreadable, or empty
+files stop the run before database queries or AED calls; there is no unrestricted
+fallback. Each site needs its own file.
+
+The MARS query uses DataSyncX through `job.sql(database="MARS")` and links each
+entity-history occurrence to `F_LotHist` and the latest `F_Product` metadata.
+Only allowed products enter first-lot ranking: an earlier disallowed lot does not
+hide a later allowed lot. Output columns and tie handling remain unchanged.
+
+For Linux deployment, mount the shared config root read-only and set runtime
+`PRODUCT_CONFIG_ROOT` to its local mount path. The mounted root must contain
+`<SITE>/prod.txt`; Linux does not resolve Windows UNC paths directly.
+
 ## Standalone GitHub Deployment
 
 This folder now includes `release.yaml`, `automation/`, `.gitignore`, and

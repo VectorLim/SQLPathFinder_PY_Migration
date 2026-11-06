@@ -9,6 +9,30 @@ from vg2c.runtime import JobRuntime
 
 # Keep AED enabled in test mode; lot_status is read-only.
 TEST_MODE_EXCLUDED = {"email", "mms"}
+PRODUCT_CONFIG_ROOT = Path(
+    r"\\AZatshfs.intel.com\AZatanalysis$\MAOATM\Config\VF_POR_Cfg"
+    r"\ICM_PCS\NGICMPCS_JDSC_BAR_SKIP"
+)
+
+
+def load_target_products(job):
+    if job.site is None:
+        raise ValueError("A site is required to load prod.txt")
+    root = Path(job.environ.get("PRODUCT_CONFIG_ROOT", PRODUCT_CONFIG_ROOT))
+    config = root / job.site / "prod.txt"
+    products = list(
+        dict.fromkeys(
+            line.strip().upper()
+            for line in config.read_text(encoding="utf-8-sig").splitlines()
+            if line.strip()
+        )
+    )
+    if not products:
+        raise ValueError(f"Product allowlist is empty: {config}")
+    job.write_file(
+        "target_products.csv",
+        pd.DataFrame({"prodgroup3": products}).to_csv(index=False),
+    )
 
 
 def run():
@@ -17,6 +41,7 @@ def run():
     )
     # job.environ["NAME"] = ""
     # job.environ["PW"] = ""
+    load_target_products(job)
     interventions = job.sql(
         "sql/query_001_first_lot_after_ept_lots.sql",
         output="ept_interventions.csv",

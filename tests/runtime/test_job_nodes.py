@@ -45,6 +45,13 @@ def test_script_site_overrides_environment(tmp_path):
     assert _job(tmp_path, site="CD", environ={"SITE": "VN"}).site == "CD"
 
 
+def test_from_script_exposes_normalized_site(tmp_path, monkeypatch):
+    monkeypatch.setenv("SITE", "VN")
+    job = JobRuntime.from_script(tmp_path / "main.py", site=" km ")
+    assert job.site == "KM"
+    assert job._resolve_node(None, "MARS", None) == "KM.[A15_PROD_21.].MARS"
+
+
 def test_blank_environment_site_is_ignored(tmp_path):
     assert _job(tmp_path, environ={"SITE": "  "}).site is None
 
