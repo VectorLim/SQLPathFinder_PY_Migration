@@ -48,6 +48,10 @@ def test_project_bundles_runtime_and_linux_packaging(tmp_path, operation):
     assert events["push"]["branches"] == ["**"]
     assert workflow["jobs"]["release"]["env"]["RELEASE_CONFIG"] == "release.yaml"
     assert (project / ".gitignore").is_file()
+    for name in ("Start-Release-Runner.cmd", "runner/start-runner.ps1", "runner/Dockerfile"):
+        assert (project / name).is_file()
+    assert "soims-release" in workflow["jobs"]["release"]["runs-on"]
+    assert "--labels soims-release" in (project / "runner/start-runner.ps1").read_text()
     assert not (project / "func.json").exists()
     assert not (project / "entrypoint.py").exists()
     assert (

@@ -59,6 +59,7 @@ vg2c = [
     "project_template/.gitignore",
     "project_template/dependencies/*",
     "project_template/automation/*.py",
+    "project_template/runner/*",
     "project_template/.github/workflows/*.yml",
 ]
 "vg2c.runtime" = ["*.crt"]
