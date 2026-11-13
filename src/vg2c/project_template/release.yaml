@@ -7,7 +7,7 @@ dnshostname: vg2c-job.s33prod.mfg.intel.com
 targetname: active
 action: create
 containers:
-  - image: amr-registry.caas.intel.com/soia/vg2c-job:pending
+  - image: amr-registry.caas.intel.com/soia/vg2c-job:latest
     resources:
       requests:
         cpu: 2
@@ -25,11 +25,3 @@ mininstances: 1
 targetclients: []
 deadline: ''
 loglabel: python-ecs
-secrets:
-  pull: itcaas-regcred
-  env:
-    workflow-testing-database: [NAME, PW]
-    aed-api-key: [API_KEY, API_CONFIG]
-branches:
-  main: ''
-  master: '-master'

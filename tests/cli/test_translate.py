@@ -36,7 +36,11 @@ def test_project_bundles_runtime_and_linux_packaging(tmp_path, operation):
     release = yaml.safe_load((project / "release.yaml").read_text())
     assert release["funcname"] == "vg2c-portable"
     assert release["namespace"] == "icmpcs-soims"
-    assert release["secrets"]["env"] == {
+    # release.yaml is uploadable in the IMServerless UI: real tag, no workflow-only keys.
+    assert release["containers"][0]["image"].endswith("/vg2c-portable:latest")
+    assert not {"secrets", "branches"} & set(release)
+    settings = yaml.safe_load((project / "automation/settings.yaml").read_text())
+    assert settings["secrets"]["env"] == {
         "workflow-testing-database": ["NAME", "PW"],
         "aed-api-key": ["API_KEY", "API_CONFIG"],
     }
@@ -48,8 +52,17 @@ def test_project_bundles_runtime_and_linux_packaging(tmp_path, operation):
     assert events["push"]["branches"] == ["**"]
     assert workflow["jobs"]["release"]["env"]["RELEASE_CONFIG"] == "release.yaml"
     assert (project / ".gitignore").is_file()
-    for name in ("Start-Release-Runner.cmd", "runner/start-runner.ps1", "runner/Dockerfile"):
+    for name in ("Start-Release-Runner.cmd", "Stop-Release-Runner.cmd", "runner/start-runner.ps1", "runner/Dockerfile"):
         assert (project / name).is_file()
+    # Launchers resolve the script relative to their own folder, so they must stay at the root.
+    for launcher in ("Start-Release-Runner.cmd", "Stop-Release-Runner.cmd"):
+        assert '"%~dp0runner\\start-runner.ps1"' in (project / launcher).read_text()
+        assert not (project / "runner" / launcher).exists()
+    # Local runs bootstrap a project .venv that must stay out of the image context.
+    assert "main.py" in (project / "Run-Local.cmd").read_text()
+    dockerignore = (project / ".dockerignore").read_text().splitlines()
+    assert {".venv", "Run-Local.cmd", "dependencies/requirements-local.txt"} <= set(dockerignore)
+    assert "-r requirements.txt" in (project / "dependencies/requirements-local.txt").read_text()
     assert "soims-release" in workflow["jobs"]["release"]["runs-on"]
     assert "--labels soims-release" in (project / "runner/start-runner.ps1").read_text()
     assert not (project / "func.json").exists()
@@ -128,15 +141,28 @@ def test_generated_release_names_are_valid_and_stable(tmp_path, name):
 
     main = init_project(tmp_path / name)
     config = main.parent / "release.yaml"
-    target = Target(config, "main")
-    other_branch = Target(config, "master")
+    target = Target(config, "prod")
+    other_branch = Target(config, "feature/any-name")
     assert target.function.startswith("vg2c-")
+    assert target.function == yaml.safe_load(config.read_text(encoding="utf-8"))["funcname"]
+    assert Target(config, "main").function == target.function + "-test"
+    assert other_branch.function == target.function + "-test"
     assert len(other_branch.deployment_name("1.999")) <= 63
-    assert target.function != other_branch.function
-    assert release_branches(config) == {"main": "", "master": "-master"}
+    assert release_branches(config) == {"prod": "", "*": "-test"}
     copied = tmp_path / "copied"
     shutil.copytree(main.parent, copied)
-    assert Target(copied / "release.yaml", "main").function == target.function
+    assert Target(copied / "release.yaml", "prod").function == target.function
+
+
+def test_generated_release_rejects_workflow_keys_in_appspec(tmp_path):
+    from vg2c.project_bundle import init_project
+    from vg2c.project_template.automation.target import Target
+
+    config = init_project(tmp_path / "split-job").parent / "release.yaml"
+    spec = yaml.safe_load(config.read_text(encoding="utf-8"))
+    config.write_text(yaml.safe_dump({**spec, "branches": {"main": ""}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="automation/settings.yaml"):
+        Target(config, "main")
 
 
 def test_generated_release_attaches_shared_credentials_without_inline_values(tmp_path):

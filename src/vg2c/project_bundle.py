@@ -51,7 +51,7 @@ def _configure_release(project):
     config["dnshostname"] = f"{name}.s33prod.mfg.intel.com"
     config["containers"][0][
         "image"
-    ] = f"amr-registry.caas.intel.com/soia/{name}:pending"
+    ] = f"amr-registry.caas.intel.com/soia/{name}:latest"
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 

@@ -5,11 +5,11 @@ from pathlib import Path
 
 from .cluster import Cluster, preflight, registry_config
 from .release import deploy
-from .target import CONFIG, Target, release_branches
+from .target import CONFIG, Target, branch_suffix
 
 
 def plan(args):
-    if args.branch not in release_branches(args.config):
+    if branch_suffix(args.branch, args.config) is None:
         print("RELEASE=false")
         return
     target = Target(args.config, args.branch)
@@ -22,7 +22,7 @@ def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", type=Path, default=CONFIG)
     common.add_argument(
-        "--branch", required=True, help="Git branch listed under release.yaml branches"
+        "--branch", required=True, help="Git branch listed under automation/settings.yaml branches"
     )
     cluster = argparse.ArgumentParser(add_help=False, parents=[common])
     cluster.add_argument("--kubeconfig", required=True, type=Path)
